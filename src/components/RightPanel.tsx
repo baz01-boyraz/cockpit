@@ -1,27 +1,40 @@
-import { useEffect, useState } from 'react'
-import type { RouteRecommendation, RouterResult } from '@shared/domain'
+import { useEffect, useRef, useState } from 'react'
+import type { RouteRecommendation } from '@shared/domain'
+import type { ChatEngine } from '@shared/ipc'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
-import { RouteCard } from './RouteCard'
 import { ApprovalCard } from './ApprovalCard'
-import { IconBolt, IconSend } from './icons'
+import { IconBolt, IconSend, IconShield } from './icons'
 
-interface ChatTurn {
+interface Msg {
   id: number
-  query: string
-  result: RouterResult | null
-  answer: string | null
-  model: string | null
-  answering: boolean
-  error: boolean
+  role: 'user' | 'assistant'
+  text: string
+  model?: string
+  answering?: boolean
+  error?: boolean
+  route?: RouteRecommendation | null
 }
 
 const SUGGESTIONS = [
-  'Bu projede neyi geliştirelim?',
+  'Bu projede sırada ne geliştirelim?',
   'API katmanını nasıl ekleriz?',
   'Show git diff for the nav',
   'Plan the next feature',
 ]
+
+const ENGINES: { id: ChatEngine; label: string; sub: string }[] = [
+  { id: 'claude', label: 'Claude', sub: 'Opus 4.8' },
+  { id: 'codex', label: 'Codex', sub: 'OpenAI' },
+]
+
+const AGENT_LABEL: Record<string, string> = {
+  claude: 'Claude Code',
+  codex: 'Codex CLI',
+  local: 'local command',
+  chat: 'chat',
+  railway: 'Railway',
+}
 
 export function RightPanel() {
   const activeProjectId = useStore((s) => s.activeProjectId)
@@ -30,51 +43,66 @@ export function RightPanel() {
   const setView = useStore((s) => s.setView)
   const refreshTerminals = useStore((s) => s.refreshTerminals)
   const refreshApprovals = useStore((s) => s.refreshApprovals)
-
   const aiDraft = useStore((s) => s.aiDraft)
   const setAiDraft = useStore((s) => s.setAiDraft)
 
+  const [engine, setEngine] = useState<ChatEngine>('claude')
   const [input, setInput] = useState('')
-  const [turns, setTurns] = useState<ChatTurn[]>([])
+  const [msgs, setMsgs] = useState<Msg[]>([])
   const [busy, setBusy] = useState(false)
+  const endRef = useRef<HTMLDivElement>(null)
+  const taRef = useRef<HTMLTextAreaElement>(null)
 
-  // Consume a draft handed over from another panel (e.g. "Send to AI").
+  const pending = approvals.filter((a) => a.status === 'pending')
+
   useEffect(() => {
     if (aiDraft) {
       setInput(aiDraft)
       setAiDraft(null)
+      taRef.current?.focus()
     }
   }, [aiDraft, setAiDraft])
 
-  const pending = approvals.filter((a) => a.status === 'pending')
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [msgs])
+
+  const grow = () => {
+    const ta = taRef.current
+    if (!ta) return
+    ta.style.height = 'auto'
+    ta.style.height = `${Math.min(160, ta.scrollHeight)}px`
+  }
 
   const submit = async (text: string) => {
-    if (!text.trim() || !activeProjectId) return
-    const id = Date.now()
+    if (!text.trim() || !activeProjectId || busy) return
+    const userId = Date.now()
+    const aId = userId + 1
     setInput('')
+    requestAnimationFrame(grow)
     setBusy(true)
-    setTurns((t) => [
-      { id, query: text, result: null, answer: null, model: null, answering: true, error: false },
-      ...t,
+    setMsgs((m) => [
+      ...m,
+      { id: userId, role: 'user', text },
+      { id: aId, role: 'assistant', text: '', answering: true },
     ])
     try {
-      // Classify the route (instant) and ask the real model (Claude Code) in parallel.
       const [result, reply] = await Promise.all([
         cockpit().router.route(activeProjectId, text),
-        cockpit().chat.ask(activeProjectId, text),
+        cockpit().chat.ask(activeProjectId, text, engine),
       ])
-      setTurns((t) =>
-        t.map((x) =>
-          x.id === id
-            ? { ...x, result, answer: reply.text, model: reply.model, answering: false, error: !reply.ok }
+      setMsgs((m) =>
+        m.map((x) =>
+          x.id === aId
+            ? { ...x, text: reply.text, model: reply.model, answering: false, error: !reply.ok, route: result.primary }
             : x,
         ),
       )
     } catch (e) {
-      setTurns((t) =>
-        t.map((x) =>
-          x.id === id
-            ? { ...x, answering: false, error: true, answer: e instanceof Error ? e.message : 'failed' }
+      setMsgs((m) =>
+        m.map((x) =>
+          x.id === aId
+            ? { ...x, text: e instanceof Error ? e.message : 'failed', answering: false, error: true }
             : x,
         ),
       )
@@ -83,14 +111,14 @@ export function RightPanel() {
     }
   }
 
-  const act = async (rec: RouteRecommendation, query: string) => {
+  const act = async (rec: RouteRecommendation) => {
     if (!activeProjectId) return
     if (rec.requiresApproval) {
       await cockpit().approvals.request({
         projectId: activeProjectId,
         actionType: rec.agent === 'railway' ? 'redeploy' : 'shell_command',
-        summary: `${rec.title}: ${query}`,
-        payload: { query, command: rec.suggestedCommand },
+        summary: `${rec.title}`,
+        payload: { command: rec.suggestedCommand },
       })
       await refreshApprovals()
       return
@@ -99,10 +127,14 @@ export function RightPanel() {
       await cockpit().terminals.launchAgent(activeProjectId, rec.agent)
       await refreshTerminals()
       setView('terminals')
+    } else if (rec.agent === 'railway') {
+      setView('railway')
     } else {
-      setView(rec.agent === 'railway' ? 'railway' : 'logs')
+      setView('logs')
     }
   }
+
+  const engineMeta = ENGINES.find((e) => e.id === engine) ?? ENGINES[0]
 
   return (
     <aside className="right">
@@ -111,20 +143,31 @@ export function RightPanel() {
           <IconBolt width={15} height={15} />
           <span>AI Cockpit</span>
         </div>
-        <span className="chip chip--accent" title="Chat answers come from your Claude Code CLI">
-          <span className="chip__dot live-dot" />
-          Opus 4.8
-        </span>
+        <div className="engineSeg" role="tablist" aria-label="Model">
+          {ENGINES.map((e) => (
+            <button
+              key={e.id}
+              role="tab"
+              aria-selected={engine === e.id}
+              className={`engineSeg__opt ${engine === e.id ? 'is-active' : ''}`}
+              onClick={() => setEngine(e.id)}
+              title={`${e.label} · ${e.sub}`}
+            >
+              {e.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="right__context">
-        <div className="right__contextRow">
-          <span className="eyebrow">context</span>
-        </div>
         <div className="right__contextGrid">
           <div>
             <div className="right__ctxLabel">project</div>
             <div className="right__ctxValue">{dashboard?.project.name ?? '—'}</div>
+          </div>
+          <div>
+            <div className="right__ctxLabel">model</div>
+            <div className="right__ctxValue">{engineMeta.label} · {engineMeta.sub}</div>
           </div>
           <div>
             <div className="right__ctxLabel">branch</div>
@@ -134,14 +177,10 @@ export function RightPanel() {
             <div className="right__ctxLabel">changes</div>
             <div className="right__ctxValue">{dashboard?.changedFiles ?? 0} files</div>
           </div>
-          <div>
-            <div className="right__ctxLabel">stack</div>
-            <div className="right__ctxValue">{dashboard?.project.techStack.slice(0, 2).join(', ') || '—'}</div>
-          </div>
         </div>
       </div>
 
-      <div className="right__body scroll-y">
+      <div className="right__body chatlog scroll-y">
         {pending.length > 0 && (
           <section className="right__section">
             <div className="eyebrow right__sectionTitle">approval required · {pending.length}</div>
@@ -151,12 +190,12 @@ export function RightPanel() {
           </section>
         )}
 
-        {turns.length === 0 ? (
+        {msgs.length === 0 ? (
           <div className="right__empty">
-            <p className="right__emptyLead">Ask the cockpit — answered by Claude Opus 4.8.</p>
+            <p className="right__emptyLead">Ask the cockpit — {engineMeta.label} {engineMeta.sub}.</p>
             <p className="right__emptyHint">
-              It answers from your project with your Claude Code CLI, and suggests which agent to route
-              the task to. Safe actions run; risky ones ask first.
+              Answers are grounded in your project via your {engineMeta.label} CLI. Pick the model
+              above; safe actions run, risky ones ask first.
             </p>
             <div className="right__suggest">
               {SUGGESTIONS.map((s) => (
@@ -167,35 +206,38 @@ export function RightPanel() {
             </div>
           </div>
         ) : (
-          turns.map((turn) => (
-            <section key={turn.id} className="right__turn animate-in">
-              <div className="right__query">{turn.query}</div>
-
-              {turn.answering ? (
-                <div className="right__answer right__answer--thinking">
-                  <span className="chip chip--accent">
-                    <span className="chip__dot live-dot" />
-                    Claude Opus 4.8 düşünüyor…
-                  </span>
-                </div>
-              ) : turn.answer ? (
-                <div className={`right__answer ${turn.error ? 'right__answer--error' : ''}`}>
-                  {turn.model && turn.model !== 'mock' && (
-                    <div className="right__answerModel">{turn.model}</div>
-                  )}
-                  <div className="right__answerText">{turn.answer}</div>
-                </div>
-              ) : null}
-
-              {turn.result && (
-                <>
-                  <div className="eyebrow right__routeHint">suggested route</div>
-                  <RouteCard rec={turn.result.primary} primary onAct={(r) => act(r, turn.query)} />
-                </>
-              )}
-            </section>
-          ))
+          msgs.map((m) =>
+            m.role === 'user' ? (
+              <div key={m.id} className="msg msg--user animate-in">
+                {m.text}
+              </div>
+            ) : (
+              <div key={m.id} className="msg msg--assistant animate-in">
+                {m.answering ? (
+                  <div className="msg__thinking">
+                    <span className="msg__dots"><i /><i /><i /></span>
+                    {engineMeta.label} düşünüyor…
+                  </div>
+                ) : (
+                  <>
+                    {m.model && m.model !== 'mock' && <div className="msg__model">{m.model}</div>}
+                    <div className={`msg__text ${m.error ? 'is-error' : ''}`}>{m.text}</div>
+                    {m.route && (
+                      <button className="chat__routeChip" onClick={() => act(m.route as RouteRecommendation)}>
+                        {m.route.requiresApproval && <IconShield width={11} height={11} />}
+                        → {AGENT_LABEL[m.route.agent]}
+                        <span className="chat__routeChipHint">
+                          {m.route.requiresApproval ? 'needs approval' : 'run'}
+                        </span>
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            ),
+          )
         )}
+        <div ref={endRef} />
       </div>
 
       <form
@@ -205,11 +247,22 @@ export function RightPanel() {
           void submit(input)
         }}
       >
-        <input
-          className="right__input"
-          placeholder="Describe a task…"
+        <textarea
+          ref={taRef}
+          className="right__input right__input--area"
+          placeholder={`Ask ${engineMeta.label}…  (Enter to send, Shift+Enter newline)`}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          rows={1}
+          onChange={(e) => {
+            setInput(e.target.value)
+            grow()
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              void submit(input)
+            }
+          }}
           disabled={busy}
         />
         <button className="btn btn--accent right__send" type="submit" disabled={busy || !input.trim()}>

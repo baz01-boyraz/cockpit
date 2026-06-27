@@ -90,6 +90,8 @@ export interface SystemInfo {
   cliAvailable: { claude: boolean; codex: boolean; railway: boolean; git: boolean }
 }
 
+export type ChatEngine = 'claude' | 'codex'
+
 export interface ChatReply {
   ok: boolean
   text: string
@@ -159,8 +161,8 @@ export interface CockpitApi {
     route(projectId: string, query: string): Promise<RouterResult>
   }
   chat: {
-    /** Ask the project's Claude Code CLI (Opus) a question; returns its reply. */
-    ask(projectId: string, prompt: string): Promise<ChatReply>
+    /** Ask the chosen agent (Claude Code or Codex) a question; returns its reply. */
+    ask(projectId: string, prompt: string, engine: ChatEngine): Promise<ChatReply>
   }
   audit: {
     list(projectId: string): Promise<AuditEntry[]>

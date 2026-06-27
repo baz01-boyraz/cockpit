@@ -377,9 +377,11 @@ export function createMockApi(): CockpitApi {
     },
     router: { route: async (_projectId, query) => classifyRoute(query) },
     chat: {
-      ask: async (_projectId, prompt) => ({
+      ask: async (_projectId, prompt, engine) => ({
         ok: true,
-        text: `(browser preview) Bu mock yanıt. Gerçek uygulamada bu, projenin Claude Code CLI'ı (Opus 4.8) tarafından yanıtlanır.\n\nSorun: "${prompt.slice(0, 120)}"`,
+        text: `(browser preview) Bu mock yanıt — gerçek uygulamada ${
+          engine === 'codex' ? 'Codex' : 'Claude Opus 4.8'
+        } cevaplar.\n\nSoru: "${prompt.slice(0, 120)}"`,
         model: 'mock',
       }),
     },

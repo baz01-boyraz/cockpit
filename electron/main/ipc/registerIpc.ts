@@ -100,8 +100,8 @@ export function registerIpc(services: Services): void {
 
   // --- chat (real model via Claude Code CLI) ---
   handle(IPC.chatAsk, (p) => {
-    const { projectId, prompt } = chatAskSchema.parse(p)
-    return services.chat.ask(projectId, prompt)
+    const { projectId, prompt, engine } = chatAskSchema.parse(p)
+    return services.chat.ask(projectId, prompt, engine)
   })
 
   // --- audit ---
