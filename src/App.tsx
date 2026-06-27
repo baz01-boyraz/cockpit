@@ -1,0 +1,41 @@
+import { useEffect } from 'react'
+import { useStore } from './store/useStore'
+import { cockpit } from './lib/cockpit'
+import { AppShell } from './components/AppShell'
+import { ProjectSwitcher } from './components/ProjectSwitcher'
+
+export function App() {
+  const ready = useStore((s) => s.ready)
+  const init = useStore((s) => s.init)
+  const switcherOpen = useStore((s) => s.projectSwitcherOpen)
+  const refreshApprovals = useStore((s) => s.refreshApprovals)
+
+  useEffect(() => {
+    void init()
+  }, [init])
+
+  // Live-refresh approvals when the backend signals a change.
+  useEffect(() => {
+    const off = cockpit().approvals.onChange(() => void refreshApprovals())
+    return off
+  }, [refreshApprovals])
+
+  if (!ready) {
+    return (
+      <div className="splash">
+        <div className="splash__mark">
+          <span className="splash__glyph">⌘</span>
+        </div>
+        <div className="splash__title">Baz Developer Cockpit</div>
+        <div className="splash__sub mono">initializing workspace…</div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <AppShell />
+      {switcherOpen && <ProjectSwitcher />}
+    </>
+  )
+}

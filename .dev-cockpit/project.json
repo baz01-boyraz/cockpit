@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "project": {
+    "name": "baz-cockpit",
+    "path": "/Users/mustafaboyraz/Projects/baz-cockpit",
+    "techStack": [
+      "React",
+      "Vite",
+      "TypeScript",
+      "Electron"
+    ]
+  },
+  "terminals": {
+    "max": 6,
+    "layout": [],
+    "profiles": [
+      {
+        "name": "Dev server",
+        "cwd": ".",
+        "command": null,
+        "role": "frontend"
+      },
+      {
+        "name": "Claude Code",
+        "cwd": ".",
+        "command": "claude",
+        "role": "claude"
+      },
+      {
+        "name": "Codex",
+        "cwd": ".",
+        "command": "codex",
+        "role": "codex"
+      }
+    ]
+  },
+  "railway": {
+    "projectId": null,
+    "environmentId": null,
+    "services": []
+  },
+  "safety": {
+    "requireApprovalFor": [
+      "git_push",
+      "git_force_push",
+      "deploy",
+      "redeploy",
+      "restart_service",
+      "delete_file",
+      "database_reset",
+      "env_write"
+    ]
+  }
+}

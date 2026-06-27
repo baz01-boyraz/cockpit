@@ -1,0 +1,85 @@
+{
+  "name": "baz-developer-cockpit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Baz Developer Cockpit — a project-aware AI coding cockpit. Terminals are the execution layer; the product is the cockpit.",
+  "author": "Baz",
+  "license": "UNLICENSED",
+  "main": "out/main/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "postinstall": "node scripts/fix-native.mjs",
+    "serve": "node serve.mjs",
+    "screenshot": "node screenshot.mjs",
+    "package:dir": "electron-vite build && electron-builder --mac dir",
+    "package": "electron-vite build && electron-builder --mac dmg"
+  },
+  "build": {
+    "appId": "com.baz.cockpit",
+    "productName": "Baz Cockpit",
+    "directories": {
+      "output": "release",
+      "buildResources": "resources"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/*.node",
+      "**/node-pty/**",
+      "**/better-sqlite3/**"
+    ],
+    "afterPack": "scripts/after-pack.cjs",
+    "mac": {
+      "target": [
+        "dir"
+      ],
+      "category": "public.app-category.developer-tools",
+      "identity": null,
+      "darkModeSupport": true
+    }
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "node-pty": "^1.0.0",
+    "simple-git": "^3.27.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
+    "@eslint/js": "^9.18.0",
+    "electron-builder": "^25.1.8",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.5",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "electron": "^33.3.1",
+    "electron-vite": "^2.3.0",
+    "eslint": "^9.18.0",
+    "globals": "^15.14.0",
+    "puppeteer": "^23.11.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8",
+    "zustand": "^5.0.3"
+  }
+}

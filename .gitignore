@@ -1,0 +1,34 @@
+# dependencies
+node_modules
+
+# build output
+out
+dist/
+dist-electron/
+release
+*.tsbuildinfo
+
+# iCloud-excluded copies (renamed via the .nosync trick)
+*.nosync
+
+# logs
+*.log
+npm-debug.log*
+
+# local data / secrets
+.dev-cockpit/secrets/
+*.sqlite
+*.sqlite3
+*.db
+.env
+.env.*
+
+# screenshots (scratch review artifacts)
+temporary screenshots/*.png
+
+# os
+.DS_Store
+Thumbs.db
+
+# coverage
+coverage/

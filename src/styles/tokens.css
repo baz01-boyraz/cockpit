@@ -1,0 +1,93 @@
+/*
+ * Baz Developer Cockpit — design tokens.
+ *
+ * An original premium dark cockpit system. Deep graphite surfaces with a warm
+ * cast, a copper/ember signal accent (never default blue/indigo), and a
+ * restrained lime for "safe/go" affordances. Surfaces are layered (base ->
+ * raised -> floating) so the UI reads with depth, not a single flat plane.
+ */
+:root {
+  /* --- graphite surface ladder --- */
+  --bg: #0b0c0f;
+  --bg-deep: #08090b;
+  --surface-1: #14161c;
+  --surface-2: #1a1d25;
+  --surface-3: #222631;
+  --surface-inset: #0e0f13;
+
+  /* --- hairlines & borders --- */
+  --border: rgba(236, 230, 218, 0.07);
+  --border-strong: rgba(236, 230, 218, 0.13);
+  --border-accent: rgba(224, 123, 69, 0.45);
+
+  /* --- text --- */
+  --text: #ece6da;
+  --text-muted: #9a9488;
+  --text-faint: #645f57;
+  --text-on-accent: #1a120c;
+
+  /* --- ember/copper signal accent --- */
+  --accent: #e07b45;
+  --accent-hi: #f29a6a;
+  --accent-dim: #b8623492;
+  --accent-glow: rgba(224, 123, 69, 0.22);
+  --accent-wash: rgba(224, 123, 69, 0.08);
+
+  /* --- secondary "signal lime" for safe / go --- */
+  --signal: #c4e35a;
+  --signal-dim: rgba(196, 227, 90, 0.16);
+
+  /* --- semantic --- */
+  --success: #93c46a;
+  --success-wash: rgba(147, 196, 106, 0.12);
+  --warning: #e3a93f;
+  --warning-wash: rgba(227, 169, 63, 0.12);
+  --danger: #e2563d;
+  --danger-wash: rgba(226, 86, 61, 0.13);
+  --info: #6fa8c4;
+
+  /* --- typography --- */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Inter, system-ui,
+    sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, 'Cascadia Code', Menlo, monospace;
+
+  --fs-display: 26px;
+  --fs-h1: 19px;
+  --fs-h2: 15px;
+  --fs-body: 13.5px;
+  --fs-sm: 12px;
+  --fs-xs: 11px;
+  --fs-micro: 10px;
+
+  /* --- spacing scale (4px base, intentional steps) --- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 22px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  /* --- radii --- */
+  --r-sm: 6px;
+  --r-md: 9px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+  --r-pill: 999px;
+
+  /* --- layered, color-tinted shadows (never flat shadow-md) --- */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.4);
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.5), 0 24px 64px rgba(0, 0, 0, 0.45);
+  --shadow-accent: 0 4px 20px var(--accent-glow);
+
+  /* --- motion --- */
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 110ms;
+  --dur: 180ms;
+
+  --rail-w: 232px;
+  --right-w: 360px;
+  --topbar-h: 52px;
+}
