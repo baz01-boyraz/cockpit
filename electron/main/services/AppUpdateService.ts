@@ -1,8 +1,35 @@
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { app } from 'electron'
 import { autoUpdater, type ProgressInfo, type UpdateInfo } from 'electron-updater'
 import type { AppUpdateState } from '@shared/domain'
 import type { CockpitEvents } from '../events'
 import { nowIso } from '../util/ids'
+
+const NOT_PACKAGED_MESSAGE = 'Auto-update is available only in a packaged app.'
+const NO_UPDATE_CONFIG_MESSAGE =
+  'This local build has no update metadata (app-update.yml). Install a released DMG/ZIP to enable auto-update.'
+
+/**
+ * electron-updater reads `app-update.yml` from the app's resources directory to
+ * learn where to look for releases. Local `--dir` builds (e.g. `npm run app:refresh`)
+ * report `app.isPackaged === true` but never generate that file, so calling
+ * `checkForUpdates()` throws a raw `ENOENT`. Probe for the file first so we can
+ * present a clean "unsupported" state instead of crashing.
+ */
+function hasUpdateConfig(): boolean {
+  try {
+    return existsSync(join(process.resourcesPath, 'app-update.yml'))
+  } catch {
+    return false
+  }
+}
+
+function unsupportedReason(): string | null {
+  if (!app.isPackaged) return NOT_PACKAGED_MESSAGE
+  if (!hasUpdateConfig()) return NO_UPDATE_CONFIG_MESSAGE
+  return null
+}
 
 function notesToString(notes: UpdateInfo['releaseNotes']): string | null {
   if (!notes) return null
@@ -24,7 +51,8 @@ export class AppUpdateService {
   private state: AppUpdateState
 
   constructor(private readonly events: CockpitEvents) {
-    const canCheck = app.isPackaged
+    const reason = unsupportedReason()
+    const canCheck = reason === null
     this.state = {
       phase: canCheck ? 'idle' : 'unsupported',
       currentVersion: app.getVersion(),
@@ -35,7 +63,7 @@ export class AppUpdateService {
       canCheck,
       canDownload: false,
       canInstall: false,
-      error: canCheck ? null : 'Auto-update is available only in a packaged app.',
+      error: reason,
       checkedAt: null,
     }
 
@@ -49,13 +77,14 @@ export class AppUpdateService {
   }
 
   async check(): Promise<AppUpdateState> {
-    if (!app.isPackaged) {
+    const reason = unsupportedReason()
+    if (reason !== null) {
       this.setState({
         phase: 'unsupported',
         canCheck: false,
         canDownload: false,
         canInstall: false,
-        error: 'Auto-update is available only in a packaged app.',
+        error: reason,
         checkedAt: nowIso(),
       })
       return this.state
