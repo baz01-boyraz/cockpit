@@ -512,13 +512,13 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 9px;
+  gap: 10px;
   width: 100%;
   min-width: 0;
-  padding: 9px 10px;
-  border-radius: var(--r-sm);
+  padding: 10px 11px 11px 13px;
+  border-radius: var(--r-md);
   border: 1px solid var(--border);
-  background: var(--surface-1);
+  background: linear-gradient(180deg, var(--surface-1), var(--surface-inset));
   color: var(--text-muted);
   overflow: hidden;
   isolation: isolate;
@@ -560,6 +560,25 @@
   --tone: var(--text-faint);
   opacity: 0.6;
 }
+/* Signature provider-tinted edge rail down the left of each card. */
+.usageDock__rail {
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 2px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(180deg, var(--provider-2), var(--provider));
+  opacity: 0.5;
+  transition:
+    opacity var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
+}
+.usageDock__item:hover .usageDock__rail,
+.usageDock__item:focus-visible .usageDock__rail {
+  opacity: 1;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--provider) 55%, transparent);
+}
 .usageDock__identity {
   position: relative;
   z-index: 1;
@@ -571,78 +590,100 @@
 }
 .usageDock__orb {
   position: relative;
-  width: 9px;
-  height: 9px;
-  display: grid;
-  place-items: center;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--provider);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--provider) 16%, transparent);
+  background: radial-gradient(circle at 35% 30%, var(--provider-2), var(--provider));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--provider) 14%, transparent);
   flex: 0 0 auto;
-}
-.usageDock__orbCore {
-  display: none;
 }
 .usageDock__label {
   min-width: 0;
+  flex: 1 1 auto;
   color: var(--text);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.usageDock__metrics {
+.usageDock__plan {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--provider) 9%, var(--surface-3));
+  color: color-mix(in srgb, var(--provider-2) 65%, var(--text-muted));
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.usageDock__meters {
   position: relative;
   z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
   width: 100%;
   min-width: 0;
 }
-.usageDock__metric {
+.batRow {
   display: grid;
-  grid-template-columns: max-content max-content;
+  grid-template-columns: 18px minmax(0, 1fr) max-content;
   align-items: center;
-  justify-content: space-between;
-  column-gap: 4px;
-  row-gap: 4px;
+  column-gap: 8px;
   min-width: 0;
 }
-.usageDock__metricTag {
+.batRow__tag {
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
-.usageDock__metricValue {
+.batRow__cells {
+  display: flex;
+  align-items: stretch;
+  gap: 2.5px;
+  height: 13px;
+  min-width: 0;
+}
+.batCell {
+  flex: 1 1 0;
+  min-width: 0;
+  border-radius: 2px;
+  background: rgba(236, 230, 218, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(236, 230, 218, 0.04);
+  transform: scaleY(0.62);
+  transform-origin: center;
+  transition:
+    background var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-spring),
+    box-shadow var(--dur) var(--ease-out);
+  transition-delay: calc(var(--i, 0) * 22ms);
+}
+.batCell--on {
+  background: linear-gradient(180deg, var(--tone), color-mix(in srgb, var(--tone) 72%, #000));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 40%, transparent);
+  transform: scaleY(1);
+}
+.batCell--lead {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tone) 88%, #fff), var(--tone));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 60%, transparent),
+    0 0 8px color-mix(in srgb, var(--tone) 65%, transparent);
+  animation: bat-lead 2.6s var(--ease-out) infinite;
+}
+.batRow__pct {
+  min-width: 30px;
   color: var(--text);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0;
   text-align: right;
-}
-.usageDock__metricTrack {
-  grid-column: 1 / -1;
-  position: relative;
-  height: 3px;
-  border-radius: var(--r-pill);
-  background: rgba(236, 230, 218, 0.09);
-  overflow: hidden;
-}
-.usageDock__metricFill {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: var(--tone);
-  opacity: 0.9;
-  transform: scaleX(var(--scale, 0));
-  transform-origin: left center;
-  transition:
-    opacity var(--dur) var(--ease-out),
-    transform 700ms var(--ease-spring);
 }
 .usageDock__state {
   position: relative;
@@ -653,6 +694,19 @@
   letter-spacing: 0;
   text-align: left;
   text-transform: uppercase;
+}
+@keyframes bat-lead {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--tone) 60%, transparent),
+      0 0 6px color-mix(in srgb, var(--tone) 45%, transparent);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--tone) 75%, transparent),
+      0 0 12px color-mix(in srgb, var(--tone) 80%, transparent);
+  }
 }
 @keyframes usage-pulse {
   0%,
@@ -667,17 +721,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .usageDock__orbCore,
+  .batCell--lead,
   .topbar__approvals--active {
     animation: none;
   }
-  .usageDock__aura,
+  .usageDock__rail,
   .usageDock__details,
   .usageDock__item,
-  .usageDock__metricFill {
-    transition: none;
-  }
-  .usageDock__item:hover .usageDock__sheen {
+  .batCell {
     transition: none;
   }
 }
