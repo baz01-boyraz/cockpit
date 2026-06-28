@@ -192,3 +192,7 @@ export const ingestLogSchema = z.object({
   sourceId: z.string().nullable().optional(),
   message: z.string(),
 })
+
+// Account usage is global to the developer's CLI auth, not project-scoped, so
+// the request carries no payload. We still validate it to reject stray input.
+export const agentUsageRequestSchema = z.union([z.undefined(), z.object({}).strict()])

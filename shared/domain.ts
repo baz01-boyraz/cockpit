@@ -465,3 +465,43 @@ export interface DashboardSnapshot {
   pendingApprovals: number
   usage: UsageSummary[]
 }
+
+// ---------------------------------------------------------------------------
+// Agent account usage (Claude Code / Codex quota awareness)
+// ---------------------------------------------------------------------------
+
+export type AgentUsageProvider = 'claude' | 'codex'
+
+/** A single quota window — the rolling 5-hour session or the weekly limit. */
+export interface AgentUsageWindow {
+  /** Short label: 'Session' (5h) or 'Weekly'. */
+  label: string
+  /** 0–100: how much of this window has been consumed. */
+  usedPercent: number
+  /** ISO timestamp the window resets, when the provider reports one. */
+  resetAt: ISODate | null
+}
+
+/**
+ * A provider's account-quota snapshot. Built in the main process from the
+ * developer's own already-authenticated CLI credentials. The renderer only
+ * ever receives this summarized shape — never a token, account id, or email.
+ */
+export interface AgentUsageSnapshot {
+  provider: AgentUsageProvider
+  /** Display name: 'Claude' / 'Codex'. */
+  label: string
+  /** True when `windows` carries live data. */
+  available: boolean
+  /** Plan tier when the provider reports one (e.g. 'Pro'). */
+  plan: string | null
+  windows: AgentUsageWindow[]
+  /** Why usage is unavailable — drives a polished empty/error state. */
+  reason: string | null
+  /** ISO time the snapshot was fetched. */
+  fetchedAt: ISODate
+}
+
+export interface AgentUsageReport {
+  providers: AgentUsageSnapshot[]
+}

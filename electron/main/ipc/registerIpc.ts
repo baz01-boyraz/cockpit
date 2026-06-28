@@ -5,6 +5,7 @@ import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { IPC, type SystemInfo } from '@shared/ipc'
 import {
   addProjectInputSchema,
+  agentUsageRequestSchema,
   approvalDecisionSchema,
   createTerminalInputSchema,
   gitCommitInputSchema,
@@ -108,6 +109,10 @@ export function registerIpc(services: Services): void {
 
   // --- usage ---
   handle(IPC.usageSummary, (p) => services.usage.summarize(projectIdSchema.parse(p).projectId))
+  handle(IPC.agentUsageGet, (p) => {
+    agentUsageRequestSchema.parse(p)
+    return services.agentUsage.getReport()
+  })
 
   // --- approvals ---
   handle(IPC.approvalsList, (p) => services.approvals.list(projectIdSchema.parse(p).projectId))

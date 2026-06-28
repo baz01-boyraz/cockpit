@@ -375,6 +375,10 @@ export function RightPanel() {
           msgs.map((m) =>
             m.role === 'user' ? (
               <div key={m.id} className="msg msg--user animate-in">
+                <div className="msg__marker" aria-hidden>
+                  <span className="msg__markerDot" />
+                  <span>You</span>
+                </div>
                 {m.image && <img className="msg__image" src={m.image.previewUrl} alt={m.image.name} />}
                 {m.text && <div className="msg__userText">{m.text}</div>}
               </div>

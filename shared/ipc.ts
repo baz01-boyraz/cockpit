@@ -11,6 +11,7 @@
  */
 import type {
   AgentType,
+  AgentUsageReport,
   AppUpdateState,
   ApprovalRequest,
   AuditEntry,
@@ -70,6 +71,7 @@ export const IPC = {
   logsIngest: 'logs:ingest',
 
   usageSummary: 'usage:summary',
+  agentUsageGet: 'agentUsage:get',
 
   approvalsList: 'approvals:list',
   approvalsRequest: 'approvals:request',
@@ -182,6 +184,14 @@ export interface CockpitApi {
   }
   usage: {
     summary(projectId: string): Promise<UsageSummary[]>
+  }
+  agentUsage: {
+    /**
+     * Account-quota snapshots for the developer's authenticated agents
+     * (Claude Code / Codex). Probed in the main process from existing CLI
+     * credentials; returns only summarized windows — never tokens.
+     */
+    get(): Promise<AgentUsageReport>
   }
   approvals: {
     list(projectId: string): Promise<ApprovalRequest[]>

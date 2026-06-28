@@ -62,6 +62,9 @@ const api: CockpitApi = {
   usage: {
     summary: (projectId) => invoke(IPC.usageSummary, { projectId }),
   },
+  agentUsage: {
+    get: () => invoke(IPC.agentUsageGet),
+  },
   approvals: {
     list: (projectId) => invoke(IPC.approvalsList, { projectId }),
     request: (input) => invoke(IPC.approvalsRequest, input),

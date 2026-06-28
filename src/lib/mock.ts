@@ -8,6 +8,7 @@
  * same shared router/log-pattern logic the real backend uses.
  */
 import type {
+  AgentUsageReport,
   ApprovalRequest,
   AuditEntry,
   DashboardSnapshot,
@@ -228,6 +229,37 @@ const usage: UsageSummary[] = [
   { provider: 'claude', sessions: 3, commands: 0, tasks: 6, totalDurationMs: 2_100_000, estimatedTokens: 184_000, warning: null },
   { provider: 'codex', sessions: 2, commands: 0, tasks: 9, totalDurationMs: 1_250_000, estimatedTokens: 96_000, warning: null },
 ]
+
+// Account-quota snapshots for the browser preview. Claude shows a healthy live
+// state; Codex shows the warning tier so the screenshot exercises both tones.
+const agentUsageReport = (): AgentUsageReport => ({
+  providers: [
+    {
+      provider: 'claude',
+      label: 'Claude',
+      available: true,
+      plan: 'Pro',
+      windows: [
+        { label: 'Session', usedPercent: 11, resetAt: new Date(Date.now() + 2.4 * 3600_000).toISOString() },
+        { label: 'Weekly', usedPercent: 23, resetAt: new Date(Date.now() + 38 * 3600_000).toISOString() },
+      ],
+      reason: null,
+      fetchedAt: now(),
+    },
+    {
+      provider: 'codex',
+      label: 'Codex',
+      available: true,
+      plan: 'Pro Lite',
+      windows: [
+        { label: 'Session', usedPercent: 82, resetAt: new Date(Date.now() + 1.1 * 3600_000).toISOString() },
+        { label: 'Weekly', usedPercent: 64, resetAt: new Date(Date.now() + 72 * 3600_000).toISOString() },
+      ],
+      reason: null,
+      fetchedAt: now(),
+    },
+  ],
+})
 
 const logs: LogEvent[] = [
   { id: id('log'), projectId: 'prj_serbest', sourceType: 'terminal', sourceId: 't1', level: 'error', message: "Error: Cannot find module 'framer-motion'", metadata: {}, createdAt: now() },
@@ -497,6 +529,7 @@ export function createMockApi(): CockpitApi {
       },
     },
     usage: { summary: async (projectId) => (projectId === 'prj_serbest' ? usage : []) },
+    agentUsage: { get: async () => agentUsageReport() },
     approvals: {
       list: async (projectId) => approvals.filter((a) => a.projectId === projectId),
       request: async (input) => {

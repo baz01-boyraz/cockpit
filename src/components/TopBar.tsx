@@ -1,6 +1,7 @@
 import { useStore } from '../store/useStore'
 import { isMockBackend } from '../lib/cockpit'
 import { IconBranch, IconSearch, IconShield, IconWarning } from './icons'
+import { UsageStrip } from './UsageStrip'
 
 export function TopBar() {
   const dashboard = useStore((s) => s.dashboard)
@@ -43,6 +44,7 @@ export function TopBar() {
       </div>
 
       <div className="topbar__status">
+        <UsageStrip />
         {isMockBackend() && <span className="chip chip--warning">browser preview</span>}
         <button
           className={`topbar__approvals ${pending > 0 ? 'topbar__approvals--active' : ''}`}

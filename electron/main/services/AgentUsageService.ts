@@ -1,0 +1,317 @@
+import { execFile } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
+import type {
+  AgentUsageProvider,
+  AgentUsageReport,
+  AgentUsageSnapshot,
+  AgentUsageWindow,
+} from '@shared/domain'
+
+const execFileAsync = promisify(execFile)
+
+const FETCH_TIMEOUT_MS = 12_000
+/** Don't re-probe the upstream APIs more often than this (they rate-limit). */
+const MIN_REFRESH_MS = 60_000
+/** Keep serving the last good snapshot through transient errors for this long. */
+const STALE_FALLBACK_MS = 6 * 60 * 60 * 1000
+
+interface OAuthCreds {
+  token: string
+  expiresAt: number | null
+  plan: string | null
+}
+
+interface CacheEntry {
+  snapshot: AgentUsageSnapshot
+  at: number
+}
+
+const LABELS: Record<AgentUsageProvider, string> = {
+  claude: 'Claude',
+  codex: 'Codex',
+}
+
+/**
+ * Account-quota awareness for the developer's already-authenticated agent CLIs.
+ *
+ * Security model: this service is the *only* place credentials are touched. It
+ * reads the OAuth tokens Claude Code / Codex already store locally (keychain or
+ * dotfile), calls each provider's own usage endpoint with the developer's token,
+ * and returns a summarized snapshot. Tokens, account ids, and emails never leave
+ * this service — the IPC layer only ever forwards the window percentages.
+ *
+ * Providers are probed independently: one failing (or signed out) never blanks
+ * the other. Missing/expired credentials degrade to a polished `available:false`
+ * snapshot with a human reason. Network blips fall back to the last good cache.
+ */
+export class AgentUsageService {
+  private readonly cache = new Map<AgentUsageProvider, CacheEntry>()
+
+  async getReport(): Promise<AgentUsageReport> {
+    const [claude, codex] = await Promise.all([
+      this.getProvider('claude', () => this.fetchClaude()),
+      this.getProvider('codex', () => this.fetchCodex()),
+    ])
+    return { providers: [claude, codex] }
+  }
+
+  // --- cache + stale-fallback wrapper -------------------------------------
+
+  private async getProvider(
+    provider: AgentUsageProvider,
+    fetcher: () => Promise<AgentUsageSnapshot>,
+  ): Promise<AgentUsageSnapshot> {
+    const cached = this.cache.get(provider)
+    if (cached && Date.now() - cached.at < MIN_REFRESH_MS) return cached.snapshot
+
+    try {
+      const snapshot = await fetcher()
+      if (snapshot.available) {
+        this.cache.set(provider, { snapshot, at: Date.now() })
+        return snapshot
+      }
+      // A clean "signed out / no quota" state — prefer a still-fresh cache so a
+      // momentary credential read miss doesn't make the pill flicker away.
+      if (cached && Date.now() - cached.at < STALE_FALLBACK_MS) return cached.snapshot
+      return snapshot
+    } catch (err) {
+      if (cached && Date.now() - cached.at < STALE_FALLBACK_MS) return cached.snapshot
+      return this.unavailable(provider, this.errorReason(err))
+    }
+  }
+
+  // --- Claude (Anthropic OAuth usage) -------------------------------------
+
+  private async fetchClaude(): Promise<AgentUsageSnapshot> {
+    const creds = await this.resolveClaudeCreds()
+    if (!creds) {
+      return this.unavailable('claude', 'Sign in with Claude Code to see usage.')
+    }
+    if (!creds.token.startsWith('sk-ant-oat')) {
+      return this.unavailable(
+        'claude',
+        'Account limits need an OAuth-backed Claude Code login.',
+      )
+    }
+
+    const payload = await this.getJson('https://api.anthropic.com/api/oauth/usage', {
+      Authorization: `Bearer ${creds.token}`,
+      Accept: 'application/json',
+      'anthropic-beta': 'oauth-2025-04-20',
+      'User-Agent': 'claude-code/2.1.0',
+    })
+
+    const windows: AgentUsageWindow[] = []
+    for (const [key, label] of [
+      ['five_hour', 'Session'],
+      ['seven_day', 'Weekly'],
+    ] as const) {
+      const win = (payload as Record<string, unknown>)[key]
+      const window = this.windowFromUtilization(label, win)
+      if (window) windows.push(window)
+    }
+    if (!windows.length) {
+      return this.unavailable('claude', 'No quota windows reported yet.')
+    }
+
+    return {
+      provider: 'claude',
+      label: LABELS.claude,
+      available: true,
+      plan: prettyPlan(creds.plan ?? (payload as { plan?: unknown }).plan),
+      windows,
+      reason: null,
+      fetchedAt: new Date().toISOString(),
+    }
+  }
+
+  private async resolveClaudeCreds(): Promise<OAuthCreds | null> {
+    const candidates = (
+      await Promise.all([this.claudeKeychain(), this.claudeFile()])
+    ).filter((c): c is OAuthCreds => c !== null)
+    if (!candidates.length) return null
+
+    const now = Date.now()
+    const valid = candidates.filter((c) => c.expiresAt === null || c.expiresAt > now)
+    // Prefer the credential that stays valid longest (Claude Code refreshes the
+    // keychain copy during use, so it's usually fresher than the dotfile).
+    const pool = valid.length ? valid : candidates
+    return pool.sort((a, b) => (b.expiresAt ?? Infinity) - (a.expiresAt ?? Infinity))[0]
+  }
+
+  private async claudeKeychain(): Promise<OAuthCreds | null> {
+    if (process.platform !== 'darwin') return null
+    try {
+      const { stdout } = await execFileAsync(
+        'security',
+        ['find-generic-password', '-s', 'Claude Code-credentials', '-w'],
+        { timeout: 4000 },
+      )
+      return parseClaudeOAuth(stdout)
+    } catch {
+      return null
+    }
+  }
+
+  private async claudeFile(): Promise<OAuthCreds | null> {
+    try {
+      const raw = await readFile(join(homedir(), '.claude', '.credentials.json'), 'utf8')
+      return parseClaudeOAuth(raw)
+    } catch {
+      return null
+    }
+  }
+
+  // --- Codex (ChatGPT backend usage) --------------------------------------
+
+  private async fetchCodex(): Promise<AgentUsageSnapshot> {
+    const auth = await this.readCodexAuth()
+    if (!auth) {
+      return this.unavailable('codex', 'Sign in with the Codex CLI to see usage.')
+    }
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${auth.token}`,
+      Accept: 'application/json',
+      'User-Agent': 'codex-cli',
+    }
+    if (auth.accountId) headers['ChatGPT-Account-Id'] = auth.accountId
+
+    const payload = await this.getJson('https://chatgpt.com/backend-api/wham/usage', headers)
+    const rateLimit = (payload as { rate_limit?: Record<string, unknown> }).rate_limit ?? {}
+
+    const windows: AgentUsageWindow[] = []
+    for (const [key, label] of [
+      ['primary_window', 'Session'],
+      ['secondary_window', 'Weekly'],
+    ] as const) {
+      const window = this.windowFromUsedPercent(label, rateLimit[key])
+      if (window) windows.push(window)
+    }
+    if (!windows.length) {
+      return this.unavailable('codex', 'No quota windows reported yet.')
+    }
+
+    return {
+      provider: 'codex',
+      label: LABELS.codex,
+      available: true,
+      plan: prettyPlan((payload as { plan_type?: unknown }).plan_type),
+      windows,
+      reason: null,
+      fetchedAt: new Date().toISOString(),
+    }
+  }
+
+  private async readCodexAuth(): Promise<{ token: string; accountId: string | null } | null> {
+    try {
+      const raw = await readFile(join(homedir(), '.codex', 'auth.json'), 'utf8')
+      const parsed = JSON.parse(raw) as { tokens?: Record<string, unknown> }
+      const tokens = parsed.tokens ?? {}
+      const token = String(tokens.access_token ?? '')
+      if (!token) return null
+      const accountId = tokens.account_id ? String(tokens.account_id) : null
+      return { token, accountId }
+    } catch {
+      return null
+    }
+  }
+
+  // --- shared helpers ------------------------------------------------------
+
+  /** Anthropic reports `utilization` (0–1 or 0–100); normalize to a percent. */
+  private windowFromUtilization(label: string, raw: unknown): AgentUsageWindow | null {
+    if (!isRecord(raw)) return null
+    const util = raw.utilization
+    if (typeof util !== 'number' || !Number.isFinite(util)) return null
+    const usedPercent = clampPercent(util <= 1 ? util * 100 : util)
+    return { label, usedPercent, resetAt: parseResetAt(raw.resets_at ?? raw.reset_at) }
+  }
+
+  /** Codex reports `used_percent` directly. */
+  private windowFromUsedPercent(label: string, raw: unknown): AgentUsageWindow | null {
+    if (!isRecord(raw)) return null
+    const used = raw.used_percent
+    if (typeof used !== 'number' || !Number.isFinite(used)) return null
+    return { label, usedPercent: clampPercent(used), resetAt: parseResetAt(raw.reset_at) }
+  }
+
+  private async getJson(url: string, headers: Record<string, string>): Promise<unknown> {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+    try {
+      const res = await fetch(url, { headers, signal: controller.signal })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return await res.json()
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  private unavailable(provider: AgentUsageProvider, reason: string): AgentUsageSnapshot {
+    return {
+      provider,
+      label: LABELS[provider],
+      available: false,
+      plan: null,
+      windows: [],
+      reason,
+      fetchedAt: new Date().toISOString(),
+    }
+  }
+
+  private errorReason(err: unknown): string {
+    const message = err instanceof Error ? err.message : ''
+    if (message.includes('401') || message.includes('403')) {
+      return 'Session expired — reopen the CLI to refresh.'
+    }
+    if (message.includes('aborted')) return 'Usage request timed out.'
+    return 'Usage temporarily unavailable.'
+  }
+}
+
+function parseClaudeOAuth(raw: string): OAuthCreds | null {
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const oauth = isRecord(parsed.claudeAiOauth) ? parsed.claudeAiOauth : parsed
+    const token = String(oauth.accessToken ?? oauth.access_token ?? '')
+    if (!token) return null
+    const expiresAt = typeof oauth.expiresAt === 'number' ? oauth.expiresAt : null
+    const plan = typeof oauth.subscriptionType === 'string' ? oauth.subscriptionType : null
+    return { token, expiresAt, plan }
+  } catch {
+    return null
+  }
+}
+
+function prettyPlan(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const cleaned = value.trim()
+  if (!cleaned) return null
+  return cleaned
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+/** Reset can be an ISO string (Claude) or a unix-seconds number (Codex). */
+function parseResetAt(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return new Date(value * 1000).toISOString()
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? null : date.toISOString()
+  }
+  return null
+}
+
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, value))
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}

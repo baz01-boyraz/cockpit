@@ -9,6 +9,7 @@ import { openDatabase } from '../db/Database'
 import type { CockpitEvents } from '../events'
 import { AuditLogService } from './AuditLogService'
 import { AttachmentService } from './AttachmentService'
+import { AgentUsageService } from './AgentUsageService'
 import { ApprovalService } from './ApprovalService'
 import { AppUpdateService } from './AppUpdateService'
 import { ChatService } from './ChatService'
@@ -34,6 +35,7 @@ export class Services {
   readonly attachments: AttachmentService
   readonly approvals: ApprovalService
   readonly usage: UsageService
+  readonly agentUsage: AgentUsageService
   readonly logs: LogIntelligenceService
   readonly projects: ProjectService
   readonly git: GitService
@@ -51,6 +53,7 @@ export class Services {
     this.secrets = new SecretStore(opts.userDataDir)
     this.audit = new AuditLogService(this.db)
     this.usage = new UsageService(this.db)
+    this.agentUsage = new AgentUsageService()
     this.logs = new LogIntelligenceService(this.db, opts.events)
     this.projects = new ProjectService(this.db)
     this.attachments = new AttachmentService(this.projects)
