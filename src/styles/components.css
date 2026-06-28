@@ -205,6 +205,10 @@
 /* ---------- topbar ---------- */
 .topbar {
   position: relative;
+  /* Above main-content cards (≤30) so the usage popover drops over them,
+     but below modals/command palette (100). backdrop-filter already makes
+     this a stacking context, so the z-index lifts the whole topbar. */
+  z-index: 50;
   height: var(--topbar-h);
   display: flex;
   align-items: center;
@@ -578,6 +582,221 @@
   }
   .usagePill__bar::after {
     transition: none;
+  }
+}
+
+/* ---------- agent usage popover (Hermes-style breakdown) ---------- */
+.usagePillWrap {
+  position: relative;
+  display: flex;
+}
+.usagePop {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  z-index: 60;
+  width: 268px;
+  padding: 13px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-strong);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
+  box-shadow: var(--shadow-float);
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+  transform-origin: top right;
+  pointer-events: none;
+  visibility: hidden;
+  transition:
+    opacity var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-spring),
+    visibility 0s linear var(--dur);
+}
+.usagePillWrap:hover .usagePop,
+.usagePillWrap:focus-within .usagePop {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  visibility: visible;
+  transition:
+    opacity var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-spring),
+    visibility 0s;
+}
+/* little caret pointing back up at the pill */
+.usagePop::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  right: 22px;
+  width: 9px;
+  height: 9px;
+  background: var(--surface-2);
+  border-left: 1px solid var(--border-strong);
+  border-top: 1px solid var(--border-strong);
+  transform: rotate(45deg);
+}
+
+/* ---------- shared quota breakdown (popover + Usage panel) ---------- */
+.quotaBody {
+  --tone: var(--signal);
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+.quotaBody--warning {
+  --tone: var(--warning);
+}
+.quotaBody--critical {
+  --tone: var(--danger);
+}
+.quotaBody--off {
+  --tone: var(--text-faint);
+}
+.quotaBody__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.quotaBody__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tone);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--tone) 60%, transparent);
+  flex-shrink: 0;
+}
+.quotaBody__name {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.quotaBody__plan {
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+}
+.quotaBody__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 2px 8px 2px 7px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-muted);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+}
+.quotaBody__liveDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--signal) 70%, transparent);
+  animation: usage-pulse 2.4s var(--ease-out) infinite;
+}
+.quotaBody__windows {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.quotaBody__reason {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+
+.quotaWindow {
+  --tone: var(--signal);
+  padding: 10px 11px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+}
+.quotaWindow--warning {
+  --tone: var(--warning);
+}
+.quotaWindow--critical {
+  --tone: var(--danger);
+}
+.quotaWindow__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.quotaWindow__title {
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 550;
+}
+.quotaWindow__value {
+  color: var(--tone);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.quotaWindow__valueHint {
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+}
+.quotaWindow__track {
+  position: relative;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: rgba(236, 230, 218, 0.08);
+  overflow: hidden;
+}
+.quotaWindow__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--fill, 0%);
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--tone) 78%, #fff 10%), var(--tone));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--tone) 55%, transparent);
+  transition: width 900ms var(--ease-spring);
+}
+.quotaWindow__reset {
+  margin-top: 7px;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.01em;
+}
+
+/* Usage panel quota section */
+.usage__quota {
+  margin-top: 14px;
+}
+.quotaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .usagePop {
+    transition: opacity var(--dur) var(--ease-out), visibility 0s linear var(--dur);
+    transform: none;
+  }
+  .usagePillWrap:hover .usagePop,
+  .usagePillWrap:focus-within .usagePop {
+    transform: none;
+  }
+  .quotaWindow__fill {
+    transition: none;
+  }
+  .quotaBody__liveDot {
+    animation: none;
   }
 }
 

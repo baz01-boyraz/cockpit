@@ -51,6 +51,58 @@ export function toneFor(minRemaining: number | null): UsageTone {
   return 'healthy'
 }
 
+/** A single quota window expanded for the rich popover / Usage panel view. */
+export interface AgentUsageWindowView {
+  /** Raw provider label ('Session' / 'Weekly'). */
+  label: string
+  /** Friendly title for display ('5h session' / 'Weekly limit'). */
+  title: string
+  /** Remaining headroom 0–100. Null when the provider doesn't report it. */
+  remainingPercent: number | null
+  /** Consumed share 0–100, mirrors `remainingPercent`. */
+  usedPercent: number
+  /** ISO timestamp this window resets, when reported. */
+  resetAt: AgentUsageWindow['resetAt']
+  tone: UsageTone
+}
+
+/** Pill summary plus the per-window breakdown the popover and panel render. */
+export interface AgentUsageDetail extends AgentUsagePill {
+  windows: AgentUsageWindowView[]
+}
+
+/** Human title for a quota window, e.g. 'Session' → '5h session'. */
+export function windowTitle(label: string): string {
+  const l = label.toLowerCase()
+  if (l.includes('session') || l === '5h') return '5h session'
+  if (l.includes('week') || l === 'w') return 'Weekly limit'
+  return label
+}
+
+/**
+ * Expand a snapshot into the full breakdown the rich surfaces use: the compact
+ * pill fields plus one view per quota window (session, weekly) with remaining
+ * headroom, reset time, and a per-window tone. Reuses {@link summarizeAgentUsage}
+ * so pill and detail never disagree.
+ */
+export function describeAgentUsage(snapshot: AgentUsageSnapshot): AgentUsageDetail {
+  const pill = summarizeAgentUsage(snapshot)
+  const windows: AgentUsageWindowView[] = snapshot.available
+    ? snapshot.windows.map((w) => {
+        const remaining = remainingPercent(w)
+        return {
+          label: w.label,
+          title: windowTitle(w.label),
+          remainingPercent: remaining,
+          usedPercent: remaining === null ? 0 : 100 - remaining,
+          resetAt: w.resetAt,
+          tone: toneFor(remaining),
+        }
+      })
+    : []
+  return { ...pill, windows }
+}
+
 /** Collapse a provider snapshot into the compact pill the TopBar shows. */
 export function summarizeAgentUsage(snapshot: AgentUsageSnapshot): AgentUsagePill {
   const base = {

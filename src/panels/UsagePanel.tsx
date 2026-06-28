@@ -1,5 +1,7 @@
 import { useStore } from '../store/useStore'
 import { IconUsage, IconWarning } from '../components/icons'
+import { useAgentUsage } from '../lib/useAgentUsage'
+import { AgentUsageBody } from '../components/AgentUsageBody'
 
 const fmtDuration = (ms: number): string => {
   const min = Math.round(ms / 60000)
@@ -15,6 +17,7 @@ const fmtTokens = (n: number | null): string => {
 
 export function UsagePanel() {
   const usage = useStore((s) => s.usage)
+  const agentUsage = useAgentUsage()
 
   const totals = usage.reduce(
     (acc, u) => ({
@@ -53,6 +56,20 @@ export function UsagePanel() {
           </div>
         ))}
       </div>
+
+      {agentUsage && agentUsage.length > 0 ? (
+        <div className="card usage__quota">
+          <div className="card__head">
+            <div className="card__title">Account quota</div>
+            <span className="chip">live · CLI plan</span>
+          </div>
+          <div className="quotaGrid">
+            {agentUsage.map((snapshot) => (
+              <AgentUsageBody key={snapshot.provider} snapshot={snapshot} />
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="card usage__table">
         <div className="card__head">

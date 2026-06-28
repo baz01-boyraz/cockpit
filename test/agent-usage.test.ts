@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentUsageSnapshot } from '@shared/domain'
-import { summarizeAgentUsage, toneFor } from '@shared/agent-usage'
+import { describeAgentUsage, summarizeAgentUsage, toneFor, windowTitle } from '@shared/agent-usage'
 
 const snap = (over: Partial<AgentUsageSnapshot>): AgentUsageSnapshot => ({
   provider: 'claude',
@@ -76,6 +76,53 @@ describe('summarizeAgentUsage', () => {
     )
     expect(pill.detail).toBe('5h 0%')
     expect(pill.minRemainingPercent).toBe(0)
+  })
+})
+
+describe('windowTitle', () => {
+  it('maps provider labels to friendly titles', () => {
+    expect(windowTitle('Session')).toBe('5h session')
+    expect(windowTitle('Current session')).toBe('5h session')
+    expect(windowTitle('Weekly')).toBe('Weekly limit')
+    expect(windowTitle('W')).toBe('Weekly limit')
+    expect(windowTitle('Custom')).toBe('Custom')
+  })
+})
+
+describe('describeAgentUsage', () => {
+  it('expands each window with remaining headroom, reset, and tone', () => {
+    const detail = describeAgentUsage(
+      snap({
+        windows: [
+          { label: 'Session', usedPercent: 11, resetAt: '2026-07-01T12:00:00.000Z' },
+          { label: 'Weekly', usedPercent: 92, resetAt: null },
+        ],
+      }),
+    )
+    expect(detail.available).toBe(true)
+    expect(detail.minRemainingPercent).toBe(8)
+    expect(detail.windows).toHaveLength(2)
+    expect(detail.windows[0]).toMatchObject({
+      title: '5h session',
+      remainingPercent: 89,
+      usedPercent: 11,
+      resetAt: '2026-07-01T12:00:00.000Z',
+      tone: 'healthy',
+    })
+    expect(detail.windows[1]).toMatchObject({
+      title: 'Weekly limit',
+      remainingPercent: 8,
+      tone: 'critical',
+    })
+  })
+
+  it('exposes no windows and keeps the reason when unavailable', () => {
+    const detail = describeAgentUsage(
+      snap({ available: false, plan: null, reason: 'Sign in with Codex to see usage.' }),
+    )
+    expect(detail.available).toBe(false)
+    expect(detail.windows).toEqual([])
+    expect(detail.reason).toBe('Sign in with Codex to see usage.')
   })
 })
 
