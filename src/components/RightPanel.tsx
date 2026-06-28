@@ -4,7 +4,7 @@ import type { ChatEngine } from '@shared/ipc'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import { ApprovalCard } from './ApprovalCard'
-import { IconBolt, IconSend, IconShield } from './icons'
+import { IconBolt, IconChevron, IconSend, IconShield } from './icons'
 
 interface Msg {
   id: number
@@ -45,6 +45,7 @@ export function RightPanel() {
   const refreshApprovals = useStore((s) => s.refreshApprovals)
   const aiDraft = useStore((s) => s.aiDraft)
   const setAiDraft = useStore((s) => s.setAiDraft)
+  const toggleChat = useStore((s) => s.toggleChat)
 
   const [engine, setEngine] = useState<ChatEngine>('claude')
   const [input, setInput] = useState('')
@@ -57,11 +58,13 @@ export function RightPanel() {
 
   useEffect(() => {
     if (aiDraft) {
+      // A draft pushed from elsewhere should reveal the panel if it was collapsed.
+      toggleChat(true)
       setInput(aiDraft)
       setAiDraft(null)
       taRef.current?.focus()
     }
-  }, [aiDraft, setAiDraft])
+  }, [aiDraft, setAiDraft, toggleChat])
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -137,25 +140,38 @@ export function RightPanel() {
   const engineMeta = ENGINES.find((e) => e.id === engine) ?? ENGINES[0]
 
   return (
-    <aside className="right">
+    <aside id="ai-cockpit-panel" className="right" aria-label="AI Cockpit">
       <div className="right__head">
         <div className="right__title">
           <IconBolt width={15} height={15} />
           <span>AI Cockpit</span>
         </div>
-        <div className="engineSeg" role="tablist" aria-label="Model">
-          {ENGINES.map((e) => (
-            <button
-              key={e.id}
-              role="tab"
-              aria-selected={engine === e.id}
-              className={`engineSeg__opt ${engine === e.id ? 'is-active' : ''}`}
-              onClick={() => setEngine(e.id)}
-              title={`${e.label} · ${e.sub}`}
-            >
-              {e.label}
-            </button>
-          ))}
+        <div className="right__headActions">
+          <div className="engineSeg" role="tablist" aria-label="Model">
+            {ENGINES.map((e) => (
+              <button
+                key={e.id}
+                role="tab"
+                aria-selected={engine === e.id}
+                className={`engineSeg__opt ${engine === e.id ? 'is-active' : ''}`}
+                onClick={() => setEngine(e.id)}
+                title={`${e.label} · ${e.sub}`}
+              >
+                {e.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="right__collapse"
+            onClick={() => toggleChat(false)}
+            aria-controls="ai-cockpit-panel"
+            aria-expanded="true"
+            aria-label="Collapse AI Cockpit"
+            title="Collapse panel"
+          >
+            <IconChevron width={16} height={16} />
+          </button>
         </div>
       </div>
 

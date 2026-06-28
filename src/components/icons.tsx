@@ -142,11 +142,41 @@ export const IconFolder = (p: IconProps) => (
   </svg>
 )
 
+export const IconImage = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <circle cx="8" cy="10" r="1.5" />
+    <path d="m5 17 4.5-4.5 3 3L15 13l4 4" />
+  </svg>
+)
+
 export const IconBranch = (p: IconProps) => (
   <svg {...base(p)}>
     <circle cx="6" cy="5" r="2.2" />
     <circle cx="6" cy="19" r="2.2" />
     <circle cx="18" cy="9" r="2.2" />
     <path d="M6 7.2v9.6M18 11.2c0 4-6 2-6 6" />
+  </svg>
+)
+
+export const IconCloud = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M7 18h10a4 4 0 0 0 .6-8A6 6 0 0 0 6.2 8.4 4.5 4.5 0 0 0 7 18z" />
+  </svg>
+)
+
+export const IconDownload = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 3v11" />
+    <path d="m7 10 5 5 5-5" />
+    <path d="M5 20h14" />
+  </svg>
+)
+
+export const IconUpload = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 15V4" />
+    <path d="m7 9 5-5 5 5" />
+    <path d="M5 20h14" />
   </svg>
 )

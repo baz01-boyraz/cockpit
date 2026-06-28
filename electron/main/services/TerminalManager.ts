@@ -23,6 +23,8 @@ const MAX_TERMINALS = 6
  */
 export class TerminalManager {
   private readonly live = new Map<string, LiveTerminal>()
+  /** Set during shutdown so late async pty events never touch a closed DB. */
+  private disposed = false
 
   constructor(
     private readonly db: Db,
@@ -85,6 +87,7 @@ export class TerminalManager {
     session.pid = proc.pid
 
     proc.onData((data) => {
+      if (this.disposed) return
       this.touch(session.id)
       this.events.emitTyped('terminal:data', {
         sessionId: session.id,
@@ -95,6 +98,7 @@ export class TerminalManager {
     })
 
     proc.onExit(({ exitCode, signal }) => {
+      if (this.disposed) return
       const live = this.live.get(session.id)
       if (live) {
         live.session.status = exitCode === 0 ? 'exited' : 'killed'
@@ -180,7 +184,17 @@ export class TerminalManager {
   }
 
   killAll(): void {
-    for (const id of [...this.live.keys()]) this.kill(id)
+    // Flag first so in-flight pty data/exit events stop writing to the DB before
+    // we (and the caller) close it.
+    this.disposed = true
+    for (const live of this.live.values()) {
+      try {
+        live.proc.kill()
+      } catch {
+        /* already dead */
+      }
+    }
+    this.live.clear()
   }
 
   private resolveCwd(projectPath: string, cwd?: string): string {
@@ -199,6 +213,7 @@ export class TerminalManager {
   }
 
   private insertRow(s: TerminalSession): void {
+    if (this.disposed) return
     this.db
       .prepare(
         `INSERT INTO terminal_sessions
@@ -209,6 +224,7 @@ export class TerminalManager {
   }
 
   private updateRow(s: TerminalSession): void {
+    if (this.disposed) return
     this.db
       .prepare(
         `UPDATE terminal_sessions SET name=@name, role=@role, status=@status, pid=@pid,

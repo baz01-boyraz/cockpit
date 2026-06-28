@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import type { TerminalExitEvent, TerminalOutputChunk } from '@shared/domain'
+import type { AppUpdateState, TerminalExitEvent, TerminalOutputChunk } from '@shared/domain'
 
 /**
  * Internal main-process event bus. Services emit here; the IPC layer subscribes
@@ -11,6 +11,7 @@ export interface CockpitEventMap {
   'terminal:exit': TerminalExitEvent
   'approvals:changed': { projectId: string }
   'logs:changed': { projectId: string }
+  'appUpdate:changed': AppUpdateState
 }
 
 export class CockpitEvents extends EventEmitter {

@@ -81,6 +81,41 @@ node screenshot.mjs http://localhost:3000 dashboard
 | `npm test` | Vitest (pure-logic unit tests) |
 | `npm run rebuild` | Rebuild `better-sqlite3` for Electron's ABI |
 | `npm run serve` / `npm run screenshot` | Localhost serve + Puppeteer shot |
+| `npm run app:refresh` | Build unsigned macOS app, replace `/Applications/Baz Cockpit.app`, relaunch |
+| `npm run package:release` | Build macOS `dmg` + `zip` and publish GitHub release artifacts |
+
+## Local app refresh workflow
+
+When the user asks to commit/push and refresh the app, use this sequence:
+
+1. Run the relevant checks for the change.
+2. Commit and push only the intended files.
+3. Run `npm run app:refresh`.
+
+`npm run app:refresh` is the development refresh path for the installed local app. It packages
+the current code, quits the running `Baz Cockpit` app if needed, replaces the installed `.app`
+bundle, removes quarantine metadata if present, and opens the refreshed app. It is not a remote
+auto-updater; GitHub push alone does not update a local desktop app.
+
+## GitHub release update workflow
+
+The production update path is GitHub Releases + `electron-updater`:
+
+1. Bump `package.json` version and tag the release (`vX.Y.Z`).
+2. GitHub Actions runs `.github/workflows/release.yml`.
+3. CI builds `dmg` + `zip`, signs/notarizes when secrets are present, and publishes release metadata.
+4. The app's Git panel checks for updates, downloads them, and restarts to install.
+
+Required repository secrets for signed/notarized production releases:
+
+- `MAC_CERTIFICATE_BASE64`
+- `MAC_CERTIFICATE_PASSWORD`
+- `APPLE_ID`
+- `APPLE_APP_SPECIFIC_PASSWORD`
+- `APPLE_TEAM_ID`
+
+Without those secrets, local/dev builds still work, but production macOS auto-update is not
+distribution-ready.
 
 ## Native modules
 
@@ -92,6 +127,8 @@ node screenshot.mjs http://localhost:3000 dashboard
 
 ## Limits for now
 
-No Monaco editor, no real Railway mutations, no deploys, no packaging/distribution work yet.
+No Monaco editor, no real Railway mutations, and no deploys. Production auto-update plumbing is
+present, but signed/notarized release readiness depends on Apple certificate/notary secrets.
+Local unsigned app refresh is handled by `npm run app:refresh`.
 Keep files focused (< 800 lines), prefer many small modules, immutable updates, explicit error
 handling.

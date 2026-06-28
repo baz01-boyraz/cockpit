@@ -1,6 +1,6 @@
 {
   "name": "baz-developer-cockpit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Baz Developer Cockpit — a project-aware AI coding cockpit. Terminals are the execution layer; the product is the cockpit.",
   "author": "Baz",
@@ -24,7 +24,9 @@
     "serve": "node serve.mjs",
     "screenshot": "node screenshot.mjs",
     "package:dir": "electron-vite build && electron-builder --mac dir",
-    "package": "electron-vite build && electron-builder --mac dmg"
+    "package": "electron-vite build && electron-builder --mac dmg",
+    "package:release": "electron-vite build && electron-builder --mac dmg zip --publish always",
+    "app:refresh": "bash scripts/release/refresh-local-app.sh"
   },
   "build": {
     "appId": "com.baz.cockpit",
@@ -43,17 +45,28 @@
       "**/better-sqlite3/**"
     ],
     "afterPack": "scripts/after-pack.cjs",
+    "afterSign": "scripts/notarize.cjs",
     "mac": {
       "target": [
-        "dir"
+        "dmg",
+        "zip"
       ],
       "category": "public.app-category.developer-tools",
-      "identity": null,
+      "hardenedRuntime": true,
       "darkModeSupport": true
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "baz01-boyraz",
+        "repo": "baz-cockpit",
+        "releaseType": "release"
+      }
+    ]
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
+    "electron-updater": "^6.8.9",
     "node-pty": "^1.0.0",
     "simple-git": "^3.27.0",
     "zod": "^3.24.1"
@@ -61,7 +74,6 @@
   "devDependencies": {
     "@electron/rebuild": "^3.7.1",
     "@eslint/js": "^9.18.0",
-    "electron-builder": "^25.1.8",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.5",
     "@types/react": "^18.3.18",
@@ -70,6 +82,7 @@
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
     "eslint": "^9.18.0",
     "globals": "^15.14.0",

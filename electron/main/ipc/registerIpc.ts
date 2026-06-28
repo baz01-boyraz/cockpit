@@ -7,12 +7,15 @@ import {
   addProjectInputSchema,
   approvalDecisionSchema,
   createTerminalInputSchema,
+  gitCommitInputSchema,
   gitDiffInputSchema,
+  gitStageInputSchema,
   chatAskSchema,
   ingestLogSchema,
   projectIdSchema,
   requestApprovalSchema,
   routeQuerySchema,
+  terminalAttachmentInputSchema,
   terminalIdSchema,
   terminalInputSchema,
   terminalRenameSchema,
@@ -66,10 +69,18 @@ export function registerIpc(services: Services): void {
       .parse(p)
     return services.terminals.launchAgent(projectId, agent)
   })
+  handle(IPC.terminalsAttachImage, (p) =>
+    services.attachments.saveTerminalImage(terminalAttachmentInputSchema.parse(p)),
+  )
 
   // --- git ---
   handle(IPC.gitStatus, (p) => services.git.status(projectIdSchema.parse(p).projectId))
   handle(IPC.gitDiff, (p) => services.git.diff(gitDiffInputSchema.parse(p)))
+  handle(IPC.gitStage, (p) => services.git.stage(gitStageInputSchema.parse(p)))
+  handle(IPC.gitCommit, (p) => services.git.commit(gitCommitInputSchema.parse(p)))
+
+  // --- github ---
+  handle(IPC.githubStatus, (p) => services.github.status(projectIdSchema.parse(p).projectId))
 
   // --- railway ---
   handle(IPC.railwayStatus, (p) => services.railway.status(projectIdSchema.parse(p).projectId))
@@ -137,4 +148,10 @@ export function registerIpc(services: Services): void {
       cliAvailable: info.cliAvailable,
     }
   })
+
+  // --- app update ---
+  handle(IPC.appUpdateStatus, () => services.appUpdate.status())
+  handle(IPC.appUpdateCheck, () => services.appUpdate.check())
+  handle(IPC.appUpdateDownload, () => services.appUpdate.download())
+  handle(IPC.appUpdateInstall, () => services.appUpdate.install())
 }

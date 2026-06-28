@@ -12,6 +12,9 @@ import type {
   AuditEntry,
   DashboardSnapshot,
   ErrorInsight,
+  AppUpdateState,
+  GitCommitResult,
+  GitHubRepositoryStatus,
   GitSnapshot,
   LogEvent,
   Project,
@@ -85,6 +88,100 @@ const gitByProject: Record<string, GitSnapshot> = {
   },
 }
 
+const githubByProject: Record<string, GitHubRepositoryStatus> = {
+  prj_serbest: {
+    connected: true,
+    authState: 'authenticated',
+    account: {
+      login: 'baz01-boyraz',
+      name: 'Baz',
+      avatarUrl: null,
+      htmlUrl: 'https://github.com/baz01-boyraz',
+    },
+    remote: {
+      name: 'origin',
+      url: 'git@github.com:baz01-boyraz/serbest-law.git',
+      provider: 'github',
+      owner: 'baz01-boyraz',
+      repo: 'serbest-law',
+      webUrl: 'https://github.com/baz01-boyraz/serbest-law',
+    },
+    repository: {
+      owner: 'baz01-boyraz',
+      name: 'serbest-law',
+      fullName: 'baz01-boyraz/serbest-law',
+      private: true,
+      defaultBranch: 'main',
+      htmlUrl: 'https://github.com/baz01-boyraz/serbest-law',
+      description: 'Client-facing legal intake site.',
+    },
+    openPullRequest: {
+      number: 18,
+      title: 'Refine hero and intake conversion path',
+      state: 'open',
+      htmlUrl: 'https://github.com/baz01-boyraz/serbest-law/pull/18',
+      draft: false,
+    },
+    latestWorkflowRun: {
+      id: 1042,
+      name: 'Preview',
+      status: 'completed',
+      conclusion: 'success',
+      htmlUrl: 'https://github.com/baz01-boyraz/serbest-law/actions/runs/1042',
+      createdAt: now(),
+    },
+    latestRelease: null,
+    error: null,
+    fetchedAt: now(),
+  },
+  prj_cockpit: {
+    connected: true,
+    authState: 'invalid',
+    account: null,
+    remote: {
+      name: 'origin',
+      url: 'https://github.com/baz01-boyraz/baz-cockpit.git',
+      provider: 'github',
+      owner: 'baz01-boyraz',
+      repo: 'baz-cockpit',
+      webUrl: 'https://github.com/baz01-boyraz/baz-cockpit',
+    },
+    repository: {
+      owner: 'baz01-boyraz',
+      name: 'baz-cockpit',
+      fullName: 'baz01-boyraz/baz-cockpit',
+      private: null,
+      defaultBranch: null,
+      htmlUrl: 'https://github.com/baz01-boyraz/baz-cockpit',
+      description: null,
+    },
+    openPullRequest: null,
+    latestWorkflowRun: null,
+    latestRelease: {
+      tagName: 'v0.1.0',
+      name: 'First private beta',
+      htmlUrl: 'https://github.com/baz01-boyraz/baz-cockpit/releases/tag/v0.1.0',
+      publishedAt: now(),
+    },
+    error: 'GitHub CLI auth is invalid. Run gh auth login to reconnect.',
+    fetchedAt: now(),
+  },
+}
+
+let appUpdateState: AppUpdateState = {
+  phase: 'available',
+  currentVersion: '0.1.0',
+  latestVersion: '0.1.1',
+  releaseName: 'Private beta refresh',
+  releaseNotes: 'GitHub-connected source control and in-app update controls.',
+  progressPercent: null,
+  canCheck: true,
+  canDownload: true,
+  canInstall: false,
+  error: null,
+  checkedAt: now(),
+}
+
 const insights: ErrorInsight[] = [
   {
     id: id('ins'),
@@ -146,6 +243,7 @@ const audit: AuditEntry[] = [
 const terminals: Record<string, TerminalSession[]> = { prj_serbest: [], prj_cockpit: [] }
 const dataListeners = new Set<(c: TerminalOutputChunk) => void>()
 const approvalListeners = new Set<() => void>()
+const appUpdateListeners = new Set<(s: AppUpdateState) => void>()
 
 function emit(sessionId: string, data: string) {
   for (const cb of dataListeners) cb({ sessionId, data, at: now() })
@@ -285,6 +383,22 @@ export function createMockApi(): CockpitApi {
         setTimeout(() => emit(session.id, `\x1b[38;5;208m●\x1b[0m launching \x1b[1m${agent}\x1b[0m…\r\n`), 140)
         return session
       },
+      attachImage: async (input) => {
+        const safe = input.fileName.replace(/[^a-zA-Z0-9._-]+/g, '-')
+        const attachmentId = id('att')
+        const name = `${attachmentId}-${safe || 'screenshot.png'}`
+        return {
+          id: attachmentId,
+          projectId: input.projectId,
+          sessionId: input.sessionId ?? null,
+          name,
+          path: `/Users/baz/Projects/mock/.dev-cockpit/attachments/${name}`,
+          relativePath: `.dev-cockpit/attachments/${name}`,
+          mimeType: input.mimeType,
+          size: Math.floor((input.dataBase64.length * 3) / 4),
+          createdAt: now(),
+        }
+      },
       onData: (cb) => {
         dataListeners.add(cb)
         return (() => dataListeners.delete(cb)) as Unsubscribe
@@ -298,6 +412,32 @@ export function createMockApi(): CockpitApi {
         binary: false,
         hunks: `diff --git a/${path} b/${path}\n@@ -12,7 +12,9 @@\n-  <h1 className="text-3xl">Serbest Law</h1>\n+  <h1 className="text-5xl tracking-tight font-semibold">\n+    Serbest Law\n+  </h1>\n   <p className="text-stone-400">Trusted counsel for modern business.</p>`,
       }),
+      stage: async ({ projectId }) => {
+        const snapshot = gitByProject[projectId] ?? gitByProject.prj_cockpit
+        snapshot.files = snapshot.files.map((file) =>
+          file.state === 'staged'
+            ? file
+            : { ...file, state: 'staged', index: file.workingDir.trim() || 'A', workingDir: ' ' },
+        )
+        snapshot.stagedCount = snapshot.files.length
+        snapshot.unstagedCount = 0
+        snapshot.untrackedCount = 0
+        return snapshot
+      },
+      commit: async ({ projectId, message }): Promise<GitCommitResult> => {
+        const snapshot = gitByProject[projectId] ?? gitByProject.prj_cockpit
+        const filesChanged = snapshot.stagedCount
+        snapshot.ahead += 1
+        snapshot.changedFilesCount = 0
+        snapshot.stagedCount = 0
+        snapshot.unstagedCount = 0
+        snapshot.untrackedCount = 0
+        snapshot.files = []
+        return { branch: snapshot.branch, commitHash: 'mock1234', summary: message, filesChanged }
+      },
+    },
+    github: {
+      status: async (projectId) => githubByProject[projectId] ?? githubByProject.prj_cockpit,
     },
     railway: {
       status: async (projectId): Promise<RailwayConnection> => ({
@@ -393,10 +533,40 @@ export function createMockApi(): CockpitApi {
         electron: null,
         node: '22',
         isMock: true,
-        cliAvailable: { claude: true, codex: true, railway: false, git: true },
+        cliAvailable: { claude: true, codex: true, railway: false, git: true, gh: true },
       }),
       // No native dialog in a plain browser — return a sample path for preview.
       chooseDirectory: async () => '/Users/baz/Documents/BAZ-WORK/sample-project',
+    },
+    appUpdate: {
+      status: async () => appUpdateState,
+      check: async () => {
+        appUpdateState = { ...appUpdateState, phase: 'available', checkedAt: now() }
+        appUpdateListeners.forEach((cb) => cb(appUpdateState))
+        return appUpdateState
+      },
+      download: async () => {
+        appUpdateState = { ...appUpdateState, phase: 'downloading', canDownload: false, progressPercent: 38 }
+        appUpdateListeners.forEach((cb) => cb(appUpdateState))
+        setTimeout(() => {
+          appUpdateState = {
+            ...appUpdateState,
+            phase: 'downloaded',
+            progressPercent: 100,
+            canInstall: true,
+            canDownload: false,
+          }
+          appUpdateListeners.forEach((cb) => cb(appUpdateState))
+        }, 700)
+        return appUpdateState
+      },
+      install: async () => {
+        appUpdateState = { ...appUpdateState, phase: 'idle', currentVersion: appUpdateState.latestVersion ?? '0.1.1' }
+      },
+      onChange: (cb) => {
+        appUpdateListeners.add(cb)
+        return (() => appUpdateListeners.delete(cb)) as Unsubscribe
+      },
     },
   }
 }

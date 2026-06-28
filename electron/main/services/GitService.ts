@@ -1,5 +1,5 @@
 import { simpleGit, type SimpleGit, type StatusResult } from 'simple-git'
-import type { GitDiff, GitFileEntry, GitFileState, GitSnapshot } from '@shared/domain'
+import type { GitCommitResult, GitDiff, GitFileEntry, GitFileState, GitSnapshot } from '@shared/domain'
 import type { Db } from '../db/Database'
 import type { ProjectService } from './ProjectService'
 import { newId, nowIso } from '../util/ids'
@@ -69,6 +69,37 @@ export class GitService {
       hunks = ''
     }
     return { path: input.path, hunks, binary: hunks.includes('Binary files') }
+  }
+
+  async stage(input: { projectId: string; paths?: string[]; all?: boolean }): Promise<GitSnapshot> {
+    const git = this.gitFor(input.projectId)
+    const isRepo = await git.checkIsRepo().catch(() => false)
+    if (!isRepo) return this.emptySnapshot(input.projectId, 'no-git')
+
+    if (input.all) {
+      await git.add(['--all'])
+    } else {
+      await git.add(input.paths ?? [])
+    }
+    return this.status(input.projectId)
+  }
+
+  async commit(input: { projectId: string; message: string }): Promise<GitCommitResult> {
+    const before = await this.status(input.projectId)
+    if (before.stagedCount === 0) {
+      throw new Error('No staged files to commit.')
+    }
+
+    const git = this.gitFor(input.projectId)
+    const result = await git.commit(input.message)
+    const commitHash = result.commit || (await git.revparse(['HEAD']).catch(() => null))
+    await this.status(input.projectId)
+    return {
+      branch: before.branch,
+      commitHash,
+      summary: input.message,
+      filesChanged: before.stagedCount,
+    }
   }
 
   private mapFiles(status: StatusResult): GitFileEntry[] {

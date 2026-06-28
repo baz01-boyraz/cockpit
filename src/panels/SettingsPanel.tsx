@@ -41,7 +41,7 @@ export function SettingsPanel() {
           <div className="card__title">Detected CLIs</div>
           <ul className="clilist">
             {clis &&
-              (['claude', 'codex', 'railway', 'git'] as const).map((c) => (
+              (['claude', 'codex', 'railway', 'git', 'gh'] as const).map((c) => (
                 <li key={c} className="cliitem">
                   <span className="mono">{c}</span>
                   {clis[c] ? (

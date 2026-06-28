@@ -58,6 +58,7 @@ function forwardEvents(): void {
   events.onTyped('terminal:exit', (p) => send(IPC.evtTerminalExit, p))
   events.onTyped('approvals:changed', (p) => send(IPC.evtApprovalsChanged, p))
   events.onTyped('logs:changed', (p) => send(IPC.evtLogsChanged, p))
+  events.onTyped('appUpdate:changed', (p) => send(IPC.evtAppUpdateChanged, p))
 }
 
 app.whenReady().then(() => {

@@ -1,8 +1,17 @@
-import { useEffect, useState } from 'react'
-import type { GitFileEntry } from '@shared/domain'
+import { useEffect, useMemo, useState } from 'react'
+import type { AppUpdateState, GitFileEntry, GitHubRepositoryStatus } from '@shared/domain'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
-import { IconBranch, IconShield } from '../components/icons'
+import {
+  IconBranch,
+  IconCheck,
+  IconCloud,
+  IconDownload,
+  IconRestart,
+  IconShield,
+  IconUpload,
+  IconWarning,
+} from '../components/icons'
 
 const STATE_LABEL: Record<string, string> = {
   staged: 'Staged',
@@ -36,18 +45,64 @@ function DiffView({ diff }: { diff: string }) {
   )
 }
 
+function AuthChip({ github }: { github: GitHubRepositoryStatus | null }) {
+  if (!github?.connected) return <span className="chip chip--warning">not connected</span>
+  if (github.authState === 'authenticated') {
+    return (
+      <span className="chip chip--success">
+        <IconCheck width={12} height={12} /> {github.account?.login ?? 'authenticated'}
+      </span>
+    )
+  }
+  if (github.authState === 'invalid') return <span className="chip chip--danger">auth invalid</span>
+  return <span className="chip chip--warning">auth needed</span>
+}
+
+function workflowLabel(github: GitHubRepositoryStatus | null): string {
+  const run = github?.latestWorkflowRun
+  if (!run) return 'no workflow data'
+  if (run.status !== 'completed') return run.status
+  return run.conclusion
+}
+
+function updateActionLabel(update: AppUpdateState | null): string {
+  if (!update) return 'Check'
+  if (update.phase === 'available') return 'Download'
+  if (update.phase === 'downloading') return `${Math.round(update.progressPercent ?? 0)}%`
+  if (update.phase === 'downloaded') return 'Restart & Install'
+  return 'Check'
+}
+
 export function GitPanel() {
   const git = useStore((s) => s.git)
+  const github = useStore((s) => s.github)
+  const appUpdate = useStore((s) => s.appUpdate)
   const activeProjectId = useStore((s) => s.activeProjectId)
+  const refreshActive = useStore((s) => s.refreshActive)
   const refreshApprovals = useStore((s) => s.refreshApprovals)
+  const refreshTerminals = useStore((s) => s.refreshTerminals)
+  const refreshAppUpdate = useStore((s) => s.refreshAppUpdate)
+  const setView = useStore((s) => s.setView)
   const [selected, setSelected] = useState<GitFileEntry | null>(null)
   const [diff, setDiff] = useState<string>('')
   const [commitMsg, setCommitMsg] = useState('')
+  const [busy, setBusy] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
     setSelected(null)
     setDiff('')
+    setNotice(null)
   }, [activeProjectId])
+
+  const grouped = useMemo(() => {
+    const files = git?.files ?? []
+    return {
+      staged: files.filter((f) => f.state === 'staged'),
+      unstaged: files.filter((f) => f.state === 'unstaged' || f.state === 'conflicted'),
+      untracked: files.filter((f) => f.state === 'untracked'),
+    }
+  }, [git])
 
   const openDiff = async (file: GitFileEntry) => {
     if (!activeProjectId) return
@@ -60,6 +115,39 @@ export function GitPanel() {
     setDiff(d.hunks || '(no textual diff)')
   }
 
+  const stageAll = async () => {
+    if (!activeProjectId) return
+    setBusy('stage')
+    setNotice(null)
+    try {
+      await cockpit().git.stage({ projectId: activeProjectId, all: true })
+      await refreshActive()
+      setNotice('All changes staged.')
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const commit = async () => {
+    if (!activeProjectId || !commitMsg.trim()) return
+    setBusy('commit')
+    setNotice(null)
+    try {
+      const result = await cockpit().git.commit({ projectId: activeProjectId, message: commitMsg.trim() })
+      setCommitMsg('')
+      await refreshActive()
+      setSelected(null)
+      setDiff('')
+      setNotice(`Committed ${result.commitHash?.slice(0, 8) ?? result.branch}.`)
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const requestPush = async (force: boolean) => {
     if (!activeProjectId || !git) return
     await cockpit().approvals.request({
@@ -69,14 +157,46 @@ export function GitPanel() {
       payload: { branch: git.branch, ahead: git.ahead, force },
     })
     await refreshApprovals()
+    setNotice(`${force ? 'Force-push' : 'Push'} approval requested.`)
+  }
+
+  const connectGitHub = async () => {
+    if (!activeProjectId) return
+    await cockpit().terminals.create({
+      projectId: activeProjectId,
+      name: 'GitHub auth',
+      role: 'git',
+      command: 'gh auth login -h github.com',
+    })
+    await refreshTerminals()
+    setView('terminals')
+  }
+
+  const runUpdateAction = async () => {
+    const api = cockpit().appUpdate
+    const phase = appUpdate?.phase
+    setBusy('update')
+    setNotice(null)
+    try {
+      if (phase === 'available') await api.download()
+      else if (phase === 'downloaded') await api.install()
+      else await api.check()
+      await refreshAppUpdate()
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
   }
 
   if (!git) return null
-  const grouped = {
-    staged: git.files.filter((f) => f.state === 'staged'),
-    unstaged: git.files.filter((f) => f.state === 'unstaged' || f.state === 'conflicted'),
-    untracked: git.files.filter((f) => f.state === 'untracked'),
-  }
+
+  const repoName = github?.repository?.fullName ?? github?.remote?.webUrl ?? 'No GitHub remote'
+  const updateDisabled =
+    busy === 'update' ||
+    appUpdate?.phase === 'unsupported' ||
+    appUpdate?.phase === 'downloading' ||
+    appUpdate?.canCheck === false
 
   return (
     <div className="panel">
@@ -89,7 +209,10 @@ export function GitPanel() {
         </div>
         <div className="panel__actions">
           <span className="chip mono">↑{git.ahead} ↓{git.behind}</span>
-          <button className="btn" disabled title="Pull (not in this build)">
+          <button className="btn" onClick={() => void refreshActive()}>
+            Refresh
+          </button>
+          <button className="btn" disabled title="Pull will be wired after push execution approvals.">
             Pull
           </button>
           <button className="btn" onClick={() => requestPush(false)} disabled={git.ahead === 0}>
@@ -101,10 +224,65 @@ export function GitPanel() {
         </div>
       </div>
 
+      <div className="git__overview">
+        <section className="card git__statusCard">
+          <div className="git__statusHead">
+            <div>
+              <div className="eyebrow">github repository</div>
+              <div className="git__repoName mono">{repoName}</div>
+            </div>
+            <AuthChip github={github} />
+          </div>
+          <div className="git__metaGrid">
+            <div><span>remote</span><strong>{github?.remote?.name ?? '—'}</strong></div>
+            <div><span>default</span><strong>{github?.repository?.defaultBranch ?? '—'}</strong></div>
+            <div><span>pull request</span><strong>{github?.openPullRequest ? `#${github.openPullRequest.number}` : 'none'}</strong></div>
+            <div><span>checks</span><strong>{workflowLabel(github)}</strong></div>
+          </div>
+          {github?.error ? (
+            <div className="git__notice git__notice--warning">
+              <IconWarning width={14} height={14} /> {github.error}
+            </div>
+          ) : null}
+          {github?.authState !== 'authenticated' ? (
+            <button className="btn git__wideAction" onClick={connectGitHub}>
+              <IconCloud width={14} height={14} /> Connect GitHub
+            </button>
+          ) : null}
+        </section>
+
+        <section className="card git__statusCard">
+          <div className="git__statusHead">
+            <div>
+              <div className="eyebrow">baz cockpit update</div>
+              <div className="git__repoName mono">
+                {appUpdate?.currentVersion ?? '—'} → {appUpdate?.latestVersion ?? 'latest'}
+              </div>
+            </div>
+            <span className={`chip ${appUpdate?.phase === 'downloaded' ? 'chip--success' : ''}`}>
+              {appUpdate?.phase ?? 'idle'}
+            </span>
+          </div>
+          <div className="git__updateCopy">
+            {appUpdate?.releaseName ?? appUpdate?.error ?? 'Check GitHub Releases for a packaged update.'}
+          </div>
+          {appUpdate?.phase === 'downloading' ? (
+            <div className="git__progress">
+              <span style={{ width: `${Math.round(appUpdate.progressPercent ?? 0)}%` }} />
+            </div>
+          ) : null}
+          <button className="btn git__wideAction" onClick={runUpdateAction} disabled={updateDisabled}>
+            {appUpdate?.phase === 'downloaded' ? <IconRestart width={14} height={14} /> : <IconDownload width={14} height={14} />}
+            {updateActionLabel(appUpdate)}
+          </button>
+        </section>
+      </div>
+
       <div className="gitcounts">
         <span className="chip chip--success">{git.stagedCount} staged</span>
         <span className="chip chip--warning">{git.unstagedCount} changed</span>
         <span className="chip">{git.untrackedCount} untracked</span>
+        {notice ? <span className="chip">{notice}</span> : null}
       </div>
 
       <div className="git__cols">
@@ -148,13 +326,16 @@ export function GitPanel() {
             </div>
           )}
           <div className="git__commit">
+            <button className="btn" onClick={stageAll} disabled={busy === 'stage' || git.changedFilesCount === git.stagedCount}>
+              <IconUpload width={13} height={13} /> Stage all
+            </button>
             <input
               className="git__commitInput"
               placeholder="Commit message…"
               value={commitMsg}
               onChange={(e) => setCommitMsg(e.target.value)}
             />
-            <button className="btn btn--accent" disabled={!commitMsg.trim() || grouped.staged.length === 0}>
+            <button className="btn btn--accent" onClick={commit} disabled={!commitMsg.trim() || grouped.staged.length === 0 || busy === 'commit'}>
               Commit {grouped.staged.length > 0 ? `(${grouped.staged.length})` : ''}
             </button>
           </div>

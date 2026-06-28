@@ -1,8 +1,10 @@
 import { create } from 'zustand'
 import type {
   ApprovalRequest,
+  AppUpdateState,
   DashboardSnapshot,
   ErrorInsight,
+  GitHubRepositoryStatus,
   GitSnapshot,
   LogEvent,
   Project,
@@ -13,6 +15,25 @@ import type {
 } from '@shared/domain'
 import type { SystemInfo } from '@shared/ipc'
 import { cockpit } from '../lib/cockpit'
+
+const CHAT_OPEN_KEY = 'cockpit.chatOpen'
+
+function loadChatOpen(): boolean {
+  try {
+    // Default to open; only an explicit "false" collapses the panel.
+    return localStorage.getItem(CHAT_OPEN_KEY) !== 'false'
+  } catch {
+    return true
+  }
+}
+
+function persistChatOpen(open: boolean): void {
+  try {
+    localStorage.setItem(CHAT_OPEN_KEY, String(open))
+  } catch {
+    // Storage may be unavailable (private mode); the in-memory state still works.
+  }
+}
 
 export type View =
   | 'dashboard'
@@ -30,10 +51,13 @@ interface CockpitState {
   activeProjectId: string | null
   view: View
   projectSwitcherOpen: boolean
+  chatOpen: boolean
   aiDraft: string | null
 
   dashboard: DashboardSnapshot | null
   git: GitSnapshot | null
+  github: GitHubRepositoryStatus | null
+  appUpdate: AppUpdateState | null
   terminals: TerminalSession[]
   insights: ErrorInsight[]
   logs: LogEvent[]
@@ -46,9 +70,12 @@ interface CockpitState {
   selectProject: (projectId: string) => Promise<void>
   setView: (view: View) => void
   toggleSwitcher: (open?: boolean) => void
+  toggleChat: (open?: boolean) => void
   setAiDraft: (text: string | null) => void
   refreshInsights: () => Promise<void>
   refreshActive: () => Promise<void>
+  refreshGitHub: () => Promise<void>
+  refreshAppUpdate: () => Promise<void>
   refreshTerminals: () => Promise<void>
   refreshApprovals: () => Promise<void>
   decideApproval: (id: string, approve: boolean) => Promise<void>
@@ -62,10 +89,13 @@ export const useStore = create<CockpitState>((set, get) => ({
   activeProjectId: null,
   view: 'dashboard',
   projectSwitcherOpen: false,
+  chatOpen: loadChatOpen(),
   aiDraft: null,
 
   dashboard: null,
   git: null,
+  github: null,
+  appUpdate: null,
   terminals: [],
   insights: [],
   logs: [],
@@ -77,11 +107,13 @@ export const useStore = create<CockpitState>((set, get) => ({
   init: async () => {
     const api = cockpit()
     const [systemInfo, projects] = await Promise.all([api.system.info(), api.projects.list()])
+    const appUpdate = await api.appUpdate.status()
+    api.appUpdate.onChange((next) => set({ appUpdate: next }))
     // Allow deep-linking a view (used by the screenshot review workflow).
     const requested = new URLSearchParams(window.location.search).get('view') as View | null
     const valid: View[] = ['dashboard', 'terminals', 'git', 'railway', 'logs', 'usage', 'settings']
     const view = requested && valid.includes(requested) ? requested : 'dashboard'
-    set({ systemInfo, projects, ready: true, view })
+    set({ systemInfo, projects, appUpdate, ready: true, view })
     if (projects.length > 0) {
       await get().selectProject(projects[0].id)
     } else {
@@ -100,6 +132,12 @@ export const useStore = create<CockpitState>((set, get) => ({
   setView: (view) => set({ view }),
   toggleSwitcher: (open) =>
     set((s) => ({ projectSwitcherOpen: open ?? !s.projectSwitcherOpen })),
+  toggleChat: (open) =>
+    set((s) => {
+      const next = open ?? !s.chatOpen
+      persistChatOpen(next)
+      return { chatOpen: next }
+    }),
   setAiDraft: (text) => set({ aiDraft: text }),
 
   refreshInsights: async () => {
@@ -116,10 +154,11 @@ export const useStore = create<CockpitState>((set, get) => ({
     const { activeProjectId } = get()
     if (!activeProjectId) return
     const api = cockpit()
-    const [dashboard, git, terminals, insights, logs, approvals, usage, railwayConnection, railwayServices] =
+    const [dashboard, git, github, terminals, insights, logs, approvals, usage, railwayConnection, railwayServices] =
       await Promise.all([
         api.projects.dashboard(activeProjectId),
         api.git.status(activeProjectId),
+        api.github.status(activeProjectId),
         api.terminals.list(activeProjectId),
         api.logs.insights(activeProjectId),
         api.logs.list(activeProjectId),
@@ -128,7 +167,17 @@ export const useStore = create<CockpitState>((set, get) => ({
         api.railway.status(activeProjectId),
         api.railway.services(activeProjectId),
       ])
-    set({ dashboard, git, terminals, insights, logs, approvals, usage, railwayConnection, railwayServices })
+    set({ dashboard, git, github, terminals, insights, logs, approvals, usage, railwayConnection, railwayServices })
+  },
+
+  refreshGitHub: async () => {
+    const { activeProjectId } = get()
+    if (!activeProjectId) return
+    set({ github: await cockpit().github.status(activeProjectId) })
+  },
+
+  refreshAppUpdate: async () => {
+    set({ appUpdate: await cockpit().appUpdate.status() })
   },
 
   refreshTerminals: async () => {

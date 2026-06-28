@@ -35,12 +35,18 @@ const api: CockpitApi = {
     restart: (sessionId) => invoke(IPC.terminalsRestart, { sessionId }),
     rename: (sessionId, name, role) => invoke(IPC.terminalsRename, { sessionId, name, role }),
     launchAgent: (projectId, agent) => invoke(IPC.terminalsLaunchAgent, { projectId, agent }),
+    attachImage: (input) => invoke(IPC.terminalsAttachImage, input),
     onData: (cb) => subscribe(IPC.evtTerminalData, cb),
     onExit: (cb) => subscribe(IPC.evtTerminalExit, cb),
   },
   git: {
     status: (projectId) => invoke(IPC.gitStatus, { projectId }),
     diff: (input) => invoke(IPC.gitDiff, input),
+    stage: (input) => invoke(IPC.gitStage, input),
+    commit: (input) => invoke(IPC.gitCommit, input),
+  },
+  github: {
+    status: (projectId) => invoke(IPC.githubStatus, { projectId }),
   },
   railway: {
     status: (projectId) => invoke(IPC.railwayStatus, { projectId }),
@@ -73,6 +79,13 @@ const api: CockpitApi = {
   system: {
     info: () => invoke(IPC.systemInfo),
     chooseDirectory: () => invoke(IPC.dialogChooseDirectory),
+  },
+  appUpdate: {
+    status: () => invoke(IPC.appUpdateStatus),
+    check: () => invoke(IPC.appUpdateCheck),
+    download: () => invoke(IPC.appUpdateDownload),
+    install: () => invoke(IPC.appUpdateInstall),
+    onChange: (cb) => subscribe(IPC.evtAppUpdateChanged, cb),
   },
 }
 

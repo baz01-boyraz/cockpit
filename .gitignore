@@ -5,7 +5,7 @@ node_modules
 out
 dist/
 dist-electron/
-release
+/release
 *.tsbuildinfo
 
 # iCloud-excluded copies (renamed via the .nosync trick)
@@ -16,6 +16,7 @@ release
 npm-debug.log*
 
 # local data / secrets
+.dev-cockpit/attachments/
 .dev-cockpit/secrets/
 *.sqlite
 *.sqlite3

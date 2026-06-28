@@ -8,9 +8,12 @@ import type { Db } from '../db/Database'
 import { openDatabase } from '../db/Database'
 import type { CockpitEvents } from '../events'
 import { AuditLogService } from './AuditLogService'
+import { AttachmentService } from './AttachmentService'
 import { ApprovalService } from './ApprovalService'
+import { AppUpdateService } from './AppUpdateService'
 import { ChatService } from './ChatService'
 import { GitService } from './GitService'
+import { GitHubService } from './GitHubService'
 import { LocalCommandRunner } from './LocalCommandRunner'
 import { LogIntelligenceService } from './LogIntelligenceService'
 import { ProjectService } from './ProjectService'
@@ -28,41 +31,50 @@ import { hasCli } from './cliDetect'
 export class Services {
   readonly db: Db
   readonly audit: AuditLogService
+  readonly attachments: AttachmentService
   readonly approvals: ApprovalService
   readonly usage: UsageService
   readonly logs: LogIntelligenceService
   readonly projects: ProjectService
   readonly git: GitService
+  readonly github: GitHubService
   readonly railway: RailwayService
   readonly secrets: SecretStore
   readonly terminals: TerminalManager
   readonly local: LocalCommandRunner
   readonly chat: ChatService
+  readonly appUpdate: AppUpdateService
+  private closing = false
 
   constructor(opts: { dbPath: string; userDataDir: string; events: CockpitEvents }) {
     this.db = openDatabase(opts.dbPath)
     this.secrets = new SecretStore(opts.userDataDir)
     this.audit = new AuditLogService(this.db)
-    this.approvals = new ApprovalService(this.db, this.audit, opts.events)
     this.usage = new UsageService(this.db)
     this.logs = new LogIntelligenceService(this.db, opts.events)
     this.projects = new ProjectService(this.db)
+    this.attachments = new AttachmentService(this.projects)
+    this.approvals = new ApprovalService(this.db, this.audit, opts.events)
     this.git = new GitService(this.db, this.projects)
+    this.github = new GitHubService(this.projects)
     this.railway = new RailwayService(this.db, this.projects)
     this.local = new LocalCommandRunner()
     this.chat = new ChatService(this.projects)
+    this.appUpdate = new AppUpdateService(opts.events)
 
     this.terminals = new TerminalManager(
       this.db,
       opts.events,
       this.projects,
       (projectId, sessionId, data) => this.handleTerminalOutput(projectId, sessionId, data),
-      (projectId, kind) =>
+      (projectId, kind) => {
+        if (this.closing) return
         this.usage.record({
           projectId,
           provider: 'terminal',
           eventType: kind === 'session' ? 'session_started' : 'command_run',
-        }),
+        })
+      },
     )
   }
 
@@ -72,6 +84,7 @@ export class Services {
    * the logs panel signal-dense instead of echoing every keystroke.
    */
   private handleTerminalOutput(projectId: string, sessionId: string, data: string): void {
+    if (this.closing) return
     const interesting = data
       .split(/\r?\n/)
       .filter((line) => inferLogLevel(line) === 'error' || inferLogLevel(line) === 'warn')
@@ -126,11 +139,16 @@ export class Services {
         codex: hasCli('codex'),
         railway: hasCli('railway'),
         git: hasCli('git'),
+        gh: hasCli('gh'),
       },
     }
   }
 
   shutdown(): void {
+    if (this.closing) return
+    this.closing = true
+    // Kill terminals first (flags TerminalManager so late pty events are ignored),
+    // then close the DB. Order + flags prevent "database connection is not open".
     this.terminals.killAll()
     try {
       this.db.close()

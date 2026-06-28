@@ -92,6 +92,18 @@ export interface TerminalOutputChunk {
   at: ISODate
 }
 
+export interface TerminalAttachment {
+  id: string
+  projectId: string
+  sessionId: string | null
+  name: string
+  path: string
+  relativePath: string
+  mimeType: string
+  size: number
+  createdAt: ISODate
+}
+
 export interface TerminalExitEvent {
   sessionId: string
   exitCode: number
@@ -165,6 +177,112 @@ export interface GitDiff {
   path: string
   hunks: string
   binary: boolean
+}
+
+export interface GitCommitResult {
+  branch: string
+  commitHash: string | null
+  summary: string
+  filesChanged: number
+}
+
+export interface GitRemoteInfo {
+  name: string
+  url: string
+  provider: 'github' | 'other'
+  owner: string | null
+  repo: string | null
+  webUrl: string | null
+}
+
+export interface GitHubAccount {
+  login: string
+  name: string | null
+  avatarUrl: string | null
+  htmlUrl: string | null
+}
+
+export type GitHubRunConclusion =
+  | 'success'
+  | 'failure'
+  | 'cancelled'
+  | 'skipped'
+  | 'timed_out'
+  | 'action_required'
+  | 'neutral'
+  | 'unknown'
+
+export interface GitHubWorkflowRun {
+  id: number
+  name: string
+  status: string
+  conclusion: GitHubRunConclusion
+  htmlUrl: string
+  createdAt: ISODate | null
+}
+
+export interface GitHubPullRequest {
+  number: number
+  title: string
+  state: 'open' | 'closed'
+  htmlUrl: string
+  draft: boolean
+}
+
+export interface GitHubReleaseInfo {
+  tagName: string
+  name: string | null
+  htmlUrl: string
+  publishedAt: ISODate | null
+}
+
+export interface GitHubRepositoryStatus {
+  connected: boolean
+  authState: 'authenticated' | 'missing' | 'invalid' | 'unknown'
+  account: GitHubAccount | null
+  remote: GitRemoteInfo | null
+  repository: {
+    owner: string
+    name: string
+    fullName: string
+    private: boolean | null
+    defaultBranch: string | null
+    htmlUrl: string | null
+    description: string | null
+  } | null
+  openPullRequest: GitHubPullRequest | null
+  latestWorkflowRun: GitHubWorkflowRun | null
+  latestRelease: GitHubReleaseInfo | null
+  error: string | null
+  fetchedAt: ISODate
+}
+
+// ---------------------------------------------------------------------------
+// App update
+// ---------------------------------------------------------------------------
+
+export type AppUpdatePhase =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
+  | 'unsupported'
+
+export interface AppUpdateState {
+  phase: AppUpdatePhase
+  currentVersion: string
+  latestVersion: string | null
+  releaseName: string | null
+  releaseNotes: string | null
+  progressPercent: number | null
+  canCheck: boolean
+  canDownload: boolean
+  canInstall: boolean
+  error: string | null
+  checkedAt: ISODate | null
 }
 
 // ---------------------------------------------------------------------------

@@ -117,6 +117,14 @@ export const terminalInputSchema = z.object({
   data: z.string(),
 })
 
+export const terminalAttachmentInputSchema = z.object({
+  projectId: z.string().min(1),
+  sessionId: z.string().min(1).nullable().optional(),
+  fileName: z.string().min(1).max(180),
+  mimeType: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']),
+  dataBase64: z.string().min(1).max(14_000_000).regex(/^[A-Za-z0-9+/=]+$/),
+})
+
 export const terminalResizeSchema = z.object({
   sessionId: z.string().min(1),
   cols: z.number().int().min(1).max(1000),
@@ -144,6 +152,21 @@ export const gitDiffInputSchema = z.object({
   projectId: z.string().min(1),
   path: z.string().min(1),
   staged: z.boolean().optional(),
+})
+
+export const gitStageInputSchema = z
+  .object({
+    projectId: z.string().min(1),
+    paths: z.array(z.string().min(1)).optional(),
+    all: z.boolean().optional(),
+  })
+  .refine((v) => v.all || (v.paths && v.paths.length > 0), {
+    message: 'Provide paths or set all=true',
+  })
+
+export const gitCommitInputSchema = z.object({
+  projectId: z.string().min(1),
+  message: z.string().min(1).max(240),
 })
 
 export const approvalDecisionSchema = z.object({

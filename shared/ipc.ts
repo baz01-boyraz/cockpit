@@ -11,11 +11,14 @@
  */
 import type {
   AgentType,
+  AppUpdateState,
   ApprovalRequest,
   AuditEntry,
   DashboardSnapshot,
   ErrorInsight,
+  GitCommitResult,
   GitDiff,
+  GitHubRepositoryStatus,
   GitSnapshot,
   LogEvent,
   MaskedEnvVar,
@@ -25,6 +28,7 @@ import type {
   RailwayService,
   RouterResult,
   TerminalExitEvent,
+  TerminalAttachment,
   TerminalOutputChunk,
   TerminalRole,
   TerminalSession,
@@ -46,9 +50,14 @@ export const IPC = {
   terminalsRestart: 'terminals:restart',
   terminalsRename: 'terminals:rename',
   terminalsLaunchAgent: 'terminals:launchAgent',
+  terminalsAttachImage: 'terminals:attachImage',
 
   gitStatus: 'git:status',
   gitDiff: 'git:diff',
+  gitStage: 'git:stage',
+  gitCommit: 'git:commit',
+
+  githubStatus: 'github:status',
 
   railwayStatus: 'railway:status',
   railwayServices: 'railway:services',
@@ -72,11 +81,17 @@ export const IPC = {
   systemInfo: 'system:info',
   dialogChooseDirectory: 'dialog:chooseDirectory',
 
+  appUpdateStatus: 'appUpdate:status',
+  appUpdateCheck: 'appUpdate:check',
+  appUpdateDownload: 'appUpdate:download',
+  appUpdateInstall: 'appUpdate:install',
+
   // main -> renderer push events
   evtTerminalData: 'evt:terminal:data',
   evtTerminalExit: 'evt:terminal:exit',
   evtApprovalsChanged: 'evt:approvals:changed',
   evtLogsChanged: 'evt:logs:changed',
+  evtAppUpdateChanged: 'evt:appUpdate:changed',
 } as const
 
 export type Unsubscribe = () => void
@@ -87,7 +102,7 @@ export interface SystemInfo {
   electron: string | null
   node: string
   isMock: boolean
-  cliAvailable: { claude: boolean; codex: boolean; railway: boolean; git: boolean }
+  cliAvailable: { claude: boolean; codex: boolean; railway: boolean; git: boolean; gh: boolean }
 }
 
 export type ChatEngine = 'claude' | 'codex'
@@ -121,12 +136,24 @@ export interface CockpitApi {
     restart(sessionId: string): Promise<TerminalSession>
     rename(sessionId: string, name: string, role?: TerminalRole | null): Promise<TerminalSession>
     launchAgent(projectId: string, agent: 'claude' | 'codex'): Promise<TerminalSession>
+    attachImage(input: {
+      projectId: string
+      sessionId?: string | null
+      fileName: string
+      mimeType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
+      dataBase64: string
+    }): Promise<TerminalAttachment>
     onData(cb: (chunk: TerminalOutputChunk) => void): Unsubscribe
     onExit(cb: (evt: TerminalExitEvent) => void): Unsubscribe
   }
   git: {
     status(projectId: string): Promise<GitSnapshot>
     diff(input: { projectId: string; path: string; staged?: boolean }): Promise<GitDiff>
+    stage(input: { projectId: string; paths?: string[]; all?: boolean }): Promise<GitSnapshot>
+    commit(input: { projectId: string; message: string }): Promise<GitCommitResult>
+  }
+  github: {
+    status(projectId: string): Promise<GitHubRepositoryStatus>
   }
   railway: {
     status(projectId: string): Promise<RailwayConnection>
@@ -171,6 +198,13 @@ export interface CockpitApi {
     info(): Promise<SystemInfo>
     /** Opens a native folder picker. Returns the chosen absolute path or null. */
     chooseDirectory(): Promise<string | null>
+  }
+  appUpdate: {
+    status(): Promise<AppUpdateState>
+    check(): Promise<AppUpdateState>
+    download(): Promise<AppUpdateState>
+    install(): Promise<void>
+    onChange(cb: (state: AppUpdateState) => void): Unsubscribe
   }
 }
 
