@@ -4,14 +4,22 @@ import { useStore } from '../store/useStore'
 import { useAgentUsage } from '../lib/useAgentUsage'
 import { AgentUsageBody } from './AgentUsageBody'
 
+function percentText(percent: number | null): string {
+  return percent === null ? '—' : `${percent}%`
+}
+
+function percentAria(percent: number | null): string {
+  return percent === null ? 'not reported' : `${percent}%`
+}
+
+function percentScale(percent: number | null): number {
+  if (percent === null) return 0
+  return Math.max(0, Math.min(1, percent / 100))
+}
+
 /**
- * Premium account-quota strip for the TopBar. One pill per agent provider
- * (Claude Code / Codex), each showing remaining session + weekly headroom with
- * a tone that warms from lime → amber → ember as quota runs low. Hovering or
- * focusing a pill opens a Hermes-style popover with the full breakdown — the
- * 5h session and weekly limit, each with its bar and reset time. Providers are
- * independent: one signed out or erroring never hides the other. Clicking a pill
- * opens the Usage panel.
+ * Rail-mounted quota dock. It keeps the busy topbar clean while making Claude
+ * and Codex quota visible in the otherwise quiet lower-left rail space.
  */
 export function UsageStrip() {
   const setView = useStore((s) => s.setView)
@@ -24,45 +32,72 @@ export function UsageStrip() {
   if (pills.every(({ pill }) => !pill.available && !pill.reason)) return null
 
   return (
-    <div className="usageStrip" role="group" aria-label="Agent usage">
+    <section className="usageDock" aria-label="Agent usage">
+      <div className="usageDock__head">
+        <span className="usageDock__eyebrow">Usage</span>
+        <button type="button" className="usageDock__details" onClick={() => setView('usage')}>
+          Details
+        </button>
+      </div>
       {pills.map(({ snapshot, pill }) => {
         const tone = pill.available ? pill.tone : 'off'
-        const headline =
-          pill.available && pill.minRemainingPercent !== null
-            ? `${pill.minRemainingPercent}%`
-            : '—'
         const label = pill.plan ? `${snapshot.label} · ${pill.plan}` : snapshot.label
+        const sessionMetric = percentText(pill.sessionPercent)
+        const weeklyMetric = percentText(pill.weeklyPercent)
+        const ariaLabel = pill.available
+          ? `${label} usage. 5 hour window ${percentAria(pill.sessionPercent)} left. Weekly window ${percentAria(pill.weeklyPercent)} left. Open dashboard.`
+          : `${label} usage unavailable. ${pill.reason ?? 'Open dashboard.'}`
         return (
-          <div key={snapshot.provider} className="usagePillWrap">
+          <div key={snapshot.provider} className="usageDock__itemWrap">
             <button
               type="button"
-              className={`usagePill usagePill--${tone}`}
-              aria-label={`${label} usage. Open dashboard.`}
+              className={`usageDock__item usageDock__item--${snapshot.provider} usageDock__item--${tone}`}
+              aria-label={ariaLabel}
               onClick={() => setView('usage')}
             >
-              <span className="usagePill__sheen" aria-hidden />
-              <span className="usagePill__dot" aria-hidden />
-              <span className="usagePill__label">{snapshot.label}</span>
-              {pill.available ? (
-                <span className="usagePill__meter" aria-hidden>
-                  <span
-                    className="usagePill__bar"
-                    style={{ '--fill': `${pill.sessionPercent ?? 0}%` } as CSSProperties}
-                  />
-                  <span
-                    className="usagePill__bar"
-                    style={{ '--fill': `${pill.weeklyPercent ?? 0}%` } as CSSProperties}
-                  />
+              <span className="usageDock__aura" aria-hidden />
+              <span className="usageDock__sheen" aria-hidden />
+              <span className="usageDock__identity">
+                <span className="usageDock__orb" aria-hidden>
+                  <span className="usageDock__orbCore" />
                 </span>
-              ) : null}
-              <span className="usagePill__value mono">{headline}</span>
+                <span className="usageDock__label">{snapshot.label}</span>
+              </span>
+              {pill.available ? (
+                <span className="usageDock__metrics" aria-hidden>
+                  <span className="usageDock__metric">
+                    <span className="usageDock__metricTag">5h</span>
+                    <span className="usageDock__metricValue mono">{sessionMetric}</span>
+                    <span className="usageDock__metricTrack">
+                      <span
+                        className="usageDock__metricFill"
+                        style={{ '--scale': percentScale(pill.sessionPercent) } as CSSProperties}
+                      />
+                    </span>
+                  </span>
+                  <span className="usageDock__metric">
+                    <span className="usageDock__metricTag">W</span>
+                    <span className="usageDock__metricValue mono">{weeklyMetric}</span>
+                    <span className="usageDock__metricTrack">
+                      <span
+                        className="usageDock__metricFill"
+                        style={{ '--scale': percentScale(pill.weeklyPercent) } as CSSProperties}
+                      />
+                    </span>
+                  </span>
+                </span>
+              ) : (
+                <span className="usageDock__state mono" aria-hidden>
+                  offline
+                </span>
+              )}
             </button>
-            <div className="usagePop" role="tooltip">
+            <div className="usageDock__pop" role="tooltip">
               <AgentUsageBody snapshot={snapshot} live />
             </div>
           </div>
         )
       })}
-    </div>
+    </section>
   )
 }

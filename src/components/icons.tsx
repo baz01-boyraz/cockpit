@@ -31,6 +31,34 @@ export const IconTerminal = (p: IconProps) => (
   </svg>
 )
 
+export const IconGrid = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="4" y="4" width="7" height="7" rx="1.5" />
+    <rect x="13" y="4" width="7" height="7" rx="1.5" />
+    <rect x="4" y="13" width="7" height="7" rx="1.5" />
+    <rect x="13" y="13" width="7" height="7" rx="1.5" />
+  </svg>
+)
+
+export const IconFocus = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M8 3H4a1 1 0 0 0-1 1v4" />
+    <path d="M16 3h4a1 1 0 0 1 1 1v4" />
+    <path d="M21 16v4a1 1 0 0 1-1 1h-4" />
+    <path d="M8 21H4a1 1 0 0 1-1-1v-4" />
+    <rect x="8" y="8" width="8" height="8" rx="1.5" />
+  </svg>
+)
+
+export const IconLayoutAuto = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4 7h16" />
+    <path d="M4 17h16" />
+    <circle cx="9" cy="7" r="2" />
+    <circle cx="15" cy="17" r="2" />
+  </svg>
+)
+
 export const IconGit = (p: IconProps) => (
   <svg {...base(p)}>
     <circle cx="6" cy="6" r="2.5" />

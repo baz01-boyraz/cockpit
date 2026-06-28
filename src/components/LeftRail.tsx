@@ -11,6 +11,7 @@ import {
   IconUsage,
 } from './icons'
 import type { ComponentType, SVGProps } from 'react'
+import { UsageStrip } from './UsageStrip'
 
 interface NavItem {
   view: View
@@ -84,6 +85,7 @@ export function LeftRail() {
       </nav>
 
       <div className="rail__footer">
+        <UsageStrip />
         {project && (
           <div className="rail__path mono" title={project.path}>
             {project.path}

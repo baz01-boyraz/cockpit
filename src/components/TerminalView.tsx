@@ -91,7 +91,8 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
     })
     const sub = term.onData((data) => void api.terminals.write(session.id, data))
 
-    const onResize = () => {
+    const fitAndResize = () => {
+      if (host.clientWidth < 20 || host.clientHeight < 20) return
       try {
         fit.fit()
         api.terminals.resize(session.id, term.cols, term.rows)
@@ -99,7 +100,9 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
         /* ignore */
       }
     }
-    const ro = new ResizeObserver(onResize)
+
+    requestAnimationFrame(fitAndResize)
+    const ro = new ResizeObserver(fitAndResize)
     ro.observe(host)
 
     return () => {
@@ -113,15 +116,22 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
 
   useEffect(() => {
     if (active && fitRef.current) {
-      requestAnimationFrame(() => {
+      const frame = requestAnimationFrame(() => {
+        const host = hostRef.current
+        const term = termRef.current
+        const fit = fitRef.current
+        if (!host || !term || !fit || host.clientWidth < 20 || host.clientHeight < 20) return
         try {
-          fitRef.current?.fit()
+          fit.fit()
+          cockpit().terminals.resize(session.id, term.cols, term.rows)
+          term.focus()
         } catch {
           /* ignore */
         }
       })
+      return () => cancelAnimationFrame(frame)
     }
-  }, [active])
+  }, [active, session.id])
 
   useEffect(() => {
     return () => {
@@ -143,7 +153,7 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
     if (!attachment?.sent) return
     const timeout = window.setTimeout(() => {
       setAttachment((current) => (current?.id === attachment.id ? null : current))
-    }, 5000)
+    }, 3200)
     return () => window.clearTimeout(timeout)
   }, [attachment?.id, attachment?.sent])
 
@@ -294,8 +304,8 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
                 </div>
               </div>
               <div className="termattach__actions">
-                <button className="btn btn--accent btn--sm" onClick={() => void sendCurrentAttachment()}>
-                  <IconImage width={12} height={12} /> Send again
+                <button className="iconbtn termattach__send" title="Send again" onClick={() => void sendCurrentAttachment()}>
+                  <IconImage width={12} height={12} />
                 </button>
                 <button className="iconbtn" title="Dismiss" onClick={() => setAttachment(null)}>
                   <IconX width={13} height={13} />

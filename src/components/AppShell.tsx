@@ -21,9 +21,16 @@ export function AppShell() {
       <LeftRail />
       <div className="shell__center">
         <TopBar />
-        <main className="shell__main scroll-y" key={view}>
+        <main className="shell__main scroll-y">
           {view === 'dashboard' && <DashboardPanel />}
-          {view === 'terminals' && <TerminalsPanel />}
+          <section
+            className={`viewSlot viewSlot--terminals ${
+              view === 'terminals' ? 'viewSlot--active' : 'viewSlot--hidden'
+            }`}
+            aria-hidden={view !== 'terminals'}
+          >
+            <TerminalsPanel panelActive={view === 'terminals'} />
+          </section>
           {view === 'git' && <GitPanel />}
           {view === 'railway' && <RailwayPanel />}
           {view === 'logs' && <LogsPanel />}

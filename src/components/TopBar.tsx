@@ -1,7 +1,6 @@
 import { useStore } from '../store/useStore'
 import { isMockBackend } from '../lib/cockpit'
 import { IconBranch, IconSearch, IconShield, IconWarning } from './icons'
-import { UsageStrip } from './UsageStrip'
 
 export function TopBar() {
   const dashboard = useStore((s) => s.dashboard)
@@ -14,7 +13,7 @@ export function TopBar() {
       <div className="topbar__id">
         <h1 className="topbar__title">{dashboard?.project.name ?? '—'}</h1>
         <div className="topbar__chips">
-          <span className="chip">
+          <span className="chip topbar__branchChip">
             <IconBranch width={11} height={11} />
             <span className="mono">{dashboard?.branch ?? 'no branch'}</span>
           </span>
@@ -44,8 +43,7 @@ export function TopBar() {
       </div>
 
       <div className="topbar__status">
-        <UsageStrip />
-        {isMockBackend() && <span className="chip chip--warning">browser preview</span>}
+        {isMockBackend() && <span className="chip chip--warning topbar__previewChip">browser preview</span>}
         <button
           className={`topbar__approvals ${pending > 0 ? 'topbar__approvals--active' : ''}`}
           onClick={() => setView('dashboard')}

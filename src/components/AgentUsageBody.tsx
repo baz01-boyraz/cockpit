@@ -16,11 +16,18 @@ function resetLabel(iso: string | null): string | null {
   })}`
 }
 
+function percentScale(percent: number | null): number {
+  if (percent === null) return 0
+  return Math.max(0, Math.min(1, percent / 100))
+}
+
 function WindowRow({ window }: { window: AgentUsageWindowView }) {
   const remaining = window.remainingPercent
   const reset = resetLabel(window.resetAt)
+  const used = remaining === null ? null : 100 - remaining
   return (
     <div className={`quotaWindow quotaWindow--${window.tone}`}>
+      <span className="quotaWindow__glow" aria-hidden />
       <div className="quotaWindow__head">
         <span className="quotaWindow__title">{window.title}</span>
         <span className="quotaWindow__value mono">
@@ -31,10 +38,13 @@ function WindowRow({ window }: { window: AgentUsageWindowView }) {
       <div className="quotaWindow__track" aria-hidden>
         <span
           className="quotaWindow__fill"
-          style={{ '--fill': `${remaining ?? 0}%` } as CSSProperties}
+          style={{ '--scale': percentScale(remaining) } as CSSProperties}
         />
       </div>
-      {reset ? <div className="quotaWindow__reset">{reset}</div> : null}
+      <div className="quotaWindow__meta">
+        {reset ? <span className="quotaWindow__reset">{reset}</span> : <span />}
+        {used === null ? null : <span className="quotaWindow__used mono">{used}% used</span>}
+      </div>
     </div>
   )
 }
@@ -57,6 +67,7 @@ export function AgentUsageBody({ snapshot, live = false }: AgentUsageBodyProps) 
 
   return (
     <div className={`quotaBody quotaBody--${tone}`}>
+      <span className="quotaBody__wash" aria-hidden />
       <div className="quotaBody__head">
         <span className="quotaBody__dot" aria-hidden />
         <span className="quotaBody__name">{snapshot.label} usage</span>
