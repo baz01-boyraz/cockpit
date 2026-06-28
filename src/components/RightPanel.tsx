@@ -1,10 +1,24 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
 import type { RouteRecommendation } from '@shared/domain'
-import type { ChatEngine } from '@shared/ipc'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
+import {
+  IMAGE_ACCEPT,
+  MAX_IMAGE_BYTES,
+  firstImage,
+  firstImageFromItems,
+  formatBytes,
+  hasFileDrag,
+  inferImageMime,
+  readBase64,
+} from '../lib/imageAttach'
 import { ApprovalCard } from './ApprovalCard'
-import { IconBolt, IconChevron, IconSend, IconShield } from './icons'
+import { IconBolt, IconChevron, IconCopy, IconImage, IconSend, IconShield, IconX } from './icons'
+
+interface ChatImage {
+  previewUrl: string
+  name: string
+}
 
 interface Msg {
   id: number
@@ -14,6 +28,14 @@ interface Msg {
   answering?: boolean
   error?: boolean
   route?: RouteRecommendation | null
+  image?: ChatImage
+}
+
+interface PendingAttachment {
+  relativePath: string
+  name: string
+  size: number
+  previewUrl: string
 }
 
 const SUGGESTIONS = [
@@ -23,10 +45,7 @@ const SUGGESTIONS = [
   'Plan the next feature',
 ]
 
-const ENGINES: { id: ChatEngine; label: string; sub: string }[] = [
-  { id: 'claude', label: 'Claude', sub: 'Opus 4.8' },
-  { id: 'codex', label: 'Codex', sub: 'OpenAI' },
-]
+const HERMES = { label: 'Hermes', sub: 'Nous' } as const
 
 const AGENT_LABEL: Record<string, string> = {
   claude: 'Claude Code',
@@ -47,12 +66,20 @@ export function RightPanel() {
   const setAiDraft = useStore((s) => s.setAiDraft)
   const toggleChat = useStore((s) => s.toggleChat)
 
-  const [engine, setEngine] = useState<ChatEngine>('claude')
   const [input, setInput] = useState('')
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [busy, setBusy] = useState(false)
+  const [copiedId, setCopiedId] = useState<number | null>(null)
+  const [attachment, setAttachment] = useState<PendingAttachment | null>(null)
+  const [attaching, setAttaching] = useState(false)
+  const [attachError, setAttachError] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
+
   const endRef = useRef<HTMLDivElement>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const dragDepthRef = useRef(0)
+  const objectUrlsRef = useRef<string[]>([])
 
   const pending = approvals.filter((a) => a.status === 'pending')
 
@@ -70,6 +97,14 @@ export function RightPanel() {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [msgs])
 
+  // Revoke every object URL we created (previews) when the panel unmounts.
+  useEffect(() => {
+    return () => {
+      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
+      objectUrlsRef.current = []
+    }
+  }, [])
+
   const grow = () => {
     const ta = taRef.current
     if (!ta) return
@@ -77,22 +112,85 @@ export function RightPanel() {
     ta.style.height = `${Math.min(160, ta.scrollHeight)}px`
   }
 
+  const trackUrl = (url: string) => {
+    objectUrlsRef.current = [...objectUrlsRef.current, url]
+    return url
+  }
+
+  const saveImage = async (file: File) => {
+    if (!activeProjectId) {
+      setAttachError('Select a project first.')
+      return
+    }
+    const mimeType = inferImageMime(file)
+    if (!mimeType) {
+      setAttachError('Use PNG, JPG, WebP, or GIF.')
+      return
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setAttachError('Image must be 10 MB or smaller.')
+      return
+    }
+
+    const previewUrl = trackUrl(URL.createObjectURL(file))
+    setAttaching(true)
+    setAttachError(null)
+    try {
+      const dataBase64 = await readBase64(file)
+      const saved = await cockpit().terminals.attachImage({
+        projectId: activeProjectId,
+        sessionId: null,
+        fileName: file.name,
+        mimeType,
+        dataBase64,
+      })
+      setAttachment({ relativePath: saved.relativePath, name: saved.name, size: saved.size, previewUrl })
+    } catch (err) {
+      URL.revokeObjectURL(previewUrl)
+      objectUrlsRef.current = objectUrlsRef.current.filter((u) => u !== previewUrl)
+      setAttachError(err instanceof Error ? err.message : 'Could not attach image.')
+    } finally {
+      setAttaching(false)
+    }
+  }
+
+  const clearAttachment = () => {
+    setAttachment(null)
+    setAttachError(null)
+  }
+
   const submit = async (text: string) => {
-    if (!text.trim() || !activeProjectId || busy) return
+    const trimmed = text.trim()
+    const att = attachment
+    if ((!trimmed && !att) || !activeProjectId || busy) return
+
     const userId = Date.now()
     const aId = userId + 1
     setInput('')
+    setAttachment(null)
+    setAttachError(null)
     requestAnimationFrame(grow)
     setBusy(true)
+
+    const routerQuery = trimmed || 'Review the attached image.'
+    const hermesPrompt = att
+      ? `${trimmed || 'Please review the attached image.'}\n\n[Attached image saved in this project at: ${att.relativePath}]`
+      : trimmed
+
     setMsgs((m) => [
       ...m,
-      { id: userId, role: 'user', text },
+      {
+        id: userId,
+        role: 'user',
+        text: trimmed,
+        image: att ? { previewUrl: att.previewUrl, name: att.name } : undefined,
+      },
       { id: aId, role: 'assistant', text: '', answering: true },
     ])
     try {
       const [result, reply] = await Promise.all([
-        cockpit().router.route(activeProjectId, text),
-        cockpit().chat.ask(activeProjectId, text, engine),
+        cockpit().router.route(activeProjectId, routerQuery),
+        cockpit().chat.ask(activeProjectId, hermesPrompt, 'hermes'),
       ])
       setMsgs((m) =>
         m.map((x) =>
@@ -111,6 +209,17 @@ export function RightPanel() {
       )
     } finally {
       setBusy(false)
+    }
+  }
+
+  const copy = async (m: Msg) => {
+    if (!m.text) return
+    try {
+      await navigator.clipboard.writeText(m.text)
+      setCopiedId(m.id)
+      window.setTimeout(() => setCopiedId((c) => (c === m.id ? null : c)), 1500)
+    } catch {
+      /* clipboard unavailable — nothing to surface */
     }
   }
 
@@ -137,29 +246,70 @@ export function RightPanel() {
     }
   }
 
-  const engineMeta = ENGINES.find((e) => e.id === engine) ?? ENGINES[0]
+  const resetDrag = () => {
+    dragDepthRef.current = 0
+    setDragging(false)
+  }
+
+  const handleDragEnter = (event: DragEvent<HTMLElement>) => {
+    if (!hasFileDrag(event)) return
+    event.preventDefault()
+    dragDepthRef.current += 1
+    setDragging(true)
+  }
+
+  const handleDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!hasFileDrag(event)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+  }
+
+  const handleDragLeave = (event: DragEvent<HTMLElement>) => {
+    if (!hasFileDrag(event)) return
+    event.preventDefault()
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+    if (dragDepthRef.current === 0) setDragging(false)
+  }
+
+  const handleDrop = (event: DragEvent<HTMLElement>) => {
+    if (!hasFileDrag(event)) return
+    event.preventDefault()
+    resetDrag()
+    const file = firstImage(event.dataTransfer.files)
+    if (file) void saveImage(file)
+    else setAttachError('Drop a PNG, JPG, WebP, or GIF image.')
+  }
+
+  const handlePaste = (event: ClipboardEvent<HTMLElement>) => {
+    const file = firstImage(event.clipboardData.files) ?? firstImageFromItems(event.clipboardData.items)
+    if (!file) return
+    event.preventDefault()
+    void saveImage(file)
+  }
+
+  const engineMeta = HERMES
+  const canSend = !busy && (Boolean(input.trim()) || Boolean(attachment))
 
   return (
-    <aside id="ai-cockpit-panel" className="right" aria-label="AI Cockpit">
+    <aside
+      id="ai-cockpit-panel"
+      className={`right ${dragging ? 'right--dragging' : ''}`}
+      aria-label="AI Cockpit"
+      onDragEnterCapture={handleDragEnter}
+      onDragOverCapture={handleDragOver}
+      onDragLeaveCapture={handleDragLeave}
+      onDropCapture={handleDrop}
+    >
       <div className="right__head">
         <div className="right__title">
           <IconBolt width={15} height={15} />
           <span>AI Cockpit</span>
         </div>
         <div className="right__headActions">
-          <div className="engineSeg" role="tablist" aria-label="Model">
-            {ENGINES.map((e) => (
-              <button
-                key={e.id}
-                role="tab"
-                aria-selected={engine === e.id}
-                className={`engineSeg__opt ${engine === e.id ? 'is-active' : ''}`}
-                onClick={() => setEngine(e.id)}
-                title={`${e.label} · ${e.sub}`}
-              >
-                {e.label}
-              </button>
-            ))}
+          <div className="engineSeg" aria-label="Model">
+            <span className="engineSeg__opt is-active" title={`${HERMES.label} · ${HERMES.sub}`}>
+              {HERMES.label}
+            </span>
           </div>
           <button
             type="button"
@@ -210,8 +360,8 @@ export function RightPanel() {
           <div className="right__empty">
             <p className="right__emptyLead">Ask the cockpit — {engineMeta.label} {engineMeta.sub}.</p>
             <p className="right__emptyHint">
-              Answers are grounded in your project via your {engineMeta.label} CLI. Pick the model
-              above; safe actions run, risky ones ask first.
+              Answers are grounded in your project via your {engineMeta.label} agent. Safe actions
+              run, risky ones ask first. Drag an image in to attach it.
             </p>
             <div className="right__suggest">
               {SUGGESTIONS.map((s) => (
@@ -225,7 +375,8 @@ export function RightPanel() {
           msgs.map((m) =>
             m.role === 'user' ? (
               <div key={m.id} className="msg msg--user animate-in">
-                {m.text}
+                {m.image && <img className="msg__image" src={m.image.previewUrl} alt={m.image.name} />}
+                {m.text && <div className="msg__userText">{m.text}</div>}
               </div>
             ) : (
               <div key={m.id} className="msg msg--assistant animate-in">
@@ -236,7 +387,25 @@ export function RightPanel() {
                   </div>
                 ) : (
                   <>
-                    {m.model && m.model !== 'mock' && <div className="msg__model">{m.model}</div>}
+                    <div className="msg__topbar">
+                      {m.model && m.model !== 'mock' ? (
+                        <div className="msg__model">{m.model}</div>
+                      ) : (
+                        <span />
+                      )}
+                      {m.text && !m.error && (
+                        <button
+                          type="button"
+                          className={`msg__copy ${copiedId === m.id ? 'is-copied' : ''}`}
+                          onClick={() => void copy(m)}
+                          title="Copy message"
+                          aria-label="Copy message"
+                        >
+                          <IconCopy width={13} height={13} />
+                          <span>{copiedId === m.id ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      )}
+                    </div>
                     <div className={`msg__text ${m.error ? 'is-error' : ''}`}>{m.text}</div>
                     {m.route && (
                       <button className="chat__routeChip" onClick={() => act(m.route as RouteRecommendation)}>
@@ -256,6 +425,48 @@ export function RightPanel() {
         <div ref={endRef} />
       </div>
 
+      {dragging && (
+        <div className="right__drop">
+          <div className="right__dropIcon">
+            <IconImage width={22} height={22} />
+          </div>
+          <div>
+            <div className="right__dropTitle">Drop to attach image</div>
+            <div className="right__dropSub">Saved into this project, then sent with your next message.</div>
+          </div>
+        </div>
+      )}
+
+      {(attachment || attaching || attachError) && (
+        <div className="right__attach">
+          {attachment ? (
+            <>
+              <img className="right__attachThumb" src={attachment.previewUrl} alt="" />
+              <div className="right__attachBody">
+                <div className="right__attachName">{attachment.name}</div>
+                <div className="right__attachMeta">{formatBytes(attachment.size)} · ready to send</div>
+              </div>
+              <button className="iconbtn" title="Remove attachment" onClick={clearAttachment}>
+                <IconX width={13} height={13} />
+              </button>
+            </>
+          ) : (
+            <>
+              {attaching ? <div className="right__attachLoader" /> : <IconImage width={16} height={16} />}
+              <div className="right__attachBody">
+                <div className="right__attachName">{attaching ? 'Attaching image…' : 'Image not attached'}</div>
+                {attachError && <div className="right__attachMeta is-error">{attachError}</div>}
+              </div>
+              {attachError && (
+                <button className="iconbtn" title="Dismiss" onClick={() => setAttachError(null)}>
+                  <IconX width={13} height={13} />
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       <form
         className="right__compose"
         onSubmit={(e) => {
@@ -263,6 +474,27 @@ export function RightPanel() {
           void submit(input)
         }}
       >
+        <input
+          ref={fileInputRef}
+          className="right__file"
+          type="file"
+          accept={IMAGE_ACCEPT}
+          onChange={(e) => {
+            const file = e.currentTarget.files?.[0]
+            e.currentTarget.value = ''
+            if (file) void saveImage(file)
+          }}
+        />
+        <button
+          type="button"
+          className="right__attachBtn"
+          title="Attach image"
+          aria-label="Attach image"
+          disabled={busy || attaching}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <IconImage width={15} height={15} />
+        </button>
         <textarea
           ref={taRef}
           className="right__input right__input--area"
@@ -279,9 +511,10 @@ export function RightPanel() {
               void submit(input)
             }
           }}
+          onPaste={handlePaste}
           disabled={busy}
         />
-        <button className="btn btn--accent right__send" type="submit" disabled={busy || !input.trim()}>
+        <button className="btn btn--accent right__send" type="submit" disabled={!canSend}>
           <IconSend width={15} height={15} />
         </button>
       </form>

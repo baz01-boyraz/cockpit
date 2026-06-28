@@ -19,6 +19,7 @@ import type {
   GitCommitResult,
   GitDiff,
   GitHubRepositoryStatus,
+  GitPushResult,
   GitSnapshot,
   LogEvent,
   MaskedEnvVar,
@@ -56,6 +57,7 @@ export const IPC = {
   gitDiff: 'git:diff',
   gitStage: 'git:stage',
   gitCommit: 'git:commit',
+  gitPush: 'git:push',
 
   githubStatus: 'github:status',
 
@@ -85,6 +87,7 @@ export const IPC = {
   appUpdateCheck: 'appUpdate:check',
   appUpdateDownload: 'appUpdate:download',
   appUpdateInstall: 'appUpdate:install',
+  appUpdateRefresh: 'appUpdate:refresh',
 
   // main -> renderer push events
   evtTerminalData: 'evt:terminal:data',
@@ -105,12 +108,18 @@ export interface SystemInfo {
   cliAvailable: { claude: boolean; codex: boolean; railway: boolean; git: boolean; gh: boolean }
 }
 
-export type ChatEngine = 'claude' | 'codex'
+export type ChatEngine = 'hermes'
 
 export interface ChatReply {
   ok: boolean
   text: string
   model: string
+}
+
+/** Result of kicking off a local rebuild + relaunch of the cockpit itself. */
+export interface AppRefreshResult {
+  ok: boolean
+  message: string
 }
 
 export interface CockpitApi {
@@ -151,6 +160,7 @@ export interface CockpitApi {
     diff(input: { projectId: string; path: string; staged?: boolean }): Promise<GitDiff>
     stage(input: { projectId: string; paths?: string[]; all?: boolean }): Promise<GitSnapshot>
     commit(input: { projectId: string; message: string }): Promise<GitCommitResult>
+    push(input: { projectId: string; force?: boolean }): Promise<GitPushResult>
   }
   github: {
     status(projectId: string): Promise<GitHubRepositoryStatus>
@@ -204,6 +214,8 @@ export interface CockpitApi {
     check(): Promise<AppUpdateState>
     download(): Promise<AppUpdateState>
     install(): Promise<void>
+    /** Rebuild the cockpit from the given project's source and relaunch it. Dev-only. */
+    refresh(projectId: string): Promise<AppRefreshResult>
     onChange(cb: (state: AppUpdateState) => void): Unsubscribe
   }
 }

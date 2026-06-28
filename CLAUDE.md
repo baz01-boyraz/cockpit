@@ -39,12 +39,15 @@ screenshot workflow possible — and it must stay in sync with the real `Cockpit
    (`shared/redaction.ts`). Reading `.env` is masked by default.
 3. Store Railway/GitHub tokens via OS keychain (`SecretStore` / `safeStorage`) — never in
    SQLite or project config. Config holds a `tokenRef`, not the value.
-4. These require approval: `git_push`, `git_force_push`, `deploy`, `redeploy`,
+4. These require approval: `git_force_push`, `deploy`, `redeploy`,
    `restart_service`, `delete_file`, `database_reset`, `env_write`. Force-push and DB reset
-   require **strong** approval and always gate regardless of config.
-5. Keep an audit log of AI/tool actions (redacted).
-6. **This build does not** actually push, force-push, deploy, mutate env vars, restart
-   services, or wipe databases. Those paths are stubbed/approval-gated by design.
+   require **strong** approval and always gate regardless of config. A regular `git_push`
+   executes directly (non-destructive, audit-logged) from the Git panel — it is the one
+   write path enabled for the developer's own loop.
+5. Keep an audit log of AI/tool actions (redacted). Real pushes are recorded with `actor: user`.
+6. **This build does not** actually force-push, deploy, mutate env vars, restart services, or
+   wipe databases. Those paths are stubbed/approval-gated by design. A regular push **does**
+   run `git push` against the active branch's `origin`.
 
 ## Frontend work — always do first
 

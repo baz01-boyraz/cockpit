@@ -1,14 +1,21 @@
 import { simpleGit, type SimpleGit, type StatusResult } from 'simple-git'
-import type { GitCommitResult, GitDiff, GitFileEntry, GitFileState, GitSnapshot } from '@shared/domain'
+import type {
+  GitCommitResult,
+  GitDiff,
+  GitFileEntry,
+  GitFileState,
+  GitPushResult,
+  GitSnapshot,
+} from '@shared/domain'
 import type { Db } from '../db/Database'
 import type { ProjectService } from './ProjectService'
 import { newId, nowIso } from '../util/ids'
 
 /**
- * Read/inspect git state for a project via simple-git. This service is
- * read-only: it never pushes, force-pushes, or mutates history. Those actions
- * are surfaced as approval requests elsewhere and are not implemented in this
- * build by design.
+ * Read/inspect git state for a project via simple-git, plus a real `push` for
+ * the developer's own loop. A regular push runs directly; force-push uses
+ * `--force-with-lease` and stays behind the approval gate elsewhere because it
+ * can rewrite remote history.
  */
 export class GitService {
   constructor(
@@ -99,6 +106,43 @@ export class GitService {
       commitHash,
       summary: input.message,
       filesChanged: before.stagedCount,
+    }
+  }
+
+  async push(input: { projectId: string; force?: boolean }): Promise<GitPushResult> {
+    const git = this.gitFor(input.projectId)
+    const isRepo = await git.checkIsRepo().catch(() => false)
+    if (!isRepo) throw new Error('Not a git repository.')
+
+    const status = await git.status()
+    const branch = status.current
+    if (!branch || branch === 'detached') {
+      throw new Error('Cannot push from a detached HEAD. Check out a branch first.')
+    }
+    if (!input.force && status.ahead === 0) {
+      throw new Error('Nothing to push — branch is already up to date with origin.')
+    }
+
+    const args = ['push']
+    if (input.force) args.push('--force-with-lease')
+    // First push of a new branch has no upstream — set it so future pushes are bare.
+    if (!status.tracking) args.push('--set-upstream', 'origin', branch)
+
+    try {
+      await git.raw(args)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      throw new Error(`git push failed: ${message.trim()}`)
+    }
+
+    const after = await this.status(input.projectId)
+    return {
+      branch,
+      remote: 'origin',
+      forced: Boolean(input.force),
+      ahead: after.ahead,
+      behind: after.behind,
+      pushedAt: nowIso(),
     }
   }
 

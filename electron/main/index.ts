@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, screen, shell } from 'electron'
 import { IPC } from '@shared/ipc'
 import { CockpitEvents } from './events'
 import { registerIpc } from './ipc/registerIpc'
@@ -10,11 +10,17 @@ let services: Services | null = null
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
+  // Fit the window to the current display's work area so it never opens wider
+  // than the screen (which clips the left rail off-screen on smaller displays).
+  const workArea = screen.getPrimaryDisplay().workAreaSize
+  const width = Math.min(1440, workArea.width)
+  const height = Math.min(900, workArea.height)
+
   mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1080,
-    minHeight: 680,
+    width,
+    height,
+    minWidth: Math.min(1080, workArea.width),
+    minHeight: Math.min(680, workArea.height),
     show: false,
     backgroundColor: '#0c0d10',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
@@ -27,7 +33,14 @@ function createWindow(): void {
     },
   })
 
-  mainWindow.on('ready-to-show', () => mainWindow?.show())
+  mainWindow.on('ready-to-show', () => {
+    // Re-center before showing. macOS window state restoration can re-apply a
+    // previously saved frame that sits partly off-screen (the symptom: the left
+    // rail and part of the terminal are clipped off the left edge). Centering on
+    // the current display guarantees the whole UI is visible.
+    mainWindow?.center()
+    mainWindow?.show()
+  })
 
   // Harden: block in-app navigation and open external links in the OS browser.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

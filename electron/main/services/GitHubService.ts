@@ -12,6 +12,7 @@ import type {
 } from '@shared/domain'
 import { nowIso } from '../util/ids'
 import type { ProjectService } from './ProjectService'
+import { resolveBin } from './resolveBin'
 
 const execFileAsync = promisify(execFile)
 
@@ -176,10 +177,11 @@ export class GitHubService {
 
   private async authState(cwd: string): Promise<GitHubRepositoryStatus['authState']> {
     try {
-      await execFileAsync('gh', ['auth', 'status', '-h', 'github.com'], {
+      await execFileAsync(resolveBin('gh'), ['auth', 'status', '-h', 'github.com'], {
         cwd,
         timeout: 10_000,
         maxBuffer: 1024 * 1024,
+        env: { ...process.env },
       })
       return 'authenticated'
     } catch (err) {
@@ -194,10 +196,11 @@ export class GitHubService {
 
   private async ghJson<T>(cwd: string, endpoint: string): Promise<T | null> {
     try {
-      const { stdout } = await execFileAsync('gh', ['api', endpoint], {
+      const { stdout } = await execFileAsync(resolveBin('gh'), ['api', endpoint], {
         cwd,
         timeout: 15_000,
         maxBuffer: 4 * 1024 * 1024,
+        env: { ...process.env },
       })
       return JSON.parse(stdout) as T
     } catch {

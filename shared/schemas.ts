@@ -145,7 +145,7 @@ export const routeQuerySchema = z.object({
 export const chatAskSchema = z.object({
   projectId: z.string().min(1),
   prompt: z.string().min(1).max(16000),
-  engine: z.enum(['claude', 'codex']).default('claude'),
+  engine: z.enum(['hermes']).default('hermes'),
 })
 
 export const gitDiffInputSchema = z.object({
@@ -167,6 +167,11 @@ export const gitStageInputSchema = z
 export const gitCommitInputSchema = z.object({
   projectId: z.string().min(1),
   message: z.string().min(1).max(240),
+})
+
+export const gitPushInputSchema = z.object({
+  projectId: z.string().min(1),
+  force: z.boolean().optional(),
 })
 
 export const approvalDecisionSchema = z.object({

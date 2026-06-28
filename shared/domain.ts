@@ -186,6 +186,15 @@ export interface GitCommitResult {
   filesChanged: number
 }
 
+export interface GitPushResult {
+  branch: string
+  remote: string
+  forced: boolean
+  ahead: number
+  behind: number
+  pushedAt: ISODate
+}
+
 export interface GitRemoteInfo {
   name: string
   url: string

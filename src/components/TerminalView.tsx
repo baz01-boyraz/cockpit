@@ -3,25 +3,22 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import type { TerminalAttachment, TerminalSession } from '@shared/domain'
 import { cockpit } from '../lib/cockpit'
+import {
+  IMAGE_ACCEPT,
+  MAX_IMAGE_BYTES,
+  firstImage,
+  firstImageFromItems,
+  formatBytes,
+  hasFileDrag,
+  inferImageMime,
+  readBase64,
+} from '../lib/imageAttach'
 import { IconImage, IconX } from './icons'
-
-type ImageMimeType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
 
 type AttachmentPreview = TerminalAttachment & {
   previewUrl: string
   sent: boolean
 }
-
-const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif'
-const IMAGE_MIME_TYPES = new Set<ImageMimeType>(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
-const IMAGE_MIME_BY_EXT: Record<string, ImageMimeType> = {
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  webp: 'image/webp',
-  gif: 'image/gif',
-}
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 const THEME = {
   background: '#0e0f13',
@@ -45,52 +42,6 @@ const THEME = {
   brightMagenta: '#d6a8e0',
   brightCyan: '#8fd6d6',
   brightWhite: '#ffffff',
-}
-
-function inferImageMime(file: File): ImageMimeType | null {
-  if (IMAGE_MIME_TYPES.has(file.type as ImageMimeType)) return file.type as ImageMimeType
-  const ext = file.name.split('.').pop()?.toLowerCase()
-  return ext ? IMAGE_MIME_BY_EXT[ext] ?? null : null
-}
-
-function firstImage(files: FileList): File | null {
-  for (let i = 0; i < files.length; i += 1) {
-    const file = files.item(i)
-    if (file && inferImageMime(file)) return file
-  }
-  return null
-}
-
-function firstImageFromItems(items: DataTransferItemList): File | null {
-  for (let i = 0; i < items.length; i += 1) {
-    const item = items[i]
-    if (item.kind !== 'file') continue
-    const file = item.getAsFile()
-    if (file && inferImageMime(file)) return file
-  }
-  return null
-}
-
-function hasFileDrag(event: DragEvent<HTMLDivElement>): boolean {
-  return Array.from(event.dataTransfer.types).includes('Files')
-}
-
-function readBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = String(reader.result ?? '')
-      resolve(result.includes(',') ? result.slice(result.indexOf(',') + 1) : result)
-    }
-    reader.onerror = () => reject(reader.error ?? new Error('Could not read image.'))
-    reader.readAsDataURL(file)
-  })
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 export function TerminalView({ session, active }: { session: TerminalSession; active: boolean }) {

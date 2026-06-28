@@ -9,6 +9,7 @@ import {
   createTerminalInputSchema,
   gitCommitInputSchema,
   gitDiffInputSchema,
+  gitPushInputSchema,
   gitStageInputSchema,
   chatAskSchema,
   ingestLogSchema,
@@ -23,6 +24,7 @@ import {
 } from '@shared/schemas'
 import { z } from 'zod'
 import type { Services } from '../services/Services'
+import { rebuildAndRelaunch } from '../services/localRebuild'
 
 /**
  * Registers every IPC handler. Each handler validates its payload with a Zod
@@ -78,6 +80,18 @@ export function registerIpc(services: Services): void {
   handle(IPC.gitDiff, (p) => services.git.diff(gitDiffInputSchema.parse(p)))
   handle(IPC.gitStage, (p) => services.git.stage(gitStageInputSchema.parse(p)))
   handle(IPC.gitCommit, (p) => services.git.commit(gitCommitInputSchema.parse(p)))
+  handle(IPC.gitPush, async (p) => {
+    const input = gitPushInputSchema.parse(p)
+    const result = await services.git.push(input)
+    services.audit.record({
+      projectId: input.projectId,
+      actor: 'user',
+      actionType: input.force ? 'git_force_push' : 'git_push',
+      summary: `${result.forced ? 'Force-pushed' : 'Pushed'} ${result.branch} to ${result.remote}`,
+      payload: { branch: result.branch, forced: result.forced },
+    })
+    return result
+  })
 
   // --- github ---
   handle(IPC.githubStatus, (p) => services.github.status(projectIdSchema.parse(p).projectId))
@@ -154,4 +168,8 @@ export function registerIpc(services: Services): void {
   handle(IPC.appUpdateCheck, () => services.appUpdate.check())
   handle(IPC.appUpdateDownload, () => services.appUpdate.download())
   handle(IPC.appUpdateInstall, () => services.appUpdate.install())
+  handle(IPC.appUpdateRefresh, (p) => {
+    const { projectId } = projectIdSchema.parse(p)
+    return rebuildAndRelaunch(services.projects.get(projectId).path)
+  })
 }

@@ -44,6 +44,7 @@ const api: CockpitApi = {
     diff: (input) => invoke(IPC.gitDiff, input),
     stage: (input) => invoke(IPC.gitStage, input),
     commit: (input) => invoke(IPC.gitCommit, input),
+    push: (input) => invoke(IPC.gitPush, input),
   },
   github: {
     status: (projectId) => invoke(IPC.githubStatus, { projectId }),
@@ -85,6 +86,7 @@ const api: CockpitApi = {
     check: () => invoke(IPC.appUpdateCheck),
     download: () => invoke(IPC.appUpdateDownload),
     install: () => invoke(IPC.appUpdateInstall),
+    refresh: (projectId) => invoke(IPC.appUpdateRefresh, { projectId }),
     onChange: (cb) => subscribe(IPC.evtAppUpdateChanged, cb),
   },
 }

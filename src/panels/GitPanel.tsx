@@ -148,16 +148,65 @@ export function GitPanel() {
     }
   }
 
-  const requestPush = async (force: boolean) => {
+  const doPush = async () => {
+    if (!activeProjectId || !git || git.ahead === 0) return
+    setBusy('push')
+    setNotice(null)
+    try {
+      const res = await cockpit().git.push({ projectId: activeProjectId })
+      await refreshActive()
+      setNotice(`Pushed ${res.branch} → ${res.remote}.`)
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const commitAndPush = async () => {
+    if (!activeProjectId || !commitMsg.trim() || grouped.staged.length === 0) return
+    setBusy('commitPush')
+    setNotice(null)
+    try {
+      await cockpit().git.commit({ projectId: activeProjectId, message: commitMsg.trim() })
+      setCommitMsg('')
+      setSelected(null)
+      setDiff('')
+      const res = await cockpit().git.push({ projectId: activeProjectId })
+      await refreshActive()
+      setNotice(`Committed & pushed ${res.branch} → ${res.remote}.`)
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  // Force-push can rewrite remote history, so it stays behind the approval gate.
+  const requestForcePush = async () => {
     if (!activeProjectId || !git) return
     await cockpit().approvals.request({
       projectId: activeProjectId,
-      actionType: force ? 'git_force_push' : 'git_push',
-      summary: `${force ? 'Force-push' : 'Push'} ${git.ahead} commit(s) to origin/${git.branch}`,
-      payload: { branch: git.branch, ahead: git.ahead, force },
+      actionType: 'git_force_push',
+      summary: `Force-push ${git.ahead} commit(s) to origin/${git.branch}`,
+      payload: { branch: git.branch, ahead: git.ahead, force: true },
     })
     await refreshApprovals()
-    setNotice(`${force ? 'Force-push' : 'Push'} approval requested.`)
+    setNotice('Force-push approval requested.')
+  }
+
+  const refreshApp = async () => {
+    if (!activeProjectId) return
+    setBusy('refresh')
+    setNotice(null)
+    try {
+      const res = await cockpit().appUpdate.refresh(activeProjectId)
+      setNotice(res.message)
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
   }
 
   const connectGitHub = async () => {
@@ -215,10 +264,15 @@ export function GitPanel() {
           <button className="btn" disabled title="Pull will be wired after push execution approvals.">
             Pull
           </button>
-          <button className="btn" onClick={() => requestPush(false)} disabled={git.ahead === 0}>
-            <IconShield width={13} height={13} /> Push…
+          <button
+            className="btn btn--accent"
+            onClick={doPush}
+            disabled={git.ahead === 0 || busy === 'push' || busy === 'commitPush'}
+          >
+            <IconUpload width={13} height={13} />{' '}
+            {busy === 'push' ? 'Pushing…' : `Push${git.ahead > 0 ? ` (${git.ahead})` : ''}`}
           </button>
-          <button className="btn btn--danger" onClick={() => requestPush(true)} disabled={git.ahead === 0}>
+          <button className="btn btn--danger" onClick={requestForcePush} disabled={git.ahead === 0}>
             <IconShield width={13} height={13} /> Force-push…
           </button>
         </div>
@@ -274,6 +328,15 @@ export function GitPanel() {
           <button className="btn git__wideAction" onClick={runUpdateAction} disabled={updateDisabled}>
             {appUpdate?.phase === 'downloaded' ? <IconRestart width={14} height={14} /> : <IconDownload width={14} height={14} />}
             {updateActionLabel(appUpdate)}
+          </button>
+          <button
+            className="btn git__wideAction"
+            onClick={refreshApp}
+            disabled={busy === 'refresh'}
+            title="Rebuild this app from the active project's source and relaunch (dev)"
+          >
+            <IconRestart width={14} height={14} />
+            {busy === 'refresh' ? 'Rebuilding…' : 'Rebuild & relaunch'}
           </button>
         </section>
       </div>
@@ -335,8 +398,16 @@ export function GitPanel() {
               value={commitMsg}
               onChange={(e) => setCommitMsg(e.target.value)}
             />
-            <button className="btn btn--accent" onClick={commit} disabled={!commitMsg.trim() || grouped.staged.length === 0 || busy === 'commit'}>
+            <button className="btn" onClick={commit} disabled={!commitMsg.trim() || grouped.staged.length === 0 || busy === 'commit' || busy === 'commitPush'}>
               Commit {grouped.staged.length > 0 ? `(${grouped.staged.length})` : ''}
+            </button>
+            <button
+              className="btn btn--accent"
+              onClick={commitAndPush}
+              disabled={!commitMsg.trim() || grouped.staged.length === 0 || busy === 'commit' || busy === 'commitPush'}
+              title="Commit staged changes and push to origin"
+            >
+              <IconUpload width={13} height={13} /> {busy === 'commitPush' ? 'Pushing…' : 'Commit & Push'}
             </button>
           </div>
         </div>

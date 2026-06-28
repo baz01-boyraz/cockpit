@@ -435,6 +435,18 @@ export function createMockApi(): CockpitApi {
         snapshot.files = []
         return { branch: snapshot.branch, commitHash: 'mock1234', summary: message, filesChanged }
       },
+      push: async ({ projectId, force }) => {
+        const snapshot = gitByProject[projectId] ?? gitByProject.prj_cockpit
+        snapshot.ahead = 0
+        return {
+          branch: snapshot.branch,
+          remote: 'origin',
+          forced: Boolean(force),
+          ahead: 0,
+          behind: snapshot.behind,
+          pushedAt: now(),
+        }
+      },
     },
     github: {
       status: async (projectId) => githubByProject[projectId] ?? githubByProject.prj_cockpit,
@@ -517,11 +529,9 @@ export function createMockApi(): CockpitApi {
     },
     router: { route: async (_projectId, query) => classifyRoute(query) },
     chat: {
-      ask: async (_projectId, prompt, engine) => ({
+      ask: async (_projectId, prompt, _engine) => ({
         ok: true,
-        text: `(browser preview) Bu mock yanıt — gerçek uygulamada ${
-          engine === 'codex' ? 'Codex' : 'Claude Opus 4.8'
-        } cevaplar.\n\nSoru: "${prompt.slice(0, 120)}"`,
+        text: `(browser preview) Bu mock yanıt — gerçek uygulamada Hermes agent cevaplar.\n\nSoru: "${prompt.slice(0, 120)}"`,
         model: 'mock',
       }),
     },
@@ -563,6 +573,10 @@ export function createMockApi(): CockpitApi {
       install: async () => {
         appUpdateState = { ...appUpdateState, phase: 'idle', currentVersion: appUpdateState.latestVersion ?? '0.1.1' }
       },
+      refresh: async () => ({
+        ok: false,
+        message: 'Rebuild & relaunch is only available in the desktop app.',
+      }),
       onChange: (cb) => {
         appUpdateListeners.add(cb)
         return (() => appUpdateListeners.delete(cb)) as Unsubscribe
