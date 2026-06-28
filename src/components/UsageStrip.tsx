@@ -55,8 +55,6 @@ export function UsageStrip() {
               aria-label={ariaLabel}
               onClick={() => setView('usage')}
             >
-              <span className="usageDock__aura" aria-hidden />
-              <span className="usageDock__sheen" aria-hidden />
               <span className="usageDock__identity">
                 <span className="usageDock__orb" aria-hidden>
                   <span className="usageDock__orbCore" />
@@ -93,7 +91,7 @@ export function UsageStrip() {
               )}
             </button>
             <div className="usageDock__pop" role="tooltip">
-              <AgentUsageBody snapshot={snapshot} live variant="radial" />
+              <AgentUsageBody snapshot={snapshot} live variant="bars" />
             </div>
           </div>
         )

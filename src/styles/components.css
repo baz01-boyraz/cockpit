@@ -455,32 +455,17 @@
   --tone: var(--signal);
   --provider: var(--accent);
   --provider-2: var(--accent-hi);
-  --provider-wash: var(--accent-wash);
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
   width: 100%;
-  padding: 9px;
+  padding: 8px;
   border-radius: var(--r-md);
   border: 1px solid var(--border);
-  background:
-    radial-gradient(120% 120% at 8% 0%, rgba(255, 141, 77, 0.16), transparent 46%),
-    radial-gradient(95% 105% at 96% 28%, rgba(111, 168, 196, 0.13), transparent 54%),
-    linear-gradient(152deg, rgba(38, 34, 35, 0.96), rgba(18, 20, 27, 0.97) 46%, rgba(8, 9, 11, 0.98));
-  box-shadow:
-    inset 0 1px 0 rgba(236, 230, 218, 0.07),
-    0 12px 34px rgba(0, 0, 0, 0.3),
-    0 0 22px rgba(224, 123, 69, 0.05);
+  background: linear-gradient(180deg, var(--surface-1), var(--bg-deep));
+  box-shadow: var(--shadow-1);
   -webkit-app-region: no-drag;
-}
-.usageDock::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  border: 1px solid rgba(236, 230, 218, 0.025);
-  pointer-events: none;
 }
 .usageDock__head {
   display: flex;
@@ -523,46 +508,29 @@
   --tone: var(--signal);
   --provider: var(--accent);
   --provider-2: var(--accent-hi);
-  --provider-wash: var(--accent-wash);
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 7px;
+  gap: 9px;
   width: 100%;
   min-width: 0;
-  min-height: 58px;
-  padding: 8px 9px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--provider) 34%, var(--border));
-  background:
-    radial-gradient(115% 150% at 2% 0%, var(--provider-wash), transparent 54%),
-    radial-gradient(95% 145% at 100% 12%, color-mix(in srgb, var(--provider-2) 16%, transparent), transparent 58%),
-    linear-gradient(160deg, rgba(34, 38, 49, 0.82), rgba(10, 11, 14, 0.9));
+  padding: 9px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
   color: var(--text-muted);
   overflow: hidden;
   isolation: isolate;
   transition:
-    opacity var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out),
     transform var(--dur-fast) var(--ease-spring);
-}
-.usageDock__item::after {
-  content: '';
-  position: absolute;
-  inset: auto 10px 6px 10px;
-  height: 2px;
-  border-radius: var(--r-pill);
-  background: linear-gradient(90deg, transparent, var(--provider), var(--provider-2), var(--tone), transparent);
-  opacity: 0.34;
-  pointer-events: none;
-  transform: scaleX(0.9);
-  transform-origin: center;
 }
 .usageDock__item:hover {
   transform: translateY(-1px);
-  box-shadow:
-    0 8px 22px rgba(0, 0, 0, 0.28),
-    0 0 18px color-mix(in srgb, var(--provider) 16%, transparent);
+  border-color: color-mix(in srgb, var(--provider) 36%, var(--border));
+  background: color-mix(in srgb, var(--provider) 5%, var(--surface-1));
 }
 .usageDock__item:active {
   transform: translateY(0) scale(0.99);
@@ -572,17 +540,15 @@
   outline-offset: 2px;
 }
 .usageDock__item--codex {
-  --provider: #72d8ff;
-  --provider-2: #7df1c6;
-  --provider-wash: rgba(114, 216, 255, 0.18);
+  --provider: #6fb6cf;
+  --provider-2: #8fcfe0;
 }
 .usageDock__item--claude {
-  --provider: #ff8a4c;
-  --provider-2: #ffd36d;
-  --provider-wash: rgba(255, 138, 76, 0.2);
+  --provider: var(--accent);
+  --provider-2: var(--accent-hi);
 }
 .usageDock__item--healthy {
-  --tone: var(--signal);
+  --tone: var(--provider);
 }
 .usageDock__item--warning {
   --tone: var(--warning);
@@ -592,43 +558,7 @@
 }
 .usageDock__item--off {
   --tone: var(--text-faint);
-  opacity: 0.62;
-}
-.usageDock__aura {
-  position: absolute;
-  inset: -34px -26px auto auto;
-  width: 96px;
-  height: 96px;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle, color-mix(in srgb, var(--provider-2) 30%, transparent), transparent 62%),
-    radial-gradient(circle, color-mix(in srgb, var(--provider) 24%, transparent), transparent 72%);
-  opacity: 0.28;
-  pointer-events: none;
-  transform: translate(8px, -8px) scale(0.82);
-  transition:
-    opacity 280ms var(--ease-out),
-    transform 520ms var(--ease-spring);
-}
-.usageDock__item:hover .usageDock__aura {
-  opacity: 0.72;
-  transform: translate(0, 0) scale(1);
-}
-.usageDock__sheen {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(108deg, transparent 34%, rgba(236, 230, 218, 0.1) 50%, transparent 66%);
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(-120%);
-}
-.usageDock__item:hover .usageDock__sheen {
-  opacity: 1;
-  transform: translateX(120%);
-  transition:
-    opacity 160ms var(--ease-out),
-    transform 760ms var(--ease-out);
+  opacity: 0.6;
 }
 .usageDock__identity {
   position: relative;
@@ -641,34 +571,23 @@
 }
 .usageDock__orb {
   position: relative;
-  width: 22px;
-  height: 22px;
+  width: 9px;
+  height: 9px;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 34% 30%, rgba(236, 230, 218, 0.7), transparent 18%),
-    radial-gradient(circle at 45% 48%, var(--provider-2), var(--provider) 72%);
-  box-shadow:
-    0 0 14px color-mix(in srgb, var(--provider) 48%, transparent),
-    inset 0 0 0 1px rgba(236, 230, 218, 0.18);
+  background: var(--provider);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--provider) 16%, transparent);
   flex: 0 0 auto;
 }
 .usageDock__orbCore {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--tone);
-  box-shadow:
-    0 0 8px color-mix(in srgb, var(--tone) 65%, transparent),
-    inset 0 0 0 1px rgba(236, 230, 218, 0.25);
-  animation: usage-pulse 2.8s var(--ease-out) infinite;
+  display: none;
 }
 .usageDock__label {
   min-width: 0;
   color: var(--text);
-  font-size: 12.5px;
-  font-weight: 680;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -699,9 +618,9 @@
   letter-spacing: 0;
 }
 .usageDock__metricValue {
-  color: var(--tone);
+  color: var(--text);
   font-size: 11px;
-  font-weight: 750;
+  font-weight: 700;
   letter-spacing: 0;
   text-align: right;
 }
@@ -710,20 +629,20 @@
   position: relative;
   height: 3px;
   border-radius: var(--r-pill);
-  background: rgba(236, 230, 218, 0.11);
+  background: rgba(236, 230, 218, 0.09);
   overflow: hidden;
 }
 .usageDock__metricFill {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--tone) 72%, #fff 12%), var(--tone));
-  box-shadow: 0 0 8px color-mix(in srgb, var(--tone) 52%, transparent);
+  background: var(--tone);
+  opacity: 0.9;
   transform: scaleX(var(--scale, 0));
   transform-origin: left center;
   transition:
     opacity var(--dur) var(--ease-out),
-    transform 760ms var(--ease-spring);
+    transform 700ms var(--ease-spring);
 }
 .usageDock__state {
   position: relative;
@@ -763,29 +682,24 @@
   }
 }
 
-/* ---------- agent usage popover ---------- */
+/* ---------- agent usage popover ----------
+ * Constrained to the rail column width and anchored straight above the strip so
+ * it never spills over the terminal/main surface to the right. */
 .usageDock__pop {
   position: absolute;
   left: 0;
-  bottom: calc(100% + 12px);
+  right: 0;
+  bottom: calc(100% + 9px);
   z-index: 60;
-  width: min(326px, calc(100vw - 28px));
-  padding: 15px;
-  border-radius: var(--r-lg);
+  padding: 12px;
+  border-radius: var(--r-md);
   border: 1px solid var(--border-strong);
-  background:
-    radial-gradient(115% 105% at 14% 0%, color-mix(in srgb, var(--provider) 22%, transparent), transparent 52%),
-    radial-gradient(95% 90% at 98% 18%, color-mix(in srgb, var(--provider-2) 16%, transparent), transparent 56%),
-    linear-gradient(162deg, rgba(29, 32, 40, 0.98), rgba(14, 16, 21, 0.98) 58%, rgba(9, 10, 13, 0.98));
-  backdrop-filter: blur(18px) saturate(1.22);
-  box-shadow:
-    0 14px 38px rgba(0, 0, 0, 0.58),
-    0 32px 80px rgba(0, 0, 0, 0.45),
-    0 0 28px color-mix(in srgb, var(--provider) 12%, transparent),
-    inset 0 1px 0 rgba(236, 230, 218, 0.07);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-inset));
+  backdrop-filter: blur(16px) saturate(1.1);
+  box-shadow: var(--shadow-float);
   opacity: 0;
-  transform: translateY(10px) scale(0.975);
-  transform-origin: bottom left;
+  transform: translateY(6px);
+  transform-origin: bottom center;
   pointer-events: none;
   visibility: hidden;
   transition:
@@ -793,19 +707,10 @@
     transform var(--dur) var(--ease-spring),
     visibility 0s linear var(--dur);
 }
-.usageDock__pop::after {
-  content: '';
-  position: absolute;
-  inset: auto 18px 0 18px;
-  height: 1px;
-  border-radius: var(--r-pill);
-  background: linear-gradient(90deg, transparent, var(--provider), var(--tone), transparent);
-  opacity: 0.72;
-}
 .usageDock__itemWrap:hover .usageDock__pop,
 .usageDock__itemWrap:focus-within .usageDock__pop {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translateY(0);
   pointer-events: auto;
   visibility: visible;
   transition:
@@ -816,14 +721,47 @@
 .usageDock__pop::before {
   content: '';
   position: absolute;
-  left: 30px;
+  left: 24px;
   bottom: -5px;
   width: 9px;
   height: 9px;
-  background: #11141a;
+  background: var(--surface-inset);
   border-right: 1px solid var(--border-strong);
   border-bottom: 1px solid var(--border-strong);
   transform: rotate(45deg);
+}
+/* Compact the shared quota rows when shown inside the narrow rail popover. */
+.usageDock__pop .quotaBody {
+  gap: 10px;
+}
+.usageDock__pop .quotaBody__head {
+  gap: 6px;
+}
+.usageDock__pop .quotaBody__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.usageDock__pop .quotaBody__live {
+  padding: 1px 6px 1px 5px;
+}
+.usageDock__pop .quotaBody__windows {
+  gap: 7px;
+}
+.usageDock__pop .quotaWindow {
+  padding: 9px 10px;
+}
+.usageDock__pop .quotaWindow__head {
+  margin-bottom: 7px;
+}
+.usageDock__pop .quotaWindow__meta {
+  margin-top: 6px;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.usageDock__pop .quotaWindow__reset {
+  display: none;
 }
 
 /* ---------- shared quota breakdown (popover + Usage panel) ---------- */
@@ -839,15 +777,7 @@
   isolation: isolate;
 }
 .quotaBody__wash {
-  position: absolute;
-  inset: -8px -8px auto auto;
-  width: 84px;
-  height: 84px;
-  border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--tone) 14%, transparent), transparent 70%);
-  opacity: 0.82;
-  pointer-events: none;
-  z-index: -1;
+  display: none;
 }
 .quotaBody--warning {
   --tone: var(--warning);
@@ -858,15 +788,16 @@
 .quotaBody--off {
   --tone: var(--text-faint);
 }
+.quotaBody--healthy {
+  --tone: var(--provider);
+}
 .quotaBody--claude {
-  --provider: #ff8a4c;
-  --provider-2: #ffd36d;
-  --provider-wash: rgba(255, 138, 76, 0.2);
+  --provider: var(--accent);
+  --provider-2: var(--accent-hi);
 }
 .quotaBody--codex {
-  --provider: #72d8ff;
-  --provider-2: #7df1c6;
-  --provider-wash: rgba(114, 216, 255, 0.18);
+  --provider: #6fb6cf;
+  --provider-2: #8fcfe0;
 }
 .quotaBody--radial {
   gap: 13px;
@@ -877,11 +808,11 @@
   gap: 7px;
 }
 .quotaBody__dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--provider-2), var(--tone));
-  box-shadow: 0 0 10px color-mix(in srgb, var(--tone) 62%, transparent);
+  background: var(--provider);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--provider) 14%, transparent);
   flex-shrink: 0;
 }
 .quotaBody__name {
@@ -1134,32 +1065,16 @@
 }
 
 .quotaWindow {
-  --tone: var(--signal);
+  --tone: var(--provider);
   position: relative;
   padding: 11px 12px 10px;
-  border-radius: var(--r-md);
+  border-radius: var(--r-sm);
   border: 1px solid var(--border);
-  background:
-    radial-gradient(95% 130% at 0% 0%, color-mix(in srgb, var(--tone) 10%, transparent), transparent 54%),
-    linear-gradient(180deg, #0f1116, #0b0c0f);
-  box-shadow:
-    inset 0 1px 0 rgba(236, 230, 218, 0.035),
-    0 1px 0 rgba(0, 0, 0, 0.38);
+  background: var(--surface-1);
   overflow: hidden;
-  transition:
-    opacity var(--dur) var(--ease-out),
-    transform var(--dur-fast) var(--ease-spring);
-}
-.usageDock__itemWrap:hover .quotaWindow,
-.usageDock__itemWrap:focus-within .quotaWindow {
-  transform: translateY(-1px);
 }
 .quotaWindow__glow {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 2px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tone) 68%, #fff 8%), var(--tone));
-  opacity: 0.84;
+  display: none;
 }
 .quotaWindow--warning {
   --tone: var(--warning);
@@ -1175,12 +1090,12 @@
   margin-bottom: 8px;
 }
 .quotaWindow__title {
-  color: var(--text);
+  color: var(--text-muted);
   font-size: var(--fs-xs);
   font-weight: 550;
 }
 .quotaWindow__value {
-  color: var(--tone);
+  color: var(--text);
   font-size: var(--fs-sm);
   font-weight: 700;
   letter-spacing: 0;
@@ -1192,20 +1107,17 @@
 }
 .quotaWindow__track {
   position: relative;
-  height: 7px;
+  height: 6px;
   border-radius: var(--r-pill);
-  background:
-    linear-gradient(90deg, rgba(236, 230, 218, 0.1), rgba(236, 230, 218, 0.06)),
-    rgba(236, 230, 218, 0.08);
+  background: rgba(236, 230, 218, 0.07);
   overflow: hidden;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.46);
 }
 .quotaWindow__fill {
   position: absolute;
   inset: 0;
   border-radius: var(--r-pill);
-  background: linear-gradient(90deg, color-mix(in srgb, var(--tone) 78%, #fff 10%), var(--tone));
-  box-shadow: 0 0 8px color-mix(in srgb, var(--tone) 55%, transparent);
+  background: var(--tone);
+  opacity: 0.9;
   transform: scaleX(var(--scale, 0));
   transform-origin: left center;
   transition: transform 900ms var(--ease-spring);

@@ -36,6 +36,7 @@ interface StatCard {
 
 export function DashboardPanel() {
   const dashboard = useStore((s) => s.dashboard)
+  const terminals = useStore((s) => s.terminals)
   const approvals = useStore((s) => s.approvals)
   const setView = useStore((s) => s.setView)
   const refreshTerminals = useStore((s) => s.refreshTerminals)
@@ -57,6 +58,16 @@ export function DashboardPanel() {
   const pending = approvals.filter((a) => a.status === 'pending')
   const errorTotal = dashboard.recentErrors.length
 
+  // Derive terminal/agent counts from the live terminals list so the dashboard
+  // stays in lockstep with the rail badge and the Terminals panel instead of a
+  // dashboard snapshot that only refreshes on approvals. A terminal running an
+  // AI CLI (claude/codex) counts as an active agent.
+  const terminalCount = terminals.length
+  const runningTerminals = terminals.filter(
+    (t) => t.status === 'running' || t.status === 'starting',
+  ).length
+  const agentCount = terminals.filter((t) => t.role === 'claude' || t.role === 'codex').length
+
   const launch = async (agent: 'claude' | 'codex') => {
     if (!activeProjectId) return
     await cockpit().terminals.launchAgent(activeProjectId, agent)
@@ -75,19 +86,19 @@ export function DashboardPanel() {
     },
     {
       label: 'Terminals',
-      value: `${dashboard.runningTerminals}/${dashboard.terminalCount}`,
-      sub: dashboard.runningTerminals ? 'running' : 'idle',
+      value: `${runningTerminals}/${terminalCount}`,
+      sub: runningTerminals ? 'running' : 'idle',
       Icon: IconTerminal,
       view: 'terminals',
-      tone: dashboard.runningTerminals ? 'live' : 'idle',
+      tone: runningTerminals ? 'live' : 'idle',
     },
     {
       label: 'Agents',
-      value: dashboard.agentCount,
-      sub: dashboard.agentCount ? 'active' : 'idle',
+      value: agentCount,
+      sub: agentCount ? 'active' : 'idle',
       Icon: IconBolt,
       view: 'terminals',
-      tone: dashboard.agentCount ? 'accent' : 'idle',
+      tone: agentCount ? 'accent' : 'idle',
     },
     {
       label: 'Railway',
