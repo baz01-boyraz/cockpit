@@ -1,6 +1,6 @@
 {
   "name": "baz-developer-cockpit",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "description": "Baz Developer Cockpit — a project-aware AI coding cockpit. Terminals are the execution layer; the product is the cockpit.",
   "author": "Baz",
