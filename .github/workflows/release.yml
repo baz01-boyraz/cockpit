@@ -34,6 +34,29 @@ jobs:
           echo "PYTHON=${PYTHON_PATH}" >> "$GITHUB_ENV"
           echo "npm_config_python=${PYTHON_PATH}" >> "$GITHUB_ENV"
 
+      - name: Configure macOS signing secrets
+        env:
+          MAC_CERTIFICATE_BASE64: ${{ secrets.MAC_CERTIFICATE_BASE64 }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_ID_SECRET: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD_SECRET: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID_SECRET: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [[ -n "${MAC_CERTIFICATE_BASE64}" ]]; then
+            echo "CSC_LINK=${MAC_CERTIFICATE_BASE64}" >> "$GITHUB_ENV"
+            echo "CSC_KEY_PASSWORD=${MAC_CERTIFICATE_PASSWORD}" >> "$GITHUB_ENV"
+          else
+            echo "No macOS signing certificate configured; building unsigned."
+          fi
+
+          if [[ -n "${APPLE_ID_SECRET}" && -n "${APPLE_APP_SPECIFIC_PASSWORD_SECRET}" && -n "${APPLE_TEAM_ID_SECRET}" ]]; then
+            echo "APPLE_ID=${APPLE_ID_SECRET}" >> "$GITHUB_ENV"
+            echo "APPLE_APP_SPECIFIC_PASSWORD=${APPLE_APP_SPECIFIC_PASSWORD_SECRET}" >> "$GITHUB_ENV"
+            echo "APPLE_TEAM_ID=${APPLE_TEAM_ID_SECRET}" >> "$GITHUB_ENV"
+          else
+            echo "Apple notarization credentials are incomplete; notarization will be skipped."
+          fi
+
       - name: Install dependencies
         run: npm ci
 
@@ -47,8 +70,3 @@ jobs:
         run: npm run package:release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ secrets.MAC_CERTIFICATE_BASE64 }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
