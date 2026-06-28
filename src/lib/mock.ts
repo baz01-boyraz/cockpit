@@ -31,6 +31,7 @@ import { classifyRoute } from '@shared/router'
 import { matchLogLine } from '@shared/log-patterns'
 
 const now = () => new Date().toISOString()
+const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString()
 const id = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`
 
 const projects: Project[] = [
@@ -208,6 +209,42 @@ const insights: ErrorInsight[] = [
     matchedPattern: 'port_in_use',
     createdAt: now(),
   },
+  {
+    id: id('ins'),
+    projectId: 'prj_serbest',
+    logEventId: null,
+    title: 'Missing module',
+    likelyCause: 'A required package or local import path is not installed or is misspelled.',
+    suggestedAction: 'Run the install command (npm/pnpm/yarn install) or fix the import path.',
+    suggestedAgent: 'codex',
+    severity: 'high',
+    matchedPattern: 'module_not_found',
+    createdAt: ago(3),
+  },
+  {
+    id: id('ins'),
+    projectId: 'prj_serbest',
+    logEventId: null,
+    title: 'Missing module',
+    likelyCause: 'A required package or local import path is not installed or is misspelled.',
+    suggestedAction: 'Run the install command (npm/pnpm/yarn install) or fix the import path.',
+    suggestedAgent: 'codex',
+    severity: 'high',
+    matchedPattern: 'module_not_found',
+    createdAt: ago(6),
+  },
+  {
+    id: id('ins'),
+    projectId: 'prj_serbest',
+    logEventId: null,
+    title: 'Port already in use',
+    likelyCause: 'Another process is already bound to the dev/server port.',
+    suggestedAction: 'Stop the other process or start the server on a different port.',
+    suggestedAgent: 'local',
+    severity: 'medium',
+    matchedPattern: 'port_in_use',
+    createdAt: ago(9),
+  },
 ]
 
 const approvals: ApprovalRequest[] = [
@@ -268,8 +305,14 @@ const logs: LogEvent[] = [
 ]
 
 const audit: AuditEntry[] = [
-  { id: id('aud'), projectId: 'prj_serbest', actor: 'ai', actionType: 'router.classify', summary: 'Routed task to claude: "plan the hero section refactor"', payloadRedacted: {}, createdAt: now() },
-  { id: id('aud'), projectId: 'prj_serbest', actor: 'user', actionType: 'terminal.create', summary: 'Created terminal "Dev server"', payloadRedacted: {}, createdAt: now() },
+  { id: id('aud'), projectId: 'prj_serbest', actor: 'ai', actionType: 'router.classify', summary: 'Routed task to claude: "plan the hero section refactor"', payloadRedacted: {}, createdAt: ago(2) },
+  { id: id('aud'), projectId: 'prj_serbest', actor: 'user', actionType: 'git.push', summary: 'Pushed main to origin', payloadRedacted: {}, createdAt: ago(7) },
+  { id: id('aud'), projectId: 'prj_serbest', actor: 'ai', actionType: 'router.classify', summary: 'Routed task to codex: "fix the failing module import"', payloadRedacted: {}, createdAt: ago(14) },
+  { id: id('aud'), projectId: 'prj_serbest', actor: 'user', actionType: 'terminal.create', summary: 'Created terminal "Dev server"', payloadRedacted: {}, createdAt: ago(26) },
+  { id: id('aud'), projectId: 'prj_serbest', actor: 'ai', actionType: 'router.classify', summary: 'Routed task to chat: "explain the redaction flow"', payloadRedacted: {}, createdAt: ago(41) },
+  { id: id('aud'), projectId: 'prj_serbest', actor: 'system', actionType: 'audit.redact', summary: 'Masked 3 secrets before sending context', payloadRedacted: {}, createdAt: ago(58) },
+  { id: id('aud'), projectId: 'prj_serbest', actor: 'ai', actionType: 'router.classify', summary: 'Routed task to claude: "review the usage dock styles"', payloadRedacted: {}, createdAt: ago(72) },
+  { id: id('aud'), projectId: 'prj_serbest', actor: 'user', actionType: 'terminal.create', summary: 'Created terminal "Codex"', payloadRedacted: {}, createdAt: ago(96) },
 ]
 
 const terminals: Record<string, TerminalSession[]> = { prj_serbest: [], prj_cockpit: [] }

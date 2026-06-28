@@ -248,7 +248,7 @@ export function GitPanel() {
     appUpdate?.canCheck === false
 
   return (
-    <div className="panel">
+    <div className="panel panel--stagger">
       <div className="panel__header">
         <div>
           <div className="eyebrow">source control</div>

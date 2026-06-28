@@ -31,7 +31,7 @@ export function RailwayPanel() {
   }
 
   return (
-    <div className="panel">
+    <div className="panel panel--stagger">
       <div className="panel__header">
         <div>
           <div className="eyebrow">infrastructure</div>
@@ -87,7 +87,10 @@ export function RailwayPanel() {
                   <div className="railway__svcName">{svc.name}</div>
                   <div className="railway__svcType mono">{meta.label}</div>
                 </div>
-                <span className={`chip ${svc.status === 'active' ? 'chip--success' : ''}`}>{svc.status}</span>
+                <span className={`chip ${svc.status === 'active' ? 'chip--success' : ''}`}>
+                  <span className="chip__dot" />
+                  {svc.status}
+                </span>
               </div>
               {svc.startCommand && <code className="railway__cmd mono">{svc.startCommand}</code>}
               <div className="railway__svcActions">

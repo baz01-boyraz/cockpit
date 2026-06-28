@@ -31,7 +31,7 @@ export function UsagePanel() {
   const maxSessions = Math.max(1, ...usage.map((u) => u.sessions))
 
   return (
-    <div className="panel">
+    <div className="panel panel--stagger">
       <div className="panel__header">
         <div>
           <div className="eyebrow">activity</div>
@@ -43,16 +43,18 @@ export function UsagePanel() {
 
       <div className="statgrid">
         {[
-          { label: 'Sessions', value: totals.sessions },
-          { label: 'Commands', value: totals.commands },
-          { label: 'Agent tasks', value: totals.tasks },
-          { label: 'Est. tokens', value: fmtTokens(totals.tokens || null) },
+          { label: 'Sessions', value: totals.sessions, sub: 'tracked locally', live: totals.sessions > 0 },
+          { label: 'Commands', value: totals.commands, sub: 'shell runs', live: totals.commands > 0 },
+          { label: 'Agent tasks', value: totals.tasks, sub: 'Claude · Codex', live: totals.tasks > 0 },
+          { label: 'Est. tokens', value: fmtTokens(totals.tokens || null), sub: 'estimated', live: totals.tokens > 0 },
         ].map((s) => (
           <div key={s.label} className="card stat">
             <div className="stat__top">
               <span className="stat__label">{s.label}</span>
+              <span className={`stat__dot stat__dot--${s.live ? 'accent' : 'idle'}`} aria-hidden />
             </div>
             <div className="stat__value">{s.value}</div>
+            <div className="stat__sub mono">{s.sub}</div>
           </div>
         ))}
       </div>

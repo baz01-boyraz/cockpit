@@ -93,7 +93,7 @@ export function UsageStrip() {
               )}
             </button>
             <div className="usageDock__pop" role="tooltip">
-              <AgentUsageBody snapshot={snapshot} live />
+              <AgentUsageBody snapshot={snapshot} live variant="radial" />
             </div>
           </div>
         )

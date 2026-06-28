@@ -86,6 +86,7 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --dur-fast: 110ms;
   --dur: 180ms;
+  --dur-slow: 360ms;
 
   --rail-w: 232px;
   --right-w: 360px;

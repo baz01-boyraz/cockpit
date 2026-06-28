@@ -17,7 +17,7 @@ export function SettingsPanel() {
   const clis = systemInfo?.cliAvailable
 
   return (
-    <div className="panel">
+    <div className="panel panel--stagger">
       <div className="panel__header">
         <div>
           <div className="eyebrow">configuration</div>

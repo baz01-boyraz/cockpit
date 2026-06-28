@@ -37,7 +37,7 @@ export function LogsPanel() {
   }
 
   return (
-    <div className="panel">
+    <div className="panel panel--stagger">
       <div className="panel__header">
         <div>
           <div className="eyebrow">observability</div>
