@@ -85,7 +85,8 @@ node screenshot.mjs http://localhost:3000 dashboard
 | `npm run rebuild` | Rebuild `better-sqlite3` for Electron's ABI |
 | `npm run serve` / `npm run screenshot` | Localhost serve + Puppeteer shot |
 | `npm run app:refresh` | Build unsigned macOS app, replace `/Applications/Baz Cockpit.app`, relaunch |
-| `npm run package:release` | Build macOS `dmg` + `zip` and publish GitHub release artifacts |
+| `npm run package:release` | Build local macOS `dmg` + `zip` artifacts without publishing |
+| `npm run package:publish` | CI-only: build macOS `dmg` + `zip` and publish GitHub release artifacts |
 
 ## Local app refresh workflow
 
@@ -104,10 +105,23 @@ auto-updater; GitHub push alone does not update a local desktop app.
 
 The production update path is GitHub Releases + `electron-updater`:
 
-1. Bump `package.json` version and tag the release (`vX.Y.Z`).
-2. GitHub Actions runs `.github/workflows/release.yml`.
-3. CI builds `dmg` + `zip`, signs/notarizes when secrets are present, and publishes release metadata.
-4. The app's Git panel checks for updates, downloads them, and restarts to install.
+Hard rule: **CI is the only publisher for release artifacts. Never run a local publish against
+GitHub for a tagged release.** A previous mixed local+CI publish left `latest-mac.yml` pointing
+at one ZIP/DMG while GitHub assets were overwritten by another build; `electron-updater` then
+failed download validation. Keep metadata and assets from the same CI run.
+
+1. Commit all app changes to `main`.
+2. Bump `package.json` version and tag the release (`vX.Y.Z`).
+3. Push `main` with tags.
+4. GitHub Actions runs `.github/workflows/release.yml`.
+5. CI deletes any partial release for that exact tag, then builds `dmg` + `zip`, signs/notarizes
+   when secrets are present, and publishes release metadata plus matching assets.
+6. Verify the workflow succeeds and `gh release view vX.Y.Z` shows `latest-mac.yml`, ZIP, DMG,
+   and blockmaps from the same run.
+7. Only then ask the app to check/download/install the update.
+
+Use `npm run package:release` only to produce local artifacts for inspection. It uses
+`--publish never`. The CI workflow uses `npm run package:publish`.
 
 Required repository secrets for signed/notarized production releases:
 

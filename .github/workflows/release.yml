@@ -9,11 +9,23 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   macos:
     name: macOS release
     runs-on: macos-latest
     steps:
+      - name: Verify release tag
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" != "tag" || "${GITHUB_REF_NAME}" != v* ]]; then
+            echo "::error::Release publishing must run from a v* tag. Select a release tag for workflow_dispatch."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -102,7 +114,12 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Clear any partial release for this tag
+        run: gh release delete "$GITHUB_REF_NAME" --yes || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build, sign, notarize, and publish
-        run: npm run package:release
+        run: npm run package:publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
