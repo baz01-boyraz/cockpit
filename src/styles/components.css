@@ -462,13 +462,11 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   width: 100%;
-  padding: 8px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border);
-  background: linear-gradient(180deg, var(--surface-1), var(--bg-deep));
-  box-shadow: var(--shadow-1);
+  /* No container box: the dock floats in the rail footer. Depth comes from the
+   * battery wells and the soft per-provider floor glow, never from a panel. */
+  padding: 4px 2px 2px;
   -webkit-app-region: no-drag;
 }
 .usageDock__head {
@@ -486,16 +484,15 @@
   text-transform: uppercase;
 }
 .usageDock__details {
-  color: var(--text-muted);
+  color: var(--text-faint);
   font-size: 10px;
   font-weight: 650;
-  letter-spacing: 0;
-  padding: 2px 8px;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(34, 38, 49, 0.56), rgba(8, 9, 11, 0.56));
+  letter-spacing: 0.01em;
+  padding: 2px 2px;
+  border: 0;
+  background: none;
   transition:
-    opacity var(--dur) var(--ease-out),
+    color var(--dur) var(--ease-out),
     transform var(--dur-fast) var(--ease-spring);
 }
 .usageDock__details:hover {
@@ -527,64 +524,54 @@
   display: flex;
   flex-direction: column;
   gap: 9px;
-  padding: 11px 10px 10px;
-  border-radius: 16px;
-  border: 1px solid var(--border);
-  /* Slightly raised graphite surface: top-left bevel highlight, darker depth. */
-  background:
-    linear-gradient(157deg, rgba(255, 255, 255, 0.026), transparent 44%),
-    linear-gradient(180deg, var(--surface-2), var(--surface-inset));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.4),
-    0 1px 2px rgba(0, 0, 0, 0.45),
-    0 6px 16px rgba(0, 0, 0, 0.3);
+  /* No box. Just identity, percent, battery, sub-readout floating in the rail.
+   * The only "surface" is a soft tone-colored floor glow that gives the cluster
+   * depth without drawing an edge. */
+  padding: 4px 4px 6px;
+  border: 0;
+  background: none;
   color: var(--text-muted);
-  overflow: hidden;
-  isolation: isolate;
-  transition:
-    border-color var(--dur) var(--ease-out),
-    transform var(--dur-fast) var(--ease-spring),
-    box-shadow var(--dur) var(--ease-out);
+  text-align: left;
+  transition: transform var(--dur-fast) var(--ease-spring);
 }
-/* faint colored glow pooled in the upper-right, only as deep as the header */
+/* subtle floor glow pooled under the readout — premium depth, no panel edge */
 .usageCard::before {
   content: '';
   position: absolute;
-  inset: 0 0 auto 0;
-  height: 46%;
+  inset: auto -4px -6px;
+  height: 72%;
   background: radial-gradient(
-    120% 92% at 80% 0%,
-    color-mix(in srgb, var(--tone) 15%, transparent),
-    transparent 70%
+    72% 100% at 60% 100%,
+    color-mix(in srgb, var(--tone) 14%, transparent),
+    transparent 74%
   );
-  opacity: 0.75;
+  opacity: 0.62;
   pointer-events: none;
+  transition: opacity var(--dur) var(--ease-out);
 }
 .usageCard:hover {
   transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--tone) 34%, var(--border));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.4),
-    0 2px 4px rgba(0, 0, 0, 0.45),
-    0 10px 22px rgba(0, 0, 0, 0.36),
-    0 0 18px color-mix(in srgb, var(--tone) 16%, transparent);
+}
+.usageCard:hover::before {
+  opacity: 1;
 }
 .usageCard:active {
   transform: translateY(-1px) scale(0.992);
 }
 .usageCard:focus-visible {
-  outline: 2px solid var(--tone);
-  outline-offset: 2px;
+  outline: 2px solid color-mix(in srgb, var(--tone) 70%, transparent);
+  outline-offset: 4px;
+  border-radius: 12px;
 }
 .usageCard--claude {
-  --provider: var(--accent);
-  --provider-hi: var(--accent-hi);
+  /* Claude's own warm coral/copper — vivid but premium, no neon. */
+  --provider: #ec7f48;
+  --provider-hi: #ffac79;
 }
 .usageCard--codex {
-  --provider: #46b9a4;
-  --provider-hi: #7fe6d2;
+  /* Codex's own emerald/teal identity. */
+  --provider: #13bd92;
+  --provider-hi: #5cf0c8;
 }
 .usageCard--critical {
   --tone: var(--danger);
@@ -602,12 +589,15 @@
   min-width: 0;
 }
 .usageCard__orb {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   flex: 0 0 auto;
   border-radius: 50%;
   background: radial-gradient(circle at 34% 30%, var(--provider-hi), var(--provider));
-  box-shadow: 0 0 7px color-mix(in srgb, var(--provider) 70%, transparent);
+  box-shadow:
+    0 0 9px color-mix(in srgb, var(--provider) 82%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--provider) 28%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 .usageCard__name {
   min-width: 0;
@@ -632,12 +622,15 @@
 }
 .usageCard__pct {
   flex: 0 1 auto;
-  color: color-mix(in srgb, var(--tone-hi) 82%, var(--text));
-  font-size: 18px;
-  font-weight: 600;
+  /* Saturated provider hue, lifted with a hint of white — vivid but not washed. */
+  color: color-mix(in srgb, var(--tone-hi) 90%, #ffffff 10%);
+  font-size: 19px;
+  font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1;
-  text-shadow: 0 0 12px color-mix(in srgb, var(--tone) 30%, transparent);
+  text-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.55),
+    0 0 12px color-mix(in srgb, var(--tone) 36%, transparent);
 }
 .usageCard__sub {
   position: relative;
@@ -694,16 +687,18 @@
     inset 0 -1px 0 rgba(255, 255, 255, 0.02);
 }
 .battery__cell--on {
+  /* Keep the hue saturated top-to-bottom (only a touch of depth at the base)
+   * so the column reads as the provider's own vivid color, not a darkened bar. */
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--tone-hi) 96%, #fff) 0%,
-    color-mix(in srgb, var(--tone) 88%, #000) 52%,
-    color-mix(in srgb, var(--tone) 60%, #000) 100%
+    color-mix(in srgb, var(--tone-hi) 88%, #fff) 0%,
+    var(--tone-hi) 38%,
+    var(--tone) 100%
   );
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    inset 0 -1px 1px rgba(0, 0, 0, 0.5),
-    0 0 7px color-mix(in srgb, var(--tone) 62%, transparent);
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.42),
+    0 0 8px color-mix(in srgb, var(--tone) 70%, transparent);
   animation: battery-breathe 4.6s var(--ease-out) infinite;
   animation-delay: calc(var(--i) * -0.55s);
 }
@@ -720,9 +715,9 @@
 /* the leading (top-most lit) cell glows a touch brighter */
 .battery__cell--crest {
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    inset 0 -1px 1px rgba(0, 0, 0, 0.4),
-    0 0 12px color-mix(in srgb, var(--tone) 80%, transparent);
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.35),
+    0 0 15px color-mix(in srgb, var(--tone) 92%, transparent);
 }
 /* slow highlight sweeping down the column */
 .battery__scan {
