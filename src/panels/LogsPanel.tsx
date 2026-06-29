@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
+import { CHAT_ENABLED } from '../lib/features'
 import { IconBolt, IconSend, IconWarning, IconX } from '../components/icons'
 import { classifyInsightRecency, RECENCY_HINT, type InsightRecency } from '@shared/insights'
 import { relativeTime } from '@shared/time'
@@ -135,9 +136,11 @@ export function LogsPanel() {
                     </div>
                     <div className="insight__foot">
                       <span className="chip chip--accent">→ {e.suggestedAgent}</span>
-                      <button className="btn btn--sm" onClick={() => sendToAi(e.title, e.suggestedAction)}>
-                        <IconSend width={12} height={12} /> Send to AI
-                      </button>
+                      {CHAT_ENABLED && (
+                        <button className="btn btn--sm" onClick={() => sendToAi(e.title, e.suggestedAction)}>
+                          <IconSend width={12} height={12} /> Send to AI
+                        </button>
+                      )}
                     </div>
                   </li>
                 )

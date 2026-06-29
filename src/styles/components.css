@@ -47,6 +47,10 @@
 .shell--chat-collapsed {
   grid-template-columns: minmax(210px, var(--rail-w)) minmax(0, 1fr) 0px;
 }
+/* Chat shelved (lib/features CHAT_ENABLED=false): no right column at all. */
+.shell--no-chat {
+  grid-template-columns: minmax(210px, var(--rail-w)) minmax(0, 1fr);
+}
 .shell__center {
   display: flex;
   flex-direction: column;
@@ -1215,6 +1219,9 @@
   }
   .shell--chat-collapsed {
     grid-template-columns: 198px minmax(0, 1fr) 0px;
+  }
+  .shell--no-chat {
+    grid-template-columns: 198px minmax(0, 1fr);
   }
   .topbar__search {
     min-width: 120px;

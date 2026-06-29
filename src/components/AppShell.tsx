@@ -1,4 +1,5 @@
 import { useStore } from '../store/useStore'
+import { CHAT_ENABLED } from '../lib/features'
 import { LeftRail } from './LeftRail'
 import { TopBar } from './TopBar'
 import { RightPanel } from './RightPanel'
@@ -16,8 +17,16 @@ export function AppShell() {
   const chatOpen = useStore((s) => s.chatOpen)
   const toggleChat = useStore((s) => s.toggleChat)
 
+  // Chat is shelved behind a flag (see lib/features). When off, the AI Cockpit
+  // panel and its launcher are not rendered and the shell runs full-width.
+  const shellClass = !CHAT_ENABLED
+    ? 'shell shell--no-chat'
+    : chatOpen
+      ? 'shell'
+      : 'shell shell--chat-collapsed'
+
   return (
-    <div className={chatOpen ? 'shell' : 'shell shell--chat-collapsed'}>
+    <div className={shellClass}>
       <LeftRail />
       <div className="shell__center">
         <TopBar />
@@ -38,21 +47,23 @@ export function AppShell() {
           {view === 'settings' && <SettingsPanel />}
         </main>
       </div>
-      <RightPanel />
-      <button
-        type="button"
-        className={`chatLauncher ${chatOpen ? 'is-hidden' : 'is-shown'}`}
-        onClick={() => toggleChat(true)}
-        aria-label="Open AI Cockpit"
-        aria-controls="ai-cockpit-panel"
-        aria-expanded={chatOpen}
-        title="Open AI Cockpit"
-        aria-hidden={chatOpen}
-        tabIndex={chatOpen ? -1 : 0}
-      >
-        <span className="chatLauncher__ring" aria-hidden="true" />
-        <IconBolt width={20} height={20} />
-      </button>
+      {CHAT_ENABLED && <RightPanel />}
+      {CHAT_ENABLED && (
+        <button
+          type="button"
+          className={`chatLauncher ${chatOpen ? 'is-hidden' : 'is-shown'}`}
+          onClick={() => toggleChat(true)}
+          aria-label="Open AI Cockpit"
+          aria-controls="ai-cockpit-panel"
+          aria-expanded={chatOpen}
+          title="Open AI Cockpit"
+          aria-hidden={chatOpen}
+          tabIndex={chatOpen ? -1 : 0}
+        >
+          <span className="chatLauncher__ring" aria-hidden="true" />
+          <IconBolt width={20} height={20} />
+        </button>
+      )}
     </div>
   )
 }
