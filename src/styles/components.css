@@ -188,22 +188,26 @@
 }
 .rail__item--active {
   color: var(--text);
-  background: var(--surface-2);
-  border-color: var(--border);
+  /* Active tab reads as a softly lit ember shelf: a faint copper wash over the
+   * raised surface, beveled, with a glowing accent rail on its leading edge. */
+  background: linear-gradient(90deg, var(--accent-wash), var(--surface-2) 62%);
+  border-color: var(--border-strong);
   position: relative;
+  box-shadow: var(--bevel);
 }
 .rail__item--active::before {
   content: '';
   position: absolute;
   left: -1px;
-  top: 9px;
-  bottom: 9px;
-  width: 2.5px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
   border-radius: var(--r-pill);
   background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  box-shadow: 0 0 10px var(--accent-glow);
 }
 .rail__item--active svg {
-  color: var(--accent);
+  color: var(--accent-hi);
 }
 .rail__itemLabel {
   flex: 1;
@@ -225,16 +229,6 @@
   min-width: 0;
   flex-shrink: 0;
 }
-.rail__path {
-  font-size: var(--fs-micro);
-  color: var(--text-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  direction: rtl;
-  text-align: left;
-}
-
 /* ---------- topbar ---------- */
 .topbar {
   position: relative;
@@ -464,16 +458,42 @@
   flex-direction: column;
   gap: 10px;
   width: 100%;
-  /* No container box: the dock floats in the rail footer. Depth comes from the
-   * battery wells and the soft per-provider floor glow, never from a panel. */
-  padding: 4px 2px 2px;
+  /* Clean glass console: a quiet raised panel consistent with the app's card
+   * language — thin top bevel, soft shadow, crisp hairline. Depth comes from
+   * light and the provider glows inside, never from heavy metal. */
+  padding: 12px 12px 13px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
+  border: 1px solid var(--border);
+  box-shadow: var(--bevel), var(--shadow-1);
   -webkit-app-region: no-drag;
+}
+/* A whisper-thin dual-tone aura along the top edge — ember left, teal right —
+ * quietly previewing the two providers below. */
+.usageDock::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, #ec7f48 60%, transparent) 26%,
+    color-mix(in srgb, #13bd92 55%, transparent) 74%,
+    transparent
+  );
+  opacity: 0.55;
+  pointer-events: none;
 }
 /* ---------- usage battery cards (Claude / Codex remaining quota) ----------
  * Two compact provider tiles side by side: identity, the binding remaining
  * percent, a two-window sub-readout, and a recessed glass "energy column"
  * battery. Animate only transform / opacity. */
 .usageDock__row {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: row;
   gap: 8px;
@@ -569,14 +589,19 @@
 .usageCard__name {
   min-width: 0;
   flex: 1 1 auto;
-  color: var(--text);
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0;
+  letter-spacing: 0.02em;
   text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Crisp premium label: a clean white→text vertical sheen, no heavy metal. */
+  background: linear-gradient(180deg, #ffffff, color-mix(in srgb, var(--text) 78%, transparent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
 }
 .usageCard__body {
   position: relative;
@@ -632,75 +657,43 @@
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  width: 26px;
-  height: 54px;
+  gap: 3px;
+  width: 15px;
+  height: 52px;
   padding: 3px;
-  border-radius: 7px;
-  /* Gunmetal housing: a vertical brushed sheen (light rim → dark body → light
-   * base) so the frame reads as a curved metal cylinder rather than a flat box. */
-  background: linear-gradient(
-    180deg,
-    #31363f 0%,
-    #1b1f26 13%,
-    #0a0c10 50%,
-    #181c22 87%,
-    #2c313b 100%
-  );
+  border-radius: var(--r-pill);
+  /* Slim glass tube: a dark inset well with a crisp hairline — clean, not
+   * metallic. The lit cells glow inside it. */
+  background: linear-gradient(180deg, var(--surface-inset), #08090d);
   box-shadow:
-    /* beveled metal rim */
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    inset 1px 0 0 rgba(255, 255, 255, 0.06),
-    inset -1px 0 0 rgba(0, 0, 0, 0.55),
-    /* deep recessed inner well */
-    inset 0 2px 5px rgba(0, 0, 0, 0.8),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.55),
-    /* raised off the rail surface for depth */
-    0 2px 6px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(255, 255, 255, 0.05);
+    inset 0 1px 2px rgba(0, 0, 0, 0.7),
+    inset 0 0 0 1px var(--border),
+    0 1px 0 rgba(255, 255, 255, 0.05);
 }
-/* Diagonal brushed-metal sheen riding across the housing rim and gaps. */
+/* Soft glass sheen riding down the left of the tube. */
 .battery::before {
   content: '';
   position: absolute;
-  inset: 0;
-  z-index: 0;
-  border-radius: 7px;
-  background: linear-gradient(
-    104deg,
-    transparent 14%,
-    rgba(255, 255, 255, 0.05) 32%,
-    rgba(255, 255, 255, 0.13) 44%,
-    rgba(255, 255, 255, 0.03) 54%,
-    transparent 64%
-  );
-  opacity: 0.85;
+  inset: 1px;
+  z-index: 2;
+  border-radius: var(--r-pill);
+  background: linear-gradient(102deg, rgba(255, 255, 255, 0.12), transparent 44%);
+  opacity: 0.8;
   pointer-events: none;
 }
 .battery__cell {
   position: relative;
   z-index: 1;
   flex: 1 1 0;
-  border-radius: 2px;
-  /* empty slot — engraved into the metal, dark and recessed */
-  background: linear-gradient(180deg, #0e1116, #060709);
-  box-shadow:
-    inset 0 1px 1px rgba(0, 0, 0, 0.92),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+  border-radius: 3px;
+  /* empty slot — a faint ghost tick in the dark well */
+  background: rgba(255, 255, 255, 0.045);
 }
 .battery__cell--on {
-  /* Keep the hue saturated top-to-bottom (only a touch of depth at the base)
-   * so the column reads as the provider's own vivid color, not a darkened bar. */
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--tone-hi) 88%, #fff) 0%,
-    var(--tone-hi) 38%,
-    var(--tone) 100%
-  );
+  background: linear-gradient(180deg, var(--tone-hi), var(--tone));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    inset 0 -1px 1px rgba(0, 0, 0, 0.42),
-    0 0 8px color-mix(in srgb, var(--tone) 70%, transparent);
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.5),
+    0 0 7px color-mix(in srgb, var(--tone) 60%, transparent);
   animation: battery-breathe 4.6s var(--ease-out) infinite;
   animation-delay: calc(var(--i) * -0.55s);
 }
@@ -709,17 +702,16 @@
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 2px;
-  background: radial-gradient(135% 130% at 50% 18%, rgba(255, 255, 255, 0.55), transparent 60%);
-  opacity: 0.7;
+  border-radius: 3px;
+  background: radial-gradient(135% 130% at 50% 18%, rgba(255, 255, 255, 0.5), transparent 62%);
+  opacity: 0.55;
   pointer-events: none;
 }
 /* the leading (top-most lit) cell glows a touch brighter */
 .battery__cell--crest {
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.72),
-    inset 0 -1px 1px rgba(0, 0, 0, 0.35),
-    0 0 15px color-mix(in srgb, var(--tone) 92%, transparent);
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.6),
+    0 0 12px color-mix(in srgb, var(--tone) 85%, transparent);
 }
 /* slow highlight sweeping down the column */
 .battery__scan {
@@ -2137,13 +2129,40 @@
 }
 .panel__title {
   font-size: var(--fs-display);
-  letter-spacing: -0.03em;
+  letter-spacing: var(--tracking-tight);
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  margin-top: 2px;
+  margin-top: 3px;
+  font-weight: 600;
+  /* Premium headline: a crisp white→quiet vertical sheen for editorial depth. */
+  background: linear-gradient(174deg, #ffffff 8%, color-mix(in srgb, var(--text) 64%, transparent) 132%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
-.panel__title svg { color: var(--accent); }
+.panel__title svg {
+  color: var(--accent);
+  -webkit-text-fill-color: var(--accent);
+}
+/* Accent eyebrow: a small leading tick + ember label gives every panel a
+ * confident, editorial masthead. */
+.panel__header .eyebrow {
+  position: relative;
+  color: var(--accent-hi);
+  padding-left: 17px;
+}
+.panel__header .eyebrow::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 11px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+}
 .panel__actions {
   display: flex;
   gap: var(--sp-2);
@@ -3540,6 +3559,46 @@
 .projcard__name { font-weight: 600; }
 .projcard__path { font-size: var(--fs-xs); color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .projcard__stack { display: flex; gap: 4px; flex-shrink: 0; }
+
+.resumecard {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-3);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-spring),
+    background var(--dur) var(--ease-out);
+}
+.resumecard:hover:not(:disabled) {
+  border-color: var(--border-accent);
+  transform: translateY(-1px);
+  background: var(--accent-wash);
+}
+.resumecard:focus-visible { outline: none; border-color: var(--border-accent); }
+.resumecard:active:not(:disabled) { transform: translateY(0); }
+.resumecard:disabled { opacity: 0.55; cursor: default; }
+.resumecard__icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-md);
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  background: var(--accent-wash);
+  flex-shrink: 0;
+}
+.resumecard__body { flex: 1; min-width: 0; }
+.resumecard__title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.resumecard__meta { font-size: var(--fs-xs); color: var(--text-faint); margin-top: 2px; }
+.resumecard__action { color: var(--text-faint); flex-shrink: 0; display: grid; place-items: center; }
+.resumecard:hover:not(:disabled) .resumecard__action { color: var(--accent); }
+
 .modal__emptyState { padding: var(--sp-5); text-align: center; color: var(--text-faint); }
 .modal__add { padding: var(--sp-4) var(--sp-5) var(--sp-5); border-top: 1px solid var(--border); margin-top: var(--sp-3); }
 .modal__browse { width: 100%; justify-content: center; padding: 11px; font-size: var(--fs-body); }

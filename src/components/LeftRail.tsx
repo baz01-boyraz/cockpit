@@ -87,11 +87,6 @@ export function LeftRail() {
 
       <div className="rail__footer">
         <UsageStrip />
-        {project && (
-          <div className="rail__path mono" title={project.path}>
-            {project.path}
-          </div>
-        )}
       </div>
     </aside>
   )

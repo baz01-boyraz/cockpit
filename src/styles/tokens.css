@@ -1,63 +1,70 @@
 /*
  * Baz Developer Cockpit — design tokens.
  *
- * An original premium dark cockpit system. Deep graphite surfaces with a warm
- * cast, a copper/ember signal accent (never default blue/indigo), and a
- * restrained lime for "safe/go" affordances. Surfaces are layered (base ->
- * raised -> floating) so the UI reads with depth, not a single flat plane.
+ * "Obsidian Ember" — a premium dark cockpit system. Deep, cool obsidian
+ * surfaces with crisp near-white type, a luminous copper/ember signal accent
+ * (never default blue/indigo), and a restrained chartreuse for "safe/go".
+ * Surfaces are layered (base -> raised -> floating) and beveled with a thin top
+ * highlight so the UI reads with real glassy depth, not a single flat plane.
  */
 :root {
-  /* --- graphite surface ladder --- */
-  --bg: #0b0c0f;
-  --bg-deep: #08090b;
-  --surface-1: #14161c;
-  --surface-2: #1a1d25;
-  --surface-3: #222631;
-  --surface-inset: #0e0f13;
+  /* --- obsidian surface ladder (cool, crisp, layered) --- */
+  --bg: #0a0b0f;
+  --bg-deep: #070809;
+  --surface-1: #13151d;
+  --surface-2: #1a1d27;
+  --surface-3: #242834;
+  --surface-inset: #0c0d12;
 
-  /* --- hairlines & borders --- */
-  --border: rgba(236, 230, 218, 0.07);
-  --border-strong: rgba(236, 230, 218, 0.13);
-  --border-accent: rgba(224, 123, 69, 0.45);
+  /* --- hairlines & borders (cool light, crisp) --- */
+  --border: rgba(255, 255, 255, 0.065);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --border-accent: rgba(238, 124, 66, 0.45);
 
-  /* --- text --- */
-  --text: #ece6da;
-  --text-muted: #9a9488;
-  --text-faint: #645f57;
-  --text-on-accent: #1a120c;
+  /* --- text (crisp cool white -> quiet greys) --- */
+  --text: #f2f4f8;
+  --text-muted: #a2a8b4;
+  --text-faint: #61656f;
+  --text-on-accent: #1a1206;
 
-  /* --- ember/copper signal accent --- */
-  --accent: #e07b45;
-  --accent-hi: #f29a6a;
+  /* --- ember/copper signal accent (luminous, premium) --- */
+  --accent: #ee7c42;
+  --accent-hi: #ff9d63;
   --accent-dim: #b8623492;
-  --accent-glow: rgba(224, 123, 69, 0.22);
-  --accent-wash: rgba(224, 123, 69, 0.08);
+  --accent-glow: rgba(238, 124, 66, 0.24);
+  --accent-wash: rgba(238, 124, 66, 0.09);
 
   /* --- secondary "signal lime" for safe / go --- */
-  --signal: #c4e35a;
-  --signal-dim: rgba(196, 227, 90, 0.16);
+  --signal: #cde85f;
+  --signal-dim: rgba(205, 232, 95, 0.16);
 
   /* --- semantic --- */
-  --success: #93c46a;
-  --success-wash: rgba(147, 196, 106, 0.12);
-  --warning: #e3a93f;
-  --warning-wash: rgba(227, 169, 63, 0.12);
-  --danger: #e2563d;
-  --danger-wash: rgba(226, 86, 61, 0.13);
-  --info: #6fa8c4;
+  --success: #82d08f;
+  --success-wash: rgba(130, 208, 143, 0.12);
+  --warning: #e8b24a;
+  --warning-wash: rgba(232, 178, 74, 0.12);
+  --danger: #ed6450;
+  --danger-wash: rgba(237, 100, 80, 0.13);
+  --info: #6cb6d6;
 
   /* --- typography --- */
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Inter, system-ui,
     sans-serif;
   --font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, 'Cascadia Code', Menlo, monospace;
 
-  --fs-display: 26px;
+  --fs-display: 28px;
   --fs-h1: 19px;
   --fs-h2: 15px;
   --fs-body: 13.5px;
   --fs-sm: 12px;
   --fs-xs: 11px;
   --fs-micro: 10px;
+
+  /* --- letter-spacing scale --- */
+  --tracking-tight: -0.025em;
+  --tracking-snug: -0.012em;
+  --tracking-wide: 0.04em;
+  --tracking-caps: 0.16em;
 
   /* --- spacing scale (4px base, intentional steps) --- */
   --sp-1: 4px;
@@ -68,25 +75,30 @@
   --sp-6: 32px;
   --sp-7: 48px;
 
-  /* --- radii --- */
-  --r-sm: 6px;
-  --r-md: 9px;
-  --r-lg: 14px;
-  --r-xl: 20px;
+  /* --- radii (softer, more modern) --- */
+  --r-sm: 7px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --r-xl: 22px;
   --r-pill: 999px;
 
-  /* --- layered, color-tinted shadows (never flat shadow-md) --- */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.25);
-  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.4);
-  --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.5), 0 24px 64px rgba(0, 0, 0, 0.45);
-  --shadow-accent: 0 4px 20px var(--accent-glow);
+  /* --- layered, deep shadows (never flat shadow-md) --- */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.42), 0 4px 14px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.5), 0 18px 44px rgba(0, 0, 0, 0.42);
+  --shadow-float: 0 10px 30px rgba(0, 0, 0, 0.55), 0 30px 80px rgba(0, 0, 0, 0.5);
+  --shadow-accent: 0 6px 26px var(--accent-glow);
+
+  /* --- bevel + ring: thin top highlight & crisp outer hairline for glass depth --- */
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --ring: 0 0 0 1px rgba(255, 255, 255, 0.04);
 
   /* --- motion --- */
   --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --dur-fast: 110ms;
-  --dur: 180ms;
-  --dur-slow: 360ms;
+  --ease-emph: cubic-bezier(0.2, 0.85, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur: 190ms;
+  --dur-slow: 400ms;
 
   --rail-w: 232px;
   --right-w: 360px;
