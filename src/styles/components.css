@@ -501,100 +501,111 @@
 .usageDock__details:active {
   transform: translateY(0) scale(0.98);
 }
-.usageDock__item {
-  --tone: var(--signal);
-  --provider: var(--accent);
-  --provider-2: var(--accent-hi);
-  position: relative;
+/* ---------- usage battery cards (Claude / Codex remaining quota) ----------
+ * Two compact provider tiles side by side: identity, the binding remaining
+ * percent, a two-window sub-readout, and a recessed glass "energy column"
+ * battery. Animate only transform / opacity. */
+.usageDock__row {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
+  flex-direction: row;
+  gap: 8px;
   width: 100%;
   min-width: 0;
-  padding: 10px 11px 11px 13px;
-  border-radius: var(--r-md);
+}
+.usageCard {
+  --provider: var(--accent);
+  --provider-hi: var(--accent-hi);
+  --tone: var(--provider);
+  --tone-hi: var(--provider-hi);
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 11px 10px 10px;
+  border-radius: 16px;
   border: 1px solid var(--border);
-  background: linear-gradient(180deg, var(--surface-1), var(--surface-inset));
+  /* Slightly raised graphite surface: top-left bevel highlight, darker depth. */
+  background:
+    linear-gradient(157deg, rgba(255, 255, 255, 0.026), transparent 44%),
+    linear-gradient(180deg, var(--surface-2), var(--surface-inset));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 6px 16px rgba(0, 0, 0, 0.3);
   color: var(--text-muted);
   overflow: hidden;
   isolation: isolate;
   transition:
     border-color var(--dur) var(--ease-out),
-    background var(--dur) var(--ease-out),
-    transform var(--dur-fast) var(--ease-spring);
-}
-.usageDock__item:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--provider) 36%, var(--border));
-  background: color-mix(in srgb, var(--provider) 5%, var(--surface-1));
-}
-.usageDock__item:active {
-  transform: translateY(0) scale(0.99);
-}
-.usageDock__item:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.usageDock__item--codex {
-  --provider: #6fb6cf;
-  --provider-2: #8fcfe0;
-}
-.usageDock__item--claude {
-  --provider: var(--accent);
-  --provider-2: var(--accent-hi);
-}
-.usageDock__item--healthy {
-  --tone: var(--provider);
-}
-.usageDock__item--warning {
-  --tone: var(--warning);
-}
-.usageDock__item--critical {
-  --tone: var(--danger);
-}
-.usageDock__item--off {
-  --tone: var(--text-faint);
-  opacity: 0.6;
-}
-/* Signature provider-tinted edge rail down the left of each card. */
-.usageDock__rail {
-  position: absolute;
-  left: 0;
-  top: 7px;
-  bottom: 7px;
-  width: 2px;
-  border-radius: var(--r-pill);
-  background: linear-gradient(180deg, var(--provider-2), var(--provider));
-  opacity: 0.5;
-  transition:
-    opacity var(--dur) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring),
     box-shadow var(--dur) var(--ease-out);
 }
-.usageDock__item:hover .usageDock__rail,
-.usageDock__item:focus-visible .usageDock__rail {
-  opacity: 1;
-  box-shadow: 0 0 10px color-mix(in srgb, var(--provider) 55%, transparent);
+/* faint colored glow pooled in the upper-right, only as deep as the header */
+.usageCard::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 46%;
+  background: radial-gradient(
+    120% 92% at 80% 0%,
+    color-mix(in srgb, var(--tone) 15%, transparent),
+    transparent 70%
+  );
+  opacity: 0.75;
+  pointer-events: none;
 }
-.usageDock__identity {
+.usageCard:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--tone) 34%, var(--border));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+    0 2px 4px rgba(0, 0, 0, 0.45),
+    0 10px 22px rgba(0, 0, 0, 0.36),
+    0 0 18px color-mix(in srgb, var(--tone) 16%, transparent);
+}
+.usageCard:active {
+  transform: translateY(-1px) scale(0.992);
+}
+.usageCard:focus-visible {
+  outline: 2px solid var(--tone);
+  outline-offset: 2px;
+}
+.usageCard--claude {
+  --provider: var(--accent);
+  --provider-hi: var(--accent-hi);
+}
+.usageCard--codex {
+  --provider: #46b9a4;
+  --provider-hi: #7fe6d2;
+}
+.usageCard--critical {
+  --tone: var(--danger);
+  --tone-hi: #f4836b;
+}
+.usageCard--off {
+  opacity: 0.55;
+}
+.usageCard__top {
   position: relative;
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
+  gap: 7px;
   min-width: 0;
 }
-.usageDock__orb {
-  position: relative;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, var(--provider-2), var(--provider));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--provider) 14%, transparent);
+.usageCard__orb {
+  width: 7px;
+  height: 7px;
   flex: 0 0 auto;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, var(--provider-hi), var(--provider));
+  box-shadow: 0 0 7px color-mix(in srgb, var(--provider) 70%, transparent);
 }
-.usageDock__label {
+.usageCard__name {
   min-width: 0;
   flex: 1 1 auto;
   color: var(--text);
@@ -606,235 +617,147 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.usageDock__plan {
-  flex: 0 0 auto;
-  padding: 1px 7px;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--provider) 9%, var(--surface-3));
-  color: color-mix(in srgb, var(--provider-2) 65%, var(--text-muted));
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-/* ---------- liquid energy vials ----------
- * Twin glass tubes per provider; fill height = remaining quota, glowing meniscus
- * rides the surface, a few motes drift up. Animated transforms/opacity only. */
-.usageDock__meters {
+.usageCard__body {
   position: relative;
   z-index: 1;
   display: flex;
-  flex-direction: row;
-  gap: 16px;
-  width: 100%;
-  min-width: 0;
-  padding-top: 3px;
-}
-.vial {
-  --vtone: var(--provider);
-  --vtone-hi: var(--provider-2);
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
   align-items: center;
+  justify-content: space-between;
   gap: 7px;
-}
-.vial--warning {
-  --vtone: var(--warning);
-  --vtone-hi: #f2c46a;
-}
-.vial--critical {
-  --vtone: var(--danger);
-  --vtone-hi: #f4836b;
-}
-/* The tube. drop-shadow gives the volumetric tone bloom around the glass. */
-.vial__glass {
-  position: relative;
-  width: 34px;
-  height: 64px;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5))
-    drop-shadow(0 0 9px color-mix(in srgb, var(--vtone) 24%, transparent));
-}
-/* Metallic end caps — sit outside the clipped bore so they read as 3D lips. */
-.vial__glass::before,
-.vial__glass::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  z-index: 5;
-  width: 25px;
-  height: 8px;
-  border-radius: 5px;
-  transform: translateX(-50%);
-  background: linear-gradient(180deg, #44474f, #1c1e23 55%, #0a0b0d);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 -2px 3px rgba(0, 0, 0, 0.7),
-    0 1px 2px rgba(0, 0, 0, 0.5);
-}
-.vial__glass::before {
-  top: -4px;
-}
-.vial__glass::after {
-  bottom: -4px;
-}
-/* Inner bore — dark glass body that clips the liquid + shine to the tube. */
-.vial__bore {
-  position: absolute;
-  inset: 0;
-  border-radius: 11px;
-  overflow: hidden;
-  isolation: isolate;
-  background: linear-gradient(180deg, rgba(16, 18, 23, 0.92), rgba(8, 9, 11, 0.96));
-  box-shadow:
-    inset 0 0 0 1px rgba(236, 230, 218, 0.1),
-    inset 2px 0 3px rgba(255, 255, 255, 0.05),
-    inset -2px 0 4px rgba(0, 0, 0, 0.65),
-    inset 0 8px 10px rgba(0, 0, 0, 0.45);
-}
-.vial__liquid {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1;
-  height: calc(var(--fill, 0) * 100%);
-  overflow: hidden;
-  background:
-    radial-gradient(
-      130% 62% at 50% 100%,
-      color-mix(in srgb, var(--vtone-hi) 70%, transparent),
-      transparent 72%
-    ),
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--vtone) 94%, #000) 0%,
-      color-mix(in srgb, var(--vtone) 72%, #000) 52%,
-      color-mix(in srgb, var(--vtone) 56%, #000) 100%
-    );
-  box-shadow:
-    inset 0 2px 7px color-mix(in srgb, var(--vtone-hi) 42%, transparent),
-    0 0 16px color-mix(in srgb, var(--vtone) 45%, transparent);
-  transition: height 900ms var(--ease-spring);
-}
-/* The glowing surface line — tracks the fill level and sways like a ripple. */
-.vial__meniscus {
-  position: absolute;
-  left: -3px;
-  right: -3px;
-  z-index: 2;
-  bottom: calc(var(--fill, 0) * 100%);
-  height: 6px;
-  margin-bottom: -3px;
-  border-radius: 50%;
-  background: radial-gradient(
-    70% 100% at 50% 50%,
-    color-mix(in srgb, var(--vtone-hi) 96%, #fff) 0%,
-    color-mix(in srgb, var(--vtone-hi) 65%, transparent) 58%,
-    transparent 100%
-  );
-  box-shadow:
-    0 0 11px color-mix(in srgb, var(--vtone-hi) 80%, transparent),
-    0 0 4px rgba(255, 255, 255, 0.4);
-  transition: bottom 900ms var(--ease-spring);
-  animation: vial-wave 5.4s var(--ease-out) infinite;
-}
-/* Rising motes inside the liquid (clipped at the surface by the liquid box). */
-.vial__spark {
-  position: absolute;
-  left: var(--x, 50%);
-  bottom: -3px;
-  width: 2px;
-  height: 2px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--vtone-hi) 92%, #fff);
-  box-shadow: 0 0 4px color-mix(in srgb, var(--vtone-hi) 80%, transparent);
-  opacity: 0;
-  animation: vial-rise var(--dur, 8s) linear var(--delay, 0s) infinite;
-}
-/* Glass highlight streak down the left of the tube. */
-.vial__shine {
-  position: absolute;
-  z-index: 3;
-  top: 5px;
-  bottom: 6px;
-  left: 6px;
-  width: 4px;
-  border-radius: 4px;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.42),
-    rgba(255, 255, 255, 0.06) 38%,
-    transparent 68%
-  );
-  filter: blur(1px);
-  pointer-events: none;
-}
-.vial--empty .vial__liquid,
-.vial--empty .vial__meniscus {
-  display: none;
-}
-.vial__caption {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
   min-width: 0;
 }
-.vial__tag {
+.usageCard__pct {
+  flex: 0 1 auto;
+  color: color-mix(in srgb, var(--tone-hi) 82%, var(--text));
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  text-shadow: 0 0 12px color-mix(in srgb, var(--tone) 30%, transparent);
+}
+.usageCard__sub {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   color: var(--text-faint);
   font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
-.vial__pct {
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0;
+.usageCard__dot {
+  color: color-mix(in srgb, var(--text-faint) 65%, transparent);
 }
-.vial--warning .vial__pct {
-  color: color-mix(in srgb, var(--warning) 55%, var(--text));
-}
-.vial--critical .vial__pct {
-  color: color-mix(in srgb, var(--danger) 62%, var(--text));
-}
-@keyframes vial-wave {
-  0%,
-  100% {
-    transform: translateX(-5%);
-  }
-  50% {
-    transform: translateX(5%) translateY(-1px);
-  }
-}
-@keyframes vial-rise {
-  0% {
-    transform: translateY(0) scale(0.5);
-    opacity: 0;
-  }
-  14% {
-    opacity: 0.9;
-  }
-  78% {
-    opacity: 0.65;
-  }
-  100% {
-    transform: translateY(-52px) scale(1);
-    opacity: 0;
-  }
-}
-.usageDock__state {
+.usageCard__offline {
   position: relative;
   z-index: 1;
   color: var(--text-faint);
   font-size: var(--fs-micro);
   font-weight: 700;
-  letter-spacing: 0;
-  text-align: left;
   text-transform: uppercase;
+}
+
+/* ---------- segmented energy battery ----------
+ * A recessed well of engraved slots; the lowest `fill × n` cells light up from
+ * the bottom and glow from inside. The leading cell glows a touch brighter, lit
+ * cells softly breathe, and a faint highlight scans down the column. */
+.battery {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 24px;
+  height: 50px;
+  padding: 3px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, var(--bg-deep), #050608);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.85),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.battery__cell {
+  position: relative;
+  flex: 1 1 0;
+  border-radius: 2px;
+  /* empty slot — engraved and dark */
+  background: linear-gradient(180deg, #0c0e12, #070809);
+  box-shadow:
+    inset 0 1px 1px rgba(0, 0, 0, 0.9),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.02);
+}
+.battery__cell--on {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tone-hi) 96%, #fff) 0%,
+    color-mix(in srgb, var(--tone) 88%, #000) 52%,
+    color-mix(in srgb, var(--tone) 60%, #000) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.5),
+    0 0 7px color-mix(in srgb, var(--tone) 62%, transparent);
+  animation: battery-breathe 4.6s var(--ease-out) infinite;
+  animation-delay: calc(var(--i) * -0.55s);
+}
+/* glass center highlight on lit cells — a soft sheen riding the top of the bar */
+.battery__cell--on::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+  background: radial-gradient(135% 130% at 50% 18%, rgba(255, 255, 255, 0.55), transparent 60%);
+  opacity: 0.7;
+  pointer-events: none;
+}
+/* the leading (top-most lit) cell glows a touch brighter */
+.battery__cell--crest {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.4),
+    0 0 12px color-mix(in srgb, var(--tone) 80%, transparent);
+}
+/* slow highlight sweeping down the column */
+.battery__scan {
+  position: absolute;
+  z-index: 3;
+  left: 2px;
+  right: 2px;
+  top: 0;
+  height: 34%;
+  border-radius: 6px;
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.13), transparent);
+  opacity: 0;
+  pointer-events: none;
+  animation: battery-scan 6.5s var(--ease-out) infinite;
+}
+@keyframes battery-breathe {
+  0%,
+  100% {
+    opacity: 0.86;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes battery-scan {
+  0% {
+    transform: translateY(-30%);
+    opacity: 0;
+  }
+  16% {
+    opacity: 0.85;
+  }
+  58% {
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(200%);
+    opacity: 0;
+  }
 }
 @keyframes usage-pulse {
   0%,
@@ -849,16 +772,16 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .vial__meniscus,
-  .vial__spark,
+  .battery__cell--on,
+  .battery__scan,
   .topbar__approvals--active {
     animation: none;
   }
-  .usageDock__rail,
-  .usageDock__details,
-  .usageDock__item,
-  .vial__liquid,
-  .vial__meniscus {
+  .battery__scan {
+    opacity: 0;
+  }
+  .usageCard,
+  .usageDock__details {
     transition: none;
   }
 }

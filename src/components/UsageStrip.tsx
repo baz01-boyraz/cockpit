@@ -1,76 +1,117 @@
 import { type CSSProperties } from 'react'
-import { summarizeAgentUsage, toneFor } from '@shared/agent-usage'
+import { summarizeAgentUsage, toneFor, type AgentUsagePill } from '@shared/agent-usage'
+import type { AgentUsageSnapshot } from '@shared/domain'
 import { useStore } from '../store/useStore'
 import { useAgentUsage } from '../lib/useAgentUsage'
 
-/** Map a remaining-percent into a 0..1 liquid fill level for the vial. */
-function fillLevel(percent: number | null): number {
+/** Number of stacked cells in a battery meter. Kept small so each cell stays
+ *  crisp at rail scale while still reading as a segmented energy column. */
+const SEGMENTS = 7
+
+/** Remaining percent → 0..1 fill for the battery (bottom-up). */
+function clampFill(percent: number | null): number {
   if (percent === null) return 0
   return Math.max(0, Math.min(1, percent / 100))
 }
 
-function percentText(percent: number | null): string {
+function pctText(percent: number | null): string {
   return percent === null ? '—' : `${percent}%`
 }
 
-function percentAria(percent: number | null): string {
+function pctAria(percent: number | null): string {
   return percent === null ? 'not reported' : `${percent}%`
 }
 
-/** A few drifting motes, seeded with stable offsets/timings so the liquid breathes. */
-const VIAL_SPARKS = [
-  { x: 26, delay: 0, dur: 7.4 },
-  { x: 62, delay: 1.6, dur: 9.1 },
-  { x: 44, delay: 3.2, dur: 8.3 },
-  { x: 74, delay: 4.5, dur: 10.2 },
-  { x: 16, delay: 5.7, dur: 8.9 },
-] as const
+/** Compact secondary readout for one window: bare number or an em dash. */
+function windowText(percent: number | null): string {
+  return percent === null ? '—' : `${percent}`
+}
 
 /**
- * A premium glass "liquid energy" vial. The fill height tracks remaining quota
- * (a full tube = lots of headroom, draining as it is consumed); a glowing
- * meniscus rides the surface and a few motes drift up through the liquid. Tone
- * shifts ember/teal → amber → red as a window runs low. Decorative only — the
- * caption beneath carries the readable percent.
+ * A recessed, glassy energy column. Cells are engraved slots; the lowest
+ * `fill × SEGMENTS` light up from the bottom and glow from inside, the topmost
+ * lit cell softly pulses. Decorative — the percent beside it carries the value.
  */
-function LiquidVial({ tag, percent }: { tag: string; percent: number | null }) {
-  const tone = percent === null ? 'healthy' : toneFor(percent)
-  const empty = percent === null
+function SegmentBattery({ percent }: { percent: number | null }) {
+  const fill = clampFill(percent)
+  const lit = Math.round(fill * SEGMENTS)
   return (
-    <div
-      className={`vial vial--${tone}${empty ? ' vial--empty' : ''}`}
-      style={{ '--fill': fillLevel(percent) } as CSSProperties}
-    >
-      <span className="vial__glass" aria-hidden>
-        <span className="vial__bore">
-          <span className="vial__liquid">
-            {VIAL_SPARKS.map((s, i) => (
-              <span
-                key={i}
-                className="vial__spark"
-                style={
-                  { '--x': `${s.x}%`, '--delay': `${s.delay}s`, '--dur': `${s.dur}s` } as CSSProperties
-                }
-              />
-            ))}
-          </span>
-          <span className="vial__meniscus" />
-          <span className="vial__shine" />
-        </span>
-      </span>
-      <span className="vial__caption">
-        <span className="vial__tag">{tag}</span>
-        <span className="vial__pct mono">{percentText(percent)}</span>
-      </span>
-    </div>
+    <span className="battery" aria-hidden>
+      <span className="battery__scan" />
+      {Array.from({ length: SEGMENTS }, (_, idx) => {
+        const fromBottom = SEGMENTS - 1 - idx
+        const on = fromBottom < lit
+        const crest = on && fromBottom === lit - 1
+        return (
+          <span
+            key={idx}
+            className={`battery__cell${on ? ' battery__cell--on' : ''}${crest ? ' battery__cell--crest' : ''}`}
+            style={{ '--i': fromBottom } as CSSProperties}
+          />
+        )
+      })}
+    </span>
   )
 }
 
 /**
- * Rail-mounted quota dock. A premium "liquid energy" read-out: each provider is
- * a card with twin glass vials (5h + weekly) whose fill tracks remaining quota,
- * so headroom is legible at a glance in the quiet lower-left rail without
- * crowding the topbar.
+ * One provider tile: identity, the binding remaining-quota percentage (the
+ * tighter of the 5h / weekly windows), a two-window sub-readout, and the
+ * battery. Warm copper for Claude, cool teal for Codex; reds out only when a
+ * window is critically low.
+ */
+function UsageBatteryCard({
+  snapshot,
+  pill,
+  onOpen,
+}: {
+  snapshot: AgentUsageSnapshot
+  pill: AgentUsagePill
+  onOpen: () => void
+}) {
+  const headline = pill.minRemainingPercent
+  const tone = pill.available ? toneFor(headline) : 'off'
+  const label = snapshot.label
+  const ariaLabel = pill.available
+    ? `${label} usage. ${pctAria(headline)} quota left. 5 hour window ${pctAria(pill.sessionPercent)}, weekly ${pctAria(pill.weeklyPercent)}. Open details.`
+    : `${label} usage unavailable. ${pill.reason ?? 'Open details.'}`
+
+  return (
+    <button
+      type="button"
+      className={`usageCard usageCard--${snapshot.provider} usageCard--${tone}`}
+      aria-label={ariaLabel}
+      onClick={onOpen}
+    >
+      <span className="usageCard__top">
+        <span className="usageCard__orb" aria-hidden />
+        <span className="usageCard__name">{label}</span>
+      </span>
+      {pill.available ? (
+        <>
+          <span className="usageCard__body">
+            <span className="usageCard__pct mono">{pctText(headline)}</span>
+            <SegmentBattery percent={headline} />
+          </span>
+          <span className="usageCard__sub mono">
+            <span>5h {windowText(pill.sessionPercent)}</span>
+            <span className="usageCard__dot" aria-hidden>
+              ·
+            </span>
+            <span>7d {windowText(pill.weeklyPercent)}</span>
+          </span>
+        </>
+      ) : (
+        <span className="usageCard__offline mono">offline</span>
+      )}
+    </button>
+  )
+}
+
+/**
+ * Rail-mounted quota dock. Two compact provider tiles sit side by side in the
+ * quiet lower-left rail — a minimal "energy battery" read-out of remaining
+ * Claude / Codex headroom that stays out of the way of the workspace.
  */
 export function UsageStrip() {
   const setView = useStore((s) => s.setView)
@@ -90,39 +131,16 @@ export function UsageStrip() {
           Details
         </button>
       </div>
-      {pills.map(({ snapshot, pill }) => {
-        const tone = pill.available ? pill.tone : 'off'
-        const label = pill.plan ? `${snapshot.label} · ${pill.plan}` : snapshot.label
-        const ariaLabel = pill.available
-          ? `${label} usage. 5 hour window ${percentAria(pill.sessionPercent)} left. Weekly window ${percentAria(pill.weeklyPercent)} left. Open dashboard.`
-          : `${label} usage unavailable. ${pill.reason ?? 'Open dashboard.'}`
-        return (
-          <button
+      <div className="usageDock__row">
+        {pills.map(({ snapshot, pill }) => (
+          <UsageBatteryCard
             key={snapshot.provider}
-            type="button"
-            className={`usageDock__item usageDock__item--${snapshot.provider} usageDock__item--${tone}`}
-            aria-label={ariaLabel}
-            onClick={() => setView('usage')}
-          >
-            <span className="usageDock__rail" aria-hidden />
-            <span className="usageDock__identity">
-              <span className="usageDock__orb" aria-hidden />
-              <span className="usageDock__label">{snapshot.label}</span>
-              {pill.plan ? <span className="usageDock__plan">{pill.plan}</span> : null}
-            </span>
-            {pill.available ? (
-              <span className="usageDock__meters">
-                <LiquidVial tag="5h" percent={pill.sessionPercent} />
-                <LiquidVial tag="7d" percent={pill.weeklyPercent} />
-              </span>
-            ) : (
-              <span className="usageDock__state mono" aria-hidden>
-                offline
-              </span>
-            )}
-          </button>
-        )
-      })}
+            snapshot={snapshot}
+            pill={pill}
+            onOpen={() => setView('usage')}
+          />
+        ))}
+      </div>
     </section>
   )
 }
