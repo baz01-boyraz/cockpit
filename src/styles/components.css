@@ -510,15 +510,16 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 9px;
-  /* No box. Just identity, percent, battery, sub-readout floating in the rail.
-   * The only "surface" is a soft tone-colored floor glow that gives the cluster
-   * depth without drawing an edge. */
-  padding: 4px 4px 6px;
+  align-items: center;
+  gap: 7px;
+  /* No box. Just the logo-battery and its percent floating in the rail. The only
+   * "surface" is a soft tone-colored floor glow that gives the cluster depth
+   * without drawing an edge. */
+  padding: 6px 4px 8px;
   border: 0;
   background: none;
   color: var(--text-muted);
-  text-align: left;
+  text-align: center;
   transition: transform var(--dur-fast) var(--ease-spring);
 }
 /* subtle floor glow pooled under the readout — premium depth, no panel edge */
@@ -567,77 +568,18 @@
 .usageCard--off {
   opacity: 0.55;
 }
-.usageCard__top {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-}
-.usageCard__orb {
-  width: 8px;
-  height: 8px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: radial-gradient(circle at 34% 30%, var(--provider-hi), var(--provider));
-  box-shadow:
-    0 0 9px color-mix(in srgb, var(--provider) 82%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--provider) 28%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-.usageCard__name {
-  min-width: 0;
-  flex: 1 1 auto;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  /* Crisp premium label: a clean white→text vertical sheen, no heavy metal. */
-  background: linear-gradient(180deg, #ffffff, color-mix(in srgb, var(--text) 78%, transparent));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-}
-.usageCard__body {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 7px;
-  min-width: 0;
-}
 .usageCard__pct {
-  flex: 0 1 auto;
+  position: relative;
+  z-index: 1;
   /* Saturated provider hue, lifted with a hint of white — vivid but not washed. */
   color: color-mix(in srgb, var(--tone-hi) 90%, #ffffff 10%);
-  font-size: 19px;
+  font-size: 14px;
   font-weight: 650;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   line-height: 1;
   text-shadow:
     0 1px 1px rgba(0, 0, 0, 0.55),
-    0 0 12px color-mix(in srgb, var(--tone) 36%, transparent);
-}
-.usageCard__sub {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--text-faint);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-}
-.usageCard__dot {
-  color: color-mix(in srgb, var(--text-faint) 65%, transparent);
+    0 0 10px color-mix(in srgb, var(--tone) 34%, transparent);
 }
 .usageCard__offline {
   position: relative;
@@ -648,109 +590,59 @@
   text-transform: uppercase;
 }
 
-/* ---------- segmented energy battery ----------
- * A recessed well of engraved slots; the lowest `fill × n` cells light up from
- * the bottom and glow from inside. The leading cell glows a touch brighter, lit
- * cells softly breathe, and a faint highlight scans down the column. */
-.battery {
-  position: relative;
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  width: 15px;
-  height: 52px;
-  padding: 3px;
-  border-radius: var(--r-pill);
-  /* Slim glass tube: a dark inset well with a crisp hairline — clean, not
-   * metallic. The lit cells glow inside it. */
-  background: linear-gradient(180deg, var(--surface-inset), #08090d);
-  box-shadow:
-    inset 0 1px 2px rgba(0, 0, 0, 0.7),
-    inset 0 0 0 1px var(--border),
-    0 1px 0 rgba(255, 255, 255, 0.05);
-}
-/* Soft glass sheen riding down the left of the tube. */
-.battery::before {
-  content: '';
-  position: absolute;
-  inset: 1px;
-  z-index: 2;
-  border-radius: var(--r-pill);
-  background: linear-gradient(102deg, rgba(255, 255, 255, 0.12), transparent 44%);
-  opacity: 0.8;
-  pointer-events: none;
-}
-.battery__cell {
+/* ---------- logo-as-battery meter ----------
+ * The provider's 3D logo IS the gauge. A spent base layer (desaturated, dimmed)
+ * reads as depleted quota; a full-color copy clipped to the bottom `remaining%`
+ * rises over it from the floor, with a thin tone-lit crest at the fill line.
+ * Animate only transform / opacity / clip-path. */
+.logoMeter {
   position: relative;
   z-index: 1;
-  flex: 1 1 0;
-  border-radius: 3px;
-  /* empty slot — a faint ghost tick in the dark well */
-  background: rgba(255, 255, 255, 0.045);
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  /* Depth + tone glow live on the wrapper so they trace the logo silhouette
+   * (the union of both layers), never the fill's straight clip edge. */
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5))
+    drop-shadow(0 0 8px color-mix(in srgb, var(--tone) 30%, transparent));
 }
-.battery__cell--on {
-  background: linear-gradient(180deg, var(--tone-hi), var(--tone));
-  box-shadow:
-    inset 0 0.5px 0 rgba(255, 255, 255, 0.5),
-    0 0 7px color-mix(in srgb, var(--tone) 60%, transparent);
-  animation: battery-breathe 4.6s var(--ease-out) infinite;
-  animation-delay: calc(var(--i) * -0.55s);
-}
-/* glass center highlight on lit cells — a soft sheen riding the top of the bar */
-.battery__cell--on::before {
-  content: '';
+.logoMeter__base,
+.logoMeter__fill {
   position: absolute;
   inset: 0;
-  border-radius: 3px;
-  background: radial-gradient(135% 130% at 50% 18%, rgba(255, 255, 255, 0.5), transparent 62%);
-  opacity: 0.55;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
-/* the leading (top-most lit) cell glows a touch brighter */
-.battery__cell--crest {
-  box-shadow:
-    inset 0 0.5px 0 rgba(255, 255, 255, 0.6),
-    0 0 12px color-mix(in srgb, var(--tone) 85%, transparent);
+/* spent: drained toward grayscale and dimmed */
+.logoMeter__base {
+  filter: grayscale(0.92) brightness(0.5) contrast(0.92);
+  opacity: 0.5;
 }
-/* slow highlight sweeping down the column */
-.battery__scan {
+/* remaining quota: full-color logo, clipped from the top down to the fill line */
+.logoMeter__fill {
+  filter: saturate(1.05);
+  transition: clip-path var(--dur) var(--ease-out);
+}
+/* a thin luminous line skimming the top of the filled portion */
+.logoMeter__crest {
   position: absolute;
-  z-index: 3;
-  left: 2px;
-  right: 2px;
-  top: 0;
-  height: 34%;
-  border-radius: 6px;
-  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.13), transparent);
-  opacity: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  transform: translateY(-0.5px);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--tone-hi) 85%, #ffffff 15%),
+    transparent
+  );
+  opacity: 0.7;
   pointer-events: none;
-  animation: battery-scan 6.5s var(--ease-out) infinite;
-}
-@keyframes battery-breathe {
-  0%,
-  100% {
-    opacity: 0.86;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-@keyframes battery-scan {
-  0% {
-    transform: translateY(-30%);
-    opacity: 0;
-  }
-  16% {
-    opacity: 0.85;
-  }
-  58% {
-    opacity: 0;
-  }
-  100% {
-    transform: translateY(200%);
-    opacity: 0;
-  }
+  box-shadow: 0 0 6px color-mix(in srgb, var(--tone) 60%, transparent);
 }
 @keyframes usage-pulse {
   0%,
@@ -765,13 +657,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .battery__cell--on,
-  .battery__scan,
   .topbar__approvals--active {
     animation: none;
   }
-  .battery__scan {
-    opacity: 0;
+  .logoMeter__fill {
+    transition: none;
   }
   .usageCard {
     transition: none;

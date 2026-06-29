@@ -3,15 +3,14 @@ import { summarizeAgentUsage, toneFor, type AgentUsagePill } from '@shared/agent
 import type { AgentUsageSnapshot } from '@shared/domain'
 import { useStore } from '../store/useStore'
 import { useAgentUsage } from '../lib/useAgentUsage'
+import claudeLogo from '../assets/usage/claude.png'
+import codexLogo from '../assets/usage/codex.png'
 
-/** Number of stacked cells in a battery meter. Kept small so each cell stays
- *  crisp at rail scale while still reading as a segmented energy column. */
-const SEGMENTS = 7
-
-/** Remaining percent → 0..1 fill for the battery (bottom-up). */
-function clampFill(percent: number | null): number {
-  if (percent === null) return 0
-  return Math.max(0, Math.min(1, percent / 100))
+/** Each provider's 3D logo doubles as its battery. The logo's lower
+ *  `remaining%` renders in full color; the spent upper part desaturates. */
+const PROVIDER_LOGOS: Record<string, string> = {
+  claude: claudeLogo,
+  codex: codexLogo,
 }
 
 function pctText(percent: number | null): string {
@@ -22,43 +21,44 @@ function pctAria(percent: number | null): string {
   return percent === null ? 'not reported' : `${percent}%`
 }
 
-/** Compact secondary readout for one window: bare number or an em dash. */
-function windowText(percent: number | null): string {
-  return percent === null ? '—' : `${percent}`
+/** Remaining-quota percent clamped to 0..100 for the fill height. */
+function clampPercent(percent: number | null): number {
+  if (percent === null) return 0
+  return Math.max(0, Math.min(100, percent))
 }
 
 /**
- * A recessed, glassy energy column. Cells are engraved slots; the lowest
- * `fill × SEGMENTS` light up from the bottom and glow from inside, the topmost
- * lit cell softly pulses. Decorative — the percent beside it carries the value.
+ * The logo-as-battery. Two stacked copies of the provider's 3D logo: a spent
+ * base layer (desaturated, dimmed) reads as depleted quota, and a full-color
+ * copy clipped to the bottom `remaining%` rises over it from the floor. A thin
+ * tone-lit crest skims the fill line. Decorative — the percent beneath carries
+ * the value.
  */
-function SegmentBattery({ percent }: { percent: number | null }) {
-  const fill = clampFill(percent)
-  const lit = Math.round(fill * SEGMENTS)
+function LogoMeter({ src, percent }: { src: string; percent: number | null }) {
+  const fill = clampPercent(percent)
+  const clipTop = 100 - fill
   return (
-    <span className="battery" aria-hidden>
-      <span className="battery__scan" />
-      {Array.from({ length: SEGMENTS }, (_, idx) => {
-        const fromBottom = SEGMENTS - 1 - idx
-        const on = fromBottom < lit
-        const crest = on && fromBottom === lit - 1
-        return (
-          <span
-            key={idx}
-            className={`battery__cell${on ? ' battery__cell--on' : ''}${crest ? ' battery__cell--crest' : ''}`}
-            style={{ '--i': fromBottom } as CSSProperties}
-          />
-        )
-      })}
+    <span className="logoMeter" aria-hidden>
+      <img className="logoMeter__base" src={src} alt="" draggable={false} />
+      <img
+        className="logoMeter__fill"
+        src={src}
+        alt=""
+        draggable={false}
+        style={{ clipPath: `inset(${clipTop}% 0 0 0)` } as CSSProperties}
+      />
+      {fill > 0 && fill < 100 ? (
+        <span className="logoMeter__crest" style={{ top: `${clipTop}%` }} />
+      ) : null}
     </span>
   )
 }
 
 /**
- * One provider tile: identity, the binding remaining-quota percentage (the
- * tighter of the 5h / weekly windows), a two-window sub-readout, and the
- * battery. Warm copper for Claude, cool teal for Codex; reds out only when a
- * window is critically low.
+ * One provider tile: its 3D logo acting as a quota battery, with the binding
+ * remaining percentage (the tighter of the 5h / weekly windows) beneath it.
+ * The logo reds out via its tone glow only when a window is critically low; the
+ * whole tile dims when the provider is offline.
  */
 function UsageBatteryCard({
   snapshot,
@@ -71,6 +71,7 @@ function UsageBatteryCard({
 }) {
   const headline = pill.minRemainingPercent
   const tone = pill.available ? toneFor(headline) : 'off'
+  const logo = PROVIDER_LOGOS[snapshot.provider]
   const label = snapshot.label
   const ariaLabel = pill.available
     ? `${label} usage. ${pctAria(headline)} quota left. 5 hour window ${pctAria(pill.sessionPercent)}, weekly ${pctAria(pill.weeklyPercent)}. Open details.`
@@ -83,24 +84,9 @@ function UsageBatteryCard({
       aria-label={ariaLabel}
       onClick={onOpen}
     >
-      <span className="usageCard__top">
-        <span className="usageCard__orb" aria-hidden />
-        <span className="usageCard__name">{label}</span>
-      </span>
+      <LogoMeter src={logo} percent={pill.available ? headline : null} />
       {pill.available ? (
-        <>
-          <span className="usageCard__body">
-            <span className="usageCard__pct mono">{pctText(headline)}</span>
-            <SegmentBattery percent={headline} />
-          </span>
-          <span className="usageCard__sub mono">
-            <span>5h {windowText(pill.sessionPercent)}</span>
-            <span className="usageCard__dot" aria-hidden>
-              ·
-            </span>
-            <span>7d {windowText(pill.weeklyPercent)}</span>
-          </span>
-        </>
+        <span className="usageCard__pct mono">{pctText(headline)}</span>
       ) : (
         <span className="usageCard__offline mono">offline</span>
       )}
@@ -110,8 +96,9 @@ function UsageBatteryCard({
 
 /**
  * Rail-mounted quota dock. Two compact provider tiles sit side by side in the
- * quiet lower-left rail — a minimal "energy battery" read-out of remaining
- * Claude / Codex headroom that stays out of the way of the workspace.
+ * quiet lower-left rail — each provider's 3D logo doubling as an "energy
+ * battery" read-out of remaining Claude / Codex headroom, out of the way of the
+ * workspace.
  */
 export function UsageStrip() {
   const setView = useStore((s) => s.setView)
