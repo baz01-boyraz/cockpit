@@ -2,7 +2,6 @@ import { type CSSProperties } from 'react'
 import { summarizeAgentUsage, toneFor } from '@shared/agent-usage'
 import { useStore } from '../store/useStore'
 import { useAgentUsage } from '../lib/useAgentUsage'
-import { AgentUsageBody } from './AgentUsageBody'
 
 /** Map a remaining-percent into a 0..1 liquid fill level for the vial. */
 function fillLevel(percent: number | null): number {
@@ -98,34 +97,30 @@ export function UsageStrip() {
           ? `${label} usage. 5 hour window ${percentAria(pill.sessionPercent)} left. Weekly window ${percentAria(pill.weeklyPercent)} left. Open dashboard.`
           : `${label} usage unavailable. ${pill.reason ?? 'Open dashboard.'}`
         return (
-          <div key={snapshot.provider} className="usageDock__itemWrap">
-            <button
-              type="button"
-              className={`usageDock__item usageDock__item--${snapshot.provider} usageDock__item--${tone}`}
-              aria-label={ariaLabel}
-              onClick={() => setView('usage')}
-            >
-              <span className="usageDock__rail" aria-hidden />
-              <span className="usageDock__identity">
-                <span className="usageDock__orb" aria-hidden />
-                <span className="usageDock__label">{snapshot.label}</span>
-                {pill.plan ? <span className="usageDock__plan">{pill.plan}</span> : null}
+          <button
+            key={snapshot.provider}
+            type="button"
+            className={`usageDock__item usageDock__item--${snapshot.provider} usageDock__item--${tone}`}
+            aria-label={ariaLabel}
+            onClick={() => setView('usage')}
+          >
+            <span className="usageDock__rail" aria-hidden />
+            <span className="usageDock__identity">
+              <span className="usageDock__orb" aria-hidden />
+              <span className="usageDock__label">{snapshot.label}</span>
+              {pill.plan ? <span className="usageDock__plan">{pill.plan}</span> : null}
+            </span>
+            {pill.available ? (
+              <span className="usageDock__meters">
+                <LiquidVial tag="5h" percent={pill.sessionPercent} />
+                <LiquidVial tag="7d" percent={pill.weeklyPercent} />
               </span>
-              {pill.available ? (
-                <span className="usageDock__meters">
-                  <LiquidVial tag="5h" percent={pill.sessionPercent} />
-                  <LiquidVial tag="7d" percent={pill.weeklyPercent} />
-                </span>
-              ) : (
-                <span className="usageDock__state mono" aria-hidden>
-                  offline
-                </span>
-              )}
-            </button>
-            <div className="usageDock__pop" role="tooltip">
-              <AgentUsageBody snapshot={snapshot} live variant="bars" />
-            </div>
-          </div>
+            ) : (
+              <span className="usageDock__state mono" aria-hidden>
+                offline
+              </span>
+            )}
+          </button>
         )
       })}
     </section>

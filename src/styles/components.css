@@ -501,9 +501,6 @@
 .usageDock__details:active {
   transform: translateY(0) scale(0.98);
 }
-.usageDock__itemWrap {
-  position: relative;
-}
 .usageDock__item {
   --tone: var(--signal);
   --provider: var(--accent);
@@ -866,89 +863,7 @@
   }
 }
 
-/* ---------- agent usage popover ----------
- * Constrained to the rail column width and anchored straight above the strip so
- * it never spills over the terminal/main surface to the right. */
-.usageDock__pop {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(100% + 9px);
-  z-index: 60;
-  padding: 12px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border-strong);
-  background: linear-gradient(180deg, var(--surface-2), var(--surface-inset));
-  backdrop-filter: blur(16px) saturate(1.1);
-  box-shadow: var(--shadow-float);
-  opacity: 0;
-  transform: translateY(6px);
-  transform-origin: bottom center;
-  pointer-events: none;
-  visibility: hidden;
-  transition:
-    opacity var(--dur) var(--ease-out),
-    transform var(--dur) var(--ease-spring),
-    visibility 0s linear var(--dur);
-}
-.usageDock__itemWrap:hover .usageDock__pop,
-.usageDock__itemWrap:focus-within .usageDock__pop {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
-  visibility: visible;
-  transition:
-    opacity var(--dur) var(--ease-out),
-    transform var(--dur) var(--ease-spring),
-    visibility 0s;
-}
-.usageDock__pop::before {
-  content: '';
-  position: absolute;
-  left: 24px;
-  bottom: -5px;
-  width: 9px;
-  height: 9px;
-  background: var(--surface-inset);
-  border-right: 1px solid var(--border-strong);
-  border-bottom: 1px solid var(--border-strong);
-  transform: rotate(45deg);
-}
-/* Compact the shared quota rows when shown inside the narrow rail popover. */
-.usageDock__pop .quotaBody {
-  gap: 10px;
-}
-.usageDock__pop .quotaBody__head {
-  gap: 6px;
-}
-.usageDock__pop .quotaBody__name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.usageDock__pop .quotaBody__live {
-  padding: 1px 6px 1px 5px;
-}
-.usageDock__pop .quotaBody__windows {
-  gap: 7px;
-}
-.usageDock__pop .quotaWindow {
-  padding: 9px 10px;
-}
-.usageDock__pop .quotaWindow__head {
-  margin-bottom: 7px;
-}
-.usageDock__pop .quotaWindow__meta {
-  margin-top: 6px;
-  gap: 6px;
-  justify-content: flex-end;
-}
-.usageDock__pop .quotaWindow__reset {
-  display: none;
-}
-
-/* ---------- shared quota breakdown (popover + Usage panel) ---------- */
+/* ---------- shared quota breakdown (Usage panel) ---------- */
 .quotaBody {
   --tone: var(--signal);
   --provider: var(--accent);
@@ -1088,10 +1003,6 @@
   stroke-linecap: round;
   stroke-dasharray: var(--quota-radial-circ);
   stroke-dashoffset: var(--quota-radial-offset);
-}
-.usageDock__itemWrap:hover .quotaRadial__progress,
-.usageDock__itemWrap:focus-within .quotaRadial__progress {
-  animation: quota-radial-draw 980ms var(--ease-spring) both;
 }
 .quotaRadial__needle {
   stroke: color-mix(in srgb, var(--text) 70%, var(--provider) 30%);
@@ -1337,24 +1248,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .usageDock__pop {
-    transition: opacity var(--dur) var(--ease-out), visibility 0s linear var(--dur);
-    transform: none;
-  }
-  .usageDock__itemWrap:hover .usageDock__pop,
-  .usageDock__itemWrap:focus-within .usageDock__pop {
-    transform: none;
-  }
-  .usageDock__itemWrap:hover .quotaWindow,
-  .usageDock__itemWrap:focus-within .quotaWindow {
-    transform: none;
-  }
   .quotaWindow__fill {
     transition: none;
-  }
-  .usageDock__itemWrap:hover .quotaRadial__progress,
-  .usageDock__itemWrap:focus-within .quotaRadial__progress {
-    animation: none;
   }
   .quotaRadialStat__fill {
     transition: none;
@@ -1854,6 +1749,85 @@
   color: var(--text-on-accent);
   background: linear-gradient(180deg, var(--accent-hi), var(--accent));
   box-shadow: var(--shadow-accent);
+}
+
+/* ---------- engine provider picker ---------- */
+.engineSeg--menu {
+  position: relative;
+}
+.engineSeg__opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+.engineSeg__caret {
+  opacity: 0.8;
+  transform: rotate(90deg);
+}
+.engineMenu__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.engineMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 41;
+  min-width: 224px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-float);
+  animation: rise-in var(--dur) var(--ease-out);
+}
+.engineMenu__eyebrow {
+  padding: 4px 8px 2px;
+  font-size: var(--fs-2xs, 10px);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.engineMenu__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 7px 8px;
+  border: none;
+  background: transparent;
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease-out),
+    color var(--dur) var(--ease-out);
+}
+.engineMenu__item:hover {
+  background: var(--surface-inset);
+}
+.engineMenu__item.is-active {
+  color: var(--accent-hi);
+  background: var(--surface-inset);
+}
+.engineMenu__hint {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: var(--fs-2xs, 10px);
+}
+.engineMenu__empty {
+  padding: 8px;
+  font-size: var(--fs-2xs, 10px);
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
 /* ---------- chat log ---------- */
