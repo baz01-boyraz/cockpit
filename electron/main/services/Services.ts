@@ -4,6 +4,7 @@ import type {
 } from '@shared/domain'
 import { classifyRoute } from '@shared/router'
 import { inferLogLevel } from '@shared/log-patterns'
+import { sanitizeChunkToLines } from '@shared/log-sanitize'
 import type { Db } from '../db/Database'
 import { openDatabase } from '../db/Database'
 import type { CockpitEvents } from '../events'
@@ -82,14 +83,15 @@ export class Services {
   }
 
   /**
-   * Filter terminal noise before persisting: only lines that look like
-   * warnings/errors become log events (and feed pattern matching). This keeps
-   * the logs panel signal-dense instead of echoing every keystroke.
+   * Filter terminal noise before persisting. Raw PTY output is first stripped of
+   * ANSI codes and interactive TUI repaint frames (Claude/Codex full-screen
+   * UIs), then only clean lines that look like warnings/errors become log events
+   * (and feed pattern matching). This keeps the logs panel signal-dense and free
+   * of escape-sequence garbage instead of echoing every keystroke/redraw.
    */
   private handleTerminalOutput(projectId: string, sessionId: string, data: string): void {
     if (this.closing) return
-    const interesting = data
-      .split(/\r?\n/)
+    const interesting = sanitizeChunkToLines(data)
       .filter((line) => inferLogLevel(line) === 'error' || inferLogLevel(line) === 'warn')
       .join('\n')
     if (interesting.trim().length === 0) return

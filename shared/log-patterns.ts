@@ -114,10 +114,20 @@ export function matchLogLine(line: string): PatternMatch | null {
   return null
 }
 
+// Real failure markers (word-boundary tokens plus a few non-word glyphs).
+const ERROR_TOKENS = /\b(error|err!|fatal|exception|failed|panic)\b|[✖✗]/i
+const WARN_TOKENS = /\b(warn|warning|deprecated)\b|[⚠]/i
+const DEBUG_TOKENS = /\b(debug|trace|verbose)\b/i
+// Success/clean-result lines that merely mention "warning"/"error" as a count
+// (e.g. "lint (0 warnings)", "✓ build", "0 errors"). These are not problems.
+const SUCCESS_LINE = /(^|\s)0\s+(errors?|warnings?|problems?)\b|[✓✔✅]/u
+
 /** Classify a single line's log level from its content. */
 export function inferLogLevel(line: string): 'debug' | 'info' | 'warn' | 'error' {
-  if (/\b(error|err!|fatal|exception|failed|✖)\b/i.test(line)) return 'error'
-  if (/\b(warn|warning|deprecated|⚠)\b/i.test(line)) return 'warn'
-  if (/\b(debug|trace|verbose)\b/i.test(line)) return 'debug'
+  // A success marker with no genuine failure token is informational, not a warn.
+  if (SUCCESS_LINE.test(line) && !ERROR_TOKENS.test(line)) return 'info'
+  if (ERROR_TOKENS.test(line)) return 'error'
+  if (WARN_TOKENS.test(line)) return 'warn'
+  if (DEBUG_TOKENS.test(line)) return 'debug'
   return 'info'
 }

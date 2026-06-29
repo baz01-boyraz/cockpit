@@ -43,4 +43,12 @@ describe('inferLogLevel', () => {
   it('defaults to info', () => {
     expect(inferLogLevel('server ready on port 3000')).toBe('info')
   })
+  it('treats success lines that merely count warnings/errors as info', () => {
+    expect(inferLogLevel('lint (0 warnings) ✅')).toBe('info')
+    expect(inferLogLevel('typecheck ✓')).toBe('info')
+    expect(inferLogLevel('build passed with 0 errors')).toBe('info')
+  })
+  it('still flags a real failure even next to a check glyph', () => {
+    expect(inferLogLevel('✓ step ok — Error: build failed')).toBe('error')
+  })
 })
