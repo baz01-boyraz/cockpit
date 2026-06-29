@@ -185,68 +185,77 @@ let appUpdateState: AppUpdateState = {
   checkedAt: now(),
 }
 
-const insights: ErrorInsight[] = [
-  {
-    id: id('ins'),
-    projectId: 'prj_serbest',
-    logEventId: null,
-    title: 'Missing module',
-    likelyCause: 'A required package or local import path is not installed or is misspelled.',
-    suggestedAction: 'Run the install command (npm/pnpm/yarn install) or fix the import path.',
-    suggestedAgent: 'codex',
-    severity: 'high',
-    matchedPattern: 'module_not_found',
-    createdAt: now(),
-  },
-  {
-    id: id('ins'),
-    projectId: 'prj_serbest',
-    logEventId: null,
-    title: 'Port already in use',
-    likelyCause: 'Another process is already bound to the dev/server port.',
-    suggestedAction: 'Stop the other process or start the server on a different port.',
-    suggestedAgent: 'local',
-    severity: 'medium',
-    matchedPattern: 'port_in_use',
-    createdAt: now(),
-  },
-  {
-    id: id('ins'),
-    projectId: 'prj_serbest',
-    logEventId: null,
-    title: 'Missing module',
-    likelyCause: 'A required package or local import path is not installed or is misspelled.',
-    suggestedAction: 'Run the install command (npm/pnpm/yarn install) or fix the import path.',
-    suggestedAgent: 'codex',
-    severity: 'high',
-    matchedPattern: 'module_not_found',
-    createdAt: ago(3),
-  },
-  {
-    id: id('ins'),
-    projectId: 'prj_serbest',
-    logEventId: null,
-    title: 'Missing module',
-    likelyCause: 'A required package or local import path is not installed or is misspelled.',
-    suggestedAction: 'Run the install command (npm/pnpm/yarn install) or fix the import path.',
-    suggestedAgent: 'codex',
-    severity: 'high',
-    matchedPattern: 'module_not_found',
-    createdAt: ago(6),
-  },
-  {
-    id: id('ins'),
-    projectId: 'prj_serbest',
-    logEventId: null,
-    title: 'Port already in use',
-    likelyCause: 'Another process is already bound to the dev/server port.',
-    suggestedAction: 'Stop the other process or start the server on a different port.',
-    suggestedAgent: 'local',
-    severity: 'medium',
-    matchedPattern: 'port_in_use',
-    createdAt: ago(9),
-  },
+// Raw occurrences (one row per matched line), mirroring the SQLite `error_insights`
+// table. listInsightsMock() aggregates these into one entry per pattern the same
+// way LogIntelligenceService does, so the web/screenshot bridge stays honest:
+// the seed spans an "active" failure, a "recent" one, and an older "earlier" one.
+const insightEvents: ErrorInsight[] = [
+  occurrence('build_failed', 'Build failed', 'The bundler/compiler rejected the current source.', 'Inspect the first error in the build output and resolve it before retrying.', 'codex', 'high', now()),
+  occurrence('build_failed', 'Build failed', 'The bundler/compiler rejected the current source.', 'Inspect the first error in the build output and resolve it before retrying.', 'codex', 'high', ago(2)),
+  occurrence('port_in_use', 'Port already in use', 'Another process is already bound to the dev/server port.', 'Stop the other process or start the server on a different port.', 'local', 'medium', ago(25)),
+  occurrence('port_in_use', 'Port already in use', 'Another process is already bound to the dev/server port.', 'Stop the other process or start the server on a different port.', 'local', 'medium', ago(41)),
+  occurrence('module_not_found', 'Missing module', 'A required package or local import path is not installed or is misspelled.', 'Run the install command (npm/pnpm/yarn install) or fix the import path.', 'codex', 'high', ago(185)),
+  occurrence('module_not_found', 'Missing module', 'A required package or local import path is not installed or is misspelled.', 'Run the install command (npm/pnpm/yarn install) or fix the import path.', 'codex', 'high', ago(420)),
 ]
+
+function occurrence(
+  pattern: string,
+  title: string,
+  likelyCause: string,
+  suggestedAction: string,
+  suggestedAgent: ErrorInsight['suggestedAgent'],
+  severity: ErrorInsight['severity'],
+  createdAt: string,
+): ErrorInsight {
+  return {
+    id: id('ins'),
+    projectId: 'prj_serbest',
+    logEventId: null,
+    title,
+    likelyCause,
+    suggestedAction,
+    suggestedAgent,
+    severity,
+    matchedPattern: pattern,
+    createdAt,
+    firstSeenAt: createdAt,
+    lastSeenAt: createdAt,
+    occurrences: 1,
+  }
+}
+
+// pattern -> newest occurrence's createdAt that the user dismissed (per project,
+// keyed `${projectId}::${pattern}`). A newer occurrence resurfaces the insight.
+const insightDismissals = new Map<string, string>()
+const dismissKey = (projectId: string, pattern: string) => `${projectId}::${pattern}`
+
+/** Aggregate raw occurrences into one entry per pattern, honouring dismissals. */
+function listInsightsMock(projectId: string): ErrorInsight[] {
+  const byPattern = new Map<string, ErrorInsight>()
+  for (const e of insightEvents) {
+    if (e.projectId !== projectId) continue
+    const existing = byPattern.get(e.matchedPattern)
+    if (!existing) {
+      byPattern.set(e.matchedPattern, { ...e })
+      continue
+    }
+    const firstSeenAt = e.createdAt < existing.firstSeenAt ? e.createdAt : existing.firstSeenAt
+    const newer = e.createdAt > existing.lastSeenAt
+    byPattern.set(e.matchedPattern, {
+      ...(newer ? e : existing),
+      firstSeenAt,
+      lastSeenAt: newer ? e.createdAt : existing.lastSeenAt,
+      occurrences: existing.occurrences + 1,
+    })
+  }
+  const out: ErrorInsight[] = []
+  for (const insight of byPattern.values()) {
+    const dismissedUpTo = insightDismissals.get(dismissKey(projectId, insight.matchedPattern))
+    if (dismissedUpTo && insight.lastSeenAt <= dismissedUpTo) continue
+    out.push(insight)
+  }
+  return out.sort((a, b) => (a.lastSeenAt < b.lastSeenAt ? 1 : a.lastSeenAt > b.lastSeenAt ? -1 : 0))
+}
 
 const approvals: ApprovalRequest[] = [
   {
@@ -365,7 +374,7 @@ function dashboardFor(projectId: string): DashboardSnapshot {
     agentCount: terms.filter((t) => t.role === 'claude' || t.role === 'codex').length,
     railwayConnected: false,
     railwayServices: 3,
-    recentErrors: insights.filter((i) => i.projectId === projectId).slice(0, 5),
+    recentErrors: listInsightsMock(projectId).slice(0, 5),
     pendingApprovals: approvals.filter((a) => a.projectId === projectId && a.status === 'pending').length,
     usage: projectId === 'prj_serbest' ? usage : [],
   }
@@ -552,24 +561,33 @@ export function createMockApi(): CockpitApi {
     },
     logs: {
       list: async (projectId) => logs.filter((l) => l.projectId === projectId),
-      insights: async (projectId) => insights.filter((i) => i.projectId === projectId),
-      ingest: async ({ message }) => {
+      insights: async (projectId) => listInsightsMock(projectId),
+      ingest: async ({ projectId, message }) => {
         const m = matchLogLine(message)
         if (!m) return null
-        const insight: ErrorInsight = {
-          id: id('ins'),
-          projectId: 'prj_serbest',
-          logEventId: null,
-          title: m.title,
-          likelyCause: m.likelyCause,
-          suggestedAction: m.suggestedAction,
-          suggestedAgent: m.suggestedAgent,
-          severity: m.severity,
-          matchedPattern: m.pattern,
-          createdAt: now(),
+        const insight = occurrence(
+          m.pattern,
+          m.title,
+          m.likelyCause,
+          m.suggestedAction,
+          m.suggestedAgent,
+          m.severity,
+          now(),
+        )
+        const scoped: ErrorInsight = { ...insight, projectId }
+        insightEvents.unshift(scoped)
+        return scoped
+      },
+      dismissInsight: async (projectId, matchedPattern) => {
+        const upTo = insightEvents
+          .filter((e) => e.projectId === projectId && e.matchedPattern === matchedPattern)
+          .reduce((max, e) => (e.createdAt > max ? e.createdAt : max), '')
+        insightDismissals.set(dismissKey(projectId, matchedPattern), upTo || now())
+      },
+      clearInsights: async (projectId) => {
+        for (const insight of listInsightsMock(projectId)) {
+          insightDismissals.set(dismissKey(projectId, insight.matchedPattern), insight.lastSeenAt)
         }
-        insights.unshift(insight)
-        return insight
       },
     },
     usage: { summary: async (projectId) => (projectId === 'prj_serbest' ? usage : []) },

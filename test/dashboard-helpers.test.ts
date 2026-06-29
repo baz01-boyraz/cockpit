@@ -3,6 +3,7 @@ import type { ErrorInsight } from '@shared/domain'
 import { groupErrors, prettyAuditSummary } from '@shared/dashboard-insights'
 
 function insight(over: Partial<ErrorInsight>): ErrorInsight {
+  const createdAt = new Date().toISOString()
   return {
     id: Math.random().toString(36).slice(2),
     projectId: 'p1',
@@ -13,7 +14,10 @@ function insight(over: Partial<ErrorInsight>): ErrorInsight {
     suggestedAgent: 'codex',
     severity: 'high',
     matchedPattern: 'module_not_found',
-    createdAt: new Date().toISOString(),
+    createdAt,
+    firstSeenAt: createdAt,
+    lastSeenAt: createdAt,
+    occurrences: 1,
     ...over,
   }
 }

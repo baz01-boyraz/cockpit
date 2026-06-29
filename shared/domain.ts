@@ -368,6 +368,12 @@ export interface ErrorInsight {
   severity: ErrorSeverity
   matchedPattern: string
   createdAt: ISODate
+  /** When this error shape was first observed in the project. */
+  firstSeenAt: ISODate
+  /** Most recent time the same error shape was observed. */
+  lastSeenAt: ISODate
+  /** How many raw log lines have matched this pattern (>= 1). */
+  occurrences: number
 }
 
 // ---------------------------------------------------------------------------

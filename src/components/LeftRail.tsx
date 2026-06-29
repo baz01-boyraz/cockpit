@@ -73,6 +73,7 @@ export function LeftRail() {
           return (
             <button
               key={v}
+              data-nav={v}
               className={`rail__item ${view === v ? 'rail__item--active' : ''}`}
               onClick={() => setView(v)}
             >

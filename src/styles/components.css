@@ -3341,6 +3341,80 @@
 .insight__action .eyebrow { color: var(--accent-hi); margin-right: 4px; }
 .insight__foot { display: flex; align-items: center; justify-content: space-between; margin-top: var(--sp-3); }
 
+/* card header actions (count + clear-all) */
+.card__headActions { display: flex; align-items: center; gap: var(--sp-2); }
+
+/* recency badge — honest "how fresh is this" signal derived from last-seen */
+.insight__meta {
+  margin-top: 6px;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+}
+.chip--recency { text-transform: capitalize; }
+.chip--recency-active {
+  color: var(--signal);
+  border-color: color-mix(in srgb, var(--signal) 38%, transparent);
+  background: color-mix(in srgb, var(--signal) 12%, transparent);
+}
+.chip--recency-recent {
+  color: var(--info);
+  border-color: color-mix(in srgb, var(--info) 32%, transparent);
+  background: color-mix(in srgb, var(--info) 10%, transparent);
+}
+.chip--recency-earlier {
+  color: var(--text-faint);
+  border-color: var(--border);
+  background: transparent;
+}
+.recency__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--signal) 70%, transparent);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+/* dismiss affordance — top-right ghost, revealed on card hover/focus */
+.insight__dismiss {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--dur) var(--ease-out),
+    color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out);
+}
+.insight--card:hover .insight__dismiss,
+.insight__dismiss:focus-visible {
+  opacity: 1;
+}
+.insight__dismiss:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: var(--danger-wash);
+}
+.insight__dismiss:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* keep the dismiss button from colliding with the title row */
+.insight--card .insight__row { padding-right: 28px; }
+
 .logstream { padding: var(--sp-2); max-height: 560px; display: flex; flex-direction: column; gap: 1px; }
 .logline {
   position: relative;

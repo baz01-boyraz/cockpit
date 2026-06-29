@@ -95,6 +95,11 @@ export class LogIntelligenceService {
             severity: match.severity,
             matchedPattern: match.pattern,
             createdAt,
+            // This object describes the single line just ingested; the aggregated
+            // history (true count / first-seen) is computed in listInsights.
+            firstSeenAt: createdAt,
+            lastSeenAt: createdAt,
+            occurrences: 1,
           }
           insertInsight.run({
             id: insight.id,
@@ -144,16 +149,38 @@ export class LogIntelligenceService {
   }
 
   listInsights(projectId: string, limit = 50): ErrorInsight[] {
-    // Over-fetch, then collapse repeats of the same matched pattern (a noisy
-    // build can emit the same error hundreds of times) to the newest occurrence.
-    const rows = this.db
-      .prepare('SELECT * FROM error_insights WHERE project_id = ? ORDER BY created_at DESC LIMIT ?')
-      .all(projectId, Math.min(limit * 5, 500)) as InsightRow[]
-    const seen = new Set<string>()
+    // Collapse repeats of the same matched pattern (a noisy build can emit the
+    // same error hundreds of times) into one entry that carries the *real*
+    // history: total occurrences, first-seen, and last-seen. Aggregating in SQL
+    // keeps the counts accurate regardless of how many raw rows exist.
+    const aggRows = this.db
+      .prepare(
+        `SELECT matched_pattern AS pattern, COUNT(*) AS cnt,
+                MIN(created_at) AS first_seen, MAX(created_at) AS last_seen
+         FROM error_insights WHERE project_id = ?
+         GROUP BY matched_pattern`,
+      )
+      .all(projectId) as { pattern: string; cnt: number; first_seen: string; last_seen: string }[]
+
+    // A dismissal hides a pattern only up to the occurrence the user had seen.
+    // If a newer occurrence exists (last_seen > dismissed_up_to) the failure has
+    // recurred and we surface it again — dismiss never buries a live error.
+    const dismissals = new Map<string, string>()
+    const drows = this.db
+      .prepare('SELECT matched_pattern AS pattern, dismissed_up_to FROM insight_dismissals WHERE project_id = ?')
+      .all(projectId) as { pattern: string; dismissed_up_to: string }[]
+    for (const d of drows) dismissals.set(d.pattern, d.dismissed_up_to)
+
+    const newest = this.db.prepare(
+      'SELECT * FROM error_insights WHERE project_id = ? AND matched_pattern = ? ORDER BY created_at DESC LIMIT 1',
+    )
+
     const insights: ErrorInsight[] = []
-    for (const r of rows) {
-      if (seen.has(r.matched_pattern)) continue
-      seen.add(r.matched_pattern)
+    for (const agg of aggRows) {
+      const dismissedUpTo = dismissals.get(agg.pattern)
+      if (dismissedUpTo && agg.last_seen <= dismissedUpTo) continue
+      const r = newest.get(projectId, agg.pattern) as InsightRow | undefined
+      if (!r) continue
       insights.push({
         id: r.id,
         projectId: r.project_id,
@@ -165,9 +192,57 @@ export class LogIntelligenceService {
         severity: r.severity as ErrorInsight['severity'],
         matchedPattern: r.matched_pattern,
         createdAt: r.created_at,
+        firstSeenAt: agg.first_seen,
+        lastSeenAt: agg.last_seen,
+        occurrences: agg.cnt,
       })
-      if (insights.length >= limit) break
     }
-    return insights
+
+    // Most recent activity first (ISO timestamps sort lexicographically).
+    insights.sort((a, b) => (a.lastSeenAt < b.lastSeenAt ? 1 : a.lastSeenAt > b.lastSeenAt ? -1 : 0))
+    return insights.slice(0, limit)
+  }
+
+  /**
+   * Dismiss a pattern up to its newest occurrence. The insight disappears from
+   * the panel, but a genuinely new occurrence afterwards makes it return — so a
+   * recurring, still-live failure is never silently hidden.
+   */
+  dismissInsight(projectId: string, matchedPattern: string): void {
+    const row = this.db
+      .prepare('SELECT MAX(created_at) AS last_seen FROM error_insights WHERE project_id = ? AND matched_pattern = ?')
+      .get(projectId, matchedPattern) as { last_seen: string | null } | undefined
+    const upTo = row?.last_seen ?? nowIso()
+    this.db
+      .prepare(
+        `INSERT INTO insight_dismissals (project_id, matched_pattern, dismissed_up_to, dismissed_at)
+         VALUES (@projectId, @pattern, @upTo, @at)
+         ON CONFLICT(project_id, matched_pattern)
+         DO UPDATE SET dismissed_up_to = excluded.dismissed_up_to, dismissed_at = excluded.dismissed_at`,
+      )
+      .run({ projectId, pattern: matchedPattern, upTo, at: nowIso() })
+    this.events.emitTyped('logs:changed', { projectId })
+  }
+
+  /** Dismiss every currently-visible pattern (each resurfaces if it recurs). */
+  clearInsights(projectId: string): void {
+    const patterns = this.db
+      .prepare(
+        `SELECT matched_pattern AS pattern, MAX(created_at) AS last_seen
+         FROM error_insights WHERE project_id = ? GROUP BY matched_pattern`,
+      )
+      .all(projectId) as { pattern: string; last_seen: string }[]
+    const stmt = this.db.prepare(
+      `INSERT INTO insight_dismissals (project_id, matched_pattern, dismissed_up_to, dismissed_at)
+       VALUES (@projectId, @pattern, @upTo, @at)
+       ON CONFLICT(project_id, matched_pattern)
+       DO UPDATE SET dismissed_up_to = excluded.dismissed_up_to, dismissed_at = excluded.dismissed_at`,
+    )
+    const at = nowIso()
+    const tx = this.db.transaction(() => {
+      for (const p of patterns) stmt.run({ projectId, pattern: p.pattern, upTo: p.last_seen, at })
+    })
+    tx()
+    this.events.emitTyped('logs:changed', { projectId })
   }
 }

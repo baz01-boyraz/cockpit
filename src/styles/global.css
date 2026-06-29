@@ -280,6 +280,10 @@ button {
     animation-duration: 1ms;
     animation-delay: 0ms !important;
   }
+  .live-dot,
+  .recency__dot {
+    animation: none;
+  }
 }
 
 @keyframes pulse-dot {

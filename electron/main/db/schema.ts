@@ -118,6 +118,19 @@ CREATE TABLE IF NOT EXISTS error_insights (
   created_at      TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_error_insights_project ON error_insights(project_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_error_insights_pattern ON error_insights(project_id, matched_pattern, created_at);
+
+-- Dismissals are per-pattern, not per-row: dismissing acknowledges "I handled
+-- this error shape up to here". dismissed_up_to is the newest occurrence's
+-- timestamp at dismiss time, so a genuinely new occurrence (created after that)
+-- makes the insight resurface — we never hide a recurring, still-live failure.
+CREATE TABLE IF NOT EXISTS insight_dismissals (
+  project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  matched_pattern TEXT NOT NULL,
+  dismissed_up_to TEXT NOT NULL,
+  dismissed_at    TEXT NOT NULL,
+  PRIMARY KEY (project_id, matched_pattern)
+);
 
 CREATE TABLE IF NOT EXISTS usage_events (
   id               TEXT PRIMARY KEY,
@@ -155,4 +168,21 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at          TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_audit_log_project ON audit_log(project_id, created_at);
+`
+
+/**
+ * v2 — per-pattern insight dismissals. Incremental DDL for databases created
+ * before this table existed. Idempotent (IF NOT EXISTS) so it is safe even when
+ * a fresh install already provisioned these objects via SCHEMA_V1.
+ */
+export const SCHEMA_V2 = /* sql */ `
+CREATE INDEX IF NOT EXISTS idx_error_insights_pattern ON error_insights(project_id, matched_pattern, created_at);
+
+CREATE TABLE IF NOT EXISTS insight_dismissals (
+  project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  matched_pattern TEXT NOT NULL,
+  dismissed_up_to TEXT NOT NULL,
+  dismissed_at    TEXT NOT NULL,
+  PRIMARY KEY (project_id, matched_pattern)
+);
 `

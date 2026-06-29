@@ -70,6 +70,8 @@ export const IPC = {
   logsList: 'logs:list',
   logsInsights: 'logs:insights',
   logsIngest: 'logs:ingest',
+  logsDismissInsight: 'logs:dismissInsight',
+  logsClearInsights: 'logs:clearInsights',
 
   usageSummary: 'usage:summary',
   agentUsageGet: 'agentUsage:get',
@@ -180,6 +182,10 @@ export interface CockpitApi {
       sourceId?: string | null
       message: string
     }): Promise<ErrorInsight | null>
+    /** Dismiss one detected pattern; it resurfaces only if it happens again. */
+    dismissInsight(projectId: string, matchedPattern: string): Promise<void>
+    /** Dismiss every currently-visible insight for the project. */
+    clearInsights(projectId: string): Promise<void>
   }
   usage: {
     summary(projectId: string): Promise<UsageSummary[]>

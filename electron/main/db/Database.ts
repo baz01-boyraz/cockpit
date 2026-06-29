@@ -1,5 +1,5 @@
 import BetterSqlite3 from 'better-sqlite3'
-import { SCHEMA_V1 } from './schema'
+import { SCHEMA_V1, SCHEMA_V2 } from './schema'
 
 export type Db = BetterSqlite3.Database
 
@@ -9,7 +9,10 @@ interface Migration {
   sql: string
 }
 
-const MIGRATIONS: Migration[] = [{ version: 1, name: 'initial_schema', sql: SCHEMA_V1 }]
+const MIGRATIONS: Migration[] = [
+  { version: 1, name: 'initial_schema', sql: SCHEMA_V1 },
+  { version: 2, name: 'insight_dismissals', sql: SCHEMA_V2 },
+]
 
 /**
  * Opens (or creates) the SQLite database, applies pending migrations inside a

@@ -13,6 +13,7 @@ import {
   gitPushInputSchema,
   gitStageInputSchema,
   chatAskSchema,
+  dismissInsightSchema,
   ingestLogSchema,
   projectIdSchema,
   requestApprovalSchema,
@@ -106,6 +107,15 @@ export function registerIpc(services: Services): void {
   handle(IPC.logsList, (p) => services.logs.listLogs(projectIdSchema.parse(p).projectId))
   handle(IPC.logsInsights, (p) => services.logs.listInsights(projectIdSchema.parse(p).projectId))
   handle(IPC.logsIngest, (p) => services.logs.ingest(ingestLogSchema.parse(p)))
+  handle(IPC.logsDismissInsight, (p) => {
+    const { projectId, matchedPattern } = dismissInsightSchema.parse(p)
+    services.logs.dismissInsight(projectId, matchedPattern)
+    return { ok: true }
+  })
+  handle(IPC.logsClearInsights, (p) => {
+    services.logs.clearInsights(projectIdSchema.parse(p).projectId)
+    return { ok: true }
+  })
 
   // --- usage ---
   handle(IPC.usageSummary, (p) => services.usage.summarize(projectIdSchema.parse(p).projectId))

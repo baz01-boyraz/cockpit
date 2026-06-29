@@ -197,6 +197,11 @@ export const ingestLogSchema = z.object({
   message: z.string(),
 })
 
+export const dismissInsightSchema = z.object({
+  projectId: z.string().min(1),
+  matchedPattern: z.string().min(1),
+})
+
 // Account usage is global to the developer's CLI auth, not project-scoped, so
 // the request carries no payload. We still validate it to reject stray input.
 export const agentUsageRequestSchema = z.union([z.undefined(), z.object({}).strict()])
