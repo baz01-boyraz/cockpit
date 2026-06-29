@@ -9,6 +9,7 @@ import {
 import type { TerminalRole, TerminalSession } from '@shared/domain'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
+import { ClaudeResumePicker } from '../components/ClaudeResumePicker'
 import { TerminalView } from '../components/TerminalView'
 import {
   IconBolt,
@@ -98,6 +99,7 @@ export function TerminalsPanel({ panelActive = true }: { panelActive?: boolean }
   const [splitState, setSplitState] = useState<SplitState>(() => ({ cols: [100], rows: [100] }))
   const [manualSplits, setManualSplits] = useState(false)
   const [resizing, setResizing] = useState(false)
+  const [resumeOpen, setResumeOpen] = useState(false)
 
   const shape = useMemo(() => autoGridShape(terminals.length, stageWidth), [terminals.length, stageWidth])
   const colSplits = splitState.cols.length === shape.cols ? splitState.cols : equalSplits(shape.cols)
@@ -243,6 +245,13 @@ export function TerminalsPanel({ panelActive = true }: { panelActive?: boolean }
     setMode('auto')
   }
 
+  const onResumed = async (s: TerminalSession) => {
+    setResumeOpen(false)
+    await refreshTerminals()
+    setActiveId(s.id)
+    setMode('auto')
+  }
+
   const kill = async (id: string) => {
     await cockpit().terminals.kill(id)
     await refreshTerminals()
@@ -296,11 +305,21 @@ export function TerminalsPanel({ panelActive = true }: { panelActive?: boolean }
             <button className="btn btn--accent" onClick={() => launch('claude')}>
               <IconBolt width={14} height={14} /> Claude Code
             </button>
+            <button className="btn" onClick={() => setResumeOpen(true)}>
+              <IconRestart width={14} height={14} /> Resume Claude
+            </button>
             <button className="btn" onClick={() => launch('codex')}>
               <IconBolt width={14} height={14} /> Codex
             </button>
           </div>
         </div>
+        {resumeOpen && activeProjectId && (
+          <ClaudeResumePicker
+            projectId={activeProjectId}
+            onResumed={onResumed}
+            onClose={() => setResumeOpen(false)}
+          />
+        )}
       </div>
     )
   }
@@ -376,6 +395,14 @@ export function TerminalsPanel({ panelActive = true }: { panelActive?: boolean }
           </span>
           <button className="btn btn--ghost btn--sm" onClick={() => launch('claude')} disabled={atLimit}>
             <IconBolt width={13} height={13} /> Claude
+          </button>
+          <button
+            className="btn btn--ghost btn--sm"
+            onClick={() => setResumeOpen(true)}
+            disabled={atLimit}
+            title={atLimit ? `Max ${MAX} terminals` : 'Resume a past Claude session'}
+          >
+            <IconRestart width={13} height={13} /> Resume
           </button>
           <button className="btn btn--ghost btn--sm" onClick={() => launch('codex')} disabled={atLimit}>
             <IconBolt width={13} height={13} /> Codex
@@ -479,6 +506,13 @@ export function TerminalsPanel({ panelActive = true }: { panelActive?: boolean }
           </div>
         )}
       </div>
+      {resumeOpen && activeProjectId && (
+        <ClaudeResumePicker
+          projectId={activeProjectId}
+          onResumed={onResumed}
+          onClose={() => setResumeOpen(false)}
+        />
+      )}
     </div>
   )
 }

@@ -16,6 +16,7 @@ import type {
   AppUpdateState,
   ApprovalRequest,
   AuditEntry,
+  ClaudeSessionSummary,
   DashboardSnapshot,
   ErrorInsight,
   GitCommitResult,
@@ -53,6 +54,8 @@ export const IPC = {
   terminalsRestart: 'terminals:restart',
   terminalsRename: 'terminals:rename',
   terminalsLaunchAgent: 'terminals:launchAgent',
+  terminalsClaudeSessions: 'terminals:claudeSessions',
+  terminalsResumeClaude: 'terminals:resumeClaude',
   terminalsAttachImage: 'terminals:attachImage',
 
   gitStatus: 'git:status',
@@ -148,6 +151,10 @@ export interface CockpitApi {
     restart(sessionId: string): Promise<TerminalSession>
     rename(sessionId: string, name: string, role?: TerminalRole | null): Promise<TerminalSession>
     launchAgent(projectId: string, agent: 'claude' | 'codex'): Promise<TerminalSession>
+    /** Past Claude Code conversations for this project, newest first. */
+    claudeSessions(projectId: string): Promise<ClaudeSessionSummary[]>
+    /** Open a new terminal that resumes a specific Claude conversation. */
+    resumeClaude(projectId: string, sessionId: string): Promise<TerminalSession>
     attachImage(input: {
       projectId: string
       sessionId?: string | null

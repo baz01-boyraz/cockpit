@@ -15,6 +15,7 @@ import { AgentUsageService } from './AgentUsageService'
 import { ApprovalService } from './ApprovalService'
 import { AppUpdateService } from './AppUpdateService'
 import { ChatService } from './ChatService'
+import { ClaudeSessionsService } from './ClaudeSessionsService'
 import { GitService } from './GitService'
 import { GitHubService } from './GitHubService'
 import { LocalCommandRunner } from './LocalCommandRunner'
@@ -45,6 +46,7 @@ export class Services {
   readonly railway: RailwayService
   readonly secrets: SecretStore
   readonly terminals: TerminalManager
+  readonly claudeSessions: ClaudeSessionsService
   readonly local: LocalCommandRunner
   readonly chat: ChatService
   readonly appUpdate: AppUpdateService
@@ -65,6 +67,7 @@ export class Services {
     this.git = new GitService(this.db, this.projects)
     this.github = new GitHubService(this.projects)
     this.railway = new RailwayService(this.db, this.projects)
+    this.claudeSessions = new ClaudeSessionsService()
     this.local = new LocalCommandRunner()
     this.chat = new ChatService(this.projects)
     this.appUpdate = new AppUpdateService(opts.events)

@@ -17,6 +17,7 @@ import {
   ingestLogSchema,
   projectIdSchema,
   requestApprovalSchema,
+  resumeClaudeSchema,
   routeQuerySchema,
   terminalAttachmentInputSchema,
   terminalIdSchema,
@@ -72,6 +73,14 @@ export function registerIpc(services: Services): void {
       .object({ projectId: z.string().min(1), agent: z.enum(['claude', 'codex']) })
       .parse(p)
     return services.terminals.launchAgent(projectId, agent)
+  })
+  handle(IPC.terminalsClaudeSessions, (p) => {
+    const { projectId } = projectIdSchema.parse(p)
+    return services.claudeSessions.list(services.projects.get(projectId).path)
+  })
+  handle(IPC.terminalsResumeClaude, (p) => {
+    const { projectId, sessionId } = resumeClaudeSchema.parse(p)
+    return services.terminals.resumeClaude(projectId, sessionId)
   })
   handle(IPC.terminalsAttachImage, (p) =>
     services.attachments.saveTerminalImage(terminalAttachmentInputSchema.parse(p)),

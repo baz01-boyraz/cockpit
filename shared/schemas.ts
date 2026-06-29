@@ -137,6 +137,16 @@ export const terminalRenameSchema = z.object({
   role: terminalRoleSchema.nullable().optional(),
 })
 
+/**
+ * The Claude session id is interpolated into a `claude --resume <id>` shell
+ * command, so it must be a strict UUID — never free-form text — to keep shell
+ * metacharacters out of the command.
+ */
+export const resumeClaudeSchema = z.object({
+  projectId: z.string().min(1),
+  sessionId: z.string().regex(/^[0-9a-fA-F-]{36}$/),
+})
+
 export const routeQuerySchema = z.object({
   projectId: z.string().min(1),
   query: z.string().min(1).max(4000),

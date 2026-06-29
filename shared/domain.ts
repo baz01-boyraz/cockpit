@@ -110,6 +110,19 @@ export interface TerminalExitEvent {
   signal: number | null
 }
 
+/**
+ * A resumable Claude Code conversation for a project, derived from the agent's
+ * own on-disk transcripts. `id` is the Claude session id passed to
+ * `claude --resume <id>`. Title is the opening user prompt.
+ */
+export interface ClaudeSessionSummary {
+  id: string
+  title: string
+  createdAt: ISODate
+  lastActiveAt: ISODate
+  sizeBytes: number
+}
+
 // ---------------------------------------------------------------------------
 // Agents / router
 // ---------------------------------------------------------------------------

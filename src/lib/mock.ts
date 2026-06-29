@@ -11,6 +11,7 @@ import type {
   AgentUsageReport,
   ApprovalRequest,
   AuditEntry,
+  ClaudeSessionSummary,
   DashboardSnapshot,
   ErrorInsight,
   AppUpdateState,
@@ -326,6 +327,13 @@ const audit: AuditEntry[] = [
 ]
 
 const terminals: Record<string, TerminalSession[]> = { prj_serbest: [], prj_cockpit: [] }
+
+const claudeSessionsMock: ClaudeSessionSummary[] = [
+  { id: 'd90ddd0d-0e6a-4868-9213-d0da10c064d1', title: 'Terminal sessions: hatırlama + Obsidian capture tasarımı', createdAt: ago(90), lastActiveAt: ago(4), sizeBytes: 2_900_000 },
+  { id: '3c9c7006-30d9-4681-8ff8-6c787b737cd4', title: 'usage pill\'e biraz daha depth ekleyip metalik yapalım', createdAt: ago(280), lastActiveAt: ago(180), sizeBytes: 5_900_000 },
+  { id: 'a4788b72-c9b9-47ee-bd5c-5b6e9c9e52e5', title: 'son release sonrası gözüme batanlar', createdAt: ago(360), lastActiveAt: ago(300), sizeBytes: 5_600_000 },
+  { id: 'de4abd0b-1a2b-4c3d-9e8f-7a6b5c4d3e2f', title: 'chat mode\'u şimdilik kaldırmak istiyorum', createdAt: ago(520), lastActiveAt: ago(420), sizeBytes: 1_200_000 },
+]
 const dataListeners = new Set<(c: TerminalOutputChunk) => void>()
 const approvalListeners = new Set<() => void>()
 const appUpdateListeners = new Set<(s: AppUpdateState) => void>()
@@ -466,6 +474,26 @@ export function createMockApi(): CockpitApi {
         }
         list.push(session)
         setTimeout(() => emit(session.id, `\x1b[38;5;208m●\x1b[0m launching \x1b[1m${agent}\x1b[0m…\r\n`), 140)
+        return session
+      },
+      claudeSessions: async () => claudeSessionsMock,
+      resumeClaude: async (projectId, sessionId) => {
+        const list = terminals[projectId] ?? (terminals[projectId] = [])
+        const session: TerminalSession = {
+          id: id('term'),
+          projectId,
+          name: 'Claude Code',
+          role: 'claude',
+          cwd: '.',
+          shell: '/bin/zsh',
+          status: 'running',
+          pid: Math.floor(Math.random() * 90000) + 1000,
+          exitCode: null,
+          createdAt: now(),
+          lastActiveAt: now(),
+        }
+        list.push(session)
+        setTimeout(() => emit(session.id, `\x1b[38;5;208m●\x1b[0m resuming \x1b[1mclaude\x1b[0m session \x1b[2m${sessionId.slice(0, 8)}\x1b[0m…\r\n`), 140)
         return session
       },
       attachImage: async (input) => {

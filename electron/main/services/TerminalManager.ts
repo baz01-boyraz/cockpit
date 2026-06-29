@@ -183,6 +183,21 @@ export class TerminalManager {
     return this.create({ projectId, name, role, command: agent })
   }
 
+  /**
+   * Open a new Claude pane that resumes a prior conversation by id, so the agent
+   * starts with full memory of that session instead of cold. The caller validates
+   * `sessionId` as a strict UUID (see `resumeClaudeSchema`) before it reaches the
+   * shell command interpolated here.
+   */
+  resumeClaude(projectId: string, sessionId: string): TerminalSession {
+    return this.create({
+      projectId,
+      name: 'Claude Code',
+      role: 'claude',
+      command: `claude --resume ${sessionId}`,
+    })
+  }
+
   killAll(): void {
     // Flag first so in-flight pty data/exit events stop writing to the DB before
     // we (and the caller) close it.
