@@ -27,6 +27,7 @@ import type {
   UsageSummary,
 } from '@shared/domain'
 import type { CockpitApi, SystemInfo, Unsubscribe } from '@shared/ipc'
+import { resolveChatModel } from '@shared/chat-models'
 import { classifyRoute } from '@shared/router'
 import { matchLogLine } from '@shared/log-patterns'
 
@@ -605,17 +606,11 @@ export function createMockApi(): CockpitApi {
     },
     router: { route: async (_projectId, query) => classifyRoute(query) },
     chat: {
-      ask: async (_projectId, prompt, _engine, opts) => ({
+      ask: async (_projectId, prompt, opts) => ({
         ok: true,
-        text: `(browser preview) Bu mock yanıt — gerçek uygulamada Hermes agent cevaplar.\n\nSoru: "${prompt.slice(0, 120)}"`,
-        model: opts?.provider ? `Hermes · ${opts.provider}` : 'Hermes · preview',
+        text: `(browser preview) Bu mock yanıt — gerçek uygulamada Claude cevaplar.\n\nSoru: "${prompt.slice(0, 120)}"`,
+        model: `Claude · ${resolveChatModel(opts?.model).label}`,
       }),
-      activeModel: async () => ({ provider: 'mock', model: 'preview', label: 'Hermes', sub: 'preview' }),
-      providers: async () => [
-        { id: 'openai-codex', credentials: 1 },
-        { id: 'anthropic', credentials: 1 },
-        { id: 'openrouter', credentials: 1 },
-      ],
     },
     audit: { list: async (projectId) => audit.filter((a) => a.projectId === projectId) },
     system: {

@@ -9,8 +9,7 @@
  * Channel name constants keep the preload `invoke` calls and the main-process
  * `handle` registrations in lockstep.
  */
-import type { HermesProvider } from './hermes-auth'
-import type { HermesRunOptions } from './hermes-run'
+import type { ClaudeRunOptions } from './claude-run'
 import type {
   AgentType,
   AgentUsageReport,
@@ -81,8 +80,6 @@ export const IPC = {
 
   routerRoute: 'router:route',
   chatAsk: 'chat:ask',
-  chatActiveModel: 'chat:activeModel',
-  chatProviders: 'chat:providers',
 
   auditList: 'audit:list',
 
@@ -114,24 +111,10 @@ export interface SystemInfo {
   cliAvailable: { claude: boolean; codex: boolean; railway: boolean; git: boolean; gh: boolean }
 }
 
-export type ChatEngine = 'hermes'
-
 export interface ChatReply {
   ok: boolean
   text: string
   model: string
-}
-
-/** The Hermes agent's currently-active brain, surfaced honestly in the UI. */
-export interface ChatModelInfo {
-  /** Provider id as Hermes records it, e.g. `openai-codex`, `anthropic`. */
-  provider: string
-  /** Raw model id, e.g. `gpt-5.5`, `claude-opus-4-8`. */
-  model: string
-  /** Constant agent brand shown as the chip's primary label. */
-  label: string
-  /** Humanized model name shown as the chip's sub-label, e.g. `GPT-5.5`. */
-  sub: string
 }
 
 /** Result of kicking off a local rebuild + relaunch of the cockpit itself. */
@@ -225,19 +208,10 @@ export interface CockpitApi {
   }
   chat: {
     /**
-     * Ask the Hermes agent a question; returns its reply. `opts` optionally
-     * overrides the provider/model and scopes skills/toolsets for this run.
+     * Ask Claude a question via the local `claude` CLI; returns its reply.
+     * `opts.model` picks the Claude model (`sonnet`, `opus`, `haiku`).
      */
-    ask(
-      projectId: string,
-      prompt: string,
-      engine: ChatEngine,
-      opts?: HermesRunOptions,
-    ): Promise<ChatReply>
-    /** The model the Hermes agent is currently configured to answer with. */
-    activeModel(): Promise<ChatModelInfo>
-    /** Providers the user has authenticated, to drive the model picker. */
-    providers(): Promise<HermesProvider[]>
+    ask(projectId: string, prompt: string, opts?: ClaudeRunOptions): Promise<ChatReply>
   }
   audit: {
     list(projectId: string): Promise<AuditEntry[]>

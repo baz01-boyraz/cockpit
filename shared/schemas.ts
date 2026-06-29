@@ -142,18 +142,12 @@ export const routeQuerySchema = z.object({
   query: z.string().min(1).max(4000),
 })
 
-const hermesIdList = z.array(z.string().min(1).max(80)).max(32).optional()
-
 export const chatAskSchema = z.object({
   projectId: z.string().min(1),
   prompt: z.string().min(1).max(16000),
-  engine: z.enum(['hermes']).default('hermes'),
   opts: z
     .object({
-      provider: z.string().min(1).max(80).optional(),
       model: z.string().min(1).max(120).optional(),
-      skills: hermesIdList,
-      toolsets: hermesIdList,
     })
     .optional(),
 })

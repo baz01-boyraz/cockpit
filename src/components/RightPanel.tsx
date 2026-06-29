@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
 import type { RouteRecommendation } from '@shared/domain'
-import { friendlyProvider, type HermesProvider } from '@shared/hermes-auth'
+import { CHAT_MODELS, DEFAULT_CHAT_MODEL, type ChatModel } from '@shared/chat-models'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import {
@@ -46,8 +46,8 @@ const SUGGESTIONS = [
   'Plan the next feature',
 ]
 
-/** Shown until the real active model is read from Hermes (or if it can't be). */
-const HERMES_FALLBACK = { label: 'Hermes', sub: 'agent' } as const
+/** The chat brand shown alongside the picked Claude model. */
+const CHAT_BRAND = 'Claude'
 
 const AGENT_LABEL: Record<string, string> = {
   claude: 'Claude Code',
@@ -76,9 +76,7 @@ export function RightPanel() {
   const [attaching, setAttaching] = useState(false)
   const [attachError, setAttachError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
-  const [engineMeta, setEngineMeta] = useState<{ label: string; sub: string }>(HERMES_FALLBACK)
-  const [providers, setProviders] = useState<HermesProvider[]>([])
-  const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
+  const [model, setModel] = useState<ChatModel>(DEFAULT_CHAT_MODEL)
   const [pickerOpen, setPickerOpen] = useState(false)
 
   const endRef = useRef<HTMLDivElement>(null)
@@ -102,31 +100,6 @@ export function RightPanel() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [msgs])
-
-  // Read the Hermes agent's actual active model + authed providers so the chip
-  // never lies and the picker offers real choices.
-  useEffect(() => {
-    let alive = true
-    cockpit()
-      .chat.activeModel()
-      .then((m) => {
-        if (alive) setEngineMeta({ label: m.label, sub: m.sub })
-      })
-      .catch(() => {
-        /* keep the fallback chip */
-      })
-    cockpit()
-      .chat.providers()
-      .then((p) => {
-        if (alive) setProviders(p)
-      })
-      .catch(() => {
-        /* picker just stays on the default */
-      })
-    return () => {
-      alive = false
-    }
-  }, [])
 
   // Revoke every object URL we created (previews) when the panel unmounts.
   useEffect(() => {
@@ -204,7 +177,7 @@ export function RightPanel() {
     setBusy(true)
 
     const routerQuery = trimmed || 'Review the attached image.'
-    const hermesPrompt = att
+    const chatPrompt = att
       ? `${trimmed || 'Please review the attached image.'}\n\n[Attached image saved in this project at: ${att.relativePath}]`
       : trimmed
 
@@ -221,12 +194,7 @@ export function RightPanel() {
     try {
       const [result, reply] = await Promise.all([
         cockpit().router.route(activeProjectId, routerQuery),
-        cockpit().chat.ask(
-          activeProjectId,
-          hermesPrompt,
-          'hermes',
-          selectedProvider ? { provider: selectedProvider } : undefined,
-        ),
+        cockpit().chat.ask(activeProjectId, chatPrompt, { model: model.id }),
       ])
       setMsgs((m) =>
         m.map((x) =>
@@ -324,7 +292,6 @@ export function RightPanel() {
   }
 
   const canSend = !busy && (Boolean(input.trim()) || Boolean(attachment))
-  const chipSub = selectedProvider ? friendlyProvider(selectedProvider) : engineMeta.sub
 
   return (
     <aside
@@ -342,59 +309,39 @@ export function RightPanel() {
           <span>AI Cockpit</span>
         </div>
         <div className="right__headActions">
-          <div className="engineSeg engineSeg--menu" aria-label="Model">
+          <div className="engineSeg engineSeg--menu" aria-label="Chat model">
             <button
               type="button"
               className="engineSeg__opt is-active"
-              title={`${engineMeta.label} · ${chipSub}`}
+              title={`${CHAT_BRAND} · ${model.name}`}
               aria-haspopup="menu"
               aria-expanded={pickerOpen}
               onClick={() => setPickerOpen((o) => !o)}
             >
-              {engineMeta.label}
+              {model.label}
               <IconChevron width={12} height={12} className="engineSeg__caret" />
             </button>
             {pickerOpen && (
               <>
                 <div className="engineMenu__backdrop" onClick={() => setPickerOpen(false)} />
                 <div className="engineMenu" role="menu">
-                  <div className="engineMenu__eyebrow">answer with</div>
-                  <button
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={selectedProvider === null}
-                    className={`engineMenu__item ${selectedProvider === null ? 'is-active' : ''}`}
-                    onClick={() => {
-                      setSelectedProvider(null)
-                      setPickerOpen(false)
-                    }}
-                  >
-                    <span>Hermes default</span>
-                    <span className="engineMenu__hint">{engineMeta.sub}</span>
-                  </button>
-                  {providers.map((p) => (
+                  <div className="engineMenu__eyebrow">chat model</div>
+                  {CHAT_MODELS.map((m) => (
                     <button
-                      key={p.id}
+                      key={m.id}
                       type="button"
                       role="menuitemradio"
-                      aria-checked={selectedProvider === p.id}
-                      className={`engineMenu__item ${selectedProvider === p.id ? 'is-active' : ''}`}
+                      aria-checked={model.id === m.id}
+                      className={`engineMenu__item ${model.id === m.id ? 'is-active' : ''}`}
                       onClick={() => {
-                        setSelectedProvider(p.id)
+                        setModel(m)
                         setPickerOpen(false)
                       }}
                     >
-                      <span>{friendlyProvider(p.id)}</span>
-                      <span className="engineMenu__hint mono">{p.id}</span>
+                      <span>{m.name}</span>
+                      <span className="engineMenu__hint">{m.hint}</span>
                     </button>
                   ))}
-                  {providers.length === 0 && (
-                    <div className="engineMenu__empty">
-                      No providers connected. Run{' '}
-                      <span className="mono">hermes auth add anthropic --type oauth</span> to use
-                      Claude.
-                    </div>
-                  )}
                 </div>
               </>
             )}
@@ -421,7 +368,7 @@ export function RightPanel() {
           </div>
           <div>
             <div className="right__ctxLabel">model</div>
-            <div className="right__ctxValue">{engineMeta.label} · {chipSub}</div>
+            <div className="right__ctxValue">{CHAT_BRAND} · {model.label}</div>
           </div>
           <div>
             <div className="right__ctxLabel">branch</div>
@@ -446,10 +393,10 @@ export function RightPanel() {
 
         {msgs.length === 0 ? (
           <div className="right__empty">
-            <p className="right__emptyLead">Ask the cockpit — {engineMeta.label} {engineMeta.sub}.</p>
+            <p className="right__emptyLead">Ask the cockpit — {model.name}.</p>
             <p className="right__emptyHint">
-              Answers are grounded in your project via your {engineMeta.label} agent. Safe actions
-              run, risky ones ask first. Drag an image in to attach it.
+              Answers come from Claude, grounded in this project. Safe to read, risky actions stay
+              out of reach. Drag an image in to attach it.
             </p>
             <div className="right__suggest">
               {SUGGESTIONS.map((s) => (
@@ -475,7 +422,7 @@ export function RightPanel() {
                 {m.answering ? (
                   <div className="msg__thinking">
                     <span className="msg__dots"><i /><i /><i /></span>
-                    {engineMeta.label} düşünüyor…
+                    {CHAT_BRAND} düşünüyor…
                   </div>
                 ) : (
                   <>
@@ -590,7 +537,7 @@ export function RightPanel() {
         <textarea
           ref={taRef}
           className="right__input right__input--area"
-          placeholder={`Ask ${engineMeta.label}…  (Enter to send, Shift+Enter newline)`}
+          placeholder={`Ask ${CHAT_BRAND}…  (Enter to send, Shift+Enter newline)`}
           value={input}
           rows={1}
           onChange={(e) => {

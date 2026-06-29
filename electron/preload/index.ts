@@ -75,10 +75,7 @@ const api: CockpitApi = {
     route: (projectId, query) => invoke(IPC.routerRoute, { projectId, query }),
   },
   chat: {
-    ask: (projectId, prompt, engine, opts) =>
-      invoke(IPC.chatAsk, { projectId, prompt, engine, opts }),
-    activeModel: () => invoke(IPC.chatActiveModel),
-    providers: () => invoke(IPC.chatProviders),
+    ask: (projectId, prompt, opts) => invoke(IPC.chatAsk, { projectId, prompt, opts }),
   },
   audit: {
     list: (projectId) => invoke(IPC.auditList, { projectId }),
