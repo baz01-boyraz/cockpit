@@ -94,3 +94,83 @@ export function sanitizeStoredLine(message: string): string | null {
   if (looksLikeGarbage(clean)) return null
   return clean
 }
+
+// --- Full-screen TUI detection (alt-screen / repainting agents) ---------------
+//
+// Interactive agent CLIs (Claude/Codex), pagers, and editors repaint the screen
+// thousands of times a session. Each frame *renders the project's own source*
+// (diffs, file previews, this very pattern file) — text that legitimately
+// contains words like "build failed" or "Cannot find module". Per-line ANSI
+// stripping cannot tell that boxed source text from a real tool error, because
+// the frame's control prefix (cursor home/hide) is split onto a different line
+// than the visible words. The only reliable discriminator is *mode*: was the
+// pane mid-repaint when the bytes were emitted? We track that across chunks and
+// suppress ingestion entirely while a TUI frame is being painted, so the error
+// matchers never see a pane echoing the codebase back at itself.
+
+// Each regex matches the ESC byte; disabling no-control-regex is the point.
+/* eslint-disable no-control-regex */
+// Alternate-screen enter/leave (vim, less, full-screen apps).
+const TUI_ENTER = new RegExp('\\u001B\\[\\?(?:1049|1047|47)h', 'g')
+const TUI_LEAVE = new RegExp('\\u001B\\[\\?(?:1049|1047|47)l', 'g')
+// Cursor hide/show brackets every inline repaint frame (ink-based agent CLIs
+// render in the normal buffer, so alt-screen toggles never appear for them).
+const CURSOR_HIDE = new RegExp('\\u001B\\[\\?25l', 'g')
+const CURSOR_SHOW = new RegExp('\\u001B\\[\\?25h', 'g')
+// Full-screen 2D addressing — cursor home, clear-screen, absolute positioning.
+// Line-oriented tools (tsc, vitest, npm, git, eslint) never emit these; their
+// presence in a chunk is an unambiguous repaint, suppressible on its own.
+const FULLSCREEN_REPAINT = new RegExp('\\u001B\\[(?:2J|H|[0-9]+;[0-9]+[Hf])')
+/* eslint-enable no-control-regex */
+
+/** Per-pane scan state threaded across consecutive PTY chunks. */
+export interface TerminalScanState {
+  /** True while the pane is mid-render of a full-screen / repainting TUI frame. */
+  tuiActive: boolean
+}
+
+export interface TerminalScanResult {
+  state: TerminalScanState
+  /** True when this chunk is TUI repaint noise and must not be ingested. */
+  suppress: boolean
+}
+
+/** Initial scan state for a freshly-opened pane. */
+export function initialTerminalScanState(): TerminalScanState {
+  return { tuiActive: false }
+}
+
+/** Index of the last match of `re` in `s`, or -1. Mutates only `re.lastIndex`. */
+function lastIndexOfMatch(s: string, re: RegExp): number {
+  re.lastIndex = 0
+  let idx = -1
+  let m: RegExpExecArray | null
+  while ((m = re.exec(s)) !== null) {
+    idx = m.index
+    if (m.index === re.lastIndex) re.lastIndex++
+  }
+  return idx
+}
+
+/**
+ * Decide whether a raw PTY chunk is full-screen TUI repaint noise, threading the
+ * alt-screen / repaint mode across chunks. A chunk is suppressed when the pane
+ * was already mid-frame, when this chunk *enters* a repaint, or when it carries
+ * full-screen addressing. The returned state reflects the mode after this chunk
+ * (the last enter/leave marker wins), so a frame fragmented across chunks stays
+ * suppressed until the cursor is shown / the alternate screen is left.
+ */
+export function scanTerminalChunk(rawChunk: string, prev: TerminalScanState): TerminalScanResult {
+  const lastEnter = Math.max(
+    lastIndexOfMatch(rawChunk, TUI_ENTER),
+    lastIndexOfMatch(rawChunk, CURSOR_HIDE),
+  )
+  const lastLeave = Math.max(
+    lastIndexOfMatch(rawChunk, TUI_LEAVE),
+    lastIndexOfMatch(rawChunk, CURSOR_SHOW),
+  )
+  let tuiActive = prev.tuiActive
+  if (lastEnter >= 0 || lastLeave >= 0) tuiActive = lastEnter > lastLeave
+  const suppress = prev.tuiActive || lastEnter >= 0 || FULLSCREEN_REPAINT.test(rawChunk)
+  return { state: { tuiActive }, suppress }
+}

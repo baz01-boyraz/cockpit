@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   hasCursorControl,
+  initialTerminalScanState,
   looksLikeGarbage,
   sanitizeChunkToLines,
   sanitizeStoredLine,
+  scanTerminalChunk,
   stripAnsi,
 } from '@shared/log-sanitize'
 
@@ -78,5 +80,57 @@ describe('sanitizeStoredLine', () => {
 
   it('cleans a stored colourised line', () => {
     expect(sanitizeStoredLine(`${ESC}[33mwarning: deprecated${ESC}[0m`)).toBe('warning: deprecated')
+  })
+})
+
+describe('scanTerminalChunk', () => {
+  const fresh = () => initialTerminalScanState()
+
+  it('passes plain line-oriented tool output through', () => {
+    const r = scanTerminalChunk('npm run build\n✓ built in 126ms\n', fresh())
+    expect(r.suppress).toBe(false)
+    expect(r.state.tuiActive).toBe(false)
+  })
+
+  it('does not suppress a real coloured error line', () => {
+    const r = scanTerminalChunk(`${ESC}[31mError: Cannot find module 'pg'${ESC}[39m\n`, fresh())
+    expect(r.suppress).toBe(false)
+  })
+
+  it('suppresses a self-contained agent repaint frame and ends inactive', () => {
+    // Hide cursor → home → boxed source text (the pattern file itself) → show.
+    const frame = `${ESC}[?25l${ESC}[H│ build failed / Failed to compile / webpack ${ESC}[?25h`
+    const r = scanTerminalChunk(frame, fresh())
+    expect(r.suppress).toBe(true)
+    expect(r.state.tuiActive).toBe(false)
+  })
+
+  it('suppresses on full-screen addressing alone (cursor home / absolute)', () => {
+    expect(scanTerminalChunk(`${ESC}[2J${ESC}[H redraw`, fresh()).suppress).toBe(true)
+    expect(scanTerminalChunk(`${ESC}[12;5HError: build failed`, fresh()).suppress).toBe(true)
+  })
+
+  it('stays suppressed across a fragmented frame until the cursor is shown', () => {
+    // Chunk 1 enters a repaint (hide) but is split before the cursor is shown.
+    const c1 = scanTerminalChunk(`${ESC}[?25l${ESC}[H some preview`, fresh())
+    expect(c1.suppress).toBe(true)
+    expect(c1.state.tuiActive).toBe(true)
+    // Chunk 2 is pure on-screen text — no markers — but must still be dropped.
+    const c2 = scanTerminalChunk(`│ build failed / Failed to compile │`, c1.state)
+    expect(c2.suppress).toBe(true)
+    expect(c2.state.tuiActive).toBe(true)
+    // Chunk 3 shows the cursor: the frame ends, mode clears.
+    const c3 = scanTerminalChunk(`more preview${ESC}[?25h`, c2.state)
+    expect(c3.state.tuiActive).toBe(false)
+    // Real output that follows is ingested again.
+    const c4 = scanTerminalChunk('Error: Cannot find module foo\n', c3.state)
+    expect(c4.suppress).toBe(false)
+  })
+
+  it('clears mode when the alternate screen is left', () => {
+    const entered = scanTerminalChunk(`${ESC}[?1049h`, fresh())
+    expect(entered.state.tuiActive).toBe(true)
+    const left = scanTerminalChunk(`${ESC}[?1049l`, entered.state)
+    expect(left.state.tuiActive).toBe(false)
   })
 })
