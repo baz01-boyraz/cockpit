@@ -125,12 +125,6 @@ export function UsageStrip() {
 
   return (
     <section className="usageDock" aria-label="Agent usage">
-      <div className="usageDock__head">
-        <span className="usageDock__eyebrow">Usage</span>
-        <button type="button" className="usageDock__details" onClick={() => setView('usage')}>
-          Details
-        </button>
-      </div>
       <div className="usageDock__row">
         {pills.map(({ snapshot, pill }) => (
           <UsageBatteryCard
