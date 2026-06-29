@@ -9,6 +9,8 @@
  * Channel name constants keep the preload `invoke` calls and the main-process
  * `handle` registrations in lockstep.
  */
+import type { HermesProvider } from './hermes-auth'
+import type { HermesRunOptions } from './hermes-run'
 import type {
   AgentType,
   AgentUsageReport,
@@ -79,6 +81,8 @@ export const IPC = {
 
   routerRoute: 'router:route',
   chatAsk: 'chat:ask',
+  chatActiveModel: 'chat:activeModel',
+  chatProviders: 'chat:providers',
 
   auditList: 'audit:list',
 
@@ -116,6 +120,18 @@ export interface ChatReply {
   ok: boolean
   text: string
   model: string
+}
+
+/** The Hermes agent's currently-active brain, surfaced honestly in the UI. */
+export interface ChatModelInfo {
+  /** Provider id as Hermes records it, e.g. `openai-codex`, `anthropic`. */
+  provider: string
+  /** Raw model id, e.g. `gpt-5.5`, `claude-opus-4-8`. */
+  model: string
+  /** Constant agent brand shown as the chip's primary label. */
+  label: string
+  /** Humanized model name shown as the chip's sub-label, e.g. `GPT-5.5`. */
+  sub: string
 }
 
 /** Result of kicking off a local rebuild + relaunch of the cockpit itself. */
@@ -208,8 +224,20 @@ export interface CockpitApi {
     route(projectId: string, query: string): Promise<RouterResult>
   }
   chat: {
-    /** Ask the chosen agent (Claude Code or Codex) a question; returns its reply. */
-    ask(projectId: string, prompt: string, engine: ChatEngine): Promise<ChatReply>
+    /**
+     * Ask the Hermes agent a question; returns its reply. `opts` optionally
+     * overrides the provider/model and scopes skills/toolsets for this run.
+     */
+    ask(
+      projectId: string,
+      prompt: string,
+      engine: ChatEngine,
+      opts?: HermesRunOptions,
+    ): Promise<ChatReply>
+    /** The model the Hermes agent is currently configured to answer with. */
+    activeModel(): Promise<ChatModelInfo>
+    /** Providers the user has authenticated, to drive the model picker. */
+    providers(): Promise<HermesProvider[]>
   }
   audit: {
     list(projectId: string): Promise<AuditEntry[]>

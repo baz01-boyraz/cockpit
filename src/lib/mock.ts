@@ -605,11 +605,17 @@ export function createMockApi(): CockpitApi {
     },
     router: { route: async (_projectId, query) => classifyRoute(query) },
     chat: {
-      ask: async (_projectId, prompt, _engine) => ({
+      ask: async (_projectId, prompt, _engine, opts) => ({
         ok: true,
         text: `(browser preview) Bu mock yanıt — gerçek uygulamada Hermes agent cevaplar.\n\nSoru: "${prompt.slice(0, 120)}"`,
-        model: 'mock',
+        model: opts?.provider ? `Hermes · ${opts.provider}` : 'Hermes · preview',
       }),
+      activeModel: async () => ({ provider: 'mock', model: 'preview', label: 'Hermes', sub: 'preview' }),
+      providers: async () => [
+        { id: 'openai-codex', credentials: 1 },
+        { id: 'anthropic', credentials: 1 },
+        { id: 'openrouter', credentials: 1 },
+      ],
     },
     audit: { list: async (projectId) => audit.filter((a) => a.projectId === projectId) },
     system: {

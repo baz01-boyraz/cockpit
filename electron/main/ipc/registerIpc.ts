@@ -128,11 +128,13 @@ export function registerIpc(services: Services): void {
     return services.route(projectId, query)
   })
 
-  // --- chat (real model via Claude Code CLI) ---
+  // --- chat (real model via the local Hermes agent) ---
   handle(IPC.chatAsk, (p) => {
-    const { projectId, prompt, engine } = chatAskSchema.parse(p)
-    return services.chat.ask(projectId, prompt, engine)
+    const { projectId, prompt, engine, opts } = chatAskSchema.parse(p)
+    return services.chat.ask(projectId, prompt, engine, opts)
   })
+  handle(IPC.chatActiveModel, () => services.chat.activeModel())
+  handle(IPC.chatProviders, () => services.chat.listProviders())
 
   // --- audit ---
   handle(IPC.auditList, (p) => services.audit.list(projectIdSchema.parse(p).projectId))

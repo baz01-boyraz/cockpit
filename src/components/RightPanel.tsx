@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
 import type { RouteRecommendation } from '@shared/domain'
+import { friendlyProvider, type HermesProvider } from '@shared/hermes-auth'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import {
@@ -45,7 +46,8 @@ const SUGGESTIONS = [
   'Plan the next feature',
 ]
 
-const HERMES = { label: 'Hermes', sub: 'Nous' } as const
+/** Shown until the real active model is read from Hermes (or if it can't be). */
+const HERMES_FALLBACK = { label: 'Hermes', sub: 'agent' } as const
 
 const AGENT_LABEL: Record<string, string> = {
   claude: 'Claude Code',
@@ -74,6 +76,10 @@ export function RightPanel() {
   const [attaching, setAttaching] = useState(false)
   const [attachError, setAttachError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
+  const [engineMeta, setEngineMeta] = useState<{ label: string; sub: string }>(HERMES_FALLBACK)
+  const [providers, setProviders] = useState<HermesProvider[]>([])
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   const endRef = useRef<HTMLDivElement>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
@@ -96,6 +102,31 @@ export function RightPanel() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [msgs])
+
+  // Read the Hermes agent's actual active model + authed providers so the chip
+  // never lies and the picker offers real choices.
+  useEffect(() => {
+    let alive = true
+    cockpit()
+      .chat.activeModel()
+      .then((m) => {
+        if (alive) setEngineMeta({ label: m.label, sub: m.sub })
+      })
+      .catch(() => {
+        /* keep the fallback chip */
+      })
+    cockpit()
+      .chat.providers()
+      .then((p) => {
+        if (alive) setProviders(p)
+      })
+      .catch(() => {
+        /* picker just stays on the default */
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   // Revoke every object URL we created (previews) when the panel unmounts.
   useEffect(() => {
@@ -190,7 +221,12 @@ export function RightPanel() {
     try {
       const [result, reply] = await Promise.all([
         cockpit().router.route(activeProjectId, routerQuery),
-        cockpit().chat.ask(activeProjectId, hermesPrompt, 'hermes'),
+        cockpit().chat.ask(
+          activeProjectId,
+          hermesPrompt,
+          'hermes',
+          selectedProvider ? { provider: selectedProvider } : undefined,
+        ),
       ])
       setMsgs((m) =>
         m.map((x) =>
@@ -287,8 +323,8 @@ export function RightPanel() {
     void saveImage(file)
   }
 
-  const engineMeta = HERMES
   const canSend = !busy && (Boolean(input.trim()) || Boolean(attachment))
+  const chipSub = selectedProvider ? friendlyProvider(selectedProvider) : engineMeta.sub
 
   return (
     <aside
@@ -306,10 +342,62 @@ export function RightPanel() {
           <span>AI Cockpit</span>
         </div>
         <div className="right__headActions">
-          <div className="engineSeg" aria-label="Model">
-            <span className="engineSeg__opt is-active" title={`${HERMES.label} · ${HERMES.sub}`}>
-              {HERMES.label}
-            </span>
+          <div className="engineSeg engineSeg--menu" aria-label="Model">
+            <button
+              type="button"
+              className="engineSeg__opt is-active"
+              title={`${engineMeta.label} · ${chipSub}`}
+              aria-haspopup="menu"
+              aria-expanded={pickerOpen}
+              onClick={() => setPickerOpen((o) => !o)}
+            >
+              {engineMeta.label}
+              <IconChevron width={12} height={12} className="engineSeg__caret" />
+            </button>
+            {pickerOpen && (
+              <>
+                <div className="engineMenu__backdrop" onClick={() => setPickerOpen(false)} />
+                <div className="engineMenu" role="menu">
+                  <div className="engineMenu__eyebrow">answer with</div>
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={selectedProvider === null}
+                    className={`engineMenu__item ${selectedProvider === null ? 'is-active' : ''}`}
+                    onClick={() => {
+                      setSelectedProvider(null)
+                      setPickerOpen(false)
+                    }}
+                  >
+                    <span>Hermes default</span>
+                    <span className="engineMenu__hint">{engineMeta.sub}</span>
+                  </button>
+                  {providers.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={selectedProvider === p.id}
+                      className={`engineMenu__item ${selectedProvider === p.id ? 'is-active' : ''}`}
+                      onClick={() => {
+                        setSelectedProvider(p.id)
+                        setPickerOpen(false)
+                      }}
+                    >
+                      <span>{friendlyProvider(p.id)}</span>
+                      <span className="engineMenu__hint mono">{p.id}</span>
+                    </button>
+                  ))}
+                  {providers.length === 0 && (
+                    <div className="engineMenu__empty">
+                      No providers connected. Run{' '}
+                      <span className="mono">hermes auth add anthropic --type oauth</span> to use
+                      Claude.
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
           <button
             type="button"
@@ -333,7 +421,7 @@ export function RightPanel() {
           </div>
           <div>
             <div className="right__ctxLabel">model</div>
-            <div className="right__ctxValue">{engineMeta.label} · {engineMeta.sub}</div>
+            <div className="right__ctxValue">{engineMeta.label} · {chipSub}</div>
           </div>
           <div>
             <div className="right__ctxLabel">branch</div>
