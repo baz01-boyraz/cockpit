@@ -55,12 +55,12 @@ function LogoMeter({ src, percent }: { src: string; percent: number | null }) {
 }
 
 /**
- * One provider tile: its 3D logo acting as a quota battery, with the binding
- * remaining percentage (the tighter of the 5h / weekly windows) beneath it.
- * The logo reds out via its tone glow only when a window is critically low; the
- * whole tile dims when the provider is offline.
+ * One engine core: the provider's 3D logo acting as a quota battery, seated on a
+ * soft "thruster" halo (light, never a box), with its name + a health-telemetry
+ * status dot and the binding remaining percent. Identity color (ember / teal)
+ * stays constant; the status dot escalates amber → red as the engine runs low.
  */
-function UsageBatteryCard({
+function EngineCore({
   snapshot,
   pill,
   onOpen,
@@ -74,31 +74,39 @@ function UsageBatteryCard({
   const logo = PROVIDER_LOGOS[snapshot.provider]
   const label = snapshot.label
   const ariaLabel = pill.available
-    ? `${label} usage. ${pctAria(headline)} quota left. 5 hour window ${pctAria(pill.sessionPercent)}, weekly ${pctAria(pill.weeklyPercent)}. Open details.`
-    : `${label} usage unavailable. ${pill.reason ?? 'Open details.'}`
+    ? `${label} engine. ${pctAria(headline)} quota left. 5 hour window ${pctAria(pill.sessionPercent)}, weekly ${pctAria(pill.weeklyPercent)}. Open details.`
+    : `${label} engine offline. ${pill.reason ?? 'Open details.'}`
 
   return (
     <button
       type="button"
-      className={`usageCard usageCard--${snapshot.provider} usageCard--${tone}`}
+      className={`engineCore engineCore--${snapshot.provider} engineCore--${tone}`}
       aria-label={ariaLabel}
       onClick={onOpen}
     >
-      <LogoMeter src={logo} percent={pill.available ? headline : null} />
-      {pill.available ? (
-        <span className="usageCard__pct mono">{pctText(headline)}</span>
-      ) : (
-        <span className="usageCard__offline mono">offline</span>
-      )}
+      <span className="engineCore__stage">
+        <LogoMeter src={logo} percent={pill.available ? headline : null} />
+      </span>
+      <span className="engineCore__meta">
+        <span className="engineCore__name">
+          <span className="engineCore__dot" aria-hidden />
+          {label}
+        </span>
+        {pill.available ? (
+          <span className="engineCore__pct mono">{pctText(headline)}</span>
+        ) : (
+          <span className="engineCore__offline mono">offline</span>
+        )}
+      </span>
     </button>
   )
 }
 
 /**
- * Rail-mounted quota dock. Two compact provider tiles sit side by side in the
- * quiet lower-left rail — each provider's 3D logo doubling as an "energy
- * battery" read-out of remaining Claude / Codex headroom, out of the way of the
- * workspace.
+ * The Engine Bay — the cockpit's lower-left power section. Drops the old panel
+ * box entirely: an "Engines" eyebrow with a live telemetry readout heads a row
+ * of engine cores, each provider's 3D logo doubling as its quota battery,
+ * seated on its own thruster halo. Floats in the rail on light, not chrome.
  */
 export function UsageStrip() {
   const setView = useStore((s) => s.setView)
@@ -107,14 +115,32 @@ export function UsageStrip() {
   if (!snapshots) return null
 
   const pills = snapshots.map((snapshot) => ({ snapshot, pill: summarizeAgentUsage(snapshot) }))
-  // Hide the strip entirely only when nothing is connected and nothing to say.
+  // Hide the bay entirely only when nothing is connected and nothing to say.
   if (pills.every(({ pill }) => !pill.available && !pill.reason)) return null
 
+  const onlineCount = pills.filter(({ pill }) => pill.available).length
+  const worstRemaining = pills.reduce<number | null>((acc, { pill }) => {
+    if (!pill.available || pill.minRemainingPercent === null) return acc
+    return acc === null ? pill.minRemainingPercent : Math.min(acc, pill.minRemainingPercent)
+  }, null)
+  const bayTone = onlineCount === 0 ? 'off' : toneFor(worstRemaining)
+
   return (
-    <section className="usageDock" aria-label="Agent usage">
-      <div className="usageDock__row">
+    <section className={`engineBay engineBay--${bayTone}`} aria-label="AI engines">
+      <header className="engineBay__head">
+        <span className="engineBay__title">Engines</span>
+        <span className="engineBay__rule" aria-hidden />
+        <span
+          className="engineBay__live mono"
+          aria-label={`${onlineCount} of ${pills.length} engines online`}
+        >
+          <span className="engineBay__liveDot" aria-hidden />
+          {onlineCount}/{pills.length}
+        </span>
+      </header>
+      <div className="engineBay__cores">
         {pills.map(({ snapshot, pill }) => (
-          <UsageBatteryCard
+          <EngineCore
             key={snapshot.provider}
             snapshot={snapshot}
             pill={pill}

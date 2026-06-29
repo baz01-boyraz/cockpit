@@ -448,63 +448,108 @@
   }
 }
 
-/* ---------- rail usage dock (Claude / Codex quota) ---------- */
-.usageDock {
-  --tone: var(--signal);
-  --provider: var(--accent);
-  --provider-2: var(--accent-hi);
+/* ---------- engine bay (Claude / Codex power section) ----------
+ * The cockpit's lower-left power section. No panel box: an "Engines" eyebrow
+ * over a row of engine cores, each provider's 3D logo doubling as its quota
+ * battery, seated on light (thruster halos), not chrome. `--bay` aggregates
+ * fleet health (lime → amber → red) for the live readout. */
+.engineBay {
+  --bay: var(--signal);
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 9px;
   width: 100%;
-  /* Clean glass console: a quiet raised panel consistent with the app's card
-   * language — thin top bevel, soft shadow, crisp hairline. Depth comes from
-   * light and the provider glows inside, never from heavy metal. */
-  padding: 12px 12px 13px;
-  border-radius: var(--r-lg);
-  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
-  border: 1px solid var(--border);
-  box-shadow: var(--bevel), var(--shadow-1);
+  padding: 2px;
   -webkit-app-region: no-drag;
 }
-/* A whisper-thin dual-tone aura along the top edge — ember left, teal right —
- * quietly previewing the two providers below. */
-.usageDock::before {
-  content: '';
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  top: 0;
+.engineBay--warning {
+  --bay: var(--warning);
+}
+.engineBay--critical {
+  --bay: var(--danger);
+}
+.engineBay--off {
+  --bay: var(--text-faint);
+}
+/* eyebrow header: "Engines" label, a hairline reaching across, a live readout */
+.engineBay__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+}
+.engineBay__title {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+/* the hairline that turns the label into a sectioning rule (no box edge) */
+.engineBay__rule {
+  flex: 1 1 auto;
   height: 1px;
+  min-width: 8px;
   background: linear-gradient(
     90deg,
-    transparent,
-    color-mix(in srgb, #ec7f48 60%, transparent) 26%,
-    color-mix(in srgb, #13bd92 55%, transparent) 74%,
+    color-mix(in srgb, var(--border-strong) 90%, transparent),
     transparent
   );
-  opacity: 0.55;
-  pointer-events: none;
 }
-/* ---------- usage battery cards (Claude / Codex remaining quota) ----------
- * Two compact provider tiles side by side: identity, the binding remaining
- * percent, a two-window sub-readout, and a recessed glass "energy column"
- * battery. Animate only transform / opacity. */
-.usageDock__row {
+.engineBay__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+/* fleet pulse — gentle breathing dot toned by aggregate engine health */
+.engineBay__liveDot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--bay);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--bay) 75%, transparent);
+  animation: engine-breathe 3.2s var(--ease-out) infinite;
+}
+@keyframes engine-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.engineBay__cores {
   position: relative;
-  z-index: 1;
   display: flex;
   flex-direction: row;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
   min-width: 0;
 }
-.usageCard {
+
+/* ---------- engine core (one provider's logo-battery + telemetry) ----------
+ * No box. The 3D logo sits on a soft thruster halo; identity color (ember /
+ * teal) holds, while a health dot escalates amber → red as quota runs low.
+ * Animate only transform / opacity. */
+.engineCore {
   --provider: var(--accent);
   --provider-hi: var(--accent-hi);
   --tone: var(--provider);
   --tone-hi: var(--provider-hi);
+  /* status dot is a health traffic-light (lime → amber → red), kept separate
+   * from identity color so "online / low / critical" reads at a glance while
+   * the logo, halo and percent carry the provider's ember / teal identity. */
+  --health: var(--signal);
   position: relative;
   flex: 1 1 0;
   min-width: 0;
@@ -512,65 +557,129 @@
   flex-direction: column;
   align-items: center;
   gap: 7px;
-  /* No box. Just the logo-battery and its percent floating in the rail. The only
-   * "surface" is a soft tone-colored floor glow that gives the cluster depth
-   * without drawing an edge. */
-  padding: 6px 4px 8px;
+  padding: 6px 4px 7px;
   border: 0;
   background: none;
   color: var(--text-muted);
   text-align: center;
   transition: transform var(--dur-fast) var(--ease-spring);
 }
-/* subtle floor glow pooled under the readout — premium depth, no panel edge */
-.usageCard::before {
-  content: '';
-  position: absolute;
-  inset: auto -4px -6px;
-  height: 72%;
-  background: radial-gradient(
-    72% 100% at 60% 100%,
-    color-mix(in srgb, var(--tone) 14%, transparent),
-    transparent 74%
-  );
-  opacity: 0.62;
-  pointer-events: none;
-  transition: opacity var(--dur) var(--ease-out);
-}
-.usageCard:hover {
-  transform: translateY(-2px);
-}
-.usageCard:hover::before {
-  opacity: 1;
-}
-.usageCard:active {
-  transform: translateY(-1px) scale(0.992);
-}
-.usageCard:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--tone) 70%, transparent);
-  outline-offset: 4px;
-  border-radius: 12px;
-}
-.usageCard--claude {
+.engineCore--claude {
   /* Claude's own warm coral/copper — vivid but premium, no neon. */
   --provider: #ec7f48;
   --provider-hi: #ffac79;
 }
-.usageCard--codex {
+.engineCore--codex {
   /* Codex's own emerald/teal identity. */
   --provider: #13bd92;
   --provider-hi: #5cf0c8;
 }
-.usageCard--critical {
+/* health escalation lives on the status dot — identity color stays put */
+.engineCore--warning {
+  --health: var(--warning);
+}
+.engineCore--critical {
   --tone: var(--danger);
   --tone-hi: #f4836b;
+  --health: var(--danger);
 }
-.usageCard--off {
+.engineCore--off {
+  opacity: 0.5;
+}
+.engineCore:hover {
+  transform: translateY(-2px);
+}
+.engineCore:active {
+  transform: translateY(-1px) scale(0.992);
+}
+.engineCore:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone) 70%, transparent);
+  outline-offset: 4px;
+  border-radius: 12px;
+}
+/* the stage the engine sits on — a soft containment halo (light, no edge) and a
+ * tighter thruster glow pooled at the base. Both trace light, never a box. */
+.engineCore__stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  padding: 4px 0 6px;
+}
+.engineCore__stage::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 58px;
+  height: 58px;
+  transform: translate(-50%, -50%);
+  border-radius: var(--r-pill);
+  background: radial-gradient(
+    circle at 50% 42%,
+    color-mix(in srgb, var(--tone) 16%, transparent),
+    transparent 68%
+  );
+  opacity: 0.7;
+  pointer-events: none;
+  transition: opacity var(--dur) var(--ease-out);
+}
+.engineCore__stage::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 70%;
+  height: 9px;
+  transform: translateX(-50%);
+  border-radius: var(--r-pill);
+  background: radial-gradient(
+    60% 100% at 50% 100%,
+    color-mix(in srgb, var(--tone-hi) 38%, transparent),
+    transparent 72%
+  );
   opacity: 0.55;
+  pointer-events: none;
+  transition: opacity var(--dur) var(--ease-out);
 }
-.usageCard__pct {
+.engineCore:hover .engineCore__stage::before {
+  opacity: 1;
+}
+.engineCore:hover .engineCore__stage::after {
+  opacity: 0.9;
+}
+.engineCore__meta {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.engineCore__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+}
+.engineCore__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--r-pill);
+  background: var(--health);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--health) 80%, transparent);
+}
+.engineCore--critical .engineCore__dot {
+  animation: engine-breathe 1.5s var(--ease-out) infinite;
+}
+.engineCore--off .engineCore__dot {
+  background: var(--text-faint);
+  box-shadow: none;
+}
+.engineCore__pct {
   /* Saturated provider hue, lifted with a hint of white — vivid but not washed. */
   color: color-mix(in srgb, var(--tone-hi) 90%, #ffffff 10%);
   font-size: 14px;
@@ -581,9 +690,7 @@
     0 1px 1px rgba(0, 0, 0, 0.55),
     0 0 10px color-mix(in srgb, var(--tone) 34%, transparent);
 }
-.usageCard__offline {
-  position: relative;
-  z-index: 1;
+.engineCore__offline {
   color: var(--text-faint);
   font-size: var(--fs-micro);
   font-weight: 700;
@@ -663,8 +770,12 @@
   .logoMeter__fill {
     transition: none;
   }
-  .usageCard {
+  .engineCore {
     transition: none;
+  }
+  .engineBay__liveDot,
+  .engineCore--critical .engineCore__dot {
+    animation: none;
   }
 }
 
