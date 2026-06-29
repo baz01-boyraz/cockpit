@@ -621,69 +621,213 @@
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
+/* ---------- liquid energy vials ----------
+ * Twin glass tubes per provider; fill height = remaining quota, glowing meniscus
+ * rides the surface, a few motes drift up. Animated transforms/opacity only. */
 .usageDock__meters {
   position: relative;
   z-index: 1;
   display: flex;
-  flex-direction: column;
-  gap: 7px;
+  flex-direction: row;
+  gap: 16px;
   width: 100%;
   min-width: 0;
+  padding-top: 3px;
 }
-.batRow {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) max-content;
+.vial {
+  --vtone: var(--provider);
+  --vtone-hi: var(--provider-2);
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  column-gap: 8px;
+  gap: 7px;
+}
+.vial--warning {
+  --vtone: var(--warning);
+  --vtone-hi: #f2c46a;
+}
+.vial--critical {
+  --vtone: var(--danger);
+  --vtone-hi: #f4836b;
+}
+/* The tube. drop-shadow gives the volumetric tone bloom around the glass. */
+.vial__glass {
+  position: relative;
+  width: 34px;
+  height: 64px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5))
+    drop-shadow(0 0 9px color-mix(in srgb, var(--vtone) 24%, transparent));
+}
+/* Metallic end caps — sit outside the clipped bore so they read as 3D lips. */
+.vial__glass::before,
+.vial__glass::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  z-index: 5;
+  width: 25px;
+  height: 8px;
+  border-radius: 5px;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, #44474f, #1c1e23 55%, #0a0b0d);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.7),
+    0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.vial__glass::before {
+  top: -4px;
+}
+.vial__glass::after {
+  bottom: -4px;
+}
+/* Inner bore — dark glass body that clips the liquid + shine to the tube. */
+.vial__bore {
+  position: absolute;
+  inset: 0;
+  border-radius: 11px;
+  overflow: hidden;
+  isolation: isolate;
+  background: linear-gradient(180deg, rgba(16, 18, 23, 0.92), rgba(8, 9, 11, 0.96));
+  box-shadow:
+    inset 0 0 0 1px rgba(236, 230, 218, 0.1),
+    inset 2px 0 3px rgba(255, 255, 255, 0.05),
+    inset -2px 0 4px rgba(0, 0, 0, 0.65),
+    inset 0 8px 10px rgba(0, 0, 0, 0.45);
+}
+.vial__liquid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  height: calc(var(--fill, 0) * 100%);
+  overflow: hidden;
+  background:
+    radial-gradient(
+      130% 62% at 50% 100%,
+      color-mix(in srgb, var(--vtone-hi) 70%, transparent),
+      transparent 72%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--vtone) 94%, #000) 0%,
+      color-mix(in srgb, var(--vtone) 72%, #000) 52%,
+      color-mix(in srgb, var(--vtone) 56%, #000) 100%
+    );
+  box-shadow:
+    inset 0 2px 7px color-mix(in srgb, var(--vtone-hi) 42%, transparent),
+    0 0 16px color-mix(in srgb, var(--vtone) 45%, transparent);
+  transition: height 900ms var(--ease-spring);
+}
+/* The glowing surface line — tracks the fill level and sways like a ripple. */
+.vial__meniscus {
+  position: absolute;
+  left: -3px;
+  right: -3px;
+  z-index: 2;
+  bottom: calc(var(--fill, 0) * 100%);
+  height: 6px;
+  margin-bottom: -3px;
+  border-radius: 50%;
+  background: radial-gradient(
+    70% 100% at 50% 50%,
+    color-mix(in srgb, var(--vtone-hi) 96%, #fff) 0%,
+    color-mix(in srgb, var(--vtone-hi) 65%, transparent) 58%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 11px color-mix(in srgb, var(--vtone-hi) 80%, transparent),
+    0 0 4px rgba(255, 255, 255, 0.4);
+  transition: bottom 900ms var(--ease-spring);
+  animation: vial-wave 5.4s var(--ease-out) infinite;
+}
+/* Rising motes inside the liquid (clipped at the surface by the liquid box). */
+.vial__spark {
+  position: absolute;
+  left: var(--x, 50%);
+  bottom: -3px;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--vtone-hi) 92%, #fff);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--vtone-hi) 80%, transparent);
+  opacity: 0;
+  animation: vial-rise var(--dur, 8s) linear var(--delay, 0s) infinite;
+}
+/* Glass highlight streak down the left of the tube. */
+.vial__shine {
+  position: absolute;
+  z-index: 3;
+  top: 5px;
+  bottom: 6px;
+  left: 6px;
+  width: 4px;
+  border-radius: 4px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.42),
+    rgba(255, 255, 255, 0.06) 38%,
+    transparent 68%
+  );
+  filter: blur(1px);
+  pointer-events: none;
+}
+.vial--empty .vial__liquid,
+.vial--empty .vial__meniscus {
+  display: none;
+}
+.vial__caption {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
   min-width: 0;
 }
-.batRow__tag {
+.vial__tag {
   color: var(--text-faint);
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
-.batRow__cells {
-  display: flex;
-  align-items: stretch;
-  gap: 2.5px;
-  height: 13px;
-  min-width: 0;
-}
-.batCell {
-  flex: 1 1 0;
-  min-width: 0;
-  border-radius: 2px;
-  background: rgba(236, 230, 218, 0.07);
-  box-shadow: inset 0 0 0 1px rgba(236, 230, 218, 0.04);
-  transform: scaleY(0.62);
-  transform-origin: center;
-  transition:
-    background var(--dur) var(--ease-out),
-    transform var(--dur) var(--ease-spring),
-    box-shadow var(--dur) var(--ease-out);
-  transition-delay: calc(var(--i, 0) * 22ms);
-}
-.batCell--on {
-  background: linear-gradient(180deg, var(--tone), color-mix(in srgb, var(--tone) 72%, #000));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 40%, transparent);
-  transform: scaleY(1);
-}
-.batCell--lead {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tone) 88%, #fff), var(--tone));
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone) 60%, transparent),
-    0 0 8px color-mix(in srgb, var(--tone) 65%, transparent);
-  animation: bat-lead 2.6s var(--ease-out) infinite;
-}
-.batRow__pct {
-  min-width: 30px;
+.vial__pct {
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
-  text-align: right;
+}
+.vial--warning .vial__pct {
+  color: color-mix(in srgb, var(--warning) 55%, var(--text));
+}
+.vial--critical .vial__pct {
+  color: color-mix(in srgb, var(--danger) 62%, var(--text));
+}
+@keyframes vial-wave {
+  0%,
+  100% {
+    transform: translateX(-5%);
+  }
+  50% {
+    transform: translateX(5%) translateY(-1px);
+  }
+}
+@keyframes vial-rise {
+  0% {
+    transform: translateY(0) scale(0.5);
+    opacity: 0;
+  }
+  14% {
+    opacity: 0.9;
+  }
+  78% {
+    opacity: 0.65;
+  }
+  100% {
+    transform: translateY(-52px) scale(1);
+    opacity: 0;
+  }
 }
 .usageDock__state {
   position: relative;
@@ -694,19 +838,6 @@
   letter-spacing: 0;
   text-align: left;
   text-transform: uppercase;
-}
-@keyframes bat-lead {
-  0%,
-  100% {
-    box-shadow:
-      inset 0 0 0 1px color-mix(in srgb, var(--tone) 60%, transparent),
-      0 0 6px color-mix(in srgb, var(--tone) 45%, transparent);
-  }
-  50% {
-    box-shadow:
-      inset 0 0 0 1px color-mix(in srgb, var(--tone) 75%, transparent),
-      0 0 12px color-mix(in srgb, var(--tone) 80%, transparent);
-  }
 }
 @keyframes usage-pulse {
   0%,
@@ -721,14 +852,16 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .batCell--lead,
+  .vial__meniscus,
+  .vial__spark,
   .topbar__approvals--active {
     animation: none;
   }
   .usageDock__rail,
   .usageDock__details,
   .usageDock__item,
-  .batCell {
+  .vial__liquid,
+  .vial__meniscus {
     transition: none;
   }
 }

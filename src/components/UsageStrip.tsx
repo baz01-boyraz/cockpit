@@ -1,10 +1,14 @@
 import { type CSSProperties } from 'react'
-import { summarizeAgentUsage } from '@shared/agent-usage'
+import { summarizeAgentUsage, toneFor } from '@shared/agent-usage'
 import { useStore } from '../store/useStore'
 import { useAgentUsage } from '../lib/useAgentUsage'
 import { AgentUsageBody } from './AgentUsageBody'
 
-const CELL_COUNT = 12
+/** Map a remaining-percent into a 0..1 liquid fill level for the vial. */
+function fillLevel(percent: number | null): number {
+  if (percent === null) return 0
+  return Math.max(0, Math.min(1, percent / 100))
+}
 
 function percentText(percent: number | null): string {
   return percent === null ? '—' : `${percent}%`
@@ -14,44 +18,60 @@ function percentAria(percent: number | null): string {
   return percent === null ? 'not reported' : `${percent}%`
 }
 
-/**
- * Map a remaining-percent into a 0..CELL_COUNT filled-cell count. We always
- * light at least one cell for any non-zero reading so a low-but-alive window
- * never reads as fully empty.
- */
-function filledCells(percent: number | null): number {
-  if (percent === null || percent <= 0) return 0
-  return Math.max(1, Math.min(CELL_COUNT, Math.round((percent / 100) * CELL_COUNT)))
-}
+/** A few drifting motes, seeded with stable offsets/timings so the liquid breathes. */
+const VIAL_SPARKS = [
+  { x: 26, delay: 0, dur: 7.4 },
+  { x: 62, delay: 1.6, dur: 9.1 },
+  { x: 44, delay: 3.2, dur: 8.3 },
+  { x: 74, delay: 4.5, dur: 10.2 },
+  { x: 16, delay: 5.7, dur: 8.9 },
+] as const
 
-/** A segmented battery meter: filled cells + a glowing leading edge. */
-function BatteryMeter({ tag, percent }: { tag: string; percent: number | null }) {
-  const filled = filledCells(percent)
+/**
+ * A premium glass "liquid energy" vial. The fill height tracks remaining quota
+ * (a full tube = lots of headroom, draining as it is consumed); a glowing
+ * meniscus rides the surface and a few motes drift up through the liquid. Tone
+ * shifts ember/teal → amber → red as a window runs low. Decorative only — the
+ * caption beneath carries the readable percent.
+ */
+function LiquidVial({ tag, percent }: { tag: string; percent: number | null }) {
+  const tone = percent === null ? 'healthy' : toneFor(percent)
+  const empty = percent === null
   return (
-    <div className="batRow">
-      <span className="batRow__tag">{tag}</span>
-      <span className="batRow__cells" aria-hidden>
-        {Array.from({ length: CELL_COUNT }, (_, i) => {
-          const on = i < filled
-          const lead = on && i === filled - 1
-          return (
-            <span
-              key={i}
-              className={`batCell${on ? ' batCell--on' : ''}${lead ? ' batCell--lead' : ''}`}
-              style={{ '--i': i } as CSSProperties}
-            />
-          )
-        })}
+    <div
+      className={`vial vial--${tone}${empty ? ' vial--empty' : ''}`}
+      style={{ '--fill': fillLevel(percent) } as CSSProperties}
+    >
+      <span className="vial__glass" aria-hidden>
+        <span className="vial__bore">
+          <span className="vial__liquid">
+            {VIAL_SPARKS.map((s, i) => (
+              <span
+                key={i}
+                className="vial__spark"
+                style={
+                  { '--x': `${s.x}%`, '--delay': `${s.delay}s`, '--dur': `${s.dur}s` } as CSSProperties
+                }
+              />
+            ))}
+          </span>
+          <span className="vial__meniscus" />
+          <span className="vial__shine" />
+        </span>
       </span>
-      <span className="batRow__pct mono">{percentText(percent)}</span>
+      <span className="vial__caption">
+        <span className="vial__tag">{tag}</span>
+        <span className="vial__pct mono">{percentText(percent)}</span>
+      </span>
     </div>
   )
 }
 
 /**
- * Rail-mounted quota dock. A premium "battery cell" read-out: each provider is
- * a card with a segmented 5h + weekly meter, so quota headroom is legible at a
- * glance in the quiet lower-left rail without crowding the topbar.
+ * Rail-mounted quota dock. A premium "liquid energy" read-out: each provider is
+ * a card with twin glass vials (5h + weekly) whose fill tracks remaining quota,
+ * so headroom is legible at a glance in the quiet lower-left rail without
+ * crowding the topbar.
  */
 export function UsageStrip() {
   const setView = useStore((s) => s.setView)
@@ -93,8 +113,8 @@ export function UsageStrip() {
               </span>
               {pill.available ? (
                 <span className="usageDock__meters">
-                  <BatteryMeter tag="5h" percent={pill.sessionPercent} />
-                  <BatteryMeter tag="7d" percent={pill.weeklyPercent} />
+                  <LiquidVial tag="5h" percent={pill.sessionPercent} />
+                  <LiquidVial tag="7d" percent={pill.weeklyPercent} />
                 </span>
               ) : (
                 <span className="usageDock__state mono" aria-hidden>
