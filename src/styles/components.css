@@ -3216,11 +3216,18 @@
 .diff__line--hunk { color: var(--info); background: var(--surface-inset); }
 .diff__line--meta { color: var(--text-faint); }
 /* ---------- git local run ---------- */
+.git__diff--solo {
+  min-height: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 120% at 100% 0%, var(--accent-wash) 0%, transparent 42%),
+    var(--bg);
+}
 .git__run {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-4);
+  gap: var(--sp-5);
   padding: var(--sp-5);
   min-height: 0;
 }
@@ -3232,18 +3239,19 @@
 .git__runIcon {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
   border-radius: var(--r-md);
   background: var(--accent-wash);
   border: 1px solid var(--border-accent);
   color: var(--accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 .git__runTitle { font-size: var(--fs-h1); margin: 2px 0 4px; }
 .git__runSub {
   margin: 0;
-  max-width: 520px;
+  max-width: 560px;
   color: var(--text-muted);
   font-size: var(--fs-sm);
   line-height: 1.55;
@@ -3251,35 +3259,100 @@
 .git__runProcs {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
+  gap: var(--sp-3);
   margin-top: auto;
 }
 .runproc {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--sp-3);
-  padding: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
   border-radius: var(--r-md);
-  background: var(--surface-inset);
+  background: var(--surface-1);
   border: 1px solid var(--border);
+  transition:
+    border-color var(--dur) var(--ease-out),
+    background-color var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-spring);
 }
-.runproc__meta { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
-.runproc__dot {
-  width: 9px;
-  height: 9px;
+.runproc:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+  transform: translateY(-1px);
+}
+.runproc--live {
+  border-color: color-mix(in srgb, var(--success) 38%, var(--border));
+  background:
+    linear-gradient(90deg, rgba(147, 196, 106, 0.06), transparent 60%),
+    var(--surface-1);
+}
+.runproc__icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
   flex-shrink: 0;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  transition: color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);
+}
+.runproc__icon--dev { color: var(--accent); border-color: var(--border-accent); background: var(--accent-wash); }
+.runproc__icon--test { color: var(--signal); border-color: var(--signal-dim); background: var(--signal-dim); }
+.runproc--live .runproc__icon { color: var(--success); border-color: color-mix(in srgb, var(--success) 45%, var(--border)); }
+.runproc__pulse {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--text-faint);
+  background: transparent;
+  border: 2px solid var(--surface-1);
   transition: background-color var(--dur) var(--ease-out);
 }
-.runproc__dot--live {
+.runproc__pulse--live {
   background: var(--success);
-  box-shadow: 0 0 0 3px rgba(147, 196, 106, 0.18);
+  box-shadow: 0 0 0 3px rgba(147, 196, 106, 0.22);
 }
-.runproc__name { font-size: var(--fs-sm); font-weight: 600; }
-.runproc__cmd { font-size: var(--fs-xs); color: var(--text-muted); }
+.runproc__body { flex: 1; min-width: 0; }
+.runproc__nameRow { display: flex; align-items: center; gap: var(--sp-2); }
+.runproc__name { font-size: var(--fs-body); font-weight: 600; color: var(--text); }
+.runproc__sub {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: 3px;
+  min-width: 0;
+}
+.runproc__cmd {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.runproc__hint {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .runproc__right { display: flex; align-items: center; gap: var(--sp-2); flex-shrink: 0; }
+.btn--run {
+  border-color: var(--border-accent);
+  color: var(--accent);
+  background: var(--accent-wash);
+}
+.btn--run:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
 .git__runBar {
   display: flex;
   align-items: center;
@@ -3295,6 +3368,18 @@
   color: var(--text-muted);
 }
 .git__runBarSpacer { flex: 1; }
+.runproc__dot {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--text-faint);
+  transition: background-color var(--dur) var(--ease-out);
+}
+.runproc__dot--live {
+  background: var(--success);
+  box-shadow: 0 0 0 3px rgba(147, 196, 106, 0.18);
+}
 
 /* ---------- railway ---------- */
 .railway__connect {

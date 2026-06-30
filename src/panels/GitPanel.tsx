@@ -8,18 +8,22 @@ import type {
 } from '@shared/domain'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
+import type { ReactNode } from 'react'
 import {
+  IconBeaker,
   IconBolt,
   IconBranch,
   IconCheck,
   IconCloud,
   IconDownload,
+  IconPlay,
   IconRestart,
+  IconServer,
   IconShield,
+  IconStop,
   IconTerminal,
   IconUpload,
   IconWarning,
-  IconX,
 } from '../components/icons'
 
 const STATE_LABEL: Record<string, string> = {
@@ -60,6 +64,9 @@ function RunChip({ term }: { term: TerminalSession | null }) {
 interface ProcRowProps {
   label: string
   command: string
+  hint: string
+  icon: ReactNode
+  tone: 'dev' | 'test'
   term: TerminalSession | null
   busy: boolean
   onStart: () => void
@@ -67,31 +74,37 @@ interface ProcRowProps {
   onOpen: () => void
 }
 
-function ProcRow({ label, command, term, busy, onStart, onStop, onOpen }: ProcRowProps) {
+function ProcRow({ label, command, hint, icon, tone, term, busy, onStart, onStop, onOpen }: ProcRowProps) {
   const live = isLive(term)
   return (
-    <div className="runproc">
-      <div className="runproc__meta">
-        <span className={`runproc__dot ${live ? 'runproc__dot--live' : ''}`} />
-        <div>
-          <div className="runproc__name">{label}</div>
-          <div className="runproc__cmd mono">{command}</div>
+    <div className={`runproc runproc--${tone} ${live ? 'runproc--live' : ''}`}>
+      <span className={`runproc__icon runproc__icon--${tone}`} aria-hidden>
+        {icon}
+        <span className={`runproc__pulse ${live ? 'runproc__pulse--live' : ''}`} />
+      </span>
+      <div className="runproc__body">
+        <div className="runproc__nameRow">
+          <span className="runproc__name">{label}</span>
+          <RunChip term={term} />
+        </div>
+        <div className="runproc__sub">
+          <span className="runproc__cmd mono">{command}</span>
+          <span className="runproc__hint">{hint}</span>
         </div>
       </div>
       <div className="runproc__right">
-        <RunChip term={term} />
         {live ? (
           <>
             <button className="btn btn--sm" onClick={onOpen}>
               <IconTerminal width={13} height={13} /> Open
             </button>
             <button className="btn btn--sm btn--danger" onClick={onStop}>
-              <IconX width={12} height={12} /> Stop
+              <IconStop width={11} height={11} /> Stop
             </button>
           </>
         ) : (
-          <button className="btn btn--sm" onClick={onStart} disabled={busy}>
-            <IconBolt width={13} height={13} /> {busy ? 'Starting…' : 'Start'}
+          <button className="btn btn--sm btn--run" onClick={onStart} disabled={busy}>
+            <IconPlay width={11} height={11} /> {busy ? 'Starting…' : 'Start'}
           </button>
         )}
       </div>
@@ -338,6 +351,77 @@ export function GitPanel() {
     appUpdate?.phase === 'downloading' ||
     appUpdate?.canCheck === false
 
+  const hasFiles = git.files.length > 0
+  const anyLive = isLive(devTerm) || isLive(testTerm)
+  const runStatus =
+    isLive(devTerm) && isLive(testTerm)
+      ? 'dev + tests running'
+      : isLive(devTerm)
+        ? 'dev running'
+        : isLive(testTerm)
+          ? 'tests running'
+          : 'idle'
+
+  const runSection = (
+    <div className="git__run">
+      <div className="git__runHead">
+        <span className="git__runIcon">
+          <IconBolt width={18} height={18} />
+        </span>
+        <div>
+          <div className="eyebrow">local run</div>
+          <h3 className="git__runTitle">Preview &amp; test this build locally</h3>
+          <p className="git__runSub">
+            Boot the dev build and run the test suite straight from here — no GitHub release,
+            no app update round-trip. Verify your changes live before you publish.
+          </p>
+        </div>
+      </div>
+      <div className="git__runProcs">
+        <ProcRow
+          label="Dev server"
+          command={DEV_COMMAND}
+          hint="Hot-reloading preview build"
+          icon={<IconServer width={17} height={17} />}
+          tone="dev"
+          term={devTerm}
+          busy={busy === 'dev' || busy === 'run'}
+          onStart={() => void startProcess('dev')}
+          onStop={() => void stopProcess('dev')}
+          onOpen={openTerminals}
+        />
+        <ProcRow
+          label="Tests"
+          command={TEST_COMMAND}
+          hint="Run the Vitest suite once"
+          icon={<IconBeaker width={17} height={17} />}
+          tone="test"
+          term={testTerm}
+          busy={busy === 'test' || busy === 'run'}
+          onStart={() => void startProcess('test')}
+          onStop={() => void stopProcess('test')}
+          onOpen={openTerminals}
+        />
+      </div>
+    </div>
+  )
+
+  const runBar = (
+    <div className="git__runBar">
+      <span className="git__runBarStatus">
+        <span className={`runproc__dot ${anyLive ? 'runproc__dot--live' : ''}`} />
+        {runStatus}
+      </span>
+      <div className="git__runBarSpacer" />
+      <button className="btn" onClick={openTerminals}>
+        <IconTerminal width={13} height={13} /> Open terminals
+      </button>
+      <button className="btn btn--accent" onClick={startBoth} disabled={busy === 'run'}>
+        <IconBolt width={13} height={13} /> {busy === 'run' ? 'Starting…' : 'Start dev + test'}
+      </button>
+    </div>
+  )
+
   return (
     <div className="panel panel--stagger">
       <div className="panel__header">
@@ -439,12 +523,10 @@ export function GitPanel() {
         {notice ? <span className="chip">{notice}</span> : null}
       </div>
 
-      <div className="git__cols">
-        <div className="card git__files scroll-y">
-          {git.files.length === 0 ? (
-            <div className="emptyline">Working tree clean.</div>
-          ) : (
-            (Object.keys(grouped) as (keyof typeof grouped)[]).map((group) =>
+      {hasFiles ? (
+        <div className="git__cols">
+          <div className="card git__files scroll-y">
+            {(Object.keys(grouped) as (keyof typeof grouped)[]).map((group) =>
               grouped[group].length ? (
                 <div key={group} className="gitgroup">
                   <div className="gitgroup__title eyebrow">{STATE_LABEL[group]}</div>
@@ -462,76 +544,29 @@ export function GitPanel() {
                   ))}
                 </div>
               ) : null,
-            )
-          )}
-        </div>
+            )}
+          </div>
 
-        <div className="card git__diff">
-          {selected ? (
-            <>
-              <div className="git__diffHead mono">{selected.path}</div>
-              <div className="git__diffBody scroll-y">
-                <DiffView diff={diff} />
-              </div>
-            </>
-          ) : (
-            <div className="git__run">
-              <div className="git__runHead">
-                <span className="git__runIcon">
-                  <IconBolt width={18} height={18} />
-                </span>
-                <div>
-                  <div className="eyebrow">local run</div>
-                  <h3 className="git__runTitle">Preview &amp; test this build locally</h3>
-                  <p className="git__runSub">
-                    Boot the dev build and run the test suite straight from here — no GitHub release,
-                    no app update round-trip. Verify your changes live before you publish.
-                  </p>
+          <div className="card git__diff">
+            {selected ? (
+              <>
+                <div className="git__diffHead mono">{selected.path}</div>
+                <div className="git__diffBody scroll-y">
+                  <DiffView diff={diff} />
                 </div>
-              </div>
-              <div className="git__runProcs">
-                <ProcRow
-                  label="Dev server"
-                  command={DEV_COMMAND}
-                  term={devTerm}
-                  busy={busy === 'dev' || busy === 'run'}
-                  onStart={() => void startProcess('dev')}
-                  onStop={() => void stopProcess('dev')}
-                  onOpen={openTerminals}
-                />
-                <ProcRow
-                  label="Tests"
-                  command={TEST_COMMAND}
-                  term={testTerm}
-                  busy={busy === 'test' || busy === 'run'}
-                  onStart={() => void startProcess('test')}
-                  onStop={() => void stopProcess('test')}
-                  onOpen={openTerminals}
-                />
-              </div>
-            </div>
-          )}
-          <div className="git__runBar">
-            <span className="git__runBarStatus">
-              <span className={`runproc__dot ${isLive(devTerm) || isLive(testTerm) ? 'runproc__dot--live' : ''}`} />
-              {isLive(devTerm) && isLive(testTerm)
-                ? 'dev + tests running'
-                : isLive(devTerm)
-                  ? 'dev running'
-                  : isLive(testTerm)
-                    ? 'tests running'
-                    : 'idle'}
-            </span>
-            <div className="git__runBarSpacer" />
-            <button className="btn" onClick={openTerminals}>
-              <IconTerminal width={13} height={13} /> Open terminals
-            </button>
-            <button className="btn btn--accent" onClick={startBoth} disabled={busy === 'run'}>
-              <IconBolt width={13} height={13} /> {busy === 'run' ? 'Starting…' : 'Start dev + test'}
-            </button>
+              </>
+            ) : (
+              runSection
+            )}
+            {runBar}
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="card git__diff git__diff--solo">
+          {runSection}
+          {runBar}
+        </div>
+      )}
     </div>
   )
 }
