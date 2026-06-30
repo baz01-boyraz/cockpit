@@ -419,6 +419,7 @@ export function createMockApi(): CockpitApi {
           projectId: input.projectId,
           name: input.name ?? `Terminal ${list.length + 1}`,
           role: input.role ?? null,
+          alias: null,
           cwd: '.',
           shell: '/bin/zsh',
           status: 'running',
@@ -448,12 +449,13 @@ export function createMockApi(): CockpitApi {
         if (found) found.status = 'running'
         return found as TerminalSession
       },
-      rename: async (sessionId, name, role) => {
+      rename: async (sessionId, name, role, alias) => {
         let found: TerminalSession | undefined
         for (const list of Object.values(terminals)) found = list.find((s) => s.id === sessionId) ?? found
         if (found) {
           found.name = name
           if (role !== undefined) found.role = role
+          if (alias !== undefined) found.alias = alias
         }
         return found as TerminalSession
       },
@@ -464,6 +466,7 @@ export function createMockApi(): CockpitApi {
           projectId,
           name: agent === 'claude' ? 'Claude Code' : 'Codex',
           role: agent,
+          alias: null,
           cwd: '.',
           shell: '/bin/zsh',
           status: 'running',
@@ -484,6 +487,7 @@ export function createMockApi(): CockpitApi {
           projectId,
           name: 'Claude Code',
           role: 'claude',
+          alias: null,
           cwd: '.',
           shell: '/bin/zsh',
           status: 'running',

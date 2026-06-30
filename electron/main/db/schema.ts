@@ -186,3 +186,14 @@ CREATE TABLE IF NOT EXISTS insight_dismissals (
   PRIMARY KEY (project_id, matched_pattern)
 );
 `
+
+/**
+ * v3 — optional per-terminal alias (a user-set task label shown next to the
+ * agent name). Forward-only DDL; `terminal_sessions` predates this column so it
+ * is added via ALTER. Not added to SCHEMA_V1 — a fresh DB runs V1 (no column)
+ * then this ALTER, and SQLite has no `ADD COLUMN IF NOT EXISTS`, so defining it
+ * in both would throw "duplicate column name".
+ */
+export const SCHEMA_V3 = /* sql */ `
+ALTER TABLE terminal_sessions ADD COLUMN alias TEXT;
+`

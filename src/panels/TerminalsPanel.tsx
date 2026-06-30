@@ -84,6 +84,95 @@ function autoGridShape(count: number, measuredWidth: number): { cols: number; ro
   return { cols: 3, rows: Math.ceil(count / 3) }
 }
 
+type AliasSurface = 'tab' | 'pane'
+
+interface AliasEdit {
+  id: string
+  surface: AliasSurface
+}
+
+interface AliasControlProps {
+  session: TerminalSession
+  surface: AliasSurface
+  editing: boolean
+  value: string
+  onChange: (value: string) => void
+  onBeginEdit: () => void
+  onCommit: () => void
+  onCancel: () => void
+}
+
+/**
+ * The per-terminal task label. Shows an ember pill when set, a faint "+ label"
+ * affordance on hover when empty, and an inline input while editing. Rendered in
+ * both the tab strip and the pane header — `surface` keeps only the clicked one
+ * focused so the two inputs never fight over autofocus in grid mode.
+ */
+function AliasControl({
+  session,
+  surface,
+  editing,
+  value,
+  onChange,
+  onBeginEdit,
+  onCommit,
+  onCancel,
+}: AliasControlProps) {
+  const prefix = surface === 'tab' ? 'tab' : 'termpane'
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        className="tab__rename"
+        value={value}
+        placeholder="label…"
+        maxLength={48}
+        aria-label="Terminal label"
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onCommit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') onCommit()
+          if (e.key === 'Escape') onCancel()
+        }}
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+      />
+    )
+  }
+
+  if (session.alias) {
+    return (
+      <button
+        type="button"
+        className={`${prefix}__alias`}
+        title="Edit label"
+        onClick={(e) => {
+          e.stopPropagation()
+          onBeginEdit()
+        }}
+        onDoubleClick={(e) => e.stopPropagation()}
+      >
+        {session.alias}
+      </button>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      className={`${prefix}__aliasAdd`}
+      title="Add a label"
+      onClick={(e) => {
+        e.stopPropagation()
+        onBeginEdit()
+      }}
+    >
+      <IconPlus width={10} height={10} /> label
+    </button>
+  )
+}
+
 export function TerminalsPanel({ panelActive = true }: { panelActive?: boolean }) {
   const terminals = useStore((s) => s.terminals)
   const activeProjectId = useStore((s) => s.activeProjectId)
@@ -93,7 +182,7 @@ export function TerminalsPanel({ panelActive = true }: { panelActive?: boolean }
   const dragRef = useRef<SplitDrag | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [mode, setMode] = useState<LayoutMode>('auto')
-  const [renaming, setRenaming] = useState<string | null>(null)
+  const [renaming, setRenaming] = useState<AliasEdit | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [stageWidth, setStageWidth] = useState(DEFAULT_STAGE_WIDTH)
   const [splitState, setSplitState] = useState<SplitState>(() => ({ cols: [100], rows: [100] }))
@@ -269,11 +358,16 @@ export function TerminalsPanel({ panelActive = true }: { panelActive?: boolean }
     setMode('focus')
   }
 
+  const beginAliasEdit = (t: TerminalSession, surface: AliasSurface) => {
+    setRenaming({ id: t.id, surface })
+    setRenameValue(t.alias ?? '')
+  }
+
   const commitRename = async (t: TerminalSession) => {
-    const name = renameValue.trim()
+    const next = renameValue.trim() || null
     setRenaming(null)
-    if (name && name !== t.name) {
-      await cockpit().terminals.rename(t.id, name, t.role)
+    if (next !== (t.alias ?? null)) {
+      await cockpit().terminals.rename(t.id, t.name, t.role, next)
       await refreshTerminals()
     }
   }
@@ -338,10 +432,7 @@ export function TerminalsPanel({ panelActive = true }: { panelActive?: boolean }
                 t.status !== 'running' ? 'tab--dead' : ''
               }`}
               onClick={() => setActiveId(t.id)}
-              onDoubleClick={() => {
-                setRenaming(t.id)
-                setRenameValue(t.name)
-              }}
+              onDoubleClick={() => beginAliasEdit(t, 'tab')}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault()
@@ -350,23 +441,18 @@ export function TerminalsPanel({ panelActive = true }: { panelActive?: boolean }
               }}
             >
               <span className={`tab__dot ${t.status === 'running' ? 'tab__dot--live' : ''}`} />
-              {renaming === t.id ? (
-                <input
-                  autoFocus
-                  className="tab__rename"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onBlur={() => commitRename(t)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') commitRename(t)
-                    if (e.key === 'Escape') setRenaming(null)
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              ) : (
-                <span className="tab__name">{t.name}</span>
-              )}
+              <span className="tab__name">{t.name}</span>
               {t.role && <span className="tab__role mono">{ROLE_LABEL[t.role]}</span>}
+              <AliasControl
+                session={t}
+                surface="tab"
+                editing={renaming?.id === t.id && renaming.surface === 'tab'}
+                value={renameValue}
+                onChange={setRenameValue}
+                onBeginEdit={() => beginAliasEdit(t, 'tab')}
+                onCommit={() => commitRename(t)}
+                onCancel={() => setRenaming(null)}
+              />
               <button
                 className="tab__close"
                 onClick={(e) => {
@@ -450,10 +536,23 @@ export function TerminalsPanel({ panelActive = true }: { panelActive?: boolean }
               onPointerDownCapture={() => setActiveId(t.id)}
             >
               {visibleMode === 'auto' && (
-                <div className="termpane__head">
+                <div
+                  className="termpane__head"
+                  onDoubleClick={() => beginAliasEdit(t, 'pane')}
+                >
                   <span className={`tab__dot ${t.status === 'running' ? 'tab__dot--live' : ''}`} />
                   <span className="termpane__name">{t.name}</span>
                   {t.role && <span className="termpane__role mono">{ROLE_LABEL[t.role]}</span>}
+                  <AliasControl
+                    session={t}
+                    surface="pane"
+                    editing={renaming?.id === t.id && renaming.surface === 'pane'}
+                    value={renameValue}
+                    onChange={setRenameValue}
+                    onBeginEdit={() => beginAliasEdit(t, 'pane')}
+                    onCommit={() => commitRename(t)}
+                    onCancel={() => setRenaming(null)}
+                  />
                   <div className="termpane__headTools">
                     <button className="iconbtn" title="Focus" onClick={() => focusTerminal(t.id)}>
                       <IconFocus width={13} height={13} />

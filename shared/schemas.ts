@@ -135,6 +135,7 @@ export const terminalRenameSchema = z.object({
   sessionId: z.string().min(1),
   name: z.string().min(1).max(64),
   role: terminalRoleSchema.nullable().optional(),
+  alias: z.string().max(48).nullable().optional(),
 })
 
 /**

@@ -149,7 +149,12 @@ export interface CockpitApi {
     resize(sessionId: string, cols: number, rows: number): Promise<void>
     kill(sessionId: string): Promise<void>
     restart(sessionId: string): Promise<TerminalSession>
-    rename(sessionId: string, name: string, role?: TerminalRole | null): Promise<TerminalSession>
+    rename(
+      sessionId: string,
+      name: string,
+      role?: TerminalRole | null,
+      alias?: string | null,
+    ): Promise<TerminalSession>
     launchAgent(projectId: string, agent: 'claude' | 'codex'): Promise<TerminalSession>
     /** Past Claude Code conversations for this project, newest first. */
     claudeSessions(projectId: string): Promise<ClaudeSessionSummary[]>

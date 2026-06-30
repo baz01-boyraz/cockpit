@@ -65,8 +65,8 @@ export function registerIpc(services: Services): void {
   handle(IPC.terminalsKill, (p) => services.terminals.kill(terminalIdSchema.parse(p).sessionId))
   handle(IPC.terminalsRestart, (p) => services.terminals.restart(terminalIdSchema.parse(p).sessionId))
   handle(IPC.terminalsRename, (p) => {
-    const { sessionId, name, role } = terminalRenameSchema.parse(p)
-    return services.terminals.rename(sessionId, name, role)
+    const { sessionId, name, role, alias } = terminalRenameSchema.parse(p)
+    return services.terminals.rename(sessionId, name, role, alias)
   })
   handle(IPC.terminalsLaunchAgent, (p) => {
     const { projectId, agent } = z

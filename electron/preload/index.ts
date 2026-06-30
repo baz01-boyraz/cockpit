@@ -33,7 +33,8 @@ const api: CockpitApi = {
     resize: (sessionId, cols, rows) => invoke(IPC.terminalsResize, { sessionId, cols, rows }),
     kill: (sessionId) => invoke(IPC.terminalsKill, { sessionId }),
     restart: (sessionId) => invoke(IPC.terminalsRestart, { sessionId }),
-    rename: (sessionId, name, role) => invoke(IPC.terminalsRename, { sessionId, name, role }),
+    rename: (sessionId, name, role, alias) =>
+      invoke(IPC.terminalsRename, { sessionId, name, role, alias }),
     launchAgent: (projectId, agent) => invoke(IPC.terminalsLaunchAgent, { projectId, agent }),
     claudeSessions: (projectId) => invoke(IPC.terminalsClaudeSessions, { projectId }),
     resumeClaude: (projectId, sessionId) => invoke(IPC.terminalsResumeClaude, { projectId, sessionId }),

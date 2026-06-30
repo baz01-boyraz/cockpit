@@ -53,6 +53,7 @@ export class TerminalManager {
     projectId: string
     name?: string
     role?: TerminalRole | null
+    alias?: string | null
     cwd?: string
     command?: string | null
   }): TerminalSession {
@@ -68,6 +69,7 @@ export class TerminalManager {
       projectId: input.projectId,
       name: input.name?.trim() || this.autoName(input.projectId),
       role: input.role ?? null,
+      alias: input.alias ?? null,
       cwd,
       shell,
       status: 'running',
@@ -162,17 +164,23 @@ export class TerminalManager {
   restart(sessionId: string): TerminalSession {
     const live = this.live.get(sessionId)
     if (!live) throw new Error(`Terminal ${sessionId} not found`)
-    const { projectId, name, role, cwd } = live.session
+    const { projectId, name, role, alias, cwd } = live.session
     const command = live.command
     this.kill(sessionId)
-    return this.create({ projectId, name, role, cwd, command })
+    return this.create({ projectId, name, role, alias, cwd, command })
   }
 
-  rename(sessionId: string, name: string, role?: TerminalRole | null): TerminalSession {
+  rename(
+    sessionId: string,
+    name: string,
+    role?: TerminalRole | null,
+    alias?: string | null,
+  ): TerminalSession {
     const live = this.live.get(sessionId)
     if (!live) throw new Error(`Terminal ${sessionId} not found`)
     live.session.name = name
     if (role !== undefined) live.session.role = role
+    if (alias !== undefined) live.session.alias = alias
     this.updateRow(live.session)
     return live.session
   }
@@ -232,8 +240,8 @@ export class TerminalManager {
     this.db
       .prepare(
         `INSERT INTO terminal_sessions
-         (id, project_id, name, role, cwd, shell, status, pid, exit_code, created_at, last_active_at)
-         VALUES (@id, @projectId, @name, @role, @cwd, @shell, @status, @pid, @exitCode, @createdAt, @lastActiveAt)`,
+         (id, project_id, name, role, alias, cwd, shell, status, pid, exit_code, created_at, last_active_at)
+         VALUES (@id, @projectId, @name, @role, @alias, @cwd, @shell, @status, @pid, @exitCode, @createdAt, @lastActiveAt)`,
       )
       .run({ ...s })
   }
@@ -242,7 +250,7 @@ export class TerminalManager {
     if (this.disposed) return
     this.db
       .prepare(
-        `UPDATE terminal_sessions SET name=@name, role=@role, status=@status, pid=@pid,
+        `UPDATE terminal_sessions SET name=@name, role=@role, alias=@alias, status=@status, pid=@pid,
          exit_code=@exitCode, last_active_at=@lastActiveAt WHERE id=@id`,
       )
       .run({ ...s })

@@ -77,6 +77,8 @@ export interface TerminalSession {
   projectId: string
   name: string
   role: TerminalRole | null
+  /** Optional user-set task label shown next to the agent name (e.g. "auth refactor"). */
+  alias: string | null
   cwd: string
   shell: string
   status: TerminalStatus
