@@ -26,6 +26,11 @@ npm-debug.log*
 
 # screenshots (scratch review artifacts)
 temporary screenshots/*.png
+# stray review screenshots dumped at the repo root
+/*.png
+
+# browser-automation (Playwright MCP) scratch captures
+.playwright-mcp/
 
 # os
 .DS_Store

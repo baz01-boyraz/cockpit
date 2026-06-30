@@ -3314,7 +3314,14 @@
   gap: var(--sp-3);
   margin-top: auto;
 }
+/* solo (clean tree): keep the hero copy + run rows compact at the top and
+   let the action bar anchor the bottom, instead of floating the rows into a
+   dead vertical gap */
+.git__diff--solo .git__run { flex: 0 0 auto; gap: var(--sp-4); }
+.git__diff--solo .git__runProcs { margin-top: var(--sp-4); }
+.git__diff--solo .git__runBar { margin-top: auto; }
 .runproc {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--sp-3);
@@ -3324,13 +3331,22 @@
   border: 1px solid var(--border);
   transition:
     border-color var(--dur) var(--ease-out),
-    background-color var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out),
     transform var(--dur) var(--ease-spring);
 }
+/* premium hover: lift + tone-matched glow, never a flat grey fill */
 .runproc:hover {
-  border-color: var(--border-strong);
-  background: var(--surface-2);
   transform: translateY(-1px);
+  border-color: var(--border-strong);
+  box-shadow: 0 12px 30px -16px rgba(0, 0, 0, 0.72);
+}
+.runproc--dev:hover {
+  border-color: var(--border-accent);
+  box-shadow: 0 14px 34px -16px var(--accent-glow);
+}
+.runproc--test:hover {
+  border-color: color-mix(in srgb, var(--signal) 42%, var(--border));
+  box-shadow: 0 14px 34px -16px rgba(205, 232, 95, 0.3);
 }
 .runproc--live {
   border-color: color-mix(in srgb, var(--success) 38%, var(--border));
@@ -3354,6 +3370,7 @@
 .runproc__icon--dev { color: var(--accent); border-color: var(--border-accent); background: var(--accent-wash); }
 .runproc__icon--test { color: var(--signal); border-color: var(--signal-dim); background: var(--signal-dim); }
 .runproc--live .runproc__icon { color: var(--success); border-color: color-mix(in srgb, var(--success) 45%, var(--border)); }
+/* live indicator only — hidden when idle so the icon tile stays clean */
 .runproc__pulse {
   position: absolute;
   top: -3px;
@@ -3361,12 +3378,16 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: transparent;
-  border: 2px solid var(--surface-1);
-  transition: background-color var(--dur) var(--ease-out);
+  background: var(--success);
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-spring);
 }
 .runproc__pulse--live {
-  background: var(--success);
+  opacity: 1;
+  transform: scale(1);
   box-shadow: 0 0 0 3px rgba(147, 196, 106, 0.22);
 }
 .runproc__body { flex: 1; min-width: 0; }
@@ -3398,12 +3419,15 @@
 .runproc__right { display: flex; align-items: center; gap: var(--sp-2); flex-shrink: 0; }
 .btn--run {
   border-color: var(--border-accent);
-  color: var(--accent);
+  color: var(--accent-hi);
   background: var(--accent-wash);
+  font-weight: 600;
 }
 .btn--run:hover:not(:disabled) {
   border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: 0 8px 22px -10px var(--accent-glow);
+  transform: translateY(-1px);
 }
 .git__runBar {
   display: flex;
