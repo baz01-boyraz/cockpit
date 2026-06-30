@@ -3811,13 +3811,13 @@
   border-radius: var(--r-md);
   border: 1px solid var(--border);
   background: var(--surface-1);
+  color: var(--text);
   text-align: left;
   overflow: hidden;
   transition: border-color var(--dur) var(--ease-out), background var(--dur) var(--ease-out),
     box-shadow var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
 }
-/* Left accent rail — slides up from nothing on hover / active for a tactile,
-   interactive "this is selectable" signal. */
+/* Left accent rail — eases up on hover / active as a calm "selectable" cue. */
 .projcard::before {
   content: '';
   position: absolute;
@@ -3835,10 +3835,11 @@
   border-color: var(--border-accent);
   background: var(--surface-2);
   transform: translateY(-1px);
-  box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.6), 0 0 22px -6px var(--accent-glow);
+  box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.55), 0 0 18px -8px var(--accent-glow);
 }
-.projcard:hover::before {
-  height: 58%;
+.projcard:hover::before,
+.projcard--active::before {
+  height: 56%;
   opacity: 1;
 }
 .projcard:focus-visible {
@@ -3852,11 +3853,6 @@
 .projcard--active {
   border-color: var(--border-accent);
   background: var(--accent-wash);
-  box-shadow: inset 0 0 0 1px var(--border-accent), 0 0 26px -8px var(--accent-glow);
-}
-.projcard--active::before {
-  height: 66%;
-  opacity: 1;
 }
 .projcard__glyph {
   position: relative;
@@ -3878,18 +3874,23 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.18), transparent 55%);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.16), transparent 55%);
   pointer-events: none;
 }
 .projcard:hover .projcard__glyph {
-  transform: scale(1.06) rotate(-1.5deg);
+  transform: scale(1.05);
 }
 .projcard__body { flex: 1; min-width: 0; }
-.projcard__name { font-weight: 600; }
+.projcard__name {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .projcard__path { font-size: var(--fs-xs); color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.projcard__stack { display: flex; gap: 4px; flex-shrink: 0; transition: transform var(--dur) var(--ease-spring); }
-.projcard:hover .projcard__stack { transform: translateX(-2px); }
-/* Enter affordance — a chevron that eases in on hover, the "press to open" cue. */
+.projcard__stack { display: flex; gap: 4px; flex-shrink: 0; }
+/* Enter affordance — a chevron that eases in on hover, the "open" cue. */
 .projcard__enter {
   display: grid;
   place-items: center;
@@ -3902,14 +3903,12 @@
   transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-spring),
     width var(--dur) var(--ease-spring), margin var(--dur) var(--ease-spring);
 }
-.projcard:hover .projcard__enter,
-.projcard--active .projcard__enter {
+.projcard:hover .projcard__enter {
   width: 16px;
   margin-left: 0;
   opacity: 1;
   transform: translateX(0);
 }
-.projcard--active .projcard__enter { color: var(--accent-hi); }
 
 .resumecard {
   display: flex;

@@ -58,6 +58,9 @@ h4 {
 
 button {
   font-family: inherit;
+  /* Inherit text color rather than the UA `buttontext` system color, which
+     flips to black when no `color-scheme: dark` is in effect (Electron). */
+  color: inherit;
   cursor: pointer;
 }
 

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import { IconedFolder } from './ProjectSwitcher.helpers'
-import { IconFolder, IconPlus, IconX } from './icons'
+import { IconChevron, IconFolder, IconPlus, IconX } from './icons'
 
 export function ProjectSwitcher() {
   const projects = useStore((s) => s.projects)
@@ -73,6 +73,9 @@ export function ProjectSwitcher() {
                   </span>
                 ))}
               </div>
+              <span className="projcard__enter" aria-hidden>
+                <IconChevron width={16} height={16} />
+              </span>
             </button>
           ))}
           {projects.length === 0 && (
@@ -88,13 +91,16 @@ export function ProjectSwitcher() {
             <span>or paste an absolute path</span>
           </div>
           <div className="modal__addRow">
-            <input
-              className="modal__input mono"
-              placeholder="/absolute/path/to/project"
-              value={path}
-              onChange={(e) => setPath(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && onAdd()}
-            />
+            <label className="modal__inputWrap">
+              <IconFolder width={14} height={14} className="modal__inputIcon" />
+              <input
+                className="modal__input modal__input--path mono"
+                placeholder="/absolute/path/to/project"
+                value={path}
+                onChange={(e) => setPath(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && onAdd()}
+              />
+            </label>
             <input
               className="modal__input modal__input--name"
               placeholder="Name (optional)"
