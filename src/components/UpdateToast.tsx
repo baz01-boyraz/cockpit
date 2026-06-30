@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import { IconBolt, IconDownload, IconRestart, IconX } from './icons'
+import { AnimatedDownload } from './AnimatedDownload'
 
 // Remember the version a developer waved away so the card stops nagging for that
 // release — a newer version clears it because the stored string no longer matches.
@@ -108,12 +109,15 @@ export function UpdateToast() {
 
       {note && <p className="updateToast__note">{note}</p>}
 
-      {phase === 'downloading' ? (
-        <div className="updateToast__progress" aria-label={`Downloading ${percent}%`}>
-          <span className="updateToast__progressFill" style={{ width: `${percent}%` }} />
-          <span className="updateToast__progressPct mono">{percent}%</span>
-        </div>
-      ) : (
+      {isFlowing && (
+        <AnimatedDownload
+          percent={phase === 'downloaded' ? 100 : percent}
+          phase={phase === 'downloaded' ? 'downloaded' : 'downloading'}
+          version={appUpdate.latestVersion}
+        />
+      )}
+
+      {phase !== 'downloading' && (
         <button
           type="button"
           className="updateToast__action"

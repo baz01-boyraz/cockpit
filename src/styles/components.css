@@ -3733,8 +3733,39 @@
   background: rgba(8, 9, 11, 0.66);
   backdrop-filter: blur(6px);
   padding: var(--sp-6);
+  animation: modal-backdrop-in var(--dur) var(--ease-out) both;
+}
+/* Ambient ember light pooled behind the panel — the same subtle glow the
+   cockpit's body uses, scoped to the floating surface for premium depth. */
+.modal::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(640px 440px at 50% 40%, var(--accent-glow), transparent 68%);
+  opacity: 0.55;
+  pointer-events: none;
+  animation: modal-glow-in var(--dur-slow) var(--ease-out) both;
+}
+@keyframes modal-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes modal-glow-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+  to {
+    opacity: 0.55;
+    transform: translateY(0) scale(1);
+  }
 }
 .modal__panel {
+  position: relative;
   width: min(720px, 100%);
   max-height: 80vh;
   display: flex;
@@ -3742,13 +3773,37 @@
   background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
   border: 1px solid var(--border-strong);
   border-radius: var(--r-xl);
-  box-shadow: var(--shadow-float);
+  box-shadow: var(--shadow-float), var(--bevel);
   overflow: hidden;
+}
+/* Premium spring entrance — overrides the generic .animate-in fade for the
+   floating picker panels (higher specificity via the .modal ancestor). */
+.modal .modal__panel {
+  animation: modal-panel-in var(--dur-slow) var(--ease-spring) both;
+}
+@keyframes modal-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 .modal__head { display: flex; align-items: flex-start; justify-content: space-between; padding: var(--sp-5) var(--sp-5) var(--sp-4); }
 .modal__title { font-size: var(--fs-h1); margin-top: 2px; }
 .modal__list { padding: 0 var(--sp-4); overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-2); }
+/* Staggered card entrance — the list rises in on mount, premium not janky. */
+.modal__list .projcard { animation: rise-in var(--dur-slow) var(--ease-spring) both; }
+.modal__list .projcard:nth-child(1) { animation-delay: 40ms; }
+.modal__list .projcard:nth-child(2) { animation-delay: 90ms; }
+.modal__list .projcard:nth-child(3) { animation-delay: 140ms; }
+.modal__list .projcard:nth-child(4) { animation-delay: 190ms; }
+.modal__list .projcard:nth-child(5) { animation-delay: 240ms; }
+.modal__list .projcard:nth-child(n + 6) { animation-delay: 280ms; }
 .projcard {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--sp-3);
@@ -3757,11 +3812,54 @@
   border: 1px solid var(--border);
   background: var(--surface-1);
   text-align: left;
-  transition: border-color var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+  overflow: hidden;
+  transition: border-color var(--dur) var(--ease-out), background var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
 }
-.projcard:hover { border-color: var(--border-accent); transform: translateY(-1px); }
-.projcard--active { border-color: var(--border-accent); background: var(--accent-wash); }
+/* Left accent rail — slides up from nothing on hover / active for a tactile,
+   interactive "this is selectable" signal. */
+.projcard::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 0;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: height var(--dur) var(--ease-spring), opacity var(--dur) var(--ease-out);
+}
+.projcard:hover {
+  border-color: var(--border-accent);
+  background: var(--surface-2);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.6), 0 0 22px -6px var(--accent-glow);
+}
+.projcard:hover::before {
+  height: 58%;
+  opacity: 1;
+}
+.projcard:focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+.projcard:active {
+  transform: translateY(0) scale(0.995);
+}
+.projcard--active {
+  border-color: var(--border-accent);
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 1px var(--border-accent), 0 0 26px -8px var(--accent-glow);
+}
+.projcard--active::before {
+  height: 66%;
+  opacity: 1;
+}
 .projcard__glyph {
+  position: relative;
   width: 40px;
   height: 40px;
   border-radius: var(--r-md);
@@ -3771,11 +3869,47 @@
   font-size: var(--fs-sm);
   color: var(--text);
   flex-shrink: 0;
+  box-shadow: var(--bevel), var(--ring);
+  transition: transform var(--dur) var(--ease-spring);
+}
+/* Glassy top-light on the project glyph. */
+.projcard__glyph::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.18), transparent 55%);
+  pointer-events: none;
+}
+.projcard:hover .projcard__glyph {
+  transform: scale(1.06) rotate(-1.5deg);
 }
 .projcard__body { flex: 1; min-width: 0; }
 .projcard__name { font-weight: 600; }
 .projcard__path { font-size: var(--fs-xs); color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.projcard__stack { display: flex; gap: 4px; flex-shrink: 0; }
+.projcard__stack { display: flex; gap: 4px; flex-shrink: 0; transition: transform var(--dur) var(--ease-spring); }
+.projcard:hover .projcard__stack { transform: translateX(-2px); }
+/* Enter affordance — a chevron that eases in on hover, the "press to open" cue. */
+.projcard__enter {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 0;
+  margin-left: -4px;
+  color: var(--accent);
+  opacity: 0;
+  transform: translateX(-6px);
+  transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-spring),
+    width var(--dur) var(--ease-spring), margin var(--dur) var(--ease-spring);
+}
+.projcard:hover .projcard__enter,
+.projcard--active .projcard__enter {
+  width: 16px;
+  margin-left: 0;
+  opacity: 1;
+  transform: translateX(0);
+}
+.projcard--active .projcard__enter { color: var(--accent-hi); }
 
 .resumecard {
   display: flex;
@@ -3818,13 +3952,49 @@
 
 .modal__emptyState { padding: var(--sp-5); text-align: center; color: var(--text-faint); }
 .modal__add { padding: var(--sp-4) var(--sp-5) var(--sp-5); border-top: 1px solid var(--border); margin-top: var(--sp-3); }
-.modal__browse { width: 100%; justify-content: center; padding: 11px; font-size: var(--fs-body); }
+.modal__browse {
+  position: relative;
+  width: 100%;
+  justify-content: center;
+  padding: 12px;
+  font-size: var(--fs-body);
+  overflow: hidden;
+}
+/* Light sweep across the primary CTA on hover — premium, restrained. */
+.modal__browse::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 42%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transform: skewX(-18deg);
+  opacity: 0;
+  pointer-events: none;
+}
+.modal__browse:hover::after {
+  animation: browse-sheen 0.85s var(--ease-out);
+}
+@keyframes browse-sheen {
+  0% {
+    left: -60%;
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    left: 130%;
+    opacity: 0;
+  }
+}
 .modal__addDivider {
   display: flex;
   align-items: center;
   text-align: center;
   gap: var(--sp-3);
-  margin: var(--sp-3) 0;
+  margin: var(--sp-4) 0;
   color: var(--text-faint);
   font-size: var(--fs-xs);
 }
@@ -3833,22 +4003,66 @@
   content: '';
   flex: 1;
   height: 1px;
-  background: var(--border);
+}
+.modal__addDivider::before {
+  background: linear-gradient(90deg, transparent, var(--border-strong));
+}
+.modal__addDivider::after {
+  background: linear-gradient(90deg, var(--border-strong), transparent);
 }
 .modal__addRow { display: flex; gap: var(--sp-2); }
+.modal__inputWrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  min-width: 0;
+}
+.modal__inputIcon {
+  position: absolute;
+  left: var(--sp-3);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-faint);
+  pointer-events: none;
+  transition: color var(--dur) var(--ease-out);
+}
+.modal__inputWrap:focus-within .modal__inputIcon { color: var(--accent); }
 .modal__input {
   flex: 1;
-  padding: 9px var(--sp-3);
+  width: 100%;
+  padding: 10px var(--sp-3);
   border-radius: var(--r-md);
   background: var(--surface-inset);
   border: 1px solid var(--border);
   color: var(--text);
   outline: none;
   font-size: var(--fs-sm);
+  transition: border-color var(--dur) var(--ease-out), background var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
 }
-.modal__input:focus { border-color: var(--border-accent); }
+.modal__input::placeholder { color: var(--text-faint); }
+.modal__input:hover { border-color: var(--border-strong); }
+.modal__input:focus {
+  border-color: var(--border-accent);
+  background: var(--surface-1);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+.modal__input--path { padding-left: 34px; }
 .modal__input--name { max-width: 180px; }
 .modal__error { color: var(--danger); font-size: var(--fs-xs); margin-top: var(--sp-2); }
+
+@media (prefers-reduced-motion: reduce) {
+  .modal,
+  .modal::before,
+  .modal .modal__panel,
+  .modal__list .projcard {
+    animation-duration: 1ms;
+    animation-delay: 0ms !important;
+  }
+  .modal__browse:hover::after {
+    animation: none;
+  }
+}
 
 /* ----------------------------------------------------------------------------
    Update toast — premium bottom-right card announcing a published release.
@@ -4000,4 +4214,138 @@
 @media (prefers-reduced-motion: reduce) {
   .updateToast { animation: none; }
   .updateToast__action:hover { transform: none; }
+}
+
+/* Animated update-download panel — terminal-style progress.
+   Ported from a 21st.dev concept and re-themed to the ember system; the motion
+   is pure CSS (chevrons + dots) plus a small scramble driven in React. */
+.adl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: 100%;
+  font-family: var(--font-mono);
+}
+
+.adl__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.adl__chevs {
+  position: relative;
+  width: 20px;
+  height: 30px;
+  flex: none;
+  overflow: hidden;
+  color: var(--accent);
+}
+.adl__chev {
+  position: absolute;
+  left: 0;
+  top: 1px;
+  display: block;
+}
+.adl__chev svg { display: block; transform: rotate(90deg); }
+.adl--active .adl__chev { animation: adl-chev 1.5s var(--ease-out) infinite; }
+.adl--active .adl__chev--2 { animation-delay: 0.3s; }
+
+@keyframes adl-chev {
+  0% { transform: translateY(0); opacity: 0.35; }
+  50% { transform: translateY(8px); opacity: 1; }
+  100% { transform: translateY(0); opacity: 0.35; }
+}
+
+.adl__banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 4px 18px 4px 11px;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-on-accent);
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+  box-shadow: 0 0 18px var(--accent-glow);
+}
+.adl__bannerText { white-space: nowrap; }
+
+.adl__dots { display: inline-flex; margin-left: 2px; }
+.adl__dots span {
+  display: inline-block;
+  width: 5px;
+  text-align: center;
+  opacity: 0.25;
+}
+.adl--active .adl__dots span { animation: adl-dot 1.4s var(--ease-out) infinite; }
+.adl--active .adl__dots span:nth-child(2) { animation-delay: 0.2s; }
+.adl--active .adl__dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes adl-dot {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
+
+.adl__rule {
+  height: 2px;
+  border-radius: 999px;
+  background: var(--text-faint);
+  opacity: 0.55;
+}
+
+.adl__labels,
+.adl__values {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 0.7fr);
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.adl__label {
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.adl__value {
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+.adl__value--pct {
+  color: var(--accent-hi);
+  font-weight: 600;
+}
+
+.adl__bar {
+  display: flex;
+  align-items: center;
+  height: 11px;
+  padding: 2px;
+  border: 1px solid var(--border-accent);
+  border-radius: 999px;
+  background: var(--surface-inset);
+  overflow: hidden;
+}
+.adl__barFill {
+  height: 100%;
+  min-width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-dim), var(--accent), var(--accent-hi));
+  box-shadow: 0 0 10px var(--accent-glow);
+  transition: width 0.35s var(--ease-out);
+}
+
+.adl__accent {
+  width: 60%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adl__barFill { transition: none; }
 }

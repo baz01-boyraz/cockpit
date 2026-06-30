@@ -25,6 +25,7 @@ import {
   IconUpload,
   IconWarning,
 } from '../components/icons'
+import { AnimatedDownload } from '../components/AnimatedDownload'
 
 const STATE_LABEL: Record<string, string> = {
   staged: 'Staged',
@@ -495,10 +496,14 @@ export function GitPanel() {
           <div className="git__updateCopy">
             {appUpdate?.releaseName ?? appUpdate?.error ?? 'Check GitHub Releases for a packaged update.'}
           </div>
-          {appUpdate?.phase === 'downloading' ? (
-            <div className="git__progress">
-              <span style={{ width: `${Math.round(appUpdate.progressPercent ?? 0)}%` }} />
-            </div>
+          {appUpdate?.phase === 'downloading' || appUpdate?.phase === 'downloaded' ? (
+            <AnimatedDownload
+              percent={
+                appUpdate.phase === 'downloaded' ? 100 : Math.round(appUpdate.progressPercent ?? 0)
+              }
+              phase={appUpdate.phase === 'downloaded' ? 'downloaded' : 'downloading'}
+              version={appUpdate.latestVersion}
+            />
           ) : null}
           <button className="btn git__wideAction" onClick={runUpdateAction} disabled={updateDisabled}>
             {appUpdate?.phase === 'downloaded' ? <IconRestart width={14} height={14} /> : <IconDownload width={14} height={14} />}
