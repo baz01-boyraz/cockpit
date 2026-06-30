@@ -1,0 +1,510 @@
+/* ====================================================================
+   Notepad — rail launcher + slide-in quick-capture drawer.
+   Self-contained so the feature touches no shared stylesheet. Built on
+   the Obsidian-Ember tokens; animates only transform / opacity.
+   ==================================================================== */
+
+/* ---------- rail launcher (below Settings, above the engine bay) ---------- */
+.railNote {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+/* The premium hairline: a copper-kissed gradient that fades to nothing at
+   both ends, setting the notepad apart from the nav group above it. */
+.railNote__divider {
+  height: 1px;
+  margin: 0 var(--sp-2);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--border-strong) 20%,
+    var(--border-accent) 50%,
+    var(--border-strong) 80%,
+    transparent
+  );
+}
+.railNote__btn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: 9px var(--sp-3);
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-body);
+  font-weight: 500;
+  transition: color var(--dur) var(--ease-out), background var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out);
+}
+.railNote__btn:hover {
+  color: var(--text);
+  background: var(--surface-1);
+}
+.railNote__btn:focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 1px var(--accent-glow);
+}
+.railNote__btn:active {
+  transform: translateY(0.5px);
+}
+.railNote__btn--active {
+  color: var(--text);
+  background: linear-gradient(90deg, var(--accent-wash), var(--surface-2) 62%);
+  border-color: var(--border-strong);
+  box-shadow: var(--bevel);
+}
+/* Glyph stays ember-lit so the notepad reads as its own distinct zone. */
+.railNote__glyph {
+  display: inline-grid;
+  place-items: center;
+  color: var(--accent-hi);
+}
+.railNote__label {
+  flex: 1;
+  text-align: left;
+}
+.railNote__count {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+
+/* ---------- drawer root + scrim ---------- */
+.notepad {
+  position: fixed;
+  inset: 0;
+  z-index: 90; /* above rail (55) + topbar (50), below modals (100) */
+  pointer-events: none;
+}
+.notepad--open {
+  pointer-events: auto;
+}
+.notepad__scrim {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  cursor: default;
+  background: rgba(6, 7, 9, 0.5);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-slow) var(--ease-out);
+}
+.notepad--open .notepad__scrim {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ---------- drawer panel ---------- */
+.notepad__panel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--rail-w);
+  width: min(360px, calc(100vw - var(--rail-w) - 16px));
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: linear-gradient(180deg, var(--surface-1), var(--bg-deep));
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-float);
+  transform: translateX(-14px);
+  opacity: 0;
+  pointer-events: none;
+  /* Hidden when closed so its inputs/buttons leave the keyboard tab order;
+     visibility flips off only after the fade-out so the close animation plays. */
+  visibility: hidden;
+  transition: transform var(--dur-slow) var(--ease-spring),
+    opacity var(--dur-slow) var(--ease-out), visibility 0s linear var(--dur-slow);
+}
+.notepad--open .notepad__panel {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transition: transform var(--dur-slow) var(--ease-spring),
+    opacity var(--dur-slow) var(--ease-out), visibility 0s;
+}
+
+.notepad__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-4) var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+.notepad__heading {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+.notepad__eyebrow {
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--text-faint);
+}
+.notepad__title {
+  font-size: var(--fs-h1);
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+}
+.notepad__count {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 2px 9px;
+  border-radius: var(--r-pill);
+}
+.notepad__close {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-faint);
+  transition: color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+}
+.notepad__close:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+.notepad__close:focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+}
+
+/* ---------- composer ---------- */
+.notepad__composer {
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+.notepad__input {
+  width: 100%;
+  resize: none;
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  transition: border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+}
+.notepad__input::placeholder {
+  color: var(--text-faint);
+}
+.notepad__input:focus,
+.notepad__input:focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+.notepad__composerFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.notepad__hint {
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+}
+.notepad__save {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  padding: 5px 14px;
+  border-radius: var(--r-sm);
+  color: var(--text-on-accent);
+  background: linear-gradient(150deg, var(--accent-hi), var(--accent));
+  border: 1px solid var(--accent);
+  box-shadow: var(--shadow-accent);
+  transition: opacity var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.notepad__save:hover {
+  opacity: 0.92;
+}
+.notepad__save:active {
+  transform: translateY(0.5px);
+}
+.notepad__save:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.notepad__save:disabled {
+  opacity: 0.4;
+  box-shadow: none;
+  cursor: default;
+}
+
+/* ---------- search ---------- */
+.notepad__search {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: var(--sp-3) var(--sp-4) 0;
+  padding: 0 var(--sp-3);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  transition: border-color var(--dur) var(--ease-out);
+}
+.notepad__search:focus-within {
+  border-color: var(--border-accent);
+}
+.notepad__searchIcon {
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+.notepad__searchInput {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 8px 0;
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+.notepad__searchInput::placeholder {
+  color: var(--text-faint);
+}
+.notepad__searchClear {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  transition: color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+}
+.notepad__searchClear:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+/* ---------- list + empty state ---------- */
+.notepad__list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+}
+.notepad__empty {
+  margin: auto;
+  max-width: 240px;
+  padding: var(--sp-6) var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  text-align: center;
+}
+.notepad__emptyGlyph {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-lg);
+  color: var(--accent-hi);
+  background: var(--accent-wash);
+  border: 1px solid var(--border-accent);
+  box-shadow: var(--bevel);
+  margin-bottom: var(--sp-1);
+}
+.notepad__emptyTitle {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text);
+}
+.notepad__emptyText {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+
+/* ---------- note card ---------- */
+.noteCard {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--bevel);
+  transition: border-color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+  animation: fade-rise var(--dur) var(--ease-out) both;
+}
+.noteCard:hover {
+  border-color: var(--border-strong);
+}
+.noteCard--pinned {
+  border-color: var(--border-accent);
+  background: linear-gradient(180deg, var(--accent-wash), var(--surface-1) 58%);
+}
+.noteCard__body {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: text;
+  padding: var(--sp-3) var(--sp-3) var(--sp-2);
+}
+.noteCard__text {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  /* Long notes stay tidy in the list; full text shows when editing. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 8;
+  overflow: hidden;
+}
+.noteCard__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-3) var(--sp-2);
+}
+.noteCard__time {
+  flex: 1;
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+}
+.noteCard__actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease-out);
+}
+.noteCard:hover .noteCard__actions,
+.noteCard:focus-within .noteCard__actions,
+.noteCard--pinned .noteCard__actions {
+  opacity: 1;
+}
+.noteCard__act {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-faint);
+  transition: color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+}
+.noteCard__act:hover {
+  color: var(--text);
+  background: var(--surface-3);
+}
+.noteCard__act:focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+}
+.noteCard__act--on {
+  color: var(--accent-hi);
+}
+.noteCard__act--danger:hover {
+  color: var(--danger);
+  background: var(--danger-wash);
+}
+
+/* edit mode */
+.noteCard--editing {
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+.noteCard__editor {
+  width: 100%;
+  resize: none;
+  background: var(--surface-inset);
+  border: none;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  padding: var(--sp-3);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  outline: none;
+}
+.noteCard__editHint {
+  padding: 4px var(--sp-3) 8px;
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+}
+
+/* ---------- undo snackbar ---------- */
+.notepad__undo {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: 0 var(--sp-4) var(--sp-4);
+  padding: 10px var(--sp-3);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-1);
+  animation: fade-rise var(--dur) var(--ease-out) both;
+}
+.notepad__undoText {
+  flex: 1;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.notepad__undoBtn {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--accent-hi);
+  background: transparent;
+  border: none;
+  padding: 2px 8px;
+  border-radius: var(--r-sm);
+  transition: color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+}
+.notepad__undoBtn:hover {
+  color: var(--accent);
+  background: var(--accent-wash);
+}
+.notepad__undoBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .notepad__panel,
+  .notepad__scrim,
+  .noteCard,
+  .notepad__undo {
+    transition: opacity var(--dur) linear;
+    animation: none;
+  }
+  .notepad__panel {
+    transform: none;
+  }
+}

@@ -3,6 +3,7 @@ import { useStore } from './store/useStore'
 import { cockpit } from './lib/cockpit'
 import { AppShell } from './components/AppShell'
 import { ProjectSwitcher } from './components/ProjectSwitcher'
+import { NotepadDrawer } from './components/NotepadDrawer'
 
 export function App() {
   const ready = useStore((s) => s.ready)
@@ -35,6 +36,7 @@ export function App() {
   return (
     <>
       <AppShell />
+      <NotepadDrawer />
       {switcherOpen && <ProjectSwitcher />}
     </>
   )

@@ -12,6 +12,7 @@ import {
 } from './icons'
 import type { ComponentType, SVGProps } from 'react'
 import { UsageStrip } from './UsageStrip'
+import { NotepadLauncher } from './NotepadLauncher'
 
 interface NavItem {
   view: View
@@ -84,6 +85,8 @@ export function LeftRail() {
           )
         })}
       </nav>
+
+      <NotepadLauncher />
 
       <div className="rail__footer">
         <UsageStrip />
