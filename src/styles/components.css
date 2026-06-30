@@ -3199,13 +3199,6 @@
   color: var(--text-muted);
 }
 .git__diffBody { flex: 1; min-height: 0; max-height: 460px; }
-.git__diffEmpty {
-  flex: 1;
-  display: grid;
-  place-items: center;
-  color: var(--text-faint);
-  font-size: var(--fs-sm);
-}
 .diff {
   margin: 0;
   padding: var(--sp-3) 0;
@@ -3222,24 +3215,86 @@
 .diff__line--del { background: rgba(226, 86, 61, 0.1); color: var(--danger); }
 .diff__line--hunk { color: var(--info); background: var(--surface-inset); }
 .diff__line--meta { color: var(--text-faint); }
-.git__commit {
+/* ---------- git local run ---------- */
+.git__run {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  min-height: 0;
+}
+.git__runHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+.git__runIcon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: var(--r-md);
+  background: var(--accent-wash);
+  border: 1px solid var(--border-accent);
+  color: var(--accent);
+}
+.git__runTitle { font-size: var(--fs-h1); margin: 2px 0 4px; }
+.git__runSub {
+  margin: 0;
+  max-width: 520px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+}
+.git__runProcs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: auto;
+}
+.runproc {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+}
+.runproc__meta { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.runproc__dot {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--text-faint);
+  transition: background-color var(--dur) var(--ease-out);
+}
+.runproc__dot--live {
+  background: var(--success);
+  box-shadow: 0 0 0 3px rgba(147, 196, 106, 0.18);
+}
+.runproc__name { font-size: var(--fs-sm); font-weight: 600; }
+.runproc__cmd { font-size: var(--fs-xs); color: var(--text-muted); }
+.runproc__right { display: flex; align-items: center; gap: var(--sp-2); flex-shrink: 0; }
+.git__runBar {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
   padding: var(--sp-3) var(--sp-4);
   border-top: 1px solid var(--border);
 }
-.git__commitInput {
-  flex: 1;
-  padding: 8px var(--sp-3);
-  border-radius: var(--r-md);
-  background: var(--surface-inset);
-  border: 1px solid var(--border);
-  color: var(--text);
-  outline: none;
+.git__runBarStatus {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
   font-size: var(--fs-sm);
+  color: var(--text-muted);
 }
-.git__commitInput:focus { border-color: var(--border-accent); }
+.git__runBarSpacer { flex: 1; }
 
 /* ---------- railway ---------- */
 .railway__connect {

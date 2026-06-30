@@ -1,16 +1,25 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { AppUpdateState, GitFileEntry, GitHubRepositoryStatus } from '@shared/domain'
+import type {
+  AppUpdateState,
+  GitFileEntry,
+  GitHubRepositoryStatus,
+  TerminalRole,
+  TerminalSession,
+} from '@shared/domain'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import {
+  IconBolt,
   IconBranch,
   IconCheck,
   IconCloud,
   IconDownload,
   IconRestart,
   IconShield,
+  IconTerminal,
   IconUpload,
   IconWarning,
+  IconX,
 } from '../components/icons'
 
 const STATE_LABEL: Record<string, string> = {
@@ -24,6 +33,70 @@ const STATE_CLASS: Record<string, string> = {
   unstaged: 'gitfile__badge--unstaged',
   untracked: 'gitfile__badge--untracked',
   conflicted: 'gitfile__badge--conflict',
+}
+
+// The local run flow trades the GitHub release → app-update round-trip for a
+// dev build + test suite you can drive straight from the Git panel.
+const DEV_COMMAND = 'npm run dev'
+const TEST_COMMAND = 'npm test'
+
+function isLive(term: TerminalSession | null): boolean {
+  return term?.status === 'running' || term?.status === 'starting'
+}
+
+function RunChip({ term }: { term: TerminalSession | null }) {
+  if (!term) return <span className="chip">idle</span>
+  if (isLive(term)) return <span className="chip chip--success">running</span>
+  if (term.status === 'exited') {
+    return term.exitCode === 0 ? (
+      <span className="chip chip--success">finished</span>
+    ) : (
+      <span className="chip chip--danger">exited {term.exitCode ?? ''}</span>
+    )
+  }
+  return <span className="chip chip--warning">stopped</span>
+}
+
+interface ProcRowProps {
+  label: string
+  command: string
+  term: TerminalSession | null
+  busy: boolean
+  onStart: () => void
+  onStop: () => void
+  onOpen: () => void
+}
+
+function ProcRow({ label, command, term, busy, onStart, onStop, onOpen }: ProcRowProps) {
+  const live = isLive(term)
+  return (
+    <div className="runproc">
+      <div className="runproc__meta">
+        <span className={`runproc__dot ${live ? 'runproc__dot--live' : ''}`} />
+        <div>
+          <div className="runproc__name">{label}</div>
+          <div className="runproc__cmd mono">{command}</div>
+        </div>
+      </div>
+      <div className="runproc__right">
+        <RunChip term={term} />
+        {live ? (
+          <>
+            <button className="btn btn--sm" onClick={onOpen}>
+              <IconTerminal width={13} height={13} /> Open
+            </button>
+            <button className="btn btn--sm btn--danger" onClick={onStop}>
+              <IconX width={12} height={12} /> Stop
+            </button>
+          </>
+        ) : (
+          <button className="btn btn--sm" onClick={onStart} disabled={busy}>
+            <IconBolt width={13} height={13} /> {busy ? 'Starting…' : 'Start'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function DiffView({ diff }: { diff: string }) {
@@ -77,6 +150,7 @@ export function GitPanel() {
   const git = useStore((s) => s.git)
   const github = useStore((s) => s.github)
   const appUpdate = useStore((s) => s.appUpdate)
+  const terminals = useStore((s) => s.terminals)
   const activeProjectId = useStore((s) => s.activeProjectId)
   const refreshActive = useStore((s) => s.refreshActive)
   const refreshApprovals = useStore((s) => s.refreshApprovals)
@@ -85,7 +159,7 @@ export function GitPanel() {
   const setView = useStore((s) => s.setView)
   const [selected, setSelected] = useState<GitFileEntry | null>(null)
   const [diff, setDiff] = useState<string>('')
-  const [commitMsg, setCommitMsg] = useState('')
+  const [runIds, setRunIds] = useState<{ dev: string | null; test: string | null }>({ dev: null, test: null })
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -93,7 +167,11 @@ export function GitPanel() {
     setSelected(null)
     setDiff('')
     setNotice(null)
+    setRunIds({ dev: null, test: null })
   }, [activeProjectId])
+
+  const devTerm = useMemo(() => terminals.find((t) => t.id === runIds.dev) ?? null, [terminals, runIds.dev])
+  const testTerm = useMemo(() => terminals.find((t) => t.id === runIds.test) ?? null, [terminals, runIds.test])
 
   const grouped = useMemo(() => {
     const files = git?.files ?? []
@@ -115,14 +193,51 @@ export function GitPanel() {
     setDiff(d.hunks || '(no textual diff)')
   }
 
-  const stageAll = async () => {
-    if (!activeProjectId) return
-    setBusy('stage')
+  // Spin up a single dev/test process in its own terminal and remember its id so
+  // the panel can mirror its live status without leaving the Git view.
+  const startProcess = async (kind: 'dev' | 'test') => {
+    if (!activeProjectId) return null
+    setBusy(kind)
     setNotice(null)
     try {
-      await cockpit().git.stage({ projectId: activeProjectId, all: true })
-      await refreshActive()
-      setNotice('All changes staged.')
+      const command = kind === 'dev' ? DEV_COMMAND : TEST_COMMAND
+      const name = kind === 'dev' ? 'Dev server' : 'Tests'
+      const role: TerminalRole = kind === 'dev' ? 'frontend' : 'general'
+      const session = await cockpit().terminals.create({ projectId: activeProjectId, role, name, command })
+      setRunIds((prev) => ({ ...prev, [kind]: session.id }))
+      await refreshTerminals()
+      setNotice(`Started ${name.toLowerCase()} — ${command}`)
+      return session
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err))
+      return null
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  // One click for the whole loop: boot the dev build, kick off the tests, then
+  // jump to the terminals so output is visible immediately.
+  const startBoth = async () => {
+    if (!activeProjectId) return
+    setBusy('run')
+    setNotice(null)
+    try {
+      const dev = await cockpit().terminals.create({
+        projectId: activeProjectId,
+        role: 'frontend',
+        name: 'Dev server',
+        command: DEV_COMMAND,
+      })
+      const test = await cockpit().terminals.create({
+        projectId: activeProjectId,
+        role: 'general',
+        name: 'Tests',
+        command: TEST_COMMAND,
+      })
+      setRunIds({ dev: dev.id, test: test.id })
+      await refreshTerminals()
+      setView('terminals')
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err))
     } finally {
@@ -130,23 +245,18 @@ export function GitPanel() {
     }
   }
 
-  const commit = async () => {
-    if (!activeProjectId || !commitMsg.trim()) return
-    setBusy('commit')
-    setNotice(null)
+  const stopProcess = async (kind: 'dev' | 'test') => {
+    const sessionId = runIds[kind]
+    if (!sessionId) return
     try {
-      const result = await cockpit().git.commit({ projectId: activeProjectId, message: commitMsg.trim() })
-      setCommitMsg('')
-      await refreshActive()
-      setSelected(null)
-      setDiff('')
-      setNotice(`Committed ${result.commitHash?.slice(0, 8) ?? result.branch}.`)
+      await cockpit().terminals.kill(sessionId)
+      await refreshTerminals()
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(null)
     }
   }
+
+  const openTerminals = () => setView('terminals')
 
   const doPush = async () => {
     if (!activeProjectId || !git || git.ahead === 0) return
@@ -156,25 +266,6 @@ export function GitPanel() {
       const res = await cockpit().git.push({ projectId: activeProjectId })
       await refreshActive()
       setNotice(`Pushed ${res.branch} → ${res.remote}.`)
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  const commitAndPush = async () => {
-    if (!activeProjectId || !commitMsg.trim() || grouped.staged.length === 0) return
-    setBusy('commitPush')
-    setNotice(null)
-    try {
-      await cockpit().git.commit({ projectId: activeProjectId, message: commitMsg.trim() })
-      setCommitMsg('')
-      setSelected(null)
-      setDiff('')
-      const res = await cockpit().git.push({ projectId: activeProjectId })
-      await refreshActive()
-      setNotice(`Committed & pushed ${res.branch} → ${res.remote}.`)
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err))
     } finally {
@@ -267,7 +358,7 @@ export function GitPanel() {
           <button
             className="btn btn--accent"
             onClick={doPush}
-            disabled={git.ahead === 0 || busy === 'push' || busy === 'commitPush'}
+            disabled={git.ahead === 0 || busy === 'push'}
           >
             <IconUpload width={13} height={13} />{' '}
             {busy === 'push' ? 'Pushing…' : `Push${git.ahead > 0 ? ` (${git.ahead})` : ''}`}
@@ -384,30 +475,59 @@ export function GitPanel() {
               </div>
             </>
           ) : (
-            <div className="git__diffEmpty">
-              <p>Select a file to view its diff.</p>
+            <div className="git__run">
+              <div className="git__runHead">
+                <span className="git__runIcon">
+                  <IconBolt width={18} height={18} />
+                </span>
+                <div>
+                  <div className="eyebrow">local run</div>
+                  <h3 className="git__runTitle">Preview &amp; test this build locally</h3>
+                  <p className="git__runSub">
+                    Boot the dev build and run the test suite straight from here — no GitHub release,
+                    no app update round-trip. Verify your changes live before you publish.
+                  </p>
+                </div>
+              </div>
+              <div className="git__runProcs">
+                <ProcRow
+                  label="Dev server"
+                  command={DEV_COMMAND}
+                  term={devTerm}
+                  busy={busy === 'dev' || busy === 'run'}
+                  onStart={() => void startProcess('dev')}
+                  onStop={() => void stopProcess('dev')}
+                  onOpen={openTerminals}
+                />
+                <ProcRow
+                  label="Tests"
+                  command={TEST_COMMAND}
+                  term={testTerm}
+                  busy={busy === 'test' || busy === 'run'}
+                  onStart={() => void startProcess('test')}
+                  onStop={() => void stopProcess('test')}
+                  onOpen={openTerminals}
+                />
+              </div>
             </div>
           )}
-          <div className="git__commit">
-            <button className="btn" onClick={stageAll} disabled={busy === 'stage' || git.changedFilesCount === git.stagedCount}>
-              <IconUpload width={13} height={13} /> Stage all
+          <div className="git__runBar">
+            <span className="git__runBarStatus">
+              <span className={`runproc__dot ${isLive(devTerm) || isLive(testTerm) ? 'runproc__dot--live' : ''}`} />
+              {isLive(devTerm) && isLive(testTerm)
+                ? 'dev + tests running'
+                : isLive(devTerm)
+                  ? 'dev running'
+                  : isLive(testTerm)
+                    ? 'tests running'
+                    : 'idle'}
+            </span>
+            <div className="git__runBarSpacer" />
+            <button className="btn" onClick={openTerminals}>
+              <IconTerminal width={13} height={13} /> Open terminals
             </button>
-            <input
-              className="git__commitInput"
-              placeholder="Commit message…"
-              value={commitMsg}
-              onChange={(e) => setCommitMsg(e.target.value)}
-            />
-            <button className="btn" onClick={commit} disabled={!commitMsg.trim() || grouped.staged.length === 0 || busy === 'commit' || busy === 'commitPush'}>
-              Commit {grouped.staged.length > 0 ? `(${grouped.staged.length})` : ''}
-            </button>
-            <button
-              className="btn btn--accent"
-              onClick={commitAndPush}
-              disabled={!commitMsg.trim() || grouped.staged.length === 0 || busy === 'commit' || busy === 'commitPush'}
-              title="Commit staged changes and push to origin"
-            >
-              <IconUpload width={13} height={13} /> {busy === 'commitPush' ? 'Pushing…' : 'Commit & Push'}
+            <button className="btn btn--accent" onClick={startBoth} disabled={busy === 'run'}>
+              <IconBolt width={13} height={13} /> {busy === 'run' ? 'Starting…' : 'Start dev + test'}
             </button>
           </div>
         </div>
