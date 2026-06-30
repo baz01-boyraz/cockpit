@@ -15,6 +15,11 @@ const NOT_PACKAGED_MESSAGE = 'Auto-update is available only in a packaged app.'
 const NO_UPDATE_CONFIG_MESSAGE =
   'This local build has no update metadata (app-update.yml). Install a released DMG/ZIP to enable auto-update.'
 
+// Give the window time to finish loading before the first background check, then
+// poll periodically so a release published mid-session still surfaces the card.
+const AUTO_CHECK_INITIAL_DELAY_MS = 8_000
+const AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
+
 /**
  * electron-updater reads `app-update.yml` from the app's resources directory to
  * learn where to look for releases. Local `--dir` builds (e.g. `npm run app:refresh`)
@@ -84,6 +89,7 @@ function notesToString(notes: UpdateInfo['releaseNotes']): string | null {
 
 export class AppUpdateService {
   private state: AppUpdateState
+  private autoCheckTimers: NodeJS.Timeout[] = []
 
   constructor(private readonly events: CockpitEvents) {
     const reason = unsupportedReason()
@@ -109,6 +115,26 @@ export class AppUpdateService {
 
   status(): AppUpdateState {
     return this.state
+  }
+
+  /**
+   * Quietly poll GitHub for a published release so the renderer can surface an
+   * "update available" card without the developer manually checking. No-op on
+   * builds that can't auto-update (dev / unpackaged / no `app-update.yml`) so we
+   * never spin a useless interval or emit error noise there.
+   */
+  startAutoCheck(): void {
+    if (!this.state.canCheck || this.autoCheckTimers.length > 0) return
+    const run = () => {
+      void this.check()
+    }
+    this.autoCheckTimers.push(setTimeout(run, AUTO_CHECK_INITIAL_DELAY_MS))
+    this.autoCheckTimers.push(setInterval(run, AUTO_CHECK_INTERVAL_MS))
+  }
+
+  stopAutoCheck(): void {
+    for (const timer of this.autoCheckTimers) clearTimeout(timer)
+    this.autoCheckTimers = []
   }
 
   async check(): Promise<AppUpdateState> {

@@ -84,6 +84,9 @@ app.whenReady().then(() => {
   registerIpc(services)
   forwardEvents()
   createWindow()
+  // Quietly poll GitHub for new releases so the renderer's update card can pop
+  // on its own. No-op on dev/unpackaged builds (see AppUpdateService).
+  services.appUpdate.startAutoCheck()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -3,6 +3,7 @@ import { CHAT_ENABLED } from '../lib/features'
 import { LeftRail } from './LeftRail'
 import { TopBar } from './TopBar'
 import { RightPanel } from './RightPanel'
+import { UpdateToast } from './UpdateToast'
 import { IconBolt } from './icons'
 import { DashboardPanel } from '../panels/DashboardPanel'
 import { TerminalsPanel } from '../panels/TerminalsPanel'
@@ -47,6 +48,7 @@ export function AppShell() {
           {view === 'settings' && <SettingsPanel />}
         </main>
       </div>
+      <UpdateToast />
       {CHAT_ENABLED && <RightPanel />}
       {CHAT_ENABLED && (
         <button

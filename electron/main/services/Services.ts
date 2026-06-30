@@ -170,6 +170,7 @@ export class Services {
     // then close the DB. Order + flags prevent "database connection is not open".
     this.terminals.killAll()
     this.tuiState.clear()
+    this.appUpdate.stopAutoCheck()
     try {
       this.db.close()
     } catch {

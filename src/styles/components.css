@@ -3849,3 +3849,155 @@
 .modal__input:focus { border-color: var(--border-accent); }
 .modal__input--name { max-width: 180px; }
 .modal__error { color: var(--danger); font-size: var(--fs-xs); margin-top: var(--sp-2); }
+
+/* ----------------------------------------------------------------------------
+   Update toast — premium bottom-right card announcing a published release.
+   Driven by AppUpdateService → store.appUpdate. Animate transform/opacity only.
+   ---------------------------------------------------------------------------- */
+.updateToast {
+  position: fixed;
+  right: var(--sp-5);
+  bottom: var(--sp-5);
+  z-index: 80;
+  width: 320px;
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(120% 100% at 100% 0, var(--accent-wash), transparent 60%),
+    linear-gradient(180deg, var(--surface-3), var(--surface-2));
+  box-shadow: var(--shadow-float), var(--shadow-accent);
+  backdrop-filter: blur(18px) saturate(1.1);
+  overflow: hidden;
+  animation: update-toast-in 0.42s var(--ease-spring) both;
+}
+
+.updateToast__glow {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.85;
+}
+
+.updateToast__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.updateToast__badge {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: var(--r-sm);
+  color: var(--accent-hi);
+  background: var(--accent-wash);
+  border: 1px solid var(--border-accent);
+  box-shadow: 0 0 16px var(--accent-glow);
+}
+
+.updateToast__title {
+  flex: 1;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.updateToast__close {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border: none;
+  border-radius: var(--r-sm);
+  color: var(--text-faint);
+  background: transparent;
+  cursor: pointer;
+  transition: color 0.15s var(--ease-out), background-color 0.15s var(--ease-out);
+}
+.updateToast__close:hover { color: var(--text); background: var(--surface-inset); }
+.updateToast__close:focus-visible { outline: 2px solid var(--border-accent); outline-offset: 1px; }
+.updateToast__close:active { transform: scale(0.92); }
+
+.updateToast__version {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+.updateToast__from { color: var(--text-faint); }
+.updateToast__arrow { color: var(--accent); }
+.updateToast__to { color: var(--accent-hi); font-weight: 600; }
+
+.updateToast__note {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.updateToast__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  height: 34px;
+  border: 1px solid var(--border-accent);
+  border-radius: var(--r-md);
+  color: var(--text-on-accent);
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s var(--ease-spring), box-shadow 0.2s var(--ease-out), opacity 0.15s var(--ease-out);
+}
+.updateToast__action:hover { transform: translateY(-1px); box-shadow: var(--shadow-accent); }
+.updateToast__action:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
+.updateToast__action:active { transform: translateY(0) scale(0.99); }
+.updateToast__action:disabled { opacity: 0.6; cursor: progress; transform: none; box-shadow: none; }
+
+.updateToast__progress {
+  position: relative;
+  height: 34px;
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+.updateToast__progressFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+  transition: width 0.3s var(--ease-out);
+}
+.updateToast__progressPct {
+  position: relative;
+  margin-left: auto;
+  margin-right: var(--sp-3);
+  font-size: var(--fs-xs);
+  color: var(--text);
+}
+
+@keyframes update-toast-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .updateToast { animation: none; }
+  .updateToast__action:hover { transform: none; }
+}
