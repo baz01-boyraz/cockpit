@@ -48,8 +48,8 @@ const projects: Project[] = [
   },
   {
     id: 'prj_cockpit',
-    name: 'Baz Developer Cockpit',
-    path: '/Users/baz/Projects/baz-cockpit',
+    name: 'cockpiT',
+    path: '/Users/baz/Projects/cockpit',
     techStack: ['Electron', 'React', 'TypeScript', 'Vite'],
     createdAt: now(),
     updatedAt: now(),
@@ -144,19 +144,19 @@ const githubByProject: Record<string, GitHubRepositoryStatus> = {
     account: null,
     remote: {
       name: 'origin',
-      url: 'https://github.com/baz01-boyraz/baz-cockpit.git',
+      url: 'https://github.com/baz01-boyraz/cockpit.git',
       provider: 'github',
       owner: 'baz01-boyraz',
-      repo: 'baz-cockpit',
-      webUrl: 'https://github.com/baz01-boyraz/baz-cockpit',
+      repo: 'cockpit',
+      webUrl: 'https://github.com/baz01-boyraz/cockpit',
     },
     repository: {
       owner: 'baz01-boyraz',
-      name: 'baz-cockpit',
-      fullName: 'baz01-boyraz/baz-cockpit',
+      name: 'cockpit',
+      fullName: 'baz01-boyraz/cockpit',
       private: null,
       defaultBranch: null,
-      htmlUrl: 'https://github.com/baz01-boyraz/baz-cockpit',
+      htmlUrl: 'https://github.com/baz01-boyraz/cockpit',
       description: null,
     },
     openPullRequest: null,
@@ -164,7 +164,7 @@ const githubByProject: Record<string, GitHubRepositoryStatus> = {
     latestRelease: {
       tagName: 'v0.1.0',
       name: 'First private beta',
-      htmlUrl: 'https://github.com/baz01-boyraz/baz-cockpit/releases/tag/v0.1.0',
+      htmlUrl: 'https://github.com/baz01-boyraz/cockpit/releases/tag/v0.1.0',
       publishedAt: now(),
     },
     error: 'GitHub CLI auth is invalid. Run gh auth login to reconnect.',
@@ -343,7 +343,7 @@ function emit(sessionId: string, data: string) {
 }
 
 const BANNER = [
-  '\x1b[38;5;208m›\x1b[0m baz-cockpit mock shell — \x1b[2mElectron not detected (browser preview)\x1b[0m',
+  '\x1b[38;5;208m›\x1b[0m cockpit mock shell — \x1b[2mElectron not detected (browser preview)\x1b[0m',
   '\x1b[2m$\x1b[0m npm run dev',
   '\x1b[38;5;150m✓\x1b[0m ready on \x1b[4mhttp://localhost:3001\x1b[0m',
   '',

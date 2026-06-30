@@ -1,10 +1,10 @@
-# CLAUDE.md — Baz Developer Cockpit
+# CLAUDE.md — cockpiT
 
 > Read this first, every session. It is the operating contract for working in this repo.
 
 ## What this is
 
-Baz Developer Cockpit is a **project-aware AI coding cockpit** — a desktop app (Electron)
+cockpiT is a **project-aware AI coding cockpit** — a desktop app (Electron)
 for daily coding work. It is **not** a terminal wrapper. Terminals are only the execution
 layer. The product is the cockpit: project awareness, an AI agent router, Git confidence,
 infra (Railway) awareness, error intelligence, and usage visibility.
@@ -84,7 +84,7 @@ node screenshot.mjs http://localhost:3000 dashboard
 | `npm test` | Vitest (pure-logic unit tests) |
 | `npm run rebuild` | Rebuild `better-sqlite3` for Electron's ABI |
 | `npm run serve` / `npm run screenshot` | Localhost serve + Puppeteer shot |
-| `npm run app:refresh` | Build unsigned macOS app, replace `/Applications/Baz Cockpit.app`, relaunch |
+| `npm run app:refresh` | Build unsigned macOS app, replace `/Applications/cockpiT.app`, relaunch |
 | `npm run package:release` | Build local macOS `dmg` + `zip` artifacts without publishing |
 | `npm run package:publish` | CI-only: build macOS `dmg` + `zip` and publish GitHub release artifacts |
 
@@ -97,7 +97,7 @@ When the user asks to commit/push and refresh the app, use this sequence:
 3. Run `npm run app:refresh`.
 
 `npm run app:refresh` is the development refresh path for the installed local app. It packages
-the current code, quits the running `Baz Cockpit` app if needed, replaces the installed `.app`
+the current code, quits the running `cockpiT` app if needed, replaces the installed `.app`
 bundle, removes quarantine metadata if present, and opens the refreshed app. It is not a remote
 auto-updater; GitHub push alone does not update a local desktop app.
 

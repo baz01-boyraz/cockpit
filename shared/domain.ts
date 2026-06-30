@@ -1,5 +1,5 @@
 /**
- * Core domain model for Baz Developer Cockpit.
+ * Core domain model for cockpiT.
  *
  * These types are shared verbatim across the Electron main process, the preload
  * bridge, and the React renderer. Keep them free of any runtime imports so they

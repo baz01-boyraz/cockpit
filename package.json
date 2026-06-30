@@ -1,8 +1,8 @@
 {
-  "name": "baz-developer-cockpit",
+  "name": "cockpit",
   "version": "0.1.22",
   "private": true,
-  "description": "Baz Developer Cockpit — a project-aware AI coding cockpit. Terminals are the execution layer; the product is the cockpit.",
+  "description": "cockpiT — a project-aware AI coding cockpit. Terminals are the execution layer; the product is the cockpit.",
   "author": "Baz",
   "license": "UNLICENSED",
   "main": "out/main/index.js",
@@ -30,8 +30,8 @@
     "app:refresh": "bash scripts/release/refresh-local-app.sh"
   },
   "build": {
-    "appId": "com.baz.cockpit",
-    "productName": "Baz Cockpit",
+    "appId": "com.boyraz.cockpit",
+    "productName": "cockpiT",
     "directories": {
       "output": "release",
       "buildResources": "resources"
@@ -61,7 +61,7 @@
       {
         "provider": "github",
         "owner": "baz01-boyraz",
-        "repo": "baz-cockpit",
+        "repo": "cockpit",
         "releaseType": "release"
       }
     ]

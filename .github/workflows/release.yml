@@ -1,4 +1,4 @@
-name: Release Baz Cockpit
+name: Release cockpiT
 
 on:
   workflow_dispatch:
@@ -98,7 +98,7 @@ jobs:
             security find-identity -v -p codesigning "$KEYCHAIN"
             {
               echo "CSC_KEYCHAIN=${KEYCHAIN}"
-              echo "CSC_NAME=Baz Cockpit Self Signed"
+              echo "CSC_NAME=cockpiT Self Signed"
               echo "CSC_IDENTITY_AUTO_DISCOVERY=true"
             } >> "$GITHUB_ENV"
           else

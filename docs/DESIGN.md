@@ -1,4 +1,4 @@
-# Design Guide — Baz Developer Cockpit
+# Design Guide — cockpiT
 
 A project-local design guide so future sessions can apply the visual system without
 re-deriving it. This is the cockpit's "house style." When in doubt, match what already ships.

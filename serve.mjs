@@ -65,7 +65,7 @@ const server = createServer(async (req, res) => {
 })
 
 server.listen(port, () => {
-  console.log(`▸ baz-cockpit renderer served at http://localhost:${port}`)
+  console.log(`▸ cockpiT renderer served at http://localhost:${port}`)
   console.log(`  (serving ${root})`)
   console.log(`  build first with:  npm run build`)
 })

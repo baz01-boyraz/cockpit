@@ -19,7 +19,7 @@ export function rebuildAndRelaunch(sourceDir: string): AppRefreshResult {
   if (!existsSync(pkgPath)) {
     return {
       ok: false,
-      message: 'Active project has no package.json. Open the Baz Cockpit source as the active project.',
+      message: 'Active project has no package.json. Open the cockpiT source as the active project.',
     }
   }
 
@@ -34,7 +34,7 @@ export function rebuildAndRelaunch(sourceDir: string): AppRefreshResult {
   if (!scripts['app:refresh']) {
     return {
       ok: false,
-      message: 'Active project is not the Baz Cockpit source (no "app:refresh" script).',
+      message: 'Active project is not the cockpiT source (no "app:refresh" script).',
     }
   }
 

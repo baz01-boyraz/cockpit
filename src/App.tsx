@@ -27,7 +27,7 @@ export function App() {
         <div className="splash__mark">
           <span className="splash__glyph">⌘</span>
         </div>
-        <div className="splash__title">Baz Developer Cockpit</div>
+        <div className="splash__title">cockpiT</div>
         <div className="splash__sub mono">initializing workspace…</div>
       </div>
     )

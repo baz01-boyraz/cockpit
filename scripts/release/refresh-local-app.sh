@@ -15,8 +15,8 @@ Options:
   --dry-run      Print the install actions without quitting or copying.
 
 Environment:
-  APP_NAME       Defaults to "Baz Cockpit".
-  APP_BUNDLE_ID  Defaults to "com.baz.cockpit".
+  APP_NAME       Defaults to "cockpiT".
+  APP_BUNDLE_ID  Defaults to "com.boyraz.cockpit".
   DEST_DIR       Defaults to "/Applications".
 EOF
 }
@@ -24,8 +24,8 @@ EOF
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-APP_NAME="${APP_NAME:-Baz Cockpit}"
-APP_BUNDLE_ID="${APP_BUNDLE_ID:-com.baz.cockpit}"
+APP_NAME="${APP_NAME:-cockpiT}"
+APP_BUNDLE_ID="${APP_BUNDLE_ID:-com.boyraz.cockpit}"
 DEST_DIR="${DEST_DIR:-/Applications}"
 DEST_APP="${DEST_DIR%/}/${APP_NAME}.app"
 RELAUNCH=1
