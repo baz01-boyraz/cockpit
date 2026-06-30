@@ -27,7 +27,8 @@
     "package": "electron-vite build && electron-builder --mac dmg",
     "package:release": "electron-vite build && electron-builder --mac dmg zip --publish never",
     "package:publish": "electron-vite build && electron-builder --mac dmg zip --publish always",
-    "app:refresh": "bash scripts/release/refresh-local-app.sh"
+    "app:refresh": "bash scripts/release/refresh-local-app.sh",
+    "app:install-release": "bash scripts/release/install-release.sh"
   },
   "build": {
     "appId": "com.boyraz.cockpit",
