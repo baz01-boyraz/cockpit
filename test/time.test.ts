@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { relativeTime } from '@shared/time'
+import { formatDuration, relativeTime } from '@shared/time'
 
 const NOW = new Date('2026-06-28T12:00:00.000Z').getTime()
 const at = (ms: number) => new Date(NOW - ms).toISOString()
@@ -38,5 +38,31 @@ describe('relativeTime', () => {
 
   it('returns an empty string for an invalid date', () => {
     expect(relativeTime('not-a-date', NOW)).toBe('')
+  })
+})
+
+describe('formatDuration', () => {
+  it('keeps sub-second durations in milliseconds', () => {
+    expect(formatDuration(0)).toBe('0ms')
+    expect(formatDuration(820)).toBe('820ms')
+    expect(formatDuration(999)).toBe('999ms')
+  })
+
+  it('shows seconds with decimals under a minute', () => {
+    expect(formatDuration(1240)).toBe('1.24s')
+    expect(formatDuration(9990)).toBe('9.99s')
+    expect(formatDuration(12300)).toBe('12.3s')
+    expect(formatDuration(59900)).toBe('59.9s')
+  })
+
+  it('switches to minutes and zero-padded seconds past a minute', () => {
+    expect(formatDuration(60000)).toBe('1m 00s')
+    expect(formatDuration(125000)).toBe('2m 05s')
+  })
+
+  it('returns an empty label for non-finite or negative input', () => {
+    expect(formatDuration(-1)).toBe('')
+    expect(formatDuration(Number.NaN)).toBe('')
+    expect(formatDuration(Number.POSITIVE_INFINITY)).toBe('')
   })
 })

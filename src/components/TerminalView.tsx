@@ -2,7 +2,11 @@ import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import type { TerminalAttachment, TerminalSession } from '@shared/domain'
+import { type CapturedBlock, CommandBlockModel, OSC_COMMAND } from '@shared/command-blocks'
+import { initialTerminalScanState, scanTerminalChunk } from '@shared/log-sanitize'
 import { cockpit } from '../lib/cockpit'
+import { CommandBlockDecorations } from '../lib/commandBlocks'
+import { BlocksView } from './BlocksView'
 import {
   IMAGE_ACCEPT,
   MAX_IMAGE_BYTES,
@@ -13,7 +17,9 @@ import {
   inferImageMime,
   readBase64,
 } from '../lib/imageAttach'
-import { IconImage, IconX } from './icons'
+import { IconChevron, IconImage, IconTerminal, IconX } from './icons'
+
+type TerminalViewMode = 'stream' | 'blocks'
 
 type AttachmentPreview = TerminalAttachment & {
   previewUrl: string
@@ -50,10 +56,13 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
   const dragDepthRef = useRef(0)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
+  const decorationsRef = useRef<CommandBlockDecorations | null>(null)
   const [dragging, setDragging] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [attachment, setAttachment] = useState<AttachmentPreview | null>(null)
+  const [mode, setMode] = useState<TerminalViewMode>('stream')
+  const [blocks, setBlocks] = useState<CapturedBlock[]>([])
 
   const resetDrag = () => {
     dragDepthRef.current = 0
@@ -85,9 +94,38 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
     termRef.current = term
     fitRef.current = fit
 
+    // Warp-style command blocks: consume OSC 133 semantic-prompt marks and paint
+    // per-command gutter/ruler decorations. Returning true stops xterm rendering
+    // the (invisible) control sequence.
+    const decorations = new CommandBlockDecorations(term)
+    decorationsRef.current = decorations
+    const offOsc = term.parser.registerOscHandler(OSC_COMMAND, (payload) => {
+      decorations.handlePayload(payload)
+      return true
+    })
+
+    // The block model captures each command's text + output for the foldable
+    // Blocks view. It reads the same raw stream, pausing capture while a
+    // full-screen TUI (Claude/vim) repaints so one app can't bloat a block.
+    const model = new CommandBlockModel()
+    let scan = initialTerminalScanState()
+    let raf: number | null = null
+    const flush = () => {
+      raf = null
+      setBlocks(model.snapshot())
+    }
+    const scheduleFlush = () => {
+      if (raf === null) raf = requestAnimationFrame(flush)
+    }
+
     const api = cockpit()
     const offData = api.terminals.onData((chunk) => {
-      if (chunk.sessionId === session.id) term.write(chunk.data)
+      if (chunk.sessionId !== session.id) return
+      term.write(chunk.data)
+      const scanned = scanTerminalChunk(chunk.data, scan)
+      scan = scanned.state
+      model.setSuppressed(scanned.suppress)
+      if (model.feed(chunk.data, Date.now())) scheduleFlush()
     })
     const sub = term.onData((data) => void api.terminals.write(session.id, data))
 
@@ -106,8 +144,12 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
     ro.observe(host)
 
     return () => {
+      if (raf !== null) cancelAnimationFrame(raf)
       offData()
       sub.dispose()
+      offOsc.dispose()
+      decorations.dispose()
+      decorationsRef.current = null
       ro.disconnect()
       term.dispose()
       termRef.current = null
@@ -160,6 +202,13 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
   const sendAttachmentPath = async (target: TerminalAttachment) => {
     const line = `Screenshot attached: ${JSON.stringify(target.path)}`
     await cockpit().terminals.write(session.id, `${line}\r`)
+    termRef.current?.focus()
+  }
+
+  const rerunCommand = (command: string) => {
+    if (!command) return
+    void cockpit().terminals.write(session.id, `${command}\r`)
+    setMode('stream')
     termRef.current?.focus()
   }
 
@@ -250,7 +299,9 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
 
   return (
     <div
-      className={`termview ${dragging ? 'termview--dragging' : ''} ${saving ? 'termview--saving' : ''}`}
+      className={`termview ${dragging ? 'termview--dragging' : ''} ${saving ? 'termview--saving' : ''} ${
+        mode === 'blocks' ? 'termview--blocks' : ''
+      }`}
       onDragEnterCapture={handleDragEnter}
       onDragOverCapture={handleDragOver}
       onDragLeaveCapture={handleDragLeave}
@@ -258,6 +309,7 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
       onPasteCapture={handlePaste}
     >
       <div className="termview__host" ref={hostRef} />
+      {mode === 'blocks' && <BlocksView blocks={blocks} onRerun={rerunCommand} />}
       <input
         ref={fileInputRef}
         className="termview__file"
@@ -269,14 +321,65 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
           if (file) void saveImage(file)
         }}
       />
-      <button
-        className="termview__attach"
-        title="Send screenshot"
-        disabled={saving}
-        onClick={() => fileInputRef.current?.click()}
-      >
-        <IconImage width={14} height={14} />
-      </button>
+
+      <div className="termview__toolbar">
+        <div className="termview__viewtoggle" role="tablist" aria-label="Terminal view">
+          <button
+            role="tab"
+            aria-selected={mode === 'stream'}
+            className={`termview__seg ${mode === 'stream' ? 'termview__seg--on' : ''}`}
+            onClick={() => setMode('stream')}
+            title="Live terminal stream"
+          >
+            <IconTerminal width={12} height={12} /> Stream
+          </button>
+          <button
+            role="tab"
+            aria-selected={mode === 'blocks'}
+            className={`termview__seg ${mode === 'blocks' ? 'termview__seg--on' : ''}`}
+            onClick={() => setMode('blocks')}
+            title="Foldable command blocks"
+          >
+            Blocks
+            {blocks.length > 0 && <span className="termview__segcount">{blocks.length}</span>}
+          </button>
+        </div>
+        {mode === 'stream' && (
+          <div className="termview__nav">
+            <button
+              className="termview__navbtn"
+              title="Previous command"
+              onClick={() => decorationsRef.current?.scrollToPrevCommand()}
+            >
+              <IconChevron width={13} height={13} className="termview__navup" />
+            </button>
+            <button
+              className="termview__navbtn"
+              title="Next command"
+              onClick={() => decorationsRef.current?.scrollToNextCommand()}
+            >
+              <IconChevron width={13} height={13} className="termview__navdown" />
+            </button>
+            <button
+              className="termview__navbtn termview__navbtn--latest"
+              title="Jump to latest"
+              onClick={() => decorationsRef.current?.scrollToLatest()}
+            >
+              <IconChevron width={13} height={13} className="termview__navdown" />
+            </button>
+          </div>
+        )}
+        {mode === 'stream' && (
+          <button
+            className="termview__attach"
+            title="Send screenshot"
+            disabled={saving}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <IconImage width={14} height={14} />
+          </button>
+        )}
+      </div>
 
       {dragging && (
         <div className="termview__drop">

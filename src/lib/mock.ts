@@ -344,10 +344,90 @@ function emit(sessionId: string, data: string) {
 
 const BANNER = [
   '\x1b[38;5;208m›\x1b[0m cockpit mock shell — \x1b[2mElectron not detected (browser preview)\x1b[0m',
-  '\x1b[2m$\x1b[0m npm run dev',
-  '\x1b[38;5;150m✓\x1b[0m ready on \x1b[4mhttp://localhost:3001\x1b[0m',
   '',
 ]
+
+// --- Command blocks (OSC 133) demo -------------------------------------------
+// The browser mock has no real shell, so it scripts a short session framed with
+// OSC 133 semantic-prompt marks. This makes the Warp-style command-block
+// decorations visible in the localhost screenshot workflow (success, failure,
+// and a still-running command) exactly as a real zsh shell would drive them.
+const MOCK_PROMPT = '\x1b[38;5;208m~/baz/serbest\x1b[0m \x1b[38;5;150m❯\x1b[0m '
+
+function osc133(seq: string): string {
+  return `\x1b]133;${seq}\x07`
+}
+
+function emitPrompt(sessionId: string) {
+  emit(sessionId, osc133('A') + MOCK_PROMPT + osc133('B'))
+}
+
+function emitBlock(sessionId: string, command: string, lines: string[], exitCode: number | null) {
+  emit(sessionId, `${command}\r\n`)
+  emit(sessionId, osc133('C'))
+  for (const line of lines) emit(sessionId, `${line}\r\n`)
+  if (exitCode !== null) emit(sessionId, osc133(`D;${exitCode}`))
+}
+
+interface MockCommand {
+  command: string
+  lines: string[]
+  exitCode: number | null
+  /** Simulated run time between output-start (C) and command-end (D). */
+  runMs: number
+}
+
+const MOCK_SESSION: MockCommand[] = [
+  {
+    command: 'npm run build',
+    lines: [
+      '\x1b[2m> vite build\x1b[0m',
+      '\x1b[38;5;150m✓\x1b[0m 42 modules transformed',
+      '\x1b[38;5;150m✓\x1b[0m built in 1.24s',
+    ],
+    exitCode: 0,
+    runMs: 1240,
+  },
+  {
+    command: 'npm test',
+    lines: [
+      '\x1b[2m> vitest run\x1b[0m',
+      '\x1b[38;5;150m✓\x1b[0m redaction (12)',
+      '\x1b[38;5;196m✗\x1b[0m usage summary — expected 3, got 2',
+      '\x1b[38;5;196m1 failed\x1b[0m, 40 passed',
+    ],
+    exitCode: 1,
+    runMs: 820,
+  },
+  {
+    command: 'npm run dev',
+    lines: ['\x1b[2m> vite\x1b[0m', '\x1b[38;5;150m➜\x1b[0m Local:  \x1b[4mhttp://localhost:3001\x1b[0m'],
+    exitCode: null,
+    runMs: 500,
+  },
+]
+
+// Play the scripted session on a timeline so each command has a realistic
+// duration (C→D gap) and the terminal feels live: prompt + command appear, then
+// the output and exit land after `runMs`. A `null` exit leaves the last command
+// running, so the Blocks view shows a live "running" card.
+function runMockSession(sessionId: string) {
+  for (const line of BANNER) emit(sessionId, `${line}\r\n`)
+  let at = 120
+  for (const step of MOCK_SESSION) {
+    const start = at
+    setTimeout(() => {
+      emitPrompt(sessionId)
+      emit(sessionId, `${step.command}\r\n`)
+      emit(sessionId, osc133('C'))
+    }, start)
+    setTimeout(() => {
+      for (const line of step.lines) emit(sessionId, `${line}\r\n`)
+      if (step.exitCode !== null) emit(sessionId, osc133(`D;${step.exitCode}`))
+    }, start + step.runMs)
+    at = start + step.runMs + 340
+  }
+}
 
 function configFor(p: Project): ProjectConfig {
   return {
@@ -429,12 +509,17 @@ export function createMockApi(): CockpitApi {
           lastActiveAt: now(),
         }
         list.push(session)
-        setTimeout(() => BANNER.forEach((l, i) => setTimeout(() => emit(session.id, l + '\r\n'), i * 90)), 120)
+        setTimeout(() => runMockSession(session.id), 120)
         return session
       },
       write: async (sessionId, data) => {
-        if (data.includes('\r')) emit(sessionId, '\r\n\x1b[2m(mock shell — command echoed in browser preview)\x1b[0m\r\n')
-        else emit(sessionId, data)
+        if (data.includes('\r')) {
+          emit(sessionId, '\r\n')
+          emitBlock(sessionId, '', ['\x1b[2m(mock shell — command echoed in browser preview)\x1b[0m'], 0)
+          emitPrompt(sessionId)
+        } else {
+          emit(sessionId, data)
+        }
       },
       resize: async () => {},
       kill: async (sessionId) => {

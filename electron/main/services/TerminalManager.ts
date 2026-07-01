@@ -5,6 +5,7 @@ import type { Db } from '../db/Database'
 import type { CockpitEvents } from '../events'
 import { newId, nowIso } from '../util/ids'
 import type { ProjectService } from './ProjectService'
+import { prepareShellIntegration } from './shellIntegration'
 
 interface LiveTerminal {
   session: TerminalSession
@@ -32,6 +33,8 @@ export class TerminalManager {
     private readonly projects: ProjectService,
     private readonly onOutput: OutputSink,
     private readonly onUsage: (projectId: string, kind: 'session' | 'command') => void,
+    /** Directory for cockpit-owned shell-integration startup files (OSC 133). */
+    private readonly shellIntegrationDir: string,
   ) {}
 
   private defaultShell(): string {
@@ -79,12 +82,21 @@ export class TerminalManager {
       lastActiveAt: nowIso(),
     }
 
-    const proc = pty.spawn(shell, [], {
+    const baseEnv = {
+      ...process.env,
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+    } as Record<string, string>
+    // Inject OSC 133 command-block marks (non-destructive; no-op for unsupported
+    // shells). zsh integrates via env (ZDOTDIR), bash via a `--rcfile` spawn arg.
+    const { env, args } = prepareShellIntegration(shell, this.shellIntegrationDir, baseEnv)
+
+    const proc = pty.spawn(shell, args ?? [], {
       name: 'xterm-256color',
       cols: 80,
       rows: 24,
       cwd,
-      env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' } as Record<string, string>,
+      env,
     })
     session.pid = proc.pid
 

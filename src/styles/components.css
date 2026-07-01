@@ -2880,12 +2880,190 @@
   min-height: 0;
 }
 .termview .xterm { height: 100%; }
+
+/* --- Command blocks (Warp-style OSC 133 decorations) ------------------------ */
+/* A status dot in the left gutter of each command's first output line, plus a
+   hairline separator at every prompt. Colours track the ember/lime/red tokens. */
+.cmdblock-dot {
+  pointer-events: none;
+  z-index: 3;
+}
+.cmdblock-dot::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -13px;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  box-shadow: 0 0 0 1px rgba(8, 9, 11, 0.55);
+  transition:
+    background var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
+}
+.cmdblock-dot--running::before {
+  background: var(--accent);
+  box-shadow: 0 0 0 1px rgba(8, 9, 11, 0.55), 0 0 10px var(--accent-glow);
+  animation: cmdblockPulse 1.15s var(--ease-out) infinite;
+}
+.cmdblock-dot--success::before {
+  background: var(--success);
+  box-shadow: 0 0 0 1px rgba(8, 9, 11, 0.55), 0 0 9px var(--success-wash);
+}
+.cmdblock-dot--error::before {
+  background: var(--danger);
+  box-shadow: 0 0 0 1px rgba(8, 9, 11, 0.55), 0 0 10px var(--danger-wash);
+}
+.cmdblock-dot--aborted::before {
+  background: var(--text-faint);
+  opacity: 0.6;
+}
+.cmdblock-sep {
+  pointer-events: none;
+  z-index: 1;
+}
+.cmdblock-sep::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 0;
+  width: 3000px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    var(--border-accent),
+    var(--border) 46%,
+    transparent 92%
+  );
+  opacity: 0.55;
+}
+@keyframes cmdblockPulse {
+  0%, 100% { transform: translateY(-50%) scale(1); opacity: 1; }
+  50% { transform: translateY(-50%) scale(0.66); opacity: 0.4; }
+}
+
 .termview__file { display: none; }
-.termview__attach {
+
+/* Floating top-right controls: the Stream/Blocks toggle plus the screenshot
+   button. The toggle stays visible for discoverability; the attach button is
+   subtle until the pane is hovered. */
+.termview__toolbar {
   position: absolute;
   top: 8px;
   right: 8px;
-  z-index: 4;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.termview__viewtoggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: rgba(14, 15, 19, 0.82);
+  box-shadow: var(--shadow-1);
+  backdrop-filter: blur(6px);
+}
+.termview__seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    color var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out);
+}
+.termview__seg:hover { color: var(--text-muted); }
+.termview__seg--on {
+  color: var(--text-on-accent);
+  background: var(--accent);
+}
+.termview__seg--on:hover { color: var(--text-on-accent); }
+.termview__seg:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 1px;
+}
+.termview__segcount {
+  display: inline-grid;
+  place-items: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(14, 15, 19, 0.28);
+  color: inherit;
+  font-size: 10px;
+  line-height: 1;
+}
+.termview__seg:not(.termview__seg--on) .termview__segcount {
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+
+/* Command navigation — jump between commands / to the live tail. Subtle until
+   the pane is hovered, like the screenshot button. */
+.termview__nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: rgba(14, 15, 19, 0.82);
+  box-shadow: var(--shadow-1);
+  backdrop-filter: blur(6px);
+  opacity: 0.28;
+  transition: opacity var(--dur) var(--ease-out);
+}
+.termview:hover .termview__nav { opacity: 1; }
+.termview__navbtn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+}
+.termview__navbtn:hover { color: var(--accent-hi); background: var(--surface-3); }
+.termview__navbtn:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 1px;
+}
+.termview__navup { transform: rotate(-90deg); }
+.termview__navdown { transform: rotate(90deg); }
+/* A thin baseline under the chevron reads as "jump to the bottom / latest". */
+.termview__navbtn--latest { position: relative; }
+.termview__navbtn--latest::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 4px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.7;
+}
+.termview__navbtn--latest .termview__navdown { transform: rotate(90deg) translateX(-1px); }
+.termview__attach {
   display: grid;
   place-items: center;
   width: 27px;
@@ -2895,20 +3073,17 @@
   background: rgba(20, 22, 28, 0.84);
   color: var(--text-muted);
   box-shadow: var(--shadow-1);
-  opacity: 0.22;
-  transform: translateY(-2px);
+  opacity: 0.28;
   transition:
     opacity var(--dur) var(--ease-out),
     color var(--dur) var(--ease-out),
     border-color var(--dur) var(--ease-out),
-    transform var(--dur) var(--ease-out),
     background var(--dur) var(--ease-out);
 }
 .termview:hover .termview__attach,
 .termview--dragging .termview__attach,
 .termview--saving .termview__attach {
   opacity: 1;
-  transform: translateY(0);
 }
 .termview__attach:hover:not(:disabled) {
   color: var(--accent-hi);
@@ -2922,6 +3097,170 @@
 .termview--saving .termview__attach svg {
   animation: termAttachFloat 0.9s var(--ease-spring) infinite alternate;
 }
+
+/* --- Foldable Blocks view (Warp-style command cards) ------------------------ */
+/* Overlays the live xterm when the pane is toggled to Blocks. The terminal keeps
+   receiving data underneath; this surface renders the captured command history. */
+.termblocks {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow-y: auto;
+  /* Extra top padding so the first card clears the floating Stream/Blocks toggle. */
+  padding: 46px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(238, 124, 66, 0.05), transparent 60%),
+    var(--surface-inset);
+  scrollbar-width: thin;
+}
+.termblocks--empty {
+  align-items: center;
+  justify-content: center;
+}
+.termblocks__hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-faint);
+  text-align: center;
+}
+.termblocks__hint svg { margin-bottom: 4px; color: var(--text-muted); }
+.termblocks__hintTitle { color: var(--text-muted); font-size: 13px; font-weight: 600; }
+.termblocks__hintSub { font-size: 11.5px; }
+
+.cmdcard {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  overflow: hidden;
+  transition: border-color var(--dur) var(--ease-out);
+}
+.cmdcard:hover { border-color: var(--border-strong, rgba(255, 255, 255, 0.12)); }
+.cmdcard--running { border-color: var(--border-accent); }
+/* A thin status rail down the left edge encodes outcome at a glance. */
+.cmdcard__head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px 7px 12px;
+  cursor: default;
+}
+.cmdcard__head::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--text-faint);
+}
+.cmdcard--success .cmdcard__head::before { background: var(--success); }
+.cmdcard--error .cmdcard__head::before { background: var(--danger); }
+.cmdcard--running .cmdcard__head::before { background: var(--accent); }
+.cmdcard--aborted .cmdcard__head::before { background: var(--text-faint); }
+.cmdcard__fold {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+}
+.cmdcard__fold:hover { color: var(--text); background: var(--surface-3); }
+.cmdcard__chevron { transition: transform var(--dur) var(--ease-out); }
+.cmdcard__chevron--open { transform: rotate(90deg); }
+.cmdcard__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.cmdcard__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.cmdcard__status--success { color: var(--success); border-color: var(--success-wash); }
+.cmdcard__status--success .cmdcard__dot { background: var(--success); }
+.cmdcard__status--error { color: var(--danger); border-color: var(--danger-wash); }
+.cmdcard__status--error .cmdcard__dot { background: var(--danger); }
+.cmdcard__status--running { color: var(--accent-hi); border-color: var(--border-accent); }
+.cmdcard__status--running .cmdcard__dot {
+  background: var(--accent);
+  animation: cmdblockPulse 1.15s var(--ease-out) infinite;
+}
+.cmdcard__status--aborted { color: var(--text-faint); }
+.cmdcard__command {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+}
+.cmdcard__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+.cmdcard__dur { color: var(--text-muted); }
+.cmdcard__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease-out);
+}
+.cmdcard:hover .cmdcard__actions { opacity: 1; }
+.cmdcard__body {
+  border-top: 1px solid var(--border);
+  background: var(--surface-inset);
+  max-height: 340px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.cmdcard__output {
+  margin: 0;
+  padding: 8px 12px 10px 15px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.cmdcard__pending,
+.cmdcard__empty {
+  padding: 8px 15px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.cmdcard__pending { color: var(--accent-hi); }
+
 .termview__drop {
   position: absolute;
   inset: 9px;

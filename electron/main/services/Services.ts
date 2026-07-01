@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import type {
   DashboardSnapshot,
   RouterResult,
@@ -85,6 +86,7 @@ export class Services {
           eventType: kind === 'session' ? 'session_started' : 'command_run',
         })
       },
+      join(opts.userDataDir, 'shell-integration'),
     )
     // Forget a pane's TUI-mode state once it exits, so session ids never leak.
     opts.events.onTyped('terminal:exit', ({ sessionId }) => this.tuiState.delete(sessionId))

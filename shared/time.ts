@@ -28,3 +28,18 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
 
   return new Date(then).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
+
+/**
+ * Compact wall-clock duration for a command block: "820ms", "1.24s", "2m 05s".
+ * Sub-second stays in ms, seconds carry two/one decimals for precision, minutes
+ * switch to `Xm SSs`. Non-finite or negative input yields an empty label.
+ */
+export function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return ''
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  const seconds = ms / 1000
+  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 2 : 1)}s`
+  const minutes = Math.floor(seconds / 60)
+  const rest = Math.round(seconds % 60)
+  return `${minutes}m ${rest.toString().padStart(2, '0')}s`
+}
