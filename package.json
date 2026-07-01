@@ -1,6 +1,6 @@
 {
   "name": "cockpit",
-  "version": "0.1.25",
+  "version": "0.1.26",
   "private": true,
   "description": "cockpiT — a project-aware AI coding cockpit. Terminals are the execution layer; the product is the cockpit.",
   "author": "Baz",
