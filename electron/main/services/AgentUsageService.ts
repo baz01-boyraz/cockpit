@@ -9,6 +9,7 @@ import type {
   AgentUsageSnapshot,
   AgentUsageWindow,
 } from '@shared/domain'
+import { windowFromUsedPercent, windowFromUtilization } from '@shared/agent-usage'
 
 const execFileAsync = promisify(execFile)
 
@@ -110,7 +111,7 @@ export class AgentUsageService {
       ['seven_day', 'Weekly'],
     ] as const) {
       const win = (payload as Record<string, unknown>)[key]
-      const window = this.windowFromUtilization(label, win)
+      const window = windowFromUtilization(label, win)
       if (window) windows.push(window)
     }
     if (!windows.length) {
@@ -188,7 +189,7 @@ export class AgentUsageService {
       ['primary_window', 'Session'],
       ['secondary_window', 'Weekly'],
     ] as const) {
-      const window = this.windowFromUsedPercent(label, rateLimit[key])
+      const window = windowFromUsedPercent(label, rateLimit[key])
       if (window) windows.push(window)
     }
     if (!windows.length) {
@@ -221,23 +222,6 @@ export class AgentUsageService {
   }
 
   // --- shared helpers ------------------------------------------------------
-
-  /** Anthropic reports `utilization` (0–1 or 0–100); normalize to a percent. */
-  private windowFromUtilization(label: string, raw: unknown): AgentUsageWindow | null {
-    if (!isRecord(raw)) return null
-    const util = raw.utilization
-    if (typeof util !== 'number' || !Number.isFinite(util)) return null
-    const usedPercent = clampPercent(util <= 1 ? util * 100 : util)
-    return { label, usedPercent, resetAt: parseResetAt(raw.resets_at ?? raw.reset_at) }
-  }
-
-  /** Codex reports `used_percent` directly. */
-  private windowFromUsedPercent(label: string, raw: unknown): AgentUsageWindow | null {
-    if (!isRecord(raw)) return null
-    const used = raw.used_percent
-    if (typeof used !== 'number' || !Number.isFinite(used)) return null
-    return { label, usedPercent: clampPercent(used), resetAt: parseResetAt(raw.reset_at) }
-  }
 
   private async getJson(url: string, headers: Record<string, string>): Promise<unknown> {
     const controller = new AbortController()
@@ -294,22 +278,6 @@ function prettyPlan(value: unknown): string | null {
   return cleaned
     .replace(/[_-]+/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase())
-}
-
-/** Reset can be an ISO string (Claude) or a unix-seconds number (Codex). */
-function parseResetAt(value: unknown): string | null {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return new Date(value * 1000).toISOString()
-  }
-  if (typeof value === 'string' && value.trim()) {
-    const date = new Date(value)
-    return Number.isNaN(date.getTime()) ? null : date.toISOString()
-  }
-  return null
-}
-
-function clampPercent(value: number): number {
-  return Math.max(0, Math.min(100, value))
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

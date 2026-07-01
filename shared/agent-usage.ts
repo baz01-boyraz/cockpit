@@ -103,6 +103,50 @@ export function describeAgentUsage(snapshot: AgentUsageSnapshot): AgentUsageDeta
   return { ...pill, windows }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+/** Clamp any number into the 0–100 percent range. */
+export function clampToPercent(value: number): number {
+  return Math.max(0, Math.min(100, value))
+}
+
+/** A quota window resets on an ISO string (Claude) or unix-seconds (Codex). */
+export function parseResetAt(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return new Date(value * 1000).toISOString()
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? null : date.toISOString()
+  }
+  return null
+}
+
+/**
+ * Normalize Anthropic's OAuth-usage window. `utilization` is a **whole percent
+ * used, 0–100** — it mirrors the `limits[].percent` field in the same payload
+ * (e.g. `utilization: 4` → 4% used, 96% remaining). It is *not* a 0–1 fraction:
+ * an earlier `util <= 1 ? util * 100` guess read a barely-used weekly window
+ * (utilization 1 = 1% used) as 100% used, so a Max account with almost all its
+ * quota left surfaced as 0% remaining. Treat it as a straight percent.
+ */
+export function windowFromUtilization(label: string, raw: unknown): AgentUsageWindow | null {
+  if (!isRecord(raw)) return null
+  const util = raw.utilization
+  if (typeof util !== 'number' || !Number.isFinite(util)) return null
+  return { label, usedPercent: clampToPercent(util), resetAt: parseResetAt(raw.resets_at ?? raw.reset_at) }
+}
+
+/** Normalize Codex's window: `used_percent` is already a 0–100 percent used. */
+export function windowFromUsedPercent(label: string, raw: unknown): AgentUsageWindow | null {
+  if (!isRecord(raw)) return null
+  const used = raw.used_percent
+  if (typeof used !== 'number' || !Number.isFinite(used)) return null
+  return { label, usedPercent: clampToPercent(used), resetAt: parseResetAt(raw.reset_at) }
+}
+
 /** Collapse a provider snapshot into the compact pill the TopBar shows. */
 export function summarizeAgentUsage(snapshot: AgentUsageSnapshot): AgentUsagePill {
   const base = {

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentUsageSnapshot } from '@shared/domain'
-import { describeAgentUsage, summarizeAgentUsage, toneFor, windowTitle } from '@shared/agent-usage'
+import {
+  describeAgentUsage,
+  summarizeAgentUsage,
+  toneFor,
+  windowFromUsedPercent,
+  windowFromUtilization,
+  windowTitle,
+} from '@shared/agent-usage'
 
 const snap = (over: Partial<AgentUsageSnapshot>): AgentUsageSnapshot => ({
   provider: 'claude',
@@ -123,6 +130,47 @@ describe('describeAgentUsage', () => {
     expect(detail.available).toBe(false)
     expect(detail.windows).toEqual([])
     expect(detail.reason).toBe('Sign in with Codex to see usage.')
+  })
+})
+
+describe('windowFromUtilization (Anthropic)', () => {
+  it('reads utilization as a whole percent used, not a 0–1 fraction', () => {
+    // Regression: a Max account at 4% session / 1% weekly must read as 96% / 99%
+    // remaining, never 0%. The old `util <= 1 ? util * 100` guess flipped the 1%
+    // weekly window into "100% used".
+    expect(windowFromUtilization('Session', { utilization: 4 })?.usedPercent).toBe(4)
+    expect(windowFromUtilization('Weekly', { utilization: 1 })?.usedPercent).toBe(1)
+    expect(windowFromUtilization('Weekly', { utilization: 0 })?.usedPercent).toBe(0)
+    expect(windowFromUtilization('Session', { utilization: 82 })?.usedPercent).toBe(82)
+  })
+
+  it('the fixed 1% weekly window summarizes as 96% remaining, not 0%', () => {
+    const session = windowFromUtilization('Session', { utilization: 4 })
+    const weekly = windowFromUtilization('Weekly', { utilization: 1 })
+    const pill = summarizeAgentUsage(snap({ windows: [session!, weekly!] }))
+    expect(pill.minRemainingPercent).toBe(96)
+    expect(pill.tone).toBe('healthy')
+  })
+
+  it('clamps and parses reset, rejects non-numeric utilization', () => {
+    expect(windowFromUtilization('Session', { utilization: 130 })?.usedPercent).toBe(100)
+    expect(
+      windowFromUtilization('Session', {
+        utilization: 5,
+        resets_at: '2026-07-01T09:00:00.000Z',
+      })?.resetAt,
+    ).toBe('2026-07-01T09:00:00.000Z')
+    expect(windowFromUtilization('Session', { utilization: null })).toBeNull()
+    expect(windowFromUtilization('Session', 42)).toBeNull()
+  })
+})
+
+describe('windowFromUsedPercent (Codex)', () => {
+  it('reads used_percent directly and parses unix-seconds reset', () => {
+    const win = windowFromUsedPercent('Session', { used_percent: 82, reset_at: 1_780_000_000 })
+    expect(win?.usedPercent).toBe(82)
+    expect(win?.resetAt).toBe(new Date(1_780_000_000 * 1000).toISOString())
+    expect(windowFromUsedPercent('Session', { used_percent: 'nope' })).toBeNull()
   })
 })
 

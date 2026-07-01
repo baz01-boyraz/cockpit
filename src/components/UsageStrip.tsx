@@ -6,8 +6,8 @@ import { useAgentUsage } from '../lib/useAgentUsage'
 import claudeLogo from '../assets/usage/claude.png'
 import codexLogo from '../assets/usage/codex.png'
 
-/** Each provider's 3D logo doubles as its battery. The logo's lower
- *  `remaining%` renders in full color; the spent upper part desaturates. */
+/** Each provider's 3D logo stays pristine and full-color; a thin quota ring
+ *  hugging it reads the remaining level, so the mark itself never dims. */
 const PROVIDER_LOGOS: Record<string, string> = {
   claude: claudeLogo,
   codex: codexLogo,
@@ -28,28 +28,17 @@ function clampPercent(percent: number | null): number {
 }
 
 /**
- * The logo-as-battery. Two stacked copies of the provider's 3D logo: a spent
- * base layer (desaturated, dimmed) reads as depleted quota, and a full-color
- * copy clipped to the bottom `remaining%` rises over it from the floor. A thin
- * tone-lit crest skims the fill line. Decorative — the percent beneath carries
- * the value.
+ * The provider's 3D logo, kept crisp and full-color, ringed by a slim quota
+ * gauge. A conic arc sweeps clockwise from 12 o'clock to `remaining%` in the
+ * engine's tone over a faint spent-track; the logo itself never desaturates.
+ * Decorative — the percent beneath carries the exact value.
  */
 function LogoMeter({ src, percent }: { src: string; percent: number | null }) {
   const fill = clampPercent(percent)
-  const clipTop = 100 - fill
   return (
     <span className="logoMeter" aria-hidden>
-      <img className="logoMeter__base" src={src} alt="" draggable={false} />
-      <img
-        className="logoMeter__fill"
-        src={src}
-        alt=""
-        draggable={false}
-        style={{ clipPath: `inset(${clipTop}% 0 0 0)` } as CSSProperties}
-      />
-      {fill > 0 && fill < 100 ? (
-        <span className="logoMeter__crest" style={{ top: `${clipTop}%` }} />
-      ) : null}
+      <span className="logoMeter__ring" style={{ '--fill': fill } as CSSProperties} />
+      <img className="logoMeter__logo" src={src} alt="" draggable={false} />
     </span>
   )
 }

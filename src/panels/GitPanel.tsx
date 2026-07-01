@@ -484,7 +484,7 @@ export function GitPanel() {
         <section className="card git__statusCard">
           <div className="git__statusHead">
             <div>
-              <div className="eyebrow">baz cockpit update</div>
+              <div className="eyebrow">cockpiT update</div>
               <div className="git__repoName mono">
                 {appUpdate?.currentVersion ?? '—'} → {appUpdate?.latestVersion ?? 'latest'}
               </div>

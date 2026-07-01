@@ -1,5 +1,5 @@
 /* ====================================================================
-   Baz Developer Cockpit — component styles
+   cockpiT — component styles
    Layout shell + every panel. Built on the tokens in tokens.css.
    ==================================================================== */
 
@@ -568,11 +568,15 @@
   /* Claude's own warm coral/copper — vivid but premium, no neon. */
   --provider: #ec7f48;
   --provider-hi: #ffac79;
+  /* Claude's mark fills ~91% of its canvas; Codex's only ~62%. Normalize the
+   * rendered artwork so both engines read at the same size, not the raw PNGs. */
+  --logo-scale: 1;
 }
 .engineCore--codex {
   /* Codex's own emerald/teal identity. */
   --provider: #13bd92;
   --provider-hi: #5cf0c8;
+  --logo-scale: 1.45;
 }
 /* health escalation lives on the status dot — identity color stays put */
 .engineCore--warning {
@@ -628,17 +632,22 @@
   content: '';
   position: absolute;
   left: 50%;
-  bottom: 0;
-  width: 70%;
-  height: 9px;
+  bottom: 2px;
+  width: 76%;
+  height: 11px;
   transform: translateX(-50%);
   border-radius: var(--r-pill);
-  background: radial-gradient(
-    60% 100% at 50% 100%,
-    color-mix(in srgb, var(--tone-hi) 38%, transparent),
-    transparent 72%
-  );
-  opacity: 0.55;
+  /* the pedestal: a soft tone glow pooled under the logo, seated on a darker
+   * contact shadow — reads as depth, "floating on light", never a box. */
+  background:
+    radial-gradient(
+      58% 100% at 50% 100%,
+      color-mix(in srgb, var(--tone-hi) 46%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(50% 100% at 50% 100%, rgba(0, 0, 0, 0.5), transparent 78%);
+  opacity: 0.62;
+  filter: blur(0.3px);
   pointer-events: none;
   transition: opacity var(--dur) var(--ease-out);
 }
@@ -697,59 +706,63 @@
   text-transform: uppercase;
 }
 
-/* ---------- logo-as-battery meter ----------
- * The provider's 3D logo IS the gauge. A spent base layer (desaturated, dimmed)
- * reads as depleted quota; a full-color copy clipped to the bottom `remaining%`
- * rises over it from the floor, with a thin tone-lit crest at the fill line.
- * Animate only transform / opacity / clip-path. */
+/* ---------- logo + quota ring ----------
+ * The provider's 3D logo stays pristine and full-color; a slim conic ring
+ * hugging it reads the remaining quota (filled arc = remaining, faint track =
+ * spent). Per-provider `--logo-scale` normalizes the two marks to one size.
+ * Animate only transform / opacity. */
 .logoMeter {
   position: relative;
   z-index: 1;
   flex: 0 0 auto;
   width: 40px;
   height: 40px;
-  /* Depth + tone glow live on the wrapper so they trace the logo silhouette
-   * (the union of both layers), never the fill's straight clip edge. */
-  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5))
-    drop-shadow(0 0 8px color-mix(in srgb, var(--tone) 30%, transparent));
 }
-.logoMeter__base,
-.logoMeter__fill {
+.logoMeter__logo {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
+  transform: scale(var(--logo-scale, 1));
+  /* Depth + a soft tone glow trace the logo's silhouette. */
+  filter: saturate(1.04) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.55))
+    drop-shadow(0 1px 9px color-mix(in srgb, var(--tone) 32%, transparent));
   pointer-events: none;
   -webkit-user-select: none;
   user-select: none;
 }
-/* spent: drained toward grayscale and dimmed */
-.logoMeter__base {
-  filter: grayscale(0.92) brightness(0.5) contrast(0.92);
-  opacity: 0.5;
-}
-/* remaining quota: full-color logo, clipped from the top down to the fill line */
-.logoMeter__fill {
-  filter: saturate(1.05);
-  transition: clip-path var(--dur) var(--ease-out);
-}
-/* a thin luminous line skimming the top of the filled portion */
-.logoMeter__crest {
+/* the quota gauge: a 3px conic ring seated just outside the mark. The filled
+ * arc sweeps from 12 o'clock to `--fill`%; the remainder is a faint track. */
+.logoMeter__ring {
   position: absolute;
-  left: 8%;
-  right: 8%;
-  height: 1px;
-  transform: translateY(-0.5px);
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--tone-hi) 85%, #ffffff 15%),
-    transparent
+  inset: -6px;
+  border-radius: var(--r-pill);
+  background: conic-gradient(
+    from 0deg,
+    color-mix(in srgb, var(--tone-hi) 58%, var(--tone) 42%) calc(var(--fill, 0) * 1%),
+    color-mix(in srgb, var(--tone) 11%, transparent) 0
   );
-  opacity: 0.7;
+  -webkit-mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 3.5px),
+    #000 calc(100% - 2.5px)
+  );
+  mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 3.5px),
+    #000 calc(100% - 2.5px)
+  );
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--tone) 30%, transparent));
+  opacity: 0.85;
   pointer-events: none;
-  box-shadow: 0 0 6px color-mix(in srgb, var(--tone) 60%, transparent);
+  transition: opacity var(--dur) var(--ease-out);
+}
+.engineCore:hover .logoMeter__ring {
+  opacity: 1;
+}
+.engineCore--off .logoMeter__ring {
+  opacity: 0.3;
 }
 @keyframes usage-pulse {
   0%,
@@ -767,7 +780,7 @@
   .topbar__approvals--active {
     animation: none;
   }
-  .logoMeter__fill {
+  .logoMeter__ring {
     transition: none;
   }
   .engineCore {
