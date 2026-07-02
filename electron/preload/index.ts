@@ -64,6 +64,7 @@ const api: CockpitApi = {
     dismissInsight: (projectId, matchedPattern) =>
       invoke(IPC.logsDismissInsight, { projectId, matchedPattern }).then(() => undefined),
     clearInsights: (projectId) => invoke(IPC.logsClearInsights, { projectId }).then(() => undefined),
+    onChange: (cb) => subscribe(IPC.evtLogsChanged, () => cb()),
   },
   usage: {
     summary: (projectId) => invoke(IPC.usageSummary, { projectId }),

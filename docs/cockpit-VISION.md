@@ -192,7 +192,7 @@ to say "enforced in main", and it's true.
 > Theme: make IPC drift impossible and give the untested layers a safety net,
 > because Phases 4–6 all grow the IPC surface.
 
-### 2.1 [ ] IPC contract/parity test — the highest-leverage S task in this doc
+### 2.1 [x] IPC contract/parity test — the highest-leverage S task in this doc
 **Why:** Today you can add a `CockpitApi` method + preload + mock, forget the main
 handler, and everything compiles and works in the browser — then throws
 "No handler registered" only at runtime in Electron. Nothing catches this.
@@ -205,7 +205,7 @@ names into an exported array/map.)
 event `evtLogsChanged` either gains a subscription method or is removed.
 **Effort:** S
 
-### 2.2 [ ] Type-bind main handlers to `CockpitApi`
+### 2.2 [x] Type-bind main handlers to `CockpitApi`
 **Why:** The handler side is the one untyped leg of the contract — `handle<T>` infers
 from the handler, nothing checks it against `CockpitApi`'s parameter/return types.
 **Do:** Derive a `Handlers` mapped type from `CockpitApi` (channel → typed handler
@@ -215,7 +215,7 @@ is a compile error.
 **Verify:** Intentionally breaking a handler's return type fails `typecheck:node`.
 **Effort:** M
 
-### 2.3 [ ] Central IPC error envelope ∥
+### 2.3 [x] Central IPC error envelope ∥ (as central error-shaping wrapper — see note)
 **Why:** Raw `Error.message` (including verbose ZodError text and internal fs paths)
 crosses to the renderer unmapped; each panel invents its own error UX.
 **Do:** Wrap `handle()` to catch, map ZodError → friendly message, strip internal
@@ -225,7 +225,7 @@ call sites/panels to consume it uniformly.
 **Verify:** A thrown ZodError reaches the UI as a clean message, no stack/paths.
 **Effort:** M
 
-### 2.4 [ ] Service-layer tests for the risk hot spots ∥
+### 2.4 [~] Service-layer tests for the risk hot spots ∥
 **Why:** 171 tests, all on `shared/` pure logic. 1 of 23 services tested; GitService,
 TerminalManager, ApprovalService, IPC, DB layer: zero.
 **Do (priority order):**
@@ -239,7 +239,7 @@ TerminalManager, ApprovalService, IPC, DB layer: zero.
 **Verify:** `npm test` green; these four areas no longer at zero.
 **Effort:** M–L (spread it; don't block other Phase 2 tasks on completion)
 
-### 2.5 [ ] De-duplicate mock vs services: move rules into `shared/` ∥
+### 2.5 [~] De-duplicate mock vs services: move rules into `shared/` ∥
 **Why:** `listInsightsMock` re-implements `LogIntelligenceService.listInsights`'s
 aggregation; `dashboardFor` duplicates `Services.dashboard`. Two sources of truth.
 Worse, the mock **mutates module-level seed singletons** (`snapshot.ahead += 1` …) —
@@ -542,5 +542,8 @@ Ordered by leverage, all optional:
 | 2026-07-01 | 1.3 | Redaction: Stripe/URL-creds/AIza/SG./npm_/ghu-ghs-ghr/Bearer patterns + bare *_KEY names + high-entropy env fallback + `redactText()`. TDD, 9 new tests |
 | 2026-07-01 | 1.4 | LogIntelligence ingest + listLogs now scrub secrets (new rows and legacy rows) |
 | 2026-07-01 | 1.5 | Rebuild & relaunch: package-identity check in main (`isCockpitSource`), native confirm dialog, audit entry, button hidden for foreign projects (`refreshEligible` IPC). 5 new tests. Verified both states via screenshots |
+| 2026-07-02 | 2.1 | Contract test scans wiring: every channel needs a main handler + preload invoke; every evt needs a preload subscribe; no unknown/duplicate registrations. Dangling `evtLogsChanged` resolved by adding `logs.onChange` to CockpitApi (preload + mock parity) |
+| 2026-07-02 | 2.2 | `IpcResultMap` in shared/ipc.ts binds each channel key to its handler return type, derived from CockpitApi; `handle()` is now keyed + typed; compile-time completeness guard (`IPC_RESULT_MAP_COMPLETE`) errors on drift |
+| 2026-07-02 | 2.3 | Central error shaping in `handle()` via `shared/ipc-errors.ts`: ZodError → one readable line, $HOME → `~`. DECISION: kept the promise-rejection contract instead of a success/data/error envelope (same UX, far smaller blast radius; panels already render e.message uniformly) — revisit only if structured error codes are needed |
 | 2026-07-01 | 1.x E2E | Dev-mode verification vs real app: 16/16 (positive consume path force-pushed a local bare origin; single-use + cross-project + pending/rejected refusals; audit chain; live redaction) |
 | 2026-07-01 | 1.6 | openExternal https/http allowlist; strict prod CSP via build plugin (verified in out/); entitlements plist + CI enables hardenedRuntime on the Apple-cert path only — VERIFY at next tagged release |

@@ -337,6 +337,8 @@ const claudeSessionsMock: ClaudeSessionSummary[] = [
 const dataListeners = new Set<(c: TerminalOutputChunk) => void>()
 const approvalListeners = new Set<() => void>()
 const appUpdateListeners = new Set<(s: AppUpdateState) => void>()
+const logsListeners = new Set<() => void>()
+const notifyLogsChanged = () => logsListeners.forEach((cb) => cb())
 
 function emit(sessionId: string, data: string) {
   for (const cb of dataListeners) cb({ sessionId, data, at: now() })
@@ -698,6 +700,7 @@ export function createMockApi(): CockpitApi {
         )
         const scoped: ErrorInsight = { ...insight, projectId }
         insightEvents.unshift(scoped)
+        notifyLogsChanged()
         return scoped
       },
       dismissInsight: async (projectId, matchedPattern) => {
@@ -705,11 +708,17 @@ export function createMockApi(): CockpitApi {
           .filter((e) => e.projectId === projectId && e.matchedPattern === matchedPattern)
           .reduce((max, e) => (e.createdAt > max ? e.createdAt : max), '')
         insightDismissals.set(dismissKey(projectId, matchedPattern), upTo || now())
+        notifyLogsChanged()
       },
       clearInsights: async (projectId) => {
         for (const insight of listInsightsMock(projectId)) {
           insightDismissals.set(dismissKey(projectId, insight.matchedPattern), insight.lastSeenAt)
         }
+        notifyLogsChanged()
+      },
+      onChange: (cb) => {
+        logsListeners.add(cb)
+        return (() => logsListeners.delete(cb)) as Unsubscribe
       },
     },
     usage: { summary: async (projectId) => (projectId === 'prj_serbest' ? usage : []) },

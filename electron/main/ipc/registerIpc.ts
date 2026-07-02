@@ -2,7 +2,8 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
-import { IPC, type SystemInfo } from '@shared/ipc'
+import { IPC, type IpcResultMap, type RequestChannelKey, type SystemInfo } from '@shared/ipc'
+import { formatIpcError } from '@shared/ipc-errors'
 import { requiresApproval } from '@shared/approval-rules'
 import type { ApprovalActionType } from '@shared/domain'
 import {
@@ -38,8 +39,23 @@ import { isCockpitSource, rebuildAndRelaunch } from '../services/localRebuild'
  * promises which the renderer surfaces to the user.
  */
 export function registerIpc(services: Services): void {
-  const handle = <T>(channel: string, fn: (payload: unknown) => T | Promise<T>) => {
-    ipcMain.handle(channel, async (_e, payload) => fn(payload))
+  /**
+   * Typed, error-shaping registration. The key binds the handler's return type
+   * to `IpcResultMap` (the main process's leg of the CockpitApi contract), and
+   * every rejection is centrally formatted — Zod issues become one readable
+   * line, absolute home paths are stripped — before crossing to the renderer.
+   */
+  const handle = <K extends RequestChannelKey>(
+    key: K,
+    fn: (payload: unknown) => IpcResultMap[K] | Promise<IpcResultMap[K]>,
+  ) => {
+    ipcMain.handle(IPC[key], async (_e, payload) => {
+      try {
+        return await fn(payload)
+      } catch (err) {
+        throw new Error(formatIpcError(err, homedir()))
+      }
+    })
   }
 
   /**
@@ -68,57 +84,57 @@ export function registerIpc(services: Services): void {
   }
 
   // --- projects ---
-  handle(IPC.projectsList, () => services.projects.list())
-  handle(IPC.projectsAdd, (p) => services.projects.add(addProjectInputSchema.parse(p)))
-  handle(IPC.projectsSelect, async (p) => {
+  handle('projectsList', () => services.projects.list())
+  handle('projectsAdd', (p) => services.projects.add(addProjectInputSchema.parse(p)))
+  handle('projectsSelect', async (p) => {
     const { projectId } = projectIdSchema.parse(p)
     services.projects.select(projectId)
     return services.dashboard(projectId)
   })
-  handle(IPC.projectsConfig, (p) => services.projects.getConfig(projectIdSchema.parse(p).projectId))
-  handle(IPC.projectsDashboard, (p) => services.dashboard(projectIdSchema.parse(p).projectId))
+  handle('projectsConfig', (p) => services.projects.getConfig(projectIdSchema.parse(p).projectId))
+  handle('projectsDashboard', (p) => services.dashboard(projectIdSchema.parse(p).projectId))
 
   // --- terminals ---
-  handle(IPC.terminalsList, (p) => services.terminals.list(projectIdSchema.parse(p).projectId))
-  handle(IPC.terminalsCreate, (p) => services.terminals.create(createTerminalInputSchema.parse(p)))
-  handle(IPC.terminalsWrite, (p) => {
+  handle('terminalsList', (p) => services.terminals.list(projectIdSchema.parse(p).projectId))
+  handle('terminalsCreate', (p) => services.terminals.create(createTerminalInputSchema.parse(p)))
+  handle('terminalsWrite', (p) => {
     const { sessionId, data } = terminalInputSchema.parse(p)
     services.terminals.write(sessionId, data)
   })
-  handle(IPC.terminalsResize, (p) => {
+  handle('terminalsResize', (p) => {
     const { sessionId, cols, rows } = terminalResizeSchema.parse(p)
     services.terminals.resize(sessionId, cols, rows)
   })
-  handle(IPC.terminalsKill, (p) => services.terminals.kill(terminalIdSchema.parse(p).sessionId))
-  handle(IPC.terminalsRestart, (p) => services.terminals.restart(terminalIdSchema.parse(p).sessionId))
-  handle(IPC.terminalsRename, (p) => {
+  handle('terminalsKill', (p) => services.terminals.kill(terminalIdSchema.parse(p).sessionId))
+  handle('terminalsRestart', (p) => services.terminals.restart(terminalIdSchema.parse(p).sessionId))
+  handle('terminalsRename', (p) => {
     const { sessionId, name, role, alias } = terminalRenameSchema.parse(p)
     return services.terminals.rename(sessionId, name, role, alias)
   })
-  handle(IPC.terminalsLaunchAgent, (p) => {
+  handle('terminalsLaunchAgent', (p) => {
     const { projectId, agent } = z
       .object({ projectId: z.string().min(1), agent: z.enum(['claude', 'codex']) })
       .parse(p)
     return services.terminals.launchAgent(projectId, agent)
   })
-  handle(IPC.terminalsClaudeSessions, (p) => {
+  handle('terminalsClaudeSessions', (p) => {
     const { projectId } = projectIdSchema.parse(p)
     return services.claudeSessions.list(services.projects.get(projectId).path)
   })
-  handle(IPC.terminalsResumeClaude, (p) => {
+  handle('terminalsResumeClaude', (p) => {
     const { projectId, sessionId } = resumeClaudeSchema.parse(p)
     return services.terminals.resumeClaude(projectId, sessionId)
   })
-  handle(IPC.terminalsAttachImage, (p) =>
+  handle('terminalsAttachImage', (p) =>
     services.attachments.saveTerminalImage(terminalAttachmentInputSchema.parse(p)),
   )
 
   // --- git ---
-  handle(IPC.gitStatus, (p) => services.git.status(projectIdSchema.parse(p).projectId))
-  handle(IPC.gitDiff, (p) => services.git.diff(gitDiffInputSchema.parse(p)))
-  handle(IPC.gitStage, (p) => services.git.stage(gitStageInputSchema.parse(p)))
-  handle(IPC.gitCommit, (p) => services.git.commit(gitCommitInputSchema.parse(p)))
-  handle(IPC.gitPush, async (p) => {
+  handle('gitStatus', (p) => services.git.status(projectIdSchema.parse(p).projectId))
+  handle('gitDiff', (p) => services.git.diff(gitDiffInputSchema.parse(p)))
+  handle('gitStage', (p) => services.git.stage(gitStageInputSchema.parse(p)))
+  handle('gitCommit', (p) => services.git.commit(gitCommitInputSchema.parse(p)))
+  handle('gitPush', async (p) => {
     const input = gitPushInputSchema.parse(p)
     // A regular push is the one enabled write path (see CLAUDE.md). Force-push
     // rewrites remote history: it must consume an approved request here, at the
@@ -137,59 +153,59 @@ export function registerIpc(services: Services): void {
   })
 
   // --- github ---
-  handle(IPC.githubStatus, (p) => services.github.status(projectIdSchema.parse(p).projectId))
+  handle('githubStatus', (p) => services.github.status(projectIdSchema.parse(p).projectId))
 
   // --- railway ---
-  handle(IPC.railwayStatus, (p) => services.railway.status(projectIdSchema.parse(p).projectId))
-  handle(IPC.railwayServices, (p) => services.railway.services(projectIdSchema.parse(p).projectId))
-  handle(IPC.railwayEnv, (p) => services.railway.env(projectIdSchema.parse(p).projectId))
+  handle('railwayStatus', (p) => services.railway.status(projectIdSchema.parse(p).projectId))
+  handle('railwayServices', (p) => services.railway.services(projectIdSchema.parse(p).projectId))
+  handle('railwayEnv', (p) => services.railway.env(projectIdSchema.parse(p).projectId))
 
   // --- logs ---
-  handle(IPC.logsList, (p) => services.logs.listLogs(projectIdSchema.parse(p).projectId))
-  handle(IPC.logsInsights, (p) => services.logs.listInsights(projectIdSchema.parse(p).projectId))
-  handle(IPC.logsIngest, (p) => services.logs.ingest(ingestLogSchema.parse(p)))
-  handle(IPC.logsDismissInsight, (p) => {
+  handle('logsList', (p) => services.logs.listLogs(projectIdSchema.parse(p).projectId))
+  handle('logsInsights', (p) => services.logs.listInsights(projectIdSchema.parse(p).projectId))
+  handle('logsIngest', (p) => services.logs.ingest(ingestLogSchema.parse(p)))
+  handle('logsDismissInsight', (p) => {
     const { projectId, matchedPattern } = dismissInsightSchema.parse(p)
     services.logs.dismissInsight(projectId, matchedPattern)
     return { ok: true }
   })
-  handle(IPC.logsClearInsights, (p) => {
+  handle('logsClearInsights', (p) => {
     services.logs.clearInsights(projectIdSchema.parse(p).projectId)
     return { ok: true }
   })
 
   // --- usage ---
-  handle(IPC.usageSummary, (p) => services.usage.summarize(projectIdSchema.parse(p).projectId))
-  handle(IPC.agentUsageGet, (p) => {
+  handle('usageSummary', (p) => services.usage.summarize(projectIdSchema.parse(p).projectId))
+  handle('agentUsageGet', (p) => {
     agentUsageRequestSchema.parse(p)
     return services.agentUsage.getReport()
   })
 
   // --- approvals ---
-  handle(IPC.approvalsList, (p) => services.approvals.list(projectIdSchema.parse(p).projectId))
-  handle(IPC.approvalsRequest, (p) => services.approvals.request(requestApprovalSchema.parse(p)))
-  handle(IPC.approvalsDecide, (p) => {
+  handle('approvalsList', (p) => services.approvals.list(projectIdSchema.parse(p).projectId))
+  handle('approvalsRequest', (p) => services.approvals.request(requestApprovalSchema.parse(p)))
+  handle('approvalsDecide', (p) => {
     const { approvalId, approve } = approvalDecisionSchema.parse(p)
     return services.approvals.decide(approvalId, approve)
   })
 
   // --- router ---
-  handle(IPC.routerRoute, (p) => {
+  handle('routerRoute', (p) => {
     const { projectId, query } = routeQuerySchema.parse(p)
     return services.route(projectId, query)
   })
 
   // --- chat (real answers via the local Claude Code CLI) ---
-  handle(IPC.chatAsk, (p) => {
+  handle('chatAsk', (p) => {
     const { projectId, prompt, opts } = chatAskSchema.parse(p)
     return services.chat.ask(projectId, prompt, opts)
   })
 
   // --- audit ---
-  handle(IPC.auditList, (p) => services.audit.list(projectIdSchema.parse(p).projectId))
+  handle('auditList', (p) => services.audit.list(projectIdSchema.parse(p).projectId))
 
   // --- native folder picker ---
-  handle(IPC.dialogChooseDirectory, async (): Promise<string | null> => {
+  handle('dialogChooseDirectory', async (): Promise<string | null> => {
     // Default the picker to the user's general projects home if it exists.
     const bazWork = join(homedir(), 'Documents', 'BAZ-WORK')
     const defaultPath = existsSync(bazWork) ? bazWork : homedir()
@@ -207,7 +223,7 @@ export function registerIpc(services: Services): void {
   })
 
   // --- system ---
-  handle(IPC.systemInfo, (): SystemInfo => {
+  handle('systemInfo', (): SystemInfo => {
     const info = services.systemInfo()
     return {
       platform: process.platform,
@@ -220,11 +236,11 @@ export function registerIpc(services: Services): void {
   })
 
   // --- app update ---
-  handle(IPC.appUpdateStatus, () => services.appUpdate.status())
-  handle(IPC.appUpdateCheck, () => services.appUpdate.check())
-  handle(IPC.appUpdateDownload, () => services.appUpdate.download())
-  handle(IPC.appUpdateInstall, () => services.appUpdate.install())
-  handle(IPC.appUpdateRefreshEligible, (p) => {
+  handle('appUpdateStatus', () => services.appUpdate.status())
+  handle('appUpdateCheck', () => services.appUpdate.check())
+  handle('appUpdateDownload', () => services.appUpdate.download())
+  handle('appUpdateInstall', () => services.appUpdate.install())
+  handle('appUpdateRefreshEligible', (p) => {
     const { projectId } = projectIdSchema.parse(p)
     try {
       return isCockpitSource(services.projects.get(projectId).path)
@@ -232,7 +248,7 @@ export function registerIpc(services: Services): void {
       return false
     }
   })
-  handle(IPC.appUpdateRefresh, async (p) => {
+  handle('appUpdateRefresh', async (p) => {
     const { projectId } = projectIdSchema.parse(p)
     const project = services.projects.get(projectId)
     // The rebuild runs an npm script from this directory. Identity is verified
