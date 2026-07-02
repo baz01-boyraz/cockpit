@@ -90,7 +90,9 @@
   overflow: visible;
   padding: var(--sp-4) var(--sp-3);
   gap: var(--sp-4);
-  background: linear-gradient(180deg, var(--bg), var(--bg-deep));
+  /* chrome, not canvas: the rail is the machined bezel around the workspace */
+  background: linear-gradient(180deg, var(--chrome), var(--chrome-deep));
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03);
 }
 .rail__brand {
   display: flex;
@@ -101,6 +103,7 @@
   padding-top: 18px;
 }
 .rail__logo {
+  position: relative;
   width: 30px;
   height: 30px;
   border-radius: 9px;
@@ -108,13 +111,35 @@
   place-items: center;
   font-weight: 700;
   color: var(--text-on-accent);
-  background: linear-gradient(150deg, var(--accent-hi), var(--accent));
-  box-shadow: var(--shadow-accent);
+  background: var(--molten);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), var(--shadow-accent);
+}
+/* pedestal: a whisper of ember light pooled under the mark */
+.rail__logo::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 130%;
+  height: 10px;
+  transform: translateX(-50%);
+  border-radius: var(--r-pill);
+  background: radial-gradient(55% 100% at 50% 0%, var(--accent-glow), transparent 75%);
+  opacity: 0.8;
+  pointer-events: none;
 }
 .rail__brandName {
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.1;
+}
+/* the wordmark moment: cockpiT's trailing T carries the molten brand warm */
+.rail__brandT {
+  background: linear-gradient(160deg, var(--ember-200), var(--ember-400));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 700;
 }
 .rail__brandSub {
   font-size: var(--fs-micro);
@@ -285,7 +310,7 @@
   text-overflow: ellipsis;
   max-width: clamp(120px, 16vw, 220px);
   flex-shrink: 1;
-  background: linear-gradient(180deg, var(--text), #c8c2b6);
+  background: linear-gradient(180deg, var(--text), #c3c8d6);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -376,8 +401,10 @@
   font-size: var(--fs-micro);
   padding: 2px 6px;
   border-radius: 5px;
-  background: var(--surface-2);
+  /* recessed keycap: top light, seated base */
+  background: linear-gradient(180deg, var(--surface-3), var(--surface-2));
   border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), inset 0 -1px 0 rgba(0, 0, 0, 0.35);
   color: var(--text-faint);
   transition: opacity var(--dur) var(--ease-out);
 }
@@ -573,9 +600,9 @@
   --logo-scale: 1;
 }
 .engineCore--codex {
-  /* Codex's own emerald/teal identity. */
-  --provider: #13bd92;
-  --provider-hi: #5cf0c8;
+  /* Codex carries the brand's glacier cool — the counterweight to Claude's ember. */
+  --provider: var(--glacier-400);
+  --provider-hi: var(--glacier-300);
   --logo-scale: 1.45;
 }
 /* health escalation lives on the status dot — identity color stays put */
@@ -757,6 +784,13 @@
   opacity: 0.85;
   pointer-events: none;
   transition: opacity var(--dur) var(--ease-out);
+  /* instrument arc: the quota ring draws in on mount (registered --fill) */
+  animation: ring-draw 700ms var(--ease-out) 150ms backwards;
+}
+@keyframes ring-draw {
+  from {
+    --fill: 0;
+  }
 }
 .engineCore:hover .logoMeter__ring {
   opacity: 1;
@@ -782,6 +816,7 @@
   }
   .logoMeter__ring {
     transition: none;
+    animation: none;
   }
   .engineCore {
     transition: none;
@@ -824,8 +859,8 @@
   --provider-2: var(--accent-hi);
 }
 .quotaBody--codex {
-  --provider: #6fb6cf;
-  --provider-2: #8fcfe0;
+  --provider: var(--glacier-400);
+  --provider-2: var(--glacier-300);
 }
 .quotaBody--radial {
   gap: 13px;
@@ -2156,8 +2191,19 @@
   color: transparent;
 }
 .panel__title svg {
-  color: var(--accent);
-  -webkit-text-fill-color: var(--accent);
+  /* quiet chrome: the eyebrow already carries the ember masthead; a second
+   * orange glyph beside every title diluted the accent's meaning. */
+  color: var(--text-muted);
+  -webkit-text-fill-color: var(--text-muted);
+}
+/* the one-word molten treatment — for a view's hero noun (e.g. the branch
+ * name on Git). Never a full title, never twice in one view. */
+.panel__molten {
+  background: linear-gradient(135deg, var(--ember-100) 0%, var(--ember-300) 60%, var(--ember-400));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 /* Accent eyebrow: a small leading tick + ember label gives every panel a
  * confident, editorial masthead. */
@@ -2286,17 +2332,20 @@
   box-shadow: 0 0 10px var(--signal-dim);
   animation: pulse-dot 1.8s ease-in-out infinite;
 }
+/* "on" — has data, but not asking for attention. Neutral-bright, no glow. */
+.stat__dot--on { background: var(--text-muted); }
 .stat__dot--idle,
 .stat__dot--off { background: var(--text-faint); opacity: 0.7; }
 .stat__value {
   position: relative;
   font-size: 30px;
-  font-weight: 600;
+  font-weight: 650;
   letter-spacing: -0.03em;
   line-height: 1;
 }
 .stat--accent .stat__value,
 .stat--live .stat__value { color: var(--accent-hi); }
+.stat--on .stat__value { color: var(--text); }
 .stat--off .stat__value { color: var(--text-muted); }
 .stat__sub {
   position: relative;
@@ -2367,9 +2416,16 @@
 }
 
 /* ----- recent errors (grouped) ----- */
+/* Recessed data well: lists sit *in* the panel like instruments, not on it. */
+.errlist,
+.actlist {
+  border-radius: var(--r-md);
+  background: linear-gradient(180deg, rgba(7, 8, 11, 0.55), rgba(7, 8, 11, 0.25));
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+}
 .errlist {
   list-style: none;
-  margin: 0;
+  margin: var(--sp-2);
   padding: var(--sp-2);
   display: flex;
   flex-direction: column;
@@ -2426,7 +2482,7 @@
   flex-shrink: 0;
   margin-top: 1px;
   font-size: var(--fs-xs);
-  color: var(--accent-hi);
+  color: var(--glacier-400);
 }
 
 /* severity tag */
@@ -2465,7 +2521,7 @@
 /* ----- activity timeline ----- */
 .actlist {
   list-style: none;
-  margin: 0;
+  margin: var(--sp-2);
   padding: var(--sp-2);
   display: flex;
   flex-direction: column;
@@ -2487,8 +2543,10 @@
   border-radius: 50%;
   background: var(--text-faint);
 }
-.actrow__dot--ai { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
-.actrow__dot--user { background: var(--signal); box-shadow: 0 0 8px var(--signal-dim); }
+/* AI rows are machine data → glacier; user rows are neutral; ember stays
+ * reserved for the view's true attention points. */
+.actrow__dot--ai { background: var(--glacier-400); box-shadow: 0 0 8px var(--glacier-wash); }
+.actrow__dot--user { background: var(--text-muted); }
 .actrow__dot--system { background: var(--text-faint); }
 .actrow__actor {
   font-size: var(--fs-micro);
@@ -2497,8 +2555,8 @@
   letter-spacing: 0.07em;
   color: var(--text-faint);
 }
-.actrow__dot--ai + .actrow__actor { color: var(--accent-hi); }
-.actrow__dot--user + .actrow__actor { color: var(--signal); }
+.actrow__dot--ai + .actrow__actor { color: var(--glacier-400); }
+.actrow__dot--user + .actrow__actor { color: var(--text-muted); }
 .actrow__summary {
   min-width: 0;
   color: var(--text);
@@ -2544,6 +2602,7 @@
   gap: var(--sp-3);
 }
 .termEmpty__icon {
+  position: relative;
   width: 56px;
   height: 56px;
   border-radius: var(--r-lg);
@@ -2552,6 +2611,21 @@
   background: var(--surface-inset);
   border: 1px solid var(--border);
   color: var(--accent);
+  box-shadow: var(--bevel);
+}
+/* pooled ambient light under the icon — composed emptiness, not dead air */
+.termEmpty__icon::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -26px;
+  width: 300%;
+  height: 44px;
+  transform: translateX(-50%);
+  border-radius: var(--r-pill);
+  background: radial-gradient(50% 100% at 50% 0%, var(--accent-glow), transparent 72%);
+  opacity: 0.55;
+  pointer-events: none;
 }
 .termEmpty__title { font-size: var(--fs-h1); }
 .termEmpty__sub {
@@ -3647,9 +3721,9 @@
   height: 40px;
   flex-shrink: 0;
   border-radius: var(--r-md);
-  background: var(--accent-wash);
-  border: 1px solid var(--border-accent);
-  color: var(--accent);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 .git__runTitle { font-size: var(--fs-h1); margin: 2px 0 4px; }
@@ -3719,8 +3793,11 @@
   color: var(--text-muted);
   transition: color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);
 }
-.runproc__icon--dev { color: var(--accent); border-color: var(--border-accent); background: var(--accent-wash); }
-.runproc__icon--test { color: var(--signal); border-color: var(--signal-dim); background: var(--signal-dim); }
+/* neutral until running — the live state (green) is the only resting light */
+.runproc__icon--dev { color: var(--text-muted); }
+.runproc__icon--test { color: var(--text-muted); }
+.runproc--dev:hover .runproc__icon { color: var(--accent); border-color: var(--border-accent); background: var(--accent-wash); }
+.runproc--test:hover .runproc__icon { color: var(--signal); border-color: var(--signal-dim); background: var(--signal-dim); }
 .runproc--live .runproc__icon { color: var(--success); border-color: color-mix(in srgb, var(--success) 45%, var(--border)); }
 /* live indicator only — hidden when idle so the icon tile stays clean */
 .runproc__pulse {
@@ -4056,7 +4133,11 @@
 .usagerow__head { display: flex; align-items: center; gap: var(--sp-2); }
 .usagerow__name { font-weight: 600; text-transform: capitalize; }
 .usagerow__bar { height: 8px; border-radius: var(--r-pill); background: var(--surface-inset); overflow: hidden; }
-.usagerow__fill { display: block; height: 100%; border-radius: var(--r-pill); background: linear-gradient(90deg, var(--accent), var(--accent-hi)); }
+/* dual-engine identity: Claude = ember, Codex = glacier, everything else is
+ * neutral instrument data. The bars stop shouting in one hue. */
+.usagerow__fill { display: block; height: 100%; border-radius: var(--r-pill); background: linear-gradient(90deg, #565c6b, #798093); }
+.usagerow__fill--claude { background: linear-gradient(90deg, var(--ember-500), var(--ember-300)); }
+.usagerow__fill--codex { background: linear-gradient(90deg, var(--glacier-500), var(--glacier-300)); }
 .usagerow__meta { display: flex; gap: var(--sp-4); font-size: var(--fs-xs); color: var(--text-faint); }
 
 /* ---------- settings ---------- */
@@ -4074,6 +4155,10 @@
 .cliitem__no { display: flex; align-items: center; gap: 5px; color: var(--text-faint); font-size: var(--fs-xs); }
 .settings__note { color: var(--text-muted); font-size: var(--fs-sm); margin: 0 0 var(--sp-3); line-height: 1.6; }
 .policygrid { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+/* Gated-action chips read neutral; only the shield glyph carries the warning
+ * tone — nine amber chips in a row was noise, not signal. */
+.chip--policy { font-family: var(--font-mono); }
+.chip--policy svg { color: var(--warning); }
 
 /* ---------- modal / project switcher ---------- */
 .modal {
@@ -4434,10 +4519,27 @@
   background:
     radial-gradient(120% 100% at 100% 0, var(--accent-wash), transparent 60%),
     linear-gradient(180deg, var(--surface-3), var(--surface-2));
-  box-shadow: var(--shadow-float), var(--shadow-accent);
+  box-shadow: var(--shadow-float);
   backdrop-filter: blur(18px) saturate(1.1);
   overflow: hidden;
-  animation: update-toast-in 0.42s var(--ease-spring) both;
+  animation: update-toast-in var(--dur-arrive) var(--ease-spring) both;
+}
+/* arrival bloom: ember light flares once as the toast lands, then settles —
+ * notifications announce themselves with physics, they don't shout forever. */
+.updateToast::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(130% 120% at 85% 0%, var(--accent-glow), transparent 62%);
+  opacity: 0;
+  pointer-events: none;
+  animation: toast-bloom 900ms var(--ease-out) 120ms both;
+}
+@keyframes toast-bloom {
+  0% { opacity: 0; }
+  30% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 .updateToast__glow {
@@ -4464,7 +4566,6 @@
   color: var(--accent-hi);
   background: var(--accent-wash);
   border: 1px solid var(--border-accent);
-  box-shadow: 0 0 16px var(--accent-glow);
 }
 
 .updateToast__title {
@@ -4513,6 +4614,7 @@
   overflow: hidden;
 }
 
+/* quiet secondary — the toast must not compete with the page's primary CTA */
 .updateToast__action {
   display: inline-flex;
   align-items: center;
@@ -4521,14 +4623,19 @@
   height: 34px;
   border: 1px solid var(--border-accent);
   border-radius: var(--r-md);
-  color: var(--text-on-accent);
-  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  color: var(--accent-hi);
+  background: var(--accent-wash);
   font-size: var(--fs-sm);
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.15s var(--ease-spring), box-shadow 0.2s var(--ease-out), opacity 0.15s var(--ease-out);
+  transition: transform 0.15s var(--ease-spring), box-shadow 0.2s var(--ease-out),
+    background 0.2s var(--ease-out), opacity 0.15s var(--ease-out);
 }
-.updateToast__action:hover { transform: translateY(-1px); box-shadow: var(--shadow-accent); }
+.updateToast__action:hover {
+  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: 0 8px 22px -10px var(--accent-glow);
+}
 .updateToast__action:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
 .updateToast__action:active { transform: translateY(0) scale(0.99); }
 .updateToast__action:disabled { opacity: 0.6; cursor: progress; transform: none; box-shadow: none; }
@@ -4563,7 +4670,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .updateToast { animation: none; }
+  .updateToast,
+  .updateToast::after { animation: none; }
   .updateToast__action:hover { transform: none; }
 }
 

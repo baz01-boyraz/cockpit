@@ -58,10 +58,15 @@
   border-color: var(--border-strong);
   box-shadow: var(--bevel);
 }
-/* Glyph stays ember-lit so the notepad reads as its own distinct zone. */
+/* Glyph rests neutral like the nav items; ember lights it on interaction. */
 .railNote__glyph {
   display: inline-grid;
   place-items: center;
+  color: var(--text-muted);
+  transition: color var(--dur) var(--ease-out);
+}
+.railNote__btn:hover .railNote__glyph,
+.railNote__btn--active .railNote__glyph {
   color: var(--accent-hi);
 }
 .railNote__label {

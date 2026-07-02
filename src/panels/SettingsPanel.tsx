@@ -68,7 +68,7 @@ export function SettingsPanel() {
           </p>
           <div className="policygrid">
             {config?.safety.requireApprovalFor.map((a) => (
-              <span key={a} className="chip chip--warning">
+              <span key={a} className="chip chip--policy">
                 <IconShield width={11} height={11} /> {a}
               </span>
             ))}

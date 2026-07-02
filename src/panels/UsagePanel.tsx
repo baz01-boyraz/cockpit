@@ -2,6 +2,14 @@ import { useStore } from '../store/useStore'
 import { IconUsage, IconWarning } from '../components/icons'
 import { useAgentUsage } from '../lib/useAgentUsage'
 import { AgentUsageBody } from '../components/AgentUsageBody'
+import { CountUp } from '../components/CountUp'
+
+/* Claude reads ember, Codex reads glacier; every other provider stays a
+ * neutral instrument bar. */
+const PROVIDER_FILL: Record<string, string> = {
+  claude: 'usagerow__fill--claude',
+  codex: 'usagerow__fill--codex',
+}
 
 const fmtDuration = (ms: number): string => {
   const min = Math.round(ms / 60000)
@@ -51,9 +59,11 @@ export function UsagePanel() {
           <div key={s.label} className="card stat">
             <div className="stat__top">
               <span className="stat__label">{s.label}</span>
-              <span className={`stat__dot stat__dot--${s.live ? 'accent' : 'idle'}`} aria-hidden />
+              <span className={`stat__dot stat__dot--${s.live ? 'on' : 'idle'}`} aria-hidden />
             </div>
-            <div className="stat__value">{s.value}</div>
+            <div className="stat__value">
+              {typeof s.value === 'number' ? <CountUp value={s.value} /> : s.value}
+            </div>
             <div className="stat__sub mono">{s.sub}</div>
           </div>
         ))}
@@ -94,7 +104,7 @@ export function UsagePanel() {
                 </div>
                 <div className="usagerow__bar">
                   <span
-                    className="usagerow__fill"
+                    className={`usagerow__fill ${PROVIDER_FILL[u.provider] ?? ''}`}
                     style={{ width: `${(u.sessions / maxSessions) * 100}%` }}
                   />
                 </div>

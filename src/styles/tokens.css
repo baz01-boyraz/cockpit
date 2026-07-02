@@ -9,12 +9,16 @@
  */
 :root {
   /* --- obsidian surface ladder (cool, crisp, layered) --- */
-  --bg: #0a0b0f;
-  --bg-deep: #070809;
-  --surface-1: #13151d;
-  --surface-2: #1a1d27;
-  --surface-3: #242834;
-  --surface-inset: #0c0d12;
+  --bg: #0a0b11;
+  --bg-deep: #07080b;
+  --surface-1: #131521;
+  --surface-2: #1a1d2b;
+  --surface-3: #242838;
+  --surface-inset: #0c0d13;
+  /* chrome: the machined bezel (left rail / frame) — a half-step cooler and
+   * lifted from the canvas so the frame reads as a distinct material. */
+  --chrome: #0e1016;
+  --chrome-deep: #08090d;
 
   /* --- hairlines & borders (cool light, crisp) --- */
   --border: rgba(255, 255, 255, 0.065);
@@ -27,12 +31,33 @@
   --text-faint: #61656f;
   --text-on-accent: #1a1206;
 
+  /* --- ember ramp: the brand warm, from pale highlight to deepest rust.
+   * --accent/--accent-hi stay aliased to ramp steps so nothing regresses. --- */
+  --ember-100: #ffd9c2;
+  --ember-200: #ffb185;
+  --ember-300: #ff9d63;
+  --ember-400: #ee7c42;
+  --ember-500: #d3642f;
+  --ember-600: #a84d24;
+  --ember-700: #6e3316;
+
   /* --- ember/copper signal accent (luminous, premium) --- */
-  --accent: #ee7c42;
-  --accent-hi: #ff9d63;
+  --accent: var(--ember-400);
+  --accent-hi: var(--ember-300);
   --accent-dim: #b8623492;
   --accent-glow: rgba(238, 124, 66, 0.24);
   --accent-wash: rgba(238, 124, 66, 0.09);
+
+  /* The signature "molten" gradient — reserved for brand moments only:
+   * primary CTA, logo, at most one hero element per view. Never two. */
+  --molten: linear-gradient(135deg, var(--ember-300), var(--ember-400) 55%, var(--ember-500));
+
+  /* --- glacier: the brand cool. Data, metrics, Codex, informational.
+   * Never an interactive color — ember owns interaction. --- */
+  --glacier-300: #9ed2ea;
+  --glacier-400: #6cb6d6;
+  --glacier-500: #4b7f9e;
+  --glacier-wash: rgba(108, 182, 214, 0.1);
 
   /* --- secondary "signal lime" for safe / go --- */
   --signal: #cde85f;
@@ -45,7 +70,7 @@
   --warning-wash: rgba(232, 178, 74, 0.12);
   --danger: #ed6450;
   --danger-wash: rgba(237, 100, 80, 0.13);
-  --info: #6cb6d6;
+  --info: var(--glacier-400);
 
   /* --- typography --- */
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Inter, system-ui,
@@ -88,6 +113,13 @@
   --shadow-float: 0 10px 30px rgba(0, 0, 0, 0.55), 0 30px 80px rgba(0, 0, 0, 0.5);
   --shadow-accent: 0 6px 26px var(--accent-glow);
 
+  /* --- glow-core: layered interactive light — hot tight rim, mid bloom,
+   * wide cooler falloff. Never a flat single box-shadow. --- */
+  --glow-core:
+    0 0 0 1px rgba(255, 177, 133, 0.22),
+    0 2px 10px -2px rgba(238, 124, 66, 0.5),
+    0 8px 30px -6px rgba(211, 100, 47, 0.32);
+
   /* --- bevel + ring: thin top highlight & crisp outer hairline for glass depth --- */
   --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.07);
   --ring: 0 0 0 1px rgba(255, 255, 255, 0.04);
@@ -99,8 +131,24 @@
   --dur-fast: 120ms;
   --dur: 190ms;
   --dur-slow: 400ms;
+  --dur-glint: 650ms;
+  --dur-trace: 600ms;
+  --dur-arrive: 320ms;
 
   --rail-w: 232px;
   --right-w: 360px;
   --topbar-h: 52px;
+}
+
+/* Registered custom properties so gradients can animate (ember trace ring,
+ * engine quota ring draw-in). Chromium-only app — @property is supported. */
+@property --trace-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+@property --fill {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
 }

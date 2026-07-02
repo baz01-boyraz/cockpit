@@ -5,6 +5,7 @@ import { cockpit } from '../lib/cockpit'
 import { relativeTime } from '@shared/time'
 import { groupErrors, prettyAuditSummary } from '@shared/dashboard-insights'
 import { ApprovalCard } from '../components/ApprovalCard'
+import { CountUp } from '../components/CountUp'
 import {
   IconBolt,
   IconGit,
@@ -23,7 +24,7 @@ const SEVERITY_CLASS: Record<ErrorSeverity, string> = {
 
 const ACTIVITY_PREVIEW = 6
 
-type StatTone = 'accent' | 'live' | 'ok' | 'idle' | 'off'
+type StatTone = 'accent' | 'live' | 'ok' | 'on' | 'idle' | 'off'
 
 interface StatCard {
   label: string
@@ -82,7 +83,7 @@ export function DashboardPanel() {
       sub: dashboard.branch ?? 'no branch',
       Icon: IconGit,
       view: 'git',
-      tone: dashboard.changedFiles ? 'accent' : 'idle',
+      tone: dashboard.changedFiles ? 'on' : 'idle',
     },
     {
       label: 'Terminals',
@@ -98,7 +99,7 @@ export function DashboardPanel() {
       sub: agentCount ? 'active' : 'idle',
       Icon: IconBolt,
       view: 'terminals',
-      tone: agentCount ? 'accent' : 'idle',
+      tone: agentCount ? 'on' : 'idle',
     },
     {
       label: 'Railway',
@@ -163,7 +164,9 @@ export function DashboardPanel() {
               <span className="stat__label">{s.label}</span>
               <span className={`stat__dot stat__dot--${s.tone}`} aria-hidden />
             </div>
-            <div className="stat__value">{s.value}</div>
+            <div className="stat__value">
+              {typeof s.value === 'number' ? <CountUp value={s.value} /> : s.value}
+            </div>
             <div className="stat__sub mono">{s.sub}</div>
           </button>
         ))}

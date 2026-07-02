@@ -88,6 +88,34 @@ button {
   border-radius: var(--r-sm);
 }
 
+::selection {
+  background: rgba(238, 124, 66, 0.28);
+  color: var(--ember-100);
+}
+
+input,
+textarea {
+  caret-color: var(--accent);
+}
+
+/* Instrument numerals: every metric, badge, timer and percentage aligns. */
+.stat__value,
+.stat__sub,
+.rail__itemBadge,
+.card__count,
+.chip,
+.quotaWindow__value,
+.quotaWindow__used,
+.quotaRadial__value,
+.quotaRadialStat__value,
+.engineCore__pct,
+.usagerow__meta,
+.actrow__time,
+.errrow__count,
+.topbar__kbd {
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- primitives ---------- */
 
 .surface {
@@ -112,6 +140,45 @@ button {
   transform: translateY(-2px);
   border-color: var(--border-strong);
   box-shadow: var(--bevel), var(--shadow-2), 0 0 0 1px var(--accent-wash);
+}
+/* Ember trace — on hover a 1px border-light sweeps around the card once and
+ * settles as a warm top-edge highlight. Drawn as a masked ring so it never
+ * paints the interior; sits at inset 0 so overflow:hidden cards keep it. */
+.card--hover::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--trace-angle),
+    rgba(255, 217, 194, 0.85),
+    color-mix(in srgb, var(--ember-400) 55%, transparent) 9%,
+    transparent 26%,
+    transparent 74%,
+    color-mix(in srgb, var(--ember-400) 40%, transparent) 91%,
+    rgba(255, 217, 194, 0.85)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease-out);
+  pointer-events: none;
+}
+.card--hover:hover::before {
+  opacity: 0.8;
+  animation: trace-sweep var(--dur-trace) var(--ease-emph);
+}
+@keyframes trace-sweep {
+  from {
+    --trace-angle: 0deg;
+  }
+  to {
+    --trace-angle: 360deg;
+  }
 }
 
 .eyebrow {
@@ -157,7 +224,9 @@ button {
   cursor: not-allowed;
 }
 .btn--accent {
-  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  position: relative;
+  overflow: hidden;
+  background: var(--molten);
   color: var(--text-on-accent);
   border-color: transparent;
   /* inner top-light gives the ember a molten, premium sheen */
@@ -165,8 +234,37 @@ button {
   font-weight: 600;
 }
 .btn--accent:hover {
-  background: linear-gradient(180deg, #ffb185, var(--accent-hi));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 8px 30px var(--accent-glow);
+  background: linear-gradient(135deg, var(--ember-200), var(--ember-300) 55%, var(--ember-400));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), var(--glow-core);
+}
+/* Ember glint — a 45° light streak sweeps across once per hover. */
+.btn--accent::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -70%;
+  width: 44%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.38), transparent);
+  transform: skewX(-18deg);
+  opacity: 0;
+  pointer-events: none;
+}
+.btn--accent:hover::after {
+  animation: glint-sweep var(--dur-glint) var(--ease-out);
+}
+@keyframes glint-sweep {
+  0% {
+    left: -70%;
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    left: 140%;
+    opacity: 0;
+  }
 }
 .btn--ghost {
   background: transparent;
@@ -291,6 +389,10 @@ button {
   }
   .live-dot,
   .recency__dot {
+    animation: none;
+  }
+  .btn--accent:hover::after,
+  .card--hover:hover::before {
     animation: none;
   }
 }

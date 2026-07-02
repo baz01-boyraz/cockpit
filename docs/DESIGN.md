@@ -9,21 +9,35 @@ Serious, fast, premium, useful. A cockpit a senior engineer trusts. **No fake da
 every visible metric or control must help the user decide or act. Calm by default; the ember
 accent is reserved for the few things that matter (primary action, live signal, attention).
 
-## Color (tokens in `src/styles/tokens.css`)
+## Color (tokens in `src/styles/tokens.css`) — "Molten Obsidian"
 
 | Role | Token | Value |
 |---|---|---|
-| Background (deep graphite, not pure black) | `--bg` | `#0b0c0f` |
-| Raised graphite | `--surface-1` | `#14161c` |
-| Warm charcoal | `--surface-2` | `#1a1d25` |
-| Floating | `--surface-3` | `#222631` |
-| Text (warm off-white) | `--text` | `#ece6da` |
-| Muted (stone) | `--text-muted` | `#9a9488` |
-| **Accent — ember/copper** | `--accent` | `#e07b45` |
-| Secondary — signal lime (safe/go) | `--signal` | `#c4e35a` |
+| Background (night obsidian, subtle blue chroma) | `--bg` | `#0a0b11` |
+| Raised obsidian | `--surface-1` | `#131521` |
+| Lifted | `--surface-2` | `#1a1d2b` |
+| Floating | `--surface-3` | `#242838` |
+| Chrome (rail / machined bezel) | `--chrome` | `#0e1016` |
+| Text (crisp cool white) | `--text` | `#f2f4f8` |
+| Muted | `--text-muted` | `#a2a8b4` |
+| **Brand warm — ember ramp** | `--ember-100..700` | anchor `--accent` = `#ee7c42` |
+| **Brand cool — glacier** (data/Codex/info) | `--glacier-300/400/500` | anchor `#6cb6d6` |
+| Molten gradient (brand moments ONLY) | `--molten` | ember 300→400→500 |
+| Secondary — signal lime (safe/go) | `--signal` | `#cde85f` |
 | success / warning / danger | … | restrained, semantic |
 
-**Never** default Tailwind blue/indigo. The accent is copper; lime means "safe/read-only."
+**The accent budget (enforced):** ember answers one question — *where should the pilot
+look?* At most ~3 ember attention points per view; demote the rest to neutral. Glacier is
+data-only, never interactive. Dual-engine identity: **Claude = ember, Codex = glacier**
+(usage bars, quota dots, engine rings). **Never** default Tailwind blue/indigo.
+
+### Light discipline
+
+Three glow primitives, one rule: **at most one resting/breathing light per view region.**
+- `--glow-core` — layered interactive light (hot rim + mid bloom + wide falloff); hover/focus only.
+- pool — radial light pooled under an element (engine pedestals, logo, empty-state icons).
+- trace — light running along one edge (active rail item, `.card--hover` ember trace ring).
+A static control never glows at rest; glow means "live or needs you."
 
 ## Type
 
@@ -43,6 +57,17 @@ gradient + a 1px hairline border (`--border`), not flat fills. Shadows are layer
 - Animate **only** `transform` and `opacity`. Never `transition-all`.
 - Spring easing (`--ease-spring`) for press/hover lift; `--ease-out` for fades.
 - `fade-rise` on view/section mount; `pulse-dot` for live indicators. Keep it subtle.
+
+### Signature motions (the whole "spicy" budget — don't add more ambient loops)
+
+1. **Ember glint** — light streak sweeps `.btn--accent` once per hover (`--dur-glint`).
+2. **Instrument tick-up** — stat numbers count up via `<CountUp>` (`src/components/CountUp.tsx`);
+   pair with `tabular-nums`.
+3. **Ember trace** — 1px conic border-light sweeps `.card--hover` on hover and settles at the
+   top edge (registered `--trace-angle`).
+4. **Arrival physics** — toasts spring in and bloom once (`toast-bloom`), then rest quiet.
+Plus: engine quota rings draw in on mount (registered `--fill`). Everything gated behind
+`prefers-reduced-motion`.
 
 ## Interactive states (required, no exceptions)
 

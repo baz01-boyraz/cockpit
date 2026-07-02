@@ -52,7 +52,9 @@ export function LeftRail() {
           <span>c</span>
         </div>
         <div className="rail__brandText">
-          <div className="rail__brandName">cockpiT</div>
+          <div className="rail__brandName">
+            cockpi<span className="rail__brandT">T</span>
+          </div>
           <div className="rail__brandSub mono">developer</div>
         </div>
       </div>
