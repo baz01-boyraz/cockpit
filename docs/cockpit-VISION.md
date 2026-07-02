@@ -178,6 +178,12 @@ app's CSP has no localhost; unit-testable allowlist helper.
 **Gate 1:** All 1.x done. A release is cut and auto-update verified
 (`gh release view` shows matching CI artifacts). CLAUDE.md security section updated
 to say "enforced in main", and it's true.
+> **Gate 1 status (2026-07-01):** code-verified end-to-end — 16/16 checks against the
+> real Electron app (isolated profile): approved force-push executed against a local
+> bare origin, replay refused, cross-project approval refused, audit chain complete,
+> redaction live, eligibility both ways, strict CSP shipped, file:// open denied.
+> REMAINING for full gate: hardened-runtime verify at the next tagged CI release.
+> Noted for 2.3: raw ZodError JSON leaks into renderer error strings — confirmed live.
 
 ---
 
@@ -536,4 +542,5 @@ Ordered by leverage, all optional:
 | 2026-07-01 | 1.3 | Redaction: Stripe/URL-creds/AIza/SG./npm_/ghu-ghs-ghr/Bearer patterns + bare *_KEY names + high-entropy env fallback + `redactText()`. TDD, 9 new tests |
 | 2026-07-01 | 1.4 | LogIntelligence ingest + listLogs now scrub secrets (new rows and legacy rows) |
 | 2026-07-01 | 1.5 | Rebuild & relaunch: package-identity check in main (`isCockpitSource`), native confirm dialog, audit entry, button hidden for foreign projects (`refreshEligible` IPC). 5 new tests. Verified both states via screenshots |
+| 2026-07-01 | 1.x E2E | Dev-mode verification vs real app: 16/16 (positive consume path force-pushed a local bare origin; single-use + cross-project + pending/rejected refusals; audit chain; live redaction) |
 | 2026-07-01 | 1.6 | openExternal https/http allowlist; strict prod CSP via build plugin (verified in out/); entitlements plist + CI enables hardenedRuntime on the Apple-cert path only — VERIFY at next tagged release |
