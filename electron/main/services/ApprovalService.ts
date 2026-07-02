@@ -100,6 +100,49 @@ export class ApprovalService {
     return this.toRequest({ ...row, status, resolved_at: resolvedAt })
   }
 
+  /**
+   * The execution-side gate. Verifies that an approval exists, belongs to this
+   * project and action type, and was approved — then marks it consumed so it
+   * can never authorize a second execution. Throws (blocking the caller)
+   * otherwise. Every mutating handler must pass through here before running a
+   * gated action; the renderer alone is never trusted to enforce the gate.
+   */
+  consume(input: { approvalId: string; projectId: string; actionType: ApprovalActionType }): void {
+    const row = this.db
+      .prepare('SELECT * FROM approval_requests WHERE id = ?')
+      .get(input.approvalId) as ApprovalRow | undefined
+    if (!row) {
+      throw new Error(`Approval ${input.approvalId} not found — request approval first.`)
+    }
+    if (row.project_id !== input.projectId || row.action_type !== input.actionType) {
+      throw new Error('Approval does not match this action — request a new approval.')
+    }
+    if (row.status === 'pending') {
+      throw new Error('Approval is still pending — approve it first.')
+    }
+    if (row.status !== 'approved') {
+      throw new Error(`Approval was ${row.status} — request a new approval.`)
+    }
+
+    // The status guard in the UPDATE makes consumption atomic: even if two
+    // calls race, only one sees changes === 1 and proceeds.
+    const res = this.db
+      .prepare(`UPDATE approval_requests SET status = 'consumed' WHERE id = ? AND status = 'approved'`)
+      .run(input.approvalId)
+    if (res.changes !== 1) {
+      throw new Error('Approval was already consumed — request a new approval.')
+    }
+
+    this.audit.record({
+      projectId: input.projectId,
+      actor: 'system',
+      actionType: `approval.consumed:${input.actionType}`,
+      summary: `Approval consumed — ${row.summary}`,
+      payload: safeJson(row.command_or_payload_json, {}),
+    })
+    this.events.emitTyped('approvals:changed', { projectId: input.projectId })
+  }
+
   list(projectId: string, limit = 50): ApprovalRequest[] {
     const rows = this.db
       .prepare(

@@ -96,6 +96,7 @@ export const IPC = {
   appUpdateDownload: 'appUpdate:download',
   appUpdateInstall: 'appUpdate:install',
   appUpdateRefresh: 'appUpdate:refresh',
+  appUpdateRefreshEligible: 'appUpdate:refreshEligible',
 
   // main -> renderer push events
   evtTerminalData: 'evt:terminal:data',
@@ -175,7 +176,11 @@ export interface CockpitApi {
     diff(input: { projectId: string; path: string; staged?: boolean }): Promise<GitDiff>
     stage(input: { projectId: string; paths?: string[]; all?: boolean }): Promise<GitSnapshot>
     commit(input: { projectId: string; message: string }): Promise<GitCommitResult>
-    push(input: { projectId: string; force?: boolean }): Promise<GitPushResult>
+    /**
+     * `force` requires `approvalId` — the id of an approved `git_force_push`
+     * request, which the main process verifies and consumes before executing.
+     */
+    push(input: { projectId: string; force?: boolean; approvalId?: string }): Promise<GitPushResult>
   }
   github: {
     status(projectId: string): Promise<GitHubRepositoryStatus>
@@ -246,6 +251,8 @@ export interface CockpitApi {
     install(): Promise<void>
     /** Rebuild the cockpit from the given project's source and relaunch it. Dev-only. */
     refresh(projectId: string): Promise<AppRefreshResult>
+    /** True only when the active project is verifiably cockpiT's own source. */
+    refreshEligible(projectId: string): Promise<boolean>
     onChange(cb: (state: AppUpdateState) => void): Unsubscribe
   }
 }

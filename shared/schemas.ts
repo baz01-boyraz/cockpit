@@ -184,10 +184,21 @@ export const gitCommitInputSchema = z.object({
   message: z.string().min(1).max(240),
 })
 
-export const gitPushInputSchema = z.object({
-  projectId: z.string().min(1),
-  force: z.boolean().optional(),
-})
+/**
+ * A regular push is the one enabled write path (non-destructive, audit-logged).
+ * Force-push can rewrite remote history, so it must carry the id of an
+ * approved request — the main process verifies and consumes it before
+ * executing. The schema makes "force without approval" unrepresentable.
+ */
+export const gitPushInputSchema = z
+  .object({
+    projectId: z.string().min(1),
+    force: z.boolean().optional(),
+    approvalId: z.string().min(1).optional(),
+  })
+  .refine((v) => !v.force || Boolean(v.approvalId), {
+    message: 'Force-push requires an approved request — request approval first.',
+  })
 
 export const approvalDecisionSchema = z.object({
   approvalId: z.string().min(1),

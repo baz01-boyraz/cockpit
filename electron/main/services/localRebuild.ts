@@ -14,27 +14,46 @@ import type { AppRefreshResult } from '@shared/ipc'
  * not get on its own. It is detached and unref'd so it survives the very app it
  * is about to quit and replace.
  */
-export function rebuildAndRelaunch(sourceDir: string): AppRefreshResult {
+const COCKPIT_PACKAGE_NAME = 'cockpit'
+const COCKPIT_APP_ID = 'com.boyraz.cockpit'
+
+interface PackageJsonShape {
+  name?: string
+  scripts?: Record<string, string>
+  build?: { appId?: string }
+}
+
+function readPackageJson(sourceDir: string): PackageJsonShape | null {
   const pkgPath = join(sourceDir, 'package.json')
-  if (!existsSync(pkgPath)) {
-    return {
-      ok: false,
-      message: 'Active project has no package.json. Open the cockpiT source as the active project.',
-    }
-  }
-
-  let scripts: Record<string, string> = {}
+  if (!existsSync(pkgPath)) return null
   try {
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { scripts?: Record<string, string> }
-    scripts = pkg.scripts ?? {}
+    return JSON.parse(readFileSync(pkgPath, 'utf8')) as PackageJsonShape
   } catch {
-    return { ok: false, message: 'Could not read package.json in the active project.' }
+    return null
   }
+}
 
-  if (!scripts['app:refresh']) {
+/**
+ * True only when the directory is cockpiT's own source checkout. The rebuild
+ * path runs an npm script from this directory with the user's privileges, so a
+ * script-name check alone would let ANY repo that declares `app:refresh`
+ * become an execution target. Require the package identity to match too.
+ */
+export function isCockpitSource(sourceDir: string): boolean {
+  const pkg = readPackageJson(sourceDir)
+  return Boolean(
+    pkg &&
+      pkg.name === COCKPIT_PACKAGE_NAME &&
+      pkg.build?.appId === COCKPIT_APP_ID &&
+      pkg.scripts?.['app:refresh'],
+  )
+}
+
+export function rebuildAndRelaunch(sourceDir: string): AppRefreshResult {
+  if (!isCockpitSource(sourceDir)) {
     return {
       ok: false,
-      message: 'Active project is not the cockpiT source (no "app:refresh" script).',
+      message: 'Active project is not the cockpiT source — rebuild refused.',
     }
   }
 

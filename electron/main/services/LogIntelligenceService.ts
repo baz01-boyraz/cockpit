@@ -1,6 +1,7 @@
 import type { ErrorInsight, LogEvent, LogLevel, LogSourceType } from '@shared/domain'
 import { inferLogLevel, matchLogLine } from '@shared/log-patterns'
 import { sanitizeStoredLine, stripAnsi } from '@shared/log-sanitize'
+import { redactText } from '@shared/redaction'
 import type { Db } from '../db/Database'
 import type { CockpitEvents } from '../events'
 import { newId, nowIso, safeJson } from '../util/ids'
@@ -49,10 +50,12 @@ export class LogIntelligenceService {
   }): ErrorInsight | null {
     // Defence in depth: strip ANSI/control debris even if the caller did not.
     // Terminal output is already sanitized upstream; the probe/system paths are
-    // user-pasted text that may still carry escape codes.
+    // user-pasted text that may still carry escape codes. Secret-shaped content
+    // (an echoed .env, a Bearer header in a failing curl) is scrubbed BEFORE
+    // anything is persisted — log_events must never store raw secrets.
     const lines = input.message
       .split(/\r?\n/)
-      .map((l) => stripAnsi(l).trim())
+      .map((l) => redactText(stripAnsi(l).trim()))
       .filter((l) => l.length > 0)
     if (lines.length === 0) return null
 
@@ -131,8 +134,11 @@ export class LogIntelligenceService {
       .all(projectId, Math.min(limit * 3, 600)) as LogRow[]
     const events: LogEvent[] = []
     for (const r of rows) {
-      const message = sanitizeStoredLine(r.message)
-      if (message === null) continue
+      // Redact on the way out too: rows ingested before redaction existed may
+      // still hold secret-shaped content on disk.
+      const sanitized = sanitizeStoredLine(r.message)
+      if (sanitized === null) continue
+      const message = redactText(sanitized)
       events.push({
         id: r.id,
         projectId: r.project_id,

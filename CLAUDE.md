@@ -41,9 +41,12 @@ screenshot workflow possible — and it must stay in sync with the real `Cockpit
    SQLite or project config. Config holds a `tokenRef`, not the value.
 4. These require approval: `git_force_push`, `deploy`, `redeploy`,
    `restart_service`, `delete_file`, `database_reset`, `env_write`. Force-push and DB reset
-   require **strong** approval and always gate regardless of config. A regular `git_push`
-   executes directly (non-destructive, audit-logged) from the Git panel — it is the one
-   write path enabled for the developer's own loop.
+   require **strong** approval and always gate regardless of config. **The gate is enforced
+   in the main process**: a gated action must present the id of an approved request, which
+   `ApprovalService.consume()` verifies and spends (single-use) before execution — see the
+   `guarded()` wrapper in `registerIpc.ts`; every future mutating handler must go through it.
+   A regular `git_push` executes directly (non-destructive, audit-logged) from the Git
+   panel — it is the one write path enabled for the developer's own loop.
 5. Keep an audit log of AI/tool actions (redacted). Real pushes are recorded with `actor: user`.
 6. **This build does not** actually force-push, deploy, mutate env vars, restart services, or
    wipe databases. Those paths are stubbed/approval-gated by design. A regular push **does**
@@ -110,7 +113,9 @@ GitHub for a tagged release.** A previous mixed local+CI publish left `latest-ma
 at one ZIP/DMG while GitHub assets were overwritten by another build; `electron-updater` then
 failed download validation. Keep metadata and assets from the same CI run.
 
-1. Commit all app changes to `main`.
+1. Commit all app changes to `main`. `npm test` must be green — the redaction and
+   force-push-gate suites are release blockers (the IPC contract test joins them in Phase 2
+   of `docs/cockpit-VISION.md`).
 2. Bump `package.json` version and tag the release (`vX.Y.Z`).
 3. Push `main` with tags.
 4. GitHub Actions runs `.github/workflows/release.yml`.

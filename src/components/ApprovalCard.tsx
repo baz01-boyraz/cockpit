@@ -37,8 +37,16 @@ export function ApprovalCard({ request }: { request: ApprovalRequest }) {
       <div className="approval__summary">{request.summary}</div>
 
       {resolved ? (
-        <div className={`approval__resolved ${request.status === 'approved' ? 'is-ok' : 'is-no'}`}>
-          {request.status === 'approved' ? 'Approved' : 'Rejected'}
+        <div
+          className={`approval__resolved ${
+            request.status === 'approved' || request.status === 'consumed' ? 'is-ok' : 'is-no'
+          }`}
+        >
+          {request.status === 'approved'
+            ? 'Approved'
+            : request.status === 'consumed'
+              ? 'Approved · executed'
+              : 'Rejected'}
         </div>
       ) : (
         <div className="approval__actions">

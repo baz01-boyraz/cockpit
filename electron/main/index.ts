@@ -43,8 +43,17 @@ function createWindow(): void {
   })
 
   // Harden: block in-app navigation and open external links in the OS browser.
+  // Only web URLs may leave the app — a crafted file:// or custom-scheme URL
+  // must never reach shell.openExternal.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
+    try {
+      const protocol = new URL(url).protocol
+      if (protocol === 'https:' || protocol === 'http:') {
+        void shell.openExternal(url)
+      }
+    } catch {
+      // Malformed URL — drop it.
+    }
     return { action: 'deny' }
   })
   mainWindow.webContents.on('will-navigate', (e, url) => {

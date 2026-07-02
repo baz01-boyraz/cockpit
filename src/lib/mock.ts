@@ -637,7 +637,12 @@ export function createMockApi(): CockpitApi {
         snapshot.files = []
         return { branch: snapshot.branch, commitHash: 'mock1234', summary: message, filesChanged }
       },
-      push: async ({ projectId, force }) => {
+      push: async ({ projectId, force, approvalId }) => {
+        // Mirror the real boundary: force-push without an approved request id
+        // is refused in main, so the mock refuses it too.
+        if (force && !approvalId) {
+          throw new Error('Force-push requires an approved request — request approval first.')
+        }
         const snapshot = gitByProject[projectId] ?? gitByProject.prj_cockpit
         snapshot.ahead = 0
         return {
@@ -789,6 +794,9 @@ export function createMockApi(): CockpitApi {
         ok: false,
         message: 'Rebuild & relaunch is only available in the desktop app.',
       }),
+      // Preview the button on the cockpit project only, matching the real
+      // main-process identity check.
+      refreshEligible: async (projectId) => projectId === 'prj_cockpit',
       onChange: (cb) => {
         appUpdateListeners.add(cb)
         return (() => appUpdateListeners.delete(cb)) as Unsubscribe

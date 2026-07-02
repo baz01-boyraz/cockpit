@@ -3,6 +3,8 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { IPC, type SystemInfo } from '@shared/ipc'
+import { requiresApproval } from '@shared/approval-rules'
+import type { ApprovalActionType } from '@shared/domain'
 import {
   addProjectInputSchema,
   agentUsageRequestSchema,
@@ -27,7 +29,7 @@ import {
 } from '@shared/schemas'
 import { z } from 'zod'
 import type { Services } from '../services/Services'
-import { rebuildAndRelaunch } from '../services/localRebuild'
+import { isCockpitSource, rebuildAndRelaunch } from '../services/localRebuild'
 
 /**
  * Registers every IPC handler. Each handler validates its payload with a Zod
@@ -38,6 +40,31 @@ import { rebuildAndRelaunch } from '../services/localRebuild'
 export function registerIpc(services: Services): void {
   const handle = <T>(channel: string, fn: (payload: unknown) => T | Promise<T>) => {
     ipcMain.handle(channel, async (_e, payload) => fn(payload))
+  }
+
+  /**
+   * Central approval gate for destructive actions. Consults the shared risk
+   * rules and consumes an approved request before running `fn` — enforcement
+   * lives here at the trust boundary, never in UI convention. Any future
+   * mutating handler (deploy, env_write, db reset, …) MUST go through this.
+   */
+  const guarded = async <T>(
+    actionType: ApprovalActionType,
+    input: { projectId: string; approvalId?: string },
+    fn: () => T | Promise<T>,
+  ): Promise<T> => {
+    const configured = services.projects.getConfig(input.projectId).safety.requireApprovalFor
+    if (requiresApproval(actionType, configured)) {
+      if (!input.approvalId) {
+        throw new Error(`${actionType} requires an approved request — request approval first.`)
+      }
+      services.approvals.consume({
+        approvalId: input.approvalId,
+        projectId: input.projectId,
+        actionType,
+      })
+    }
+    return fn()
   }
 
   // --- projects ---
@@ -93,7 +120,12 @@ export function registerIpc(services: Services): void {
   handle(IPC.gitCommit, (p) => services.git.commit(gitCommitInputSchema.parse(p)))
   handle(IPC.gitPush, async (p) => {
     const input = gitPushInputSchema.parse(p)
-    const result = await services.git.push(input)
+    // A regular push is the one enabled write path (see CLAUDE.md). Force-push
+    // rewrites remote history: it must consume an approved request here, at the
+    // boundary — the renderer alone can never trigger it.
+    const result = input.force
+      ? await guarded('git_force_push', input, () => services.git.push(input))
+      : await services.git.push(input)
     services.audit.record({
       projectId: input.projectId,
       actor: 'user',
@@ -192,8 +224,51 @@ export function registerIpc(services: Services): void {
   handle(IPC.appUpdateCheck, () => services.appUpdate.check())
   handle(IPC.appUpdateDownload, () => services.appUpdate.download())
   handle(IPC.appUpdateInstall, () => services.appUpdate.install())
-  handle(IPC.appUpdateRefresh, (p) => {
+  handle(IPC.appUpdateRefreshEligible, (p) => {
     const { projectId } = projectIdSchema.parse(p)
-    return rebuildAndRelaunch(services.projects.get(projectId).path)
+    try {
+      return isCockpitSource(services.projects.get(projectId).path)
+    } catch {
+      return false
+    }
+  })
+  handle(IPC.appUpdateRefresh, async (p) => {
+    const { projectId } = projectIdSchema.parse(p)
+    const project = services.projects.get(projectId)
+    // The rebuild runs an npm script from this directory. Identity is verified
+    // here in main — a foreign repo declaring an `app:refresh` script must
+    // never be an execution target, no matter what the renderer asks for.
+    if (!isCockpitSource(project.path)) {
+      return {
+        ok: false,
+        message: 'Rebuild is only available when the active project is the cockpiT source.',
+      }
+    }
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    const confirmOpts = {
+      type: 'warning' as const,
+      buttons: ['Rebuild & relaunch', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      message: 'Rebuild cockpiT and relaunch?',
+      detail: `Runs "npm run app:refresh" in ${project.path}. The app will quit and replace itself.`,
+    }
+    const { response } = win
+      ? await dialog.showMessageBox(win, confirmOpts)
+      : await dialog.showMessageBox(confirmOpts)
+    if (response !== 0) {
+      return { ok: false, message: 'Rebuild cancelled.' }
+    }
+    const result = rebuildAndRelaunch(project.path)
+    services.audit.record({
+      projectId,
+      actor: 'user',
+      actionType: 'app_refresh',
+      summary: result.ok
+        ? `Rebuild & relaunch started from ${project.path}`
+        : `Rebuild refused: ${result.message}`,
+      payload: { path: project.path, ok: result.ok },
+    })
+    return result
   })
 }

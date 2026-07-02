@@ -176,12 +176,34 @@ export function GitPanel() {
   const [runIds, setRunIds] = useState<{ dev: string | null; test: string | null }>({ dev: null, test: null })
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [canRefreshApp, setCanRefreshApp] = useState(false)
 
   useEffect(() => {
     setSelected(null)
     setDiff('')
     setNotice(null)
     setRunIds({ dev: null, test: null })
+  }, [activeProjectId])
+
+  // The rebuild button is only offered when main verifies the active project is
+  // cockpiT's own source — never for an arbitrary repo with a matching script.
+  useEffect(() => {
+    let cancelled = false
+    if (!activeProjectId) {
+      setCanRefreshApp(false)
+      return
+    }
+    cockpit()
+      .appUpdate.refreshEligible(activeProjectId)
+      .then((ok) => {
+        if (!cancelled) setCanRefreshApp(ok)
+      })
+      .catch(() => {
+        if (!cancelled) setCanRefreshApp(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [activeProjectId])
 
   const devTerm = useMemo(() => terminals.find((t) => t.id === runIds.dev) ?? null, [terminals, runIds.dev])
@@ -429,7 +451,8 @@ export function GitPanel() {
         <div>
           <div className="eyebrow">source control</div>
           <h2 className="panel__title">
-            <IconBranch width={18} height={18} /> {git.branch}
+            <IconBranch width={18} height={18} />{' '}
+            <span className="panel__molten">{git.branch}</span>
           </h2>
         </div>
         <div className="panel__actions">
@@ -509,15 +532,17 @@ export function GitPanel() {
             {appUpdate?.phase === 'downloaded' ? <IconRestart width={14} height={14} /> : <IconDownload width={14} height={14} />}
             {updateActionLabel(appUpdate)}
           </button>
-          <button
-            className="btn git__wideAction"
-            onClick={refreshApp}
-            disabled={busy === 'refresh'}
-            title="Rebuild this app from the active project's source and relaunch (dev)"
-          >
-            <IconRestart width={14} height={14} />
-            {busy === 'refresh' ? 'Rebuilding…' : 'Rebuild & relaunch'}
-          </button>
+          {canRefreshApp ? (
+            <button
+              className="btn git__wideAction"
+              onClick={refreshApp}
+              disabled={busy === 'refresh'}
+              title="Rebuild this app from the cockpiT source and relaunch (dev)"
+            >
+              <IconRestart width={14} height={14} />
+              {busy === 'refresh' ? 'Rebuilding…' : 'Rebuild & relaunch'}
+            </button>
+          ) : null}
         </section>
       </div>
 

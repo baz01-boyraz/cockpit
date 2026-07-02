@@ -443,7 +443,8 @@ export type ApprovalActionType =
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
 
-export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired'
+/** `consumed` = the approval authorized exactly one execution and is spent. */
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'consumed'
 
 export interface ApprovalRequest {
   id: string
