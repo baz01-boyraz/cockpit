@@ -1,5 +1,6 @@
 import { platform } from 'node:os'
 import * as pty from 'node-pty'
+import { countActiveAgents } from '@shared/dashboard-assembly'
 import type { TerminalRole, TerminalSession } from '@shared/domain'
 import type { Db } from '../db/Database'
 import type { CockpitEvents } from '../events'
@@ -50,6 +51,14 @@ export class TerminalManager {
 
   count(projectId: string): number {
     return this.list(projectId).length
+  }
+
+  /**
+   * Live AI-agent panes (Claude Code / Codex) currently running for a project.
+   * The rule itself is shared with the browser mock (`countActiveAgents`).
+   */
+  countActiveAgents(projectId: string): number {
+    return countActiveAgents(this.list(projectId))
   }
 
   create(input: {

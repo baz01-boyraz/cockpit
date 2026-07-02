@@ -29,6 +29,8 @@ import type {
 } from '@shared/domain'
 import type { CockpitApi, SystemInfo, Unsubscribe } from '@shared/ipc'
 import { resolveChatModel } from '@shared/chat-models'
+import { assembleDashboard, countActiveAgents } from '@shared/dashboard-assembly'
+import { aggregateInsights, insightFromMatch } from '@shared/insight-aggregation'
 import { classifyRoute } from '@shared/router'
 import { matchLogLine } from '@shared/log-patterns'
 
@@ -57,7 +59,9 @@ const projects: Project[] = [
   },
 ]
 
-const gitByProject: Record<string, GitSnapshot> = {
+// Immutable seed snapshots — NEVER mutated. Git actions operate on `gitState`
+// (below), whose entries are replaced with fresh objects on every operation.
+const gitSeeds: Record<string, GitSnapshot> = {
   prj_serbest: {
     id: id('git'),
     projectId: 'prj_serbest',
@@ -90,6 +94,19 @@ const gitByProject: Record<string, GitSnapshot> = {
     files: [],
     createdAt: now(),
   },
+}
+
+// Current per-project snapshots. Entries are REPLACED (spread) by git actions;
+// the seed objects above stay pristine across renders and operations.
+const gitState = new Map<string, GitSnapshot>()
+
+function gitSnapshotFor(projectId: string): GitSnapshot {
+  const current = gitState.get(projectId)
+  if (current) return current
+  const seed = gitSeeds[projectId] ?? gitSeeds.prj_cockpit
+  const fresh: GitSnapshot = { ...seed, files: seed.files.map((f) => ({ ...f })) }
+  gitState.set(projectId, fresh)
+  return fresh
 }
 
 const githubByProject: Record<string, GitHubRepositoryStatus> = {
@@ -187,8 +204,8 @@ let appUpdateState: AppUpdateState = {
 }
 
 // Raw occurrences (one row per matched line), mirroring the SQLite `error_insights`
-// table. listInsightsMock() aggregates these into one entry per pattern the same
-// way LogIntelligenceService does, so the web/screenshot bridge stays honest:
+// table. listInsightsMock() aggregates these through the SAME shared function
+// LogIntelligenceService uses, so the web/screenshot bridge stays honest:
 // the seed spans an "active" failure, a "recent" one, and an older "earlier" one.
 const insightEvents: ErrorInsight[] = [
   occurrence('build_failed', 'Build failed', 'The bundler/compiler rejected the current source.', 'Inspect the first error in the build output and resolve it before retrying.', 'codex', 'high', now()),
@@ -208,54 +225,28 @@ function occurrence(
   severity: ErrorInsight['severity'],
   createdAt: string,
 ): ErrorInsight {
-  return {
-    id: id('ins'),
-    projectId: 'prj_serbest',
-    logEventId: null,
-    title,
-    likelyCause,
-    suggestedAction,
-    suggestedAgent,
-    severity,
-    matchedPattern: pattern,
-    createdAt,
-    firstSeenAt: createdAt,
-    lastSeenAt: createdAt,
-    occurrences: 1,
-  }
+  return insightFromMatch(
+    { pattern, title, likelyCause, suggestedAction, suggestedAgent, severity },
+    { id: id('ins'), projectId: 'prj_serbest', createdAt },
+  )
 }
 
-// pattern -> newest occurrence's createdAt that the user dismissed (per project,
-// keyed `${projectId}::${pattern}`). A newer occurrence resurfaces the insight.
-const insightDismissals = new Map<string, string>()
-const dismissKey = (projectId: string, pattern: string) => `${projectId}::${pattern}`
+// Per-project dismissal watermarks: pattern -> newest occurrence's createdAt
+// the user dismissed. A newer occurrence resurfaces the insight.
+const insightDismissals = new Map<string, Map<string, string>>()
 
-/** Aggregate raw occurrences into one entry per pattern, honouring dismissals. */
+function dismissalsFor(projectId: string): Map<string, string> {
+  const existing = insightDismissals.get(projectId)
+  if (existing) return existing
+  const fresh = new Map<string, string>()
+  insightDismissals.set(projectId, fresh)
+  return fresh
+}
+
+/** Same aggregation rule the real LogIntelligenceService delegates to. */
 function listInsightsMock(projectId: string): ErrorInsight[] {
-  const byPattern = new Map<string, ErrorInsight>()
-  for (const e of insightEvents) {
-    if (e.projectId !== projectId) continue
-    const existing = byPattern.get(e.matchedPattern)
-    if (!existing) {
-      byPattern.set(e.matchedPattern, { ...e })
-      continue
-    }
-    const firstSeenAt = e.createdAt < existing.firstSeenAt ? e.createdAt : existing.firstSeenAt
-    const newer = e.createdAt > existing.lastSeenAt
-    byPattern.set(e.matchedPattern, {
-      ...(newer ? e : existing),
-      firstSeenAt,
-      lastSeenAt: newer ? e.createdAt : existing.lastSeenAt,
-      occurrences: existing.occurrences + 1,
-    })
-  }
-  const out: ErrorInsight[] = []
-  for (const insight of byPattern.values()) {
-    const dismissedUpTo = insightDismissals.get(dismissKey(projectId, insight.matchedPattern))
-    if (dismissedUpTo && insight.lastSeenAt <= dismissedUpTo) continue
-    out.push(insight)
-  }
-  return out.sort((a, b) => (a.lastSeenAt < b.lastSeenAt ? 1 : a.lastSeenAt > b.lastSeenAt ? -1 : 0))
+  const events = insightEvents.filter((e) => e.projectId === projectId)
+  return aggregateInsights(events, dismissalsFor(projectId))
 }
 
 const approvals: ApprovalRequest[] = [
@@ -451,23 +442,20 @@ function configFor(p: Project): ProjectConfig {
   }
 }
 
+// Same shape-building as the real Services.dashboard() (shared/dashboard-assembly).
 function dashboardFor(projectId: string): DashboardSnapshot {
-  const project = projects.find((p) => p.id === projectId) ?? projects[0]
-  const git = gitByProject[projectId]
   const terms = terminals[projectId] ?? []
-  return {
-    project,
-    branch: git?.branch ?? null,
-    changedFiles: git?.changedFilesCount ?? 0,
-    terminalCount: terms.length,
-    runningTerminals: terms.filter((t) => t.status === 'running').length,
-    agentCount: terms.filter((t) => t.role === 'claude' || t.role === 'codex').length,
+  return assembleDashboard({
+    project: projects.find((p) => p.id === projectId) ?? projects[0],
+    git: gitState.get(projectId) ?? gitSeeds[projectId] ?? null,
+    terminals: terms,
+    agentCount: countActiveAgents(terms),
     railwayConnected: false,
-    railwayServices: 3,
-    recentErrors: listInsightsMock(projectId).slice(0, 5),
+    railwayServiceCount: 3,
+    recentErrors: listInsightsMock(projectId),
     pendingApprovals: approvals.filter((a) => a.projectId === projectId && a.status === 'pending').length,
     usage: projectId === 'prj_serbest' ? usage : [],
-  }
+  })
 }
 
 export function createMockApi(): CockpitApi {
@@ -610,34 +598,36 @@ export function createMockApi(): CockpitApi {
       onExit: () => (() => {}) as Unsubscribe,
     },
     git: {
-      status: async (projectId) => gitByProject[projectId] ?? gitByProject.prj_cockpit,
+      status: async (projectId) => gitSnapshotFor(projectId),
       diff: async ({ path }) => ({
         path,
         binary: false,
         hunks: `diff --git a/${path} b/${path}\n@@ -12,7 +12,9 @@\n-  <h1 className="text-3xl">Serbest Law</h1>\n+  <h1 className="text-5xl tracking-tight font-semibold">\n+    Serbest Law\n+  </h1>\n   <p className="text-stone-400">Trusted counsel for modern business.</p>`,
       }),
       stage: async ({ projectId }) => {
-        const snapshot = gitByProject[projectId] ?? gitByProject.prj_cockpit
-        snapshot.files = snapshot.files.map((file) =>
+        const prev = gitSnapshotFor(projectId)
+        const files = prev.files.map((file) =>
           file.state === 'staged'
             ? file
-            : { ...file, state: 'staged', index: file.workingDir.trim() || 'A', workingDir: ' ' },
+            : { ...file, state: 'staged' as const, index: file.workingDir.trim() || 'A', workingDir: ' ' },
         )
-        snapshot.stagedCount = snapshot.files.length
-        snapshot.unstagedCount = 0
-        snapshot.untrackedCount = 0
-        return snapshot
+        const next: GitSnapshot = { ...prev, files, stagedCount: files.length, unstagedCount: 0, untrackedCount: 0 }
+        gitState.set(projectId, next)
+        return next
       },
       commit: async ({ projectId, message }): Promise<GitCommitResult> => {
-        const snapshot = gitByProject[projectId] ?? gitByProject.prj_cockpit
-        const filesChanged = snapshot.stagedCount
-        snapshot.ahead += 1
-        snapshot.changedFilesCount = 0
-        snapshot.stagedCount = 0
-        snapshot.unstagedCount = 0
-        snapshot.untrackedCount = 0
-        snapshot.files = []
-        return { branch: snapshot.branch, commitHash: 'mock1234', summary: message, filesChanged }
+        const prev = gitSnapshotFor(projectId)
+        const next: GitSnapshot = {
+          ...prev,
+          ahead: prev.ahead + 1,
+          changedFilesCount: 0,
+          stagedCount: 0,
+          unstagedCount: 0,
+          untrackedCount: 0,
+          files: [],
+        }
+        gitState.set(projectId, next)
+        return { branch: prev.branch, commitHash: 'mock1234', summary: message, filesChanged: prev.stagedCount }
       },
       push: async ({ projectId, force, approvalId }) => {
         // Mirror the real boundary: force-push without an approved request id
@@ -645,14 +635,14 @@ export function createMockApi(): CockpitApi {
         if (force && !approvalId) {
           throw new Error('Force-push requires an approved request — request approval first.')
         }
-        const snapshot = gitByProject[projectId] ?? gitByProject.prj_cockpit
-        snapshot.ahead = 0
+        const prev = gitSnapshotFor(projectId)
+        gitState.set(projectId, { ...prev, ahead: 0 })
         return {
-          branch: snapshot.branch,
+          branch: prev.branch,
           remote: 'origin',
           forced: Boolean(force),
           ahead: 0,
-          behind: snapshot.behind,
+          behind: prev.behind,
           pushedAt: now(),
         }
       },
@@ -689,30 +679,22 @@ export function createMockApi(): CockpitApi {
       ingest: async ({ projectId, message }) => {
         const m = matchLogLine(message)
         if (!m) return null
-        const insight = occurrence(
-          m.pattern,
-          m.title,
-          m.likelyCause,
-          m.suggestedAction,
-          m.suggestedAgent,
-          m.severity,
-          now(),
-        )
-        const scoped: ErrorInsight = { ...insight, projectId }
-        insightEvents.unshift(scoped)
+        const insight = insightFromMatch(m, { id: id('ins'), projectId, createdAt: now() })
+        insightEvents.unshift(insight)
         notifyLogsChanged()
-        return scoped
+        return insight
       },
       dismissInsight: async (projectId, matchedPattern) => {
         const upTo = insightEvents
           .filter((e) => e.projectId === projectId && e.matchedPattern === matchedPattern)
           .reduce((max, e) => (e.createdAt > max ? e.createdAt : max), '')
-        insightDismissals.set(dismissKey(projectId, matchedPattern), upTo || now())
+        dismissalsFor(projectId).set(matchedPattern, upTo || now())
         notifyLogsChanged()
       },
       clearInsights: async (projectId) => {
+        const dismissals = dismissalsFor(projectId)
         for (const insight of listInsightsMock(projectId)) {
-          insightDismissals.set(dismissKey(projectId, insight.matchedPattern), insight.lastSeenAt)
+          dismissals.set(insight.matchedPattern, insight.lastSeenAt)
         }
         notifyLogsChanged()
       },

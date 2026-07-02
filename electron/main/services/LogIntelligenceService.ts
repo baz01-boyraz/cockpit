@@ -1,4 +1,6 @@
 import type { ErrorInsight, LogEvent, LogLevel, LogSourceType } from '@shared/domain'
+import type { InsightOccurrence } from '@shared/insight-aggregation'
+import { aggregateInsights, insightFromMatch } from '@shared/insight-aggregation'
 import { inferLogLevel, matchLogLine } from '@shared/log-patterns'
 import { sanitizeStoredLine, stripAnsi } from '@shared/log-sanitize'
 import { redactText } from '@shared/redaction'
@@ -28,6 +30,22 @@ interface InsightRow {
   severity: string
   matched_pattern: string
   created_at: string
+}
+
+/** Map a raw SQLite row to the shared per-occurrence shape. */
+function toOccurrence(r: InsightRow): InsightOccurrence {
+  return {
+    id: r.id,
+    projectId: r.project_id,
+    logEventId: r.log_event_id,
+    title: r.title,
+    likelyCause: r.likely_cause,
+    suggestedAction: r.suggested_action,
+    suggestedAgent: r.suggested_agent as ErrorInsight['suggestedAgent'],
+    severity: r.severity as ErrorInsight['severity'],
+    matchedPattern: r.matched_pattern,
+    createdAt: r.created_at,
+  }
 }
 
 /**
@@ -87,23 +105,14 @@ export class LogIntelligenceService {
 
         const match = matchLogLine(line)
         if (match) {
-          const insight: ErrorInsight = {
+          // Describes the single line just ingested; the aggregated history
+          // (true count / first-seen) is computed in listInsights.
+          const insight = insightFromMatch(match, {
             id: newId('ins'),
             projectId: input.projectId,
             logEventId: logId,
-            title: match.title,
-            likelyCause: match.likelyCause,
-            suggestedAction: match.suggestedAction,
-            suggestedAgent: match.suggestedAgent,
-            severity: match.severity,
-            matchedPattern: match.pattern,
             createdAt,
-            // This object describes the single line just ingested; the aggregated
-            // history (true count / first-seen) is computed in listInsights.
-            firstSeenAt: createdAt,
-            lastSeenAt: createdAt,
-            occurrences: 1,
-          }
+          })
           insertInsight.run({
             id: insight.id,
             projectId: insight.projectId,
@@ -155,18 +164,14 @@ export class LogIntelligenceService {
   }
 
   listInsights(projectId: string, limit = 50): ErrorInsight[] {
-    // Collapse repeats of the same matched pattern (a noisy build can emit the
-    // same error hundreds of times) into one entry that carries the *real*
-    // history: total occurrences, first-seen, and last-seen. Aggregating in SQL
-    // keeps the counts accurate regardless of how many raw rows exist.
-    const aggRows = this.db
-      .prepare(
-        `SELECT matched_pattern AS pattern, COUNT(*) AS cnt,
-                MIN(created_at) AS first_seen, MAX(created_at) AS last_seen
-         FROM error_insights WHERE project_id = ?
-         GROUP BY matched_pattern`,
-      )
-      .all(projectId) as { pattern: string; cnt: number; first_seen: string; last_seen: string }[]
+    // Fetch the raw per-occurrence rows and delegate the aggregation RULE
+    // (group by pattern, dismissal watermarks, newest-representative, sort,
+    // limit) to shared/insight-aggregation — the exact same function the
+    // browser mock runs, so the two bridges can never drift. Tables are small
+    // (bounded per project), so aggregating in-process is cheap.
+    const rows = this.db
+      .prepare('SELECT * FROM error_insights WHERE project_id = ? ORDER BY created_at DESC')
+      .all(projectId) as InsightRow[]
 
     // A dismissal hides a pattern only up to the occurrence the user had seen.
     // If a newer occurrence exists (last_seen > dismissed_up_to) the failure has
@@ -177,36 +182,7 @@ export class LogIntelligenceService {
       .all(projectId) as { pattern: string; dismissed_up_to: string }[]
     for (const d of drows) dismissals.set(d.pattern, d.dismissed_up_to)
 
-    const newest = this.db.prepare(
-      'SELECT * FROM error_insights WHERE project_id = ? AND matched_pattern = ? ORDER BY created_at DESC LIMIT 1',
-    )
-
-    const insights: ErrorInsight[] = []
-    for (const agg of aggRows) {
-      const dismissedUpTo = dismissals.get(agg.pattern)
-      if (dismissedUpTo && agg.last_seen <= dismissedUpTo) continue
-      const r = newest.get(projectId, agg.pattern) as InsightRow | undefined
-      if (!r) continue
-      insights.push({
-        id: r.id,
-        projectId: r.project_id,
-        logEventId: r.log_event_id,
-        title: r.title,
-        likelyCause: r.likely_cause,
-        suggestedAction: r.suggested_action,
-        suggestedAgent: r.suggested_agent as ErrorInsight['suggestedAgent'],
-        severity: r.severity as ErrorInsight['severity'],
-        matchedPattern: r.matched_pattern,
-        createdAt: r.created_at,
-        firstSeenAt: agg.first_seen,
-        lastSeenAt: agg.last_seen,
-        occurrences: agg.cnt,
-      })
-    }
-
-    // Most recent activity first (ISO timestamps sort lexicographically).
-    insights.sort((a, b) => (a.lastSeenAt < b.lastSeenAt ? 1 : a.lastSeenAt > b.lastSeenAt ? -1 : 0))
-    return insights.slice(0, limit)
+    return aggregateInsights(rows.map(toOccurrence), dismissals, limit)
   }
 
   /**

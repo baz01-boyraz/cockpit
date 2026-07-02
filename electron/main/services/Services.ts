@@ -3,6 +3,7 @@ import type {
   DashboardSnapshot,
   RouterResult,
 } from '@shared/domain'
+import { DASHBOARD_RECENT_ERRORS_LIMIT, assembleDashboard } from '@shared/dashboard-assembly'
 import { classifyRoute } from '@shared/router'
 import { inferLogLevel } from '@shared/log-patterns'
 import type { TerminalScanState } from '@shared/log-sanitize'
@@ -116,29 +117,25 @@ export class Services {
 
   async dashboard(projectId: string): Promise<DashboardSnapshot> {
     const project = this.projects.get(projectId)
-    const git = await this.git.status(projectId).catch(() => null)
-    const terminals = this.terminals.list(projectId)
-    const railwayConnection = await this.railway.status(projectId)
-    const railwayServices = await this.railway.services(projectId)
-    const recentErrors = this.logs.listInsights(projectId, 5)
-    const usage = this.usage.summarize(projectId)
-    const agentRow = this.db
-      .prepare(`SELECT COUNT(*) as n FROM agent_sessions WHERE project_id = ? AND status = 'active'`)
-      .get(projectId) as { n: number }
-
-    return {
+    // Git and Railway lookups are independent — fetch them concurrently.
+    const [git, railwayConnection, railwayServices] = await Promise.all([
+      this.git.status(projectId).catch(() => null),
+      this.railway.status(projectId),
+      this.railway.services(projectId),
+    ])
+    // Shape-building is shared with the browser mock (shared/dashboard-assembly)
+    // so the two bridges assemble the exact same snapshot from their inputs.
+    return assembleDashboard({
       project,
-      branch: git?.branch ?? null,
-      changedFiles: git?.changedFilesCount ?? 0,
-      terminalCount: terminals.length,
-      runningTerminals: terminals.filter((t) => t.status === 'running').length,
-      agentCount: agentRow.n,
+      git,
+      terminals: this.terminals.list(projectId),
+      agentCount: this.terminals.countActiveAgents(projectId),
       railwayConnected: railwayConnection.connected,
-      railwayServices: railwayServices.length,
-      recentErrors,
+      railwayServiceCount: railwayServices.length,
+      recentErrors: this.logs.listInsights(projectId, DASHBOARD_RECENT_ERRORS_LIMIT),
       pendingApprovals: this.approvals.countPending(projectId),
-      usage,
-    }
+      usage: this.usage.summarize(projectId),
+    })
   }
 
   route(projectId: string, query: string): RouterResult {

@@ -225,7 +225,7 @@ call sites/panels to consume it uniformly.
 **Verify:** A thrown ZodError reaches the UI as a clean message, no stack/paths.
 **Effort:** M
 
-### 2.4 [~] Service-layer tests for the risk hot spots ∥
+### 2.4 [x] Service-layer tests for the risk hot spots ∥
 **Why:** 171 tests, all on `shared/` pure logic. 1 of 23 services tested; GitService,
 TerminalManager, ApprovalService, IPC, DB layer: zero.
 **Do (priority order):**
@@ -239,7 +239,7 @@ TerminalManager, ApprovalService, IPC, DB layer: zero.
 **Verify:** `npm test` green; these four areas no longer at zero.
 **Effort:** M–L (spread it; don't block other Phase 2 tasks on completion)
 
-### 2.5 [~] De-duplicate mock vs services: move rules into `shared/` ∥
+### 2.5 [x] De-duplicate mock vs services: move rules into `shared/` ∥
 **Why:** `listInsightsMock` re-implements `LogIntelligenceService.listInsights`'s
 aggregation; `dashboardFor` duplicates `Services.dashboard`. Two sources of truth.
 Worse, the mock **mutates module-level seed singletons** (`snapshot.ahead += 1` …) —
@@ -258,6 +258,8 @@ of shared seeds (spread-based updates only).
 
 **Gate 2:** Contract test + typed handlers green in CI. Breaking any leg of the
 IPC contract is now a compile- or test-time failure, never a runtime surprise.
+> **Gate 2 status (2026-07-02): PASSED locally** — 281 tests / 28 files, typecheck +
+> lint clean. CI runs the same `npm test` on the next tagged release.
 
 ---
 
@@ -326,6 +328,16 @@ terminals stay visually smooth.
   wire an IPC channel → `LocalCommandRunner.run()`, or delete the class and route
   "local" suggestions to a prefilled terminal. Don't leave a fake execution target
   for Swarm work to trip on. (`electron/main/services/LocalCommandRunner.ts`, `shared/router.ts`)
+  *Found by 2.4 tests:* `isAllowed` uses `key in ALLOWED` on an object literal, so
+  prototype keys (`toString`, …) report as allowed — fix with `Object.hasOwn` if kept.
+- [ ] **Bug sweep from 2.4/2.5 findings:** (a) `TerminalManager.onExit` labels any
+  non-zero natural exit as `killed` (belongs with 3.3's lifecycle states);
+  (b) `GitService` maps `current: null` to the literal branch name `'detached'`, so a
+  real branch named "detached" can never push; (c) `GitService.push`/`commit` call
+  `status()` 2–3× per operation, persisting a `git_snapshots` row each time — fold
+  into the pruning item below; (d) schema table `agent_sessions` is written by nothing
+  (the old dashboard agent-count read it — now fixed to count live agent panes);
+  either drop it in a migration or claim it for Swarm's lifecycle work in 3.3/Phase 6.
 - [ ] **schema.ts self-contradiction:** V1 was edited after V2 shipped
   (`insight_dismissals` + an index exist in both). Clean up so the "append-only
   migrations" rule is actually followed; new migrations from 3.3 must append. (`electron/main/db/schema.ts` ~108–133 vs ~178–188)
@@ -545,5 +557,7 @@ Ordered by leverage, all optional:
 | 2026-07-02 | 2.1 | Contract test scans wiring: every channel needs a main handler + preload invoke; every evt needs a preload subscribe; no unknown/duplicate registrations. Dangling `evtLogsChanged` resolved by adding `logs.onChange` to CockpitApi (preload + mock parity) |
 | 2026-07-02 | 2.2 | `IpcResultMap` in shared/ipc.ts binds each channel key to its handler return type, derived from CockpitApi; `handle()` is now keyed + typed; compile-time completeness guard (`IPC_RESULT_MAP_COMPLETE`) errors on drift |
 | 2026-07-02 | 2.3 | Central error shaping in `handle()` via `shared/ipc-errors.ts`: ZodError → one readable line, $HOME → `~`. DECISION: kept the promise-rejection contract instead of a success/data/error envelope (same UX, far smaller blast radius; panels already render e.message uniformly) — revisit only if structured error codes are needed |
+| 2026-07-02 | 2.4 | 55 service tests added (GitService w/ mocked simple-git, Approval request/decide lifecycle, TerminalManager w/ fake ptys, UsageService, LocalCommandRunner) + shared FakeDb helper. NOT testable under Node: DB migrations (better-sqlite3 = Electron ABI). 5 latent bugs surfaced → folded into Phase 3.5 notes |
+| 2026-07-02 | 2.5 | insight-aggregation + dashboard-assembly extracted to shared/ (single rule for service + mock); mock singleton mutation fixed (immutable per-project git state); Services.dashboard: Promise.all + agent count via TerminalManager. BUG FOUND: real dashboard agentCount was always 0 (dead `agent_sessions` table) — now counts live agent panes. mock.ts 815→797 |
 | 2026-07-01 | 1.x E2E | Dev-mode verification vs real app: 16/16 (positive consume path force-pushed a local bare origin; single-use + cross-project + pending/rejected refusals; audit chain; live redaction) |
 | 2026-07-01 | 1.6 | openExternal https/http allowlist; strict prod CSP via build plugin (verified in out/); entitlements plist + CI enables hardenedRuntime on the Apple-cert path only — VERIFY at next tagged release |
