@@ -439,20 +439,20 @@ green; audit entries present; screenshots reviewed. Ship it, use it daily —
 
 > Ship backlinks before the pretty graph. Write `docs/plans/memory-graph-plan.md` first.
 
-### 5.1 [ ] Storage map decision doc (do this FIRST, it's an hour)
+### 5.1 [x] Storage map decision doc (do this FIRST, it's an hour)
 **Why:** This feature adds a third storage tier (markdown) next to SQLite and
 localStorage. Without a written map, in six months nobody knows what lives where.
 **Do:** One table in the plan doc: data kind → tier → why → sync/backup story.
 Includes existing Notepad (localStorage) and session layer (SQLite) placement, and
 whether Notepad notes migrate into the hub (recommended: yes, as plain .md).
 
-### 5.2 [ ] `shared/wikilink.ts` — parse + backlink index (TDD, pure)
+### 5.2 [x] `shared/wikilink.ts` — parse + backlink index (TDD, pure)
 **Do:** Parse `[[wikilinks]]` (with aliases `[[name|label]]`), build forward/back
 link indexes from a set of documents, suggest unresolved links. Pure functions,
 fully unit-tested — this is the kernel of the feature and it's free to test.
 **Effort:** S–M
 
-### 5.3 [ ] MemoryHubService (main) + IPC
+### 5.3 [x] MemoryHubService (main) + IPC
 **Do:** A per-project `.cockpit-memory/` (or configured) markdown folder: list,
 read, write, rename with link-refresh. Files are the source of truth — the service
 only indexes (SQLite cache of the link graph is fine; files must remain the truth).
@@ -570,6 +570,7 @@ Ordered by leverage, all optional:
 | 2026-07-01 | 1.3 | Redaction: Stripe/URL-creds/AIza/SG./npm_/ghu-ghs-ghr/Bearer patterns + bare *_KEY names + high-entropy env fallback + `redactText()`. TDD, 9 new tests |
 | 2026-07-01 | 1.4 | LogIntelligence ingest + listLogs now scrub secrets (new rows and legacy rows) |
 | 2026-07-01 | 1.5 | Rebuild & relaunch: package-identity check in main (`isCockpitSource`), native confirm dialog, audit entry, button hidden for foreign projects (`refreshEligible` IPC). 5 new tests. Verified both states via screenshots |
+| 2026-07-02 | 5.1–5.3 | Memory hub core: plan doc + storage-map table; shared/wikilink kernel (parse w/ code-region awareness, slug-by-construction names, forward/backlink/unresolved index, rename-refresh) TDD 10 tests; shared/memory-hub pure assembly (single rule, both bridges); MemoryHubService (atomic writes, soft-delete to .trash, foreign files ignored) 7 tests; 5 IPC channels all legs; seeded interlinked mock. mock.ts split (942→619 + mockData.ts) to respect the 800 cap |
 | 2026-07-02 | 4.5–4.6 + Gate 4 | Review UI shipped (GitPanel card + block bridge + shared ReviewFindings, Molten Obsidian, 2 screenshot rounds by UI agent); Gate 4 dogfood: real CLI reviewed this repo's own diff 3× — found a real false-"ship it" bug in the fresh UI (fixed); parser hardened; timeout 360s. Phase 4 COMPLETE |
 | 2026-07-02 | 4.1–4.4 | Security boundary shipped TDD-first: shared/diff-sanitize (blocklist, redaction, caps+markers, injection suspects, lockfile/binary summaries, parseUnifiedDiff) + shared/review (prompt builder w/ per-run fence, defensive JSON parser); ReviewService (staged+worktree+untracked collection, traversal guard, injectable runner, audit=stats-only) + runText for the block bridge; IPC reviewRun/reviewRunText wired all legs. +31 tests |
 | 2026-07-02 | 3.1–3.2 | Block state lifted to app-level blockStore (single onData capture subscription, per-session rAF snapshots, `findBlock()` seam for Phase 4); store split into 8 feature slices, consumer API unchanged; logs.onChange wired to live insight refresh |

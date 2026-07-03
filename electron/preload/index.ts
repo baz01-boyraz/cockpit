@@ -86,6 +86,13 @@ const api: CockpitApi = {
     runText: (projectId, input, opts) =>
       invoke(IPC.reviewRunText, { projectId, ...input, model: opts?.model }),
   },
+  memory: {
+    list: (projectId) => invoke(IPC.memoryList, { projectId }),
+    read: (projectId, name) => invoke(IPC.memoryRead, { projectId, name }),
+    write: (projectId, name, content) => invoke(IPC.memoryWrite, { projectId, name, content }),
+    rename: (projectId, from, to) => invoke(IPC.memoryRename, { projectId, from, to }),
+    trash: (projectId, name) => invoke(IPC.memoryTrash, { projectId, name }),
+  },
   chat: {
     ask: (projectId, prompt, opts) => invoke(IPC.chatAsk, { projectId, prompt, opts }),
   },

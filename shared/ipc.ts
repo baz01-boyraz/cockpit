@@ -11,6 +11,7 @@
  */
 import type { ClaudeRunOptions } from './claude-run'
 import type { ReviewResult } from './review'
+import type { MemoryHubSnapshot, MemoryNote } from './memory-hub'
 import type {
   AgentType,
   AgentUsageReport,
@@ -88,6 +89,12 @@ export const IPC = {
   chatAsk: 'chat:ask',
   reviewRun: 'review:run',
   reviewRunText: 'review:runText',
+
+  memoryList: 'memory:list',
+  memoryRead: 'memory:read',
+  memoryWrite: 'memory:write',
+  memoryRename: 'memory:rename',
+  memoryTrash: 'memory:trash',
 
   auditList: 'audit:list',
 
@@ -251,6 +258,17 @@ export interface CockpitApi {
       opts?: { model?: string },
     ): Promise<ReviewResult>
   }
+  memory: {
+    /**
+     * Per-project markdown knowledge hub (`.cockpit-memory/`). Files are the
+     * source of truth; names are slugs; deletion is a soft move to `.trash/`.
+     */
+    list(projectId: string): Promise<MemoryHubSnapshot>
+    read(projectId: string, name: string): Promise<MemoryNote | null>
+    write(projectId: string, name: string, content: string): Promise<MemoryNote>
+    rename(projectId: string, from: string, to: string): Promise<MemoryHubSnapshot>
+    trash(projectId: string, name: string): Promise<MemoryHubSnapshot>
+  }
   chat: {
     /**
      * Ask Claude a question via the local `claude` CLI; returns its reply.
@@ -344,6 +362,11 @@ export interface IpcResultMap {
   chatAsk: R<CockpitApi['chat']['ask']>
   reviewRun: R<CockpitApi['review']['run']>
   reviewRunText: R<CockpitApi['review']['runText']>
+  memoryList: R<CockpitApi['memory']['list']>
+  memoryRead: R<CockpitApi['memory']['read']>
+  memoryWrite: R<CockpitApi['memory']['write']>
+  memoryRename: R<CockpitApi['memory']['rename']>
+  memoryTrash: R<CockpitApi['memory']['trash']>
   auditList: R<CockpitApi['audit']['list']>
 
   systemInfo: R<CockpitApi['system']['info']>

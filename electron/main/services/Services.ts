@@ -17,6 +17,7 @@ import { AgentUsageService } from './AgentUsageService'
 import { ApprovalService } from './ApprovalService'
 import { AppUpdateService } from './AppUpdateService'
 import { ChatService } from './ChatService'
+import { MemoryHubService } from './MemoryHubService'
 import { ReviewService } from './ReviewService'
 import { ClaudeSessionsService } from './ClaudeSessionsService'
 import { GitService } from './GitService'
@@ -51,6 +52,7 @@ export class Services {
   readonly claudeSessions: ClaudeSessionsService
   readonly chat: ChatService
   readonly review: ReviewService
+  readonly memory: MemoryHubService
   readonly appUpdate: AppUpdateService
   private closing = false
   /** Per-pane full-screen-TUI mode, so repaint frames never reach the matchers. */
@@ -72,6 +74,7 @@ export class Services {
     this.claudeSessions = new ClaudeSessionsService()
     this.chat = new ChatService(this.projects)
     this.review = new ReviewService(this.projects, this.audit)
+    this.memory = new MemoryHubService(this.projects)
     this.appUpdate = new AppUpdateService(opts.events)
 
     this.terminals = new TerminalManager(

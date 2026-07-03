@@ -175,6 +175,23 @@ export const reviewRunTextSchema = z.object({
   model: z.string().min(1).max(120).optional(),
 })
 
+export const memoryNameSchema = z.object({
+  projectId: z.string().min(1),
+  name: z.string().min(1).max(120),
+})
+
+export const memoryWriteSchema = z.object({
+  projectId: z.string().min(1),
+  name: z.string().min(1).max(120),
+  content: z.string().max(500_000),
+})
+
+export const memoryRenameSchema = z.object({
+  projectId: z.string().min(1),
+  from: z.string().min(1).max(120),
+  to: z.string().min(1).max(120),
+})
+
 export const gitDiffInputSchema = z.object({
   projectId: z.string().min(1),
   path: z.string().min(1),

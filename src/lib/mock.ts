@@ -8,96 +8,46 @@
  * same shared router/log-pattern logic the real backend uses.
  */
 import type {
-  AgentUsageReport,
   ApprovalRequest,
-  AuditEntry,
-  ClaudeSessionSummary,
   DashboardSnapshot,
   ErrorInsight,
   AppUpdateState,
   GitCommitResult,
-  GitHubRepositoryStatus,
   GitSnapshot,
-  LogEvent,
   Project,
   ProjectConfig,
   RailwayConnection,
   RailwayService,
   TerminalOutputChunk,
   TerminalSession,
-  UsageSummary,
 } from '@shared/domain'
 import type { CockpitApi, SystemInfo, Unsubscribe } from '@shared/ipc'
 import { resolveChatModel } from '@shared/chat-models'
 import { assembleDashboard, countActiveAgents } from '@shared/dashboard-assembly'
 import { aggregateInsights, insightFromMatch } from '@shared/insight-aggregation'
+import { assembleHubSnapshot, assembleNote, type MemoryDoc } from '@shared/memory-hub'
+import { normalizeNoteName, renameLinkTargets } from '@shared/wikilink'
 import { classifyRoute } from '@shared/router'
 import { matchLogLine } from '@shared/log-patterns'
+import {
+  BANNER,
+  MOCK_PROMPT,
+  MOCK_SESSION,
+  agentUsageReport,
+  approvals,
+  audit,
+  claudeSessionsMock,
+  gitSeeds,
+  githubByProject,
+  id,
+  insightEvents,
+  logs,
+  memoryHub,
+  now,
+  projects,
+  usage,
+} from './mockData'
 
-const now = () => new Date().toISOString()
-const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString()
-const id = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`
-
-const projects: Project[] = [
-  {
-    id: 'prj_serbest',
-    name: 'Serbest Law Landing Page',
-    path: '/Users/baz/dev/serbest-law',
-    techStack: ['Next.js', 'Tailwind', 'FastAPI', 'PostgreSQL'],
-    createdAt: now(),
-    updatedAt: now(),
-    lastOpenedAt: now(),
-  },
-  {
-    id: 'prj_cockpit',
-    name: 'cockpiT',
-    path: '/Users/baz/Projects/cockpit',
-    techStack: ['Electron', 'React', 'TypeScript', 'Vite'],
-    createdAt: now(),
-    updatedAt: now(),
-    lastOpenedAt: now(),
-  },
-]
-
-// Immutable seed snapshots — NEVER mutated. Git actions operate on `gitState`
-// (below), whose entries are replaced with fresh objects on every operation.
-const gitSeeds: Record<string, GitSnapshot> = {
-  prj_serbest: {
-    id: id('git'),
-    projectId: 'prj_serbest',
-    branch: 'feature/hero-redesign',
-    ahead: 2,
-    behind: 0,
-    changedFilesCount: 5,
-    stagedCount: 2,
-    unstagedCount: 2,
-    untrackedCount: 1,
-    files: [
-      { path: 'app/page.tsx', state: 'staged', index: 'M', workingDir: ' ' },
-      { path: 'components/Hero.tsx', state: 'staged', index: 'M', workingDir: ' ' },
-      { path: 'components/Nav.tsx', state: 'unstaged', index: ' ', workingDir: 'M' },
-      { path: 'styles/tokens.css', state: 'unstaged', index: ' ', workingDir: 'M' },
-      { path: 'public/og-image.png', state: 'untracked', index: '?', workingDir: '?' },
-    ],
-    createdAt: now(),
-  },
-  prj_cockpit: {
-    id: id('git'),
-    projectId: 'prj_cockpit',
-    branch: 'main',
-    ahead: 0,
-    behind: 0,
-    changedFilesCount: 0,
-    stagedCount: 0,
-    unstagedCount: 0,
-    untrackedCount: 0,
-    files: [],
-    createdAt: now(),
-  },
-}
-
-// Current per-project snapshots. Entries are REPLACED (spread) by git actions;
-// the seed objects above stay pristine across renders and operations.
 const gitState = new Map<string, GitSnapshot>()
 
 function gitSnapshotFor(projectId: string): GitSnapshot {
@@ -107,86 +57,6 @@ function gitSnapshotFor(projectId: string): GitSnapshot {
   const fresh: GitSnapshot = { ...seed, files: seed.files.map((f) => ({ ...f })) }
   gitState.set(projectId, fresh)
   return fresh
-}
-
-const githubByProject: Record<string, GitHubRepositoryStatus> = {
-  prj_serbest: {
-    connected: true,
-    authState: 'authenticated',
-    account: {
-      login: 'baz01-boyraz',
-      name: 'Baz',
-      avatarUrl: null,
-      htmlUrl: 'https://github.com/baz01-boyraz',
-    },
-    remote: {
-      name: 'origin',
-      url: 'git@github.com:baz01-boyraz/serbest-law.git',
-      provider: 'github',
-      owner: 'baz01-boyraz',
-      repo: 'serbest-law',
-      webUrl: 'https://github.com/baz01-boyraz/serbest-law',
-    },
-    repository: {
-      owner: 'baz01-boyraz',
-      name: 'serbest-law',
-      fullName: 'baz01-boyraz/serbest-law',
-      private: true,
-      defaultBranch: 'main',
-      htmlUrl: 'https://github.com/baz01-boyraz/serbest-law',
-      description: 'Client-facing legal intake site.',
-    },
-    openPullRequest: {
-      number: 18,
-      title: 'Refine hero and intake conversion path',
-      state: 'open',
-      htmlUrl: 'https://github.com/baz01-boyraz/serbest-law/pull/18',
-      draft: false,
-    },
-    latestWorkflowRun: {
-      id: 1042,
-      name: 'Preview',
-      status: 'completed',
-      conclusion: 'success',
-      htmlUrl: 'https://github.com/baz01-boyraz/serbest-law/actions/runs/1042',
-      createdAt: now(),
-    },
-    latestRelease: null,
-    error: null,
-    fetchedAt: now(),
-  },
-  prj_cockpit: {
-    connected: true,
-    authState: 'invalid',
-    account: null,
-    remote: {
-      name: 'origin',
-      url: 'https://github.com/baz01-boyraz/cockpit.git',
-      provider: 'github',
-      owner: 'baz01-boyraz',
-      repo: 'cockpit',
-      webUrl: 'https://github.com/baz01-boyraz/cockpit',
-    },
-    repository: {
-      owner: 'baz01-boyraz',
-      name: 'cockpit',
-      fullName: 'baz01-boyraz/cockpit',
-      private: null,
-      defaultBranch: null,
-      htmlUrl: 'https://github.com/baz01-boyraz/cockpit',
-      description: null,
-    },
-    openPullRequest: null,
-    latestWorkflowRun: null,
-    latestRelease: {
-      tagName: 'v0.1.0',
-      name: 'First private beta',
-      htmlUrl: 'https://github.com/baz01-boyraz/cockpit/releases/tag/v0.1.0',
-      publishedAt: now(),
-    },
-    error: 'GitHub CLI auth is invalid. Run gh auth login to reconnect.',
-    fetchedAt: now(),
-  },
 }
 
 let appUpdateState: AppUpdateState = {
@@ -203,36 +73,6 @@ let appUpdateState: AppUpdateState = {
   checkedAt: now(),
 }
 
-// Raw occurrences (one row per matched line), mirroring the SQLite `error_insights`
-// table. listInsightsMock() aggregates these through the SAME shared function
-// LogIntelligenceService uses, so the web/screenshot bridge stays honest:
-// the seed spans an "active" failure, a "recent" one, and an older "earlier" one.
-const insightEvents: ErrorInsight[] = [
-  occurrence('build_failed', 'Build failed', 'The bundler/compiler rejected the current source.', 'Inspect the first error in the build output and resolve it before retrying.', 'codex', 'high', now()),
-  occurrence('build_failed', 'Build failed', 'The bundler/compiler rejected the current source.', 'Inspect the first error in the build output and resolve it before retrying.', 'codex', 'high', ago(2)),
-  occurrence('port_in_use', 'Port already in use', 'Another process is already bound to the dev/server port.', 'Stop the other process or start the server on a different port.', 'local', 'medium', ago(25)),
-  occurrence('port_in_use', 'Port already in use', 'Another process is already bound to the dev/server port.', 'Stop the other process or start the server on a different port.', 'local', 'medium', ago(41)),
-  occurrence('module_not_found', 'Missing module', 'A required package or local import path is not installed or is misspelled.', 'Run the install command (npm/pnpm/yarn install) or fix the import path.', 'codex', 'high', ago(185)),
-  occurrence('module_not_found', 'Missing module', 'A required package or local import path is not installed or is misspelled.', 'Run the install command (npm/pnpm/yarn install) or fix the import path.', 'codex', 'high', ago(420)),
-]
-
-function occurrence(
-  pattern: string,
-  title: string,
-  likelyCause: string,
-  suggestedAction: string,
-  suggestedAgent: ErrorInsight['suggestedAgent'],
-  severity: ErrorInsight['severity'],
-  createdAt: string,
-): ErrorInsight {
-  return insightFromMatch(
-    { pattern, title, likelyCause, suggestedAction, suggestedAgent, severity },
-    { id: id('ins'), projectId: 'prj_serbest', createdAt },
-  )
-}
-
-// Per-project dismissal watermarks: pattern -> newest occurrence's createdAt
-// the user dismissed. A newer occurrence resurfaces the insight.
 const insightDismissals = new Map<string, Map<string, string>>()
 
 function dismissalsFor(projectId: string): Map<string, string> {
@@ -249,103 +89,19 @@ function listInsightsMock(projectId: string): ErrorInsight[] {
   return aggregateInsights(events, dismissalsFor(projectId))
 }
 
-const approvals: ApprovalRequest[] = [
-  {
-    id: id('apr'),
-    projectId: 'prj_serbest',
-    actionType: 'git_push',
-    riskLevel: 'high',
-    summary: 'Push 2 commits to origin/feature/hero-redesign',
-    payload: { remote: 'origin', branch: 'feature/hero-redesign', commits: 2 },
-    status: 'pending',
-    createdAt: now(),
-    resolvedAt: null,
-  },
-]
-
-const usage: UsageSummary[] = [
-  { provider: 'terminal', sessions: 4, commands: 37, tasks: 0, totalDurationMs: 5_400_000, estimatedTokens: null, warning: null },
-  { provider: 'claude', sessions: 3, commands: 0, tasks: 6, totalDurationMs: 2_100_000, estimatedTokens: 184_000, warning: null },
-  { provider: 'codex', sessions: 2, commands: 0, tasks: 9, totalDurationMs: 1_250_000, estimatedTokens: 96_000, warning: null },
-]
-
-// Account-quota snapshots for the browser preview. Claude shows a healthy live
-// state; Codex shows the warning tier so the screenshot exercises both tones.
-const agentUsageReport = (): AgentUsageReport => ({
-  providers: [
-    {
-      provider: 'claude',
-      label: 'Claude',
-      available: true,
-      plan: 'Pro',
-      windows: [
-        { label: 'Session', usedPercent: 11, resetAt: new Date(Date.now() + 2.4 * 3600_000).toISOString() },
-        { label: 'Weekly', usedPercent: 23, resetAt: new Date(Date.now() + 38 * 3600_000).toISOString() },
-      ],
-      reason: null,
-      fetchedAt: now(),
-    },
-    {
-      provider: 'codex',
-      label: 'Codex',
-      available: true,
-      plan: 'Pro Lite',
-      windows: [
-        { label: 'Session', usedPercent: 82, resetAt: new Date(Date.now() + 1.1 * 3600_000).toISOString() },
-        { label: 'Weekly', usedPercent: 64, resetAt: new Date(Date.now() + 72 * 3600_000).toISOString() },
-      ],
-      reason: null,
-      fetchedAt: now(),
-    },
-  ],
-})
-
-const logs: LogEvent[] = [
-  { id: id('log'), projectId: 'prj_serbest', sourceType: 'terminal', sourceId: 't1', level: 'error', message: "Error: Cannot find module 'framer-motion'", metadata: {}, createdAt: now() },
-  { id: id('log'), projectId: 'prj_serbest', sourceType: 'terminal', sourceId: 't1', level: 'warn', message: 'warning: port 3000 is already in use, trying 3001', metadata: {}, createdAt: now() },
-  { id: id('log'), projectId: 'prj_serbest', sourceType: 'system', sourceId: null, level: 'info', message: 'Dev server ready on http://localhost:3001', metadata: {}, createdAt: now() },
-]
-
-const audit: AuditEntry[] = [
-  { id: id('aud'), projectId: 'prj_serbest', actor: 'ai', actionType: 'router.classify', summary: 'Routed task to claude: "plan the hero section refactor"', payloadRedacted: {}, createdAt: ago(2) },
-  { id: id('aud'), projectId: 'prj_serbest', actor: 'user', actionType: 'git.push', summary: 'Pushed main to origin', payloadRedacted: {}, createdAt: ago(7) },
-  { id: id('aud'), projectId: 'prj_serbest', actor: 'ai', actionType: 'router.classify', summary: 'Routed task to codex: "fix the failing module import"', payloadRedacted: {}, createdAt: ago(14) },
-  { id: id('aud'), projectId: 'prj_serbest', actor: 'user', actionType: 'terminal.create', summary: 'Created terminal "Dev server"', payloadRedacted: {}, createdAt: ago(26) },
-  { id: id('aud'), projectId: 'prj_serbest', actor: 'ai', actionType: 'router.classify', summary: 'Routed task to chat: "explain the redaction flow"', payloadRedacted: {}, createdAt: ago(41) },
-  { id: id('aud'), projectId: 'prj_serbest', actor: 'system', actionType: 'audit.redact', summary: 'Masked 3 secrets before sending context', payloadRedacted: {}, createdAt: ago(58) },
-  { id: id('aud'), projectId: 'prj_serbest', actor: 'ai', actionType: 'router.classify', summary: 'Routed task to claude: "review the usage dock styles"', payloadRedacted: {}, createdAt: ago(72) },
-  { id: id('aud'), projectId: 'prj_serbest', actor: 'user', actionType: 'terminal.create', summary: 'Created terminal "Codex"', payloadRedacted: {}, createdAt: ago(96) },
-]
-
 const terminals: Record<string, TerminalSession[]> = { prj_serbest: [], prj_cockpit: [] }
 
-const claudeSessionsMock: ClaudeSessionSummary[] = [
-  { id: 'd90ddd0d-0e6a-4868-9213-d0da10c064d1', title: 'Terminal sessions: hatırlama + Obsidian capture tasarımı', createdAt: ago(90), lastActiveAt: ago(4), sizeBytes: 2_900_000 },
-  { id: '3c9c7006-30d9-4681-8ff8-6c787b737cd4', title: 'usage pill\'e biraz daha depth ekleyip metalik yapalım', createdAt: ago(280), lastActiveAt: ago(180), sizeBytes: 5_900_000 },
-  { id: 'a4788b72-c9b9-47ee-bd5c-5b6e9c9e52e5', title: 'son release sonrası gözüme batanlar', createdAt: ago(360), lastActiveAt: ago(300), sizeBytes: 5_600_000 },
-  { id: 'de4abd0b-1a2b-4c3d-9e8f-7a6b5c4d3e2f', title: 'chat mode\'u şimdilik kaldırmak istiyorum', createdAt: ago(520), lastActiveAt: ago(420), sizeBytes: 1_200_000 },
-]
 const dataListeners = new Set<(c: TerminalOutputChunk) => void>()
 const approvalListeners = new Set<() => void>()
 const appUpdateListeners = new Set<(s: AppUpdateState) => void>()
 const logsListeners = new Set<() => void>()
 const notifyLogsChanged = () => logsListeners.forEach((cb) => cb())
 
+const memoryDocsFor = (projectId: string): MemoryDoc[] => memoryHub.get(projectId) ?? []
+
 function emit(sessionId: string, data: string) {
   for (const cb of dataListeners) cb({ sessionId, data, at: now() })
 }
-
-const BANNER = [
-  '\x1b[38;5;208m›\x1b[0m cockpit mock shell — \x1b[2mElectron not detected (browser preview)\x1b[0m',
-  '',
-]
-
-// --- Command blocks (OSC 133) demo -------------------------------------------
-// The browser mock has no real shell, so it scripts a short session framed with
-// OSC 133 semantic-prompt marks. This makes the Warp-style command-block
-// decorations visible in the localhost screenshot workflow (success, failure,
-// and a still-running command) exactly as a real zsh shell would drive them.
-const MOCK_PROMPT = '\x1b[38;5;208m~/baz/serbest\x1b[0m \x1b[38;5;150m❯\x1b[0m '
 
 function osc133(seq: string): string {
   return `\x1b]133;${seq}\x07`
@@ -362,48 +118,6 @@ function emitBlock(sessionId: string, command: string, lines: string[], exitCode
   if (exitCode !== null) emit(sessionId, osc133(`D;${exitCode}`))
 }
 
-interface MockCommand {
-  command: string
-  lines: string[]
-  exitCode: number | null
-  /** Simulated run time between output-start (C) and command-end (D). */
-  runMs: number
-}
-
-const MOCK_SESSION: MockCommand[] = [
-  {
-    command: 'npm run build',
-    lines: [
-      '\x1b[2m> vite build\x1b[0m',
-      '\x1b[38;5;150m✓\x1b[0m 42 modules transformed',
-      '\x1b[38;5;150m✓\x1b[0m built in 1.24s',
-    ],
-    exitCode: 0,
-    runMs: 1240,
-  },
-  {
-    command: 'npm test',
-    lines: [
-      '\x1b[2m> vitest run\x1b[0m',
-      '\x1b[38;5;150m✓\x1b[0m redaction (12)',
-      '\x1b[38;5;196m✗\x1b[0m usage summary — expected 3, got 2',
-      '\x1b[38;5;196m1 failed\x1b[0m, 40 passed',
-    ],
-    exitCode: 1,
-    runMs: 820,
-  },
-  {
-    command: 'npm run dev',
-    lines: ['\x1b[2m> vite\x1b[0m', '\x1b[38;5;150m➜\x1b[0m Local:  \x1b[4mhttp://localhost:3001\x1b[0m'],
-    exitCode: null,
-    runMs: 500,
-  },
-]
-
-// Play the scripted session on a timeline so each command has a realistic
-// duration (C→D gap) and the terminal feels live: prompt + command appear, then
-// the output and exit land after `runMs`. A `null` exit leaves the last command
-// running, so the Blocks view shows a live "running" card.
 function runMockSession(sessionId: string) {
   for (const line of BANNER) emit(sessionId, `${line}\r\n`)
   let at = 120
@@ -736,6 +450,41 @@ export function createMockApi(): CockpitApi {
       },
     },
     router: { route: async (_projectId, query) => classifyRoute(query) },
+    memory: {
+      list: async (projectId) => assembleHubSnapshot(memoryDocsFor(projectId)),
+      read: async (projectId, name) => assembleNote(memoryDocsFor(projectId), name),
+      write: async (projectId, name, content) => {
+        const slug = normalizeNoteName(name)
+        if (!slug) throw new Error(`Invalid note name: ${JSON.stringify(name)}`)
+        const docs = memoryDocsFor(projectId)
+        const next = docs.filter((d) => d.name !== slug)
+        next.push({ name: slug, content, updatedAt: now() })
+        memoryHub.set(projectId, next)
+        const note = assembleNote(next, slug)
+        if (!note) throw new Error('Note write could not be read back.')
+        return note
+      },
+      rename: async (projectId, from, to) => {
+        const fromSlug = normalizeNoteName(from)
+        const toSlug = normalizeNoteName(to)
+        if (!fromSlug || !toSlug) throw new Error('Invalid note name.')
+        const docs = memoryDocsFor(projectId)
+        if (docs.some((d) => d.name === toSlug)) throw new Error(`A note named "${toSlug}" already exists.`)
+        const next = docs.map((d) =>
+          d.name === fromSlug
+            ? { ...d, name: toSlug, updatedAt: now() }
+            : { ...d, content: renameLinkTargets(d.content, fromSlug, toSlug) },
+        )
+        memoryHub.set(projectId, next)
+        return assembleHubSnapshot(next)
+      },
+      trash: async (projectId, name) => {
+        const slug = normalizeNoteName(name)
+        const next = memoryDocsFor(projectId).filter((d) => d.name !== slug)
+        memoryHub.set(projectId, next)
+        return assembleHubSnapshot(next)
+      },
+    },
     review: {
       // Staged review session so the surface is fully explorable in the
       // browser preview: a short "thinking" delay, then realistic findings.

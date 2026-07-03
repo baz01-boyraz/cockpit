@@ -18,6 +18,9 @@ import {
   chatAskSchema,
   dismissInsightSchema,
   ingestLogSchema,
+  memoryNameSchema,
+  memoryRenameSchema,
+  memoryWriteSchema,
   projectIdSchema,
   requestApprovalSchema,
   reviewRunSchema,
@@ -205,6 +208,25 @@ export function registerIpc(services: Services): void {
   handle('reviewRunText', (p) => {
     const { projectId, label, content, model } = reviewRunTextSchema.parse(p)
     return services.review.runText(projectId, { label, content }, { model })
+  })
+
+  // --- memory hub (per-project markdown knowledge, files are the truth) ---
+  handle('memoryList', (p) => services.memory.list(projectIdSchema.parse(p).projectId))
+  handle('memoryRead', (p) => {
+    const { projectId, name } = memoryNameSchema.parse(p)
+    return services.memory.read(projectId, name)
+  })
+  handle('memoryWrite', (p) => {
+    const { projectId, name, content } = memoryWriteSchema.parse(p)
+    return services.memory.write(projectId, name, content)
+  })
+  handle('memoryRename', (p) => {
+    const { projectId, from, to } = memoryRenameSchema.parse(p)
+    return services.memory.rename(projectId, from, to)
+  })
+  handle('memoryTrash', (p) => {
+    const { projectId, name } = memoryNameSchema.parse(p)
+    return services.memory.trash(projectId, name)
   })
 
   // --- chat (real answers via the local Claude Code CLI) ---
