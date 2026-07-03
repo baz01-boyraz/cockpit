@@ -1,13 +1,25 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, screen, shell } from 'electron'
 import { IPC } from '@shared/ipc'
-import { CockpitEvents } from './events'
+import { CockpitEvents, TerminalDataCoalescer } from './events'
 import { registerIpc } from './ipc/registerIpc'
 import { Services } from './services/Services'
 
 const events = new CockpitEvents()
 let services: Services | null = null
 let mainWindow: BrowserWindow | null = null
+let terminalCoalescer: TerminalDataCoalescer | null = null
+
+/**
+ * Owner-registry seam: resolves which windows receive a given renderer event.
+ * Today there is one window, so every event targets all windows. When
+ * detachable panels land, this is the single place that maps an event's owner
+ * (sessionId/projectId in the payload) to its window — do not add per-event
+ * routing logic elsewhere.
+ */
+function resolveTargetWindows(_channel: string, _payload: unknown): BrowserWindow[] {
+  return BrowserWindow.getAllWindows()
+}
 
 function createWindow(): void {
   // Fit the window to the current display's work area so it never opens wider
@@ -32,6 +44,10 @@ function createWindow(): void {
       webviewTag: false,
     },
   })
+
+  // Drain any coalesced terminal output while the webContents still exists —
+  // a pending 16ms frame must not be dropped by the window teardown.
+  mainWindow.on('close', () => terminalCoalescer?.flush())
 
   mainWindow.on('ready-to-show', () => {
     // Re-center before showing. macOS window state restoration can re-apply a
@@ -72,12 +88,20 @@ function createWindow(): void {
 
 function forwardEvents(): void {
   const send = (channel: string, payload: unknown) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send(channel, payload)
+    for (const win of resolveTargetWindows(channel, payload)) {
+      if (!win.isDestroyed()) win.webContents.send(channel, payload)
     }
   }
-  events.onTyped('terminal:data', (p) => send(IPC.evtTerminalData, p))
-  events.onTyped('terminal:exit', (p) => send(IPC.evtTerminalExit, p))
+  // pty output arrives as many tiny chunks; coalesce per session on a ~16ms
+  // frame so a burst produces at most one send per session per frame. All
+  // other event types are low-frequency and stay immediate.
+  terminalCoalescer = new TerminalDataCoalescer((chunk) => send(IPC.evtTerminalData, chunk))
+  events.onTyped('terminal:data', (p) => terminalCoalescer?.push(p))
+  events.onTyped('terminal:exit', (p) => {
+    // Drain the session's buffered output first so exit never overtakes data.
+    terminalCoalescer?.flushSession(p.sessionId)
+    send(IPC.evtTerminalExit, p)
+  })
   events.onTyped('approvals:changed', (p) => send(IPC.evtApprovalsChanged, p))
   events.onTyped('logs:changed', (p) => send(IPC.evtLogsChanged, p))
   events.onTyped('appUpdate:changed', (p) => send(IPC.evtAppUpdateChanged, p))
@@ -109,4 +133,9 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => services?.shutdown())
+app.on('before-quit', () => {
+  // Flush before shutdown: buffered pty output still reaches any live window,
+  // and the coalescer's pending frame timer never outlives the services.
+  terminalCoalescer?.flush()
+  services?.shutdown()
+})

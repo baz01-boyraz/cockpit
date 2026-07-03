@@ -3,7 +3,14 @@
  *
  * One forward-only SQL string applied inside a transaction. Versioning is
  * tracked in `schema_migrations`; future migrations append new version blocks
- * in `migrations.ts` rather than editing this one.
+ * below rather than editing this one.
+ *
+ * HISTORICAL NOTE (append-only violation, kept as-is): V1 was edited in place
+ * after V2 had already shipped, so `insight_dismissals` and
+ * `idx_error_insights_pattern` appear in BOTH blocks. That is harmless only
+ * because both use IF NOT EXISTS (fresh installs create them via V1, upgraded
+ * installs via V2). Do not restructure the old blocks — and never edit a
+ * shipped block again. New DDL must go in a NEW appended SCHEMA_Vn block.
  */
 export const SCHEMA_V1 = /* sql */ `
 CREATE TABLE IF NOT EXISTS projects (
@@ -44,6 +51,9 @@ CREATE TABLE IF NOT EXISTS terminal_layouts (
   updated_at  TEXT NOT NULL
 );
 
+-- RESERVED for Phase 6 (Swarm agent lifecycle). Nothing writes this table yet
+-- (the old dashboard agent-count read it; that now counts live agent panes).
+-- Kept, not dropped: Swarm's spawn/track/resume work will claim it.
 CREATE TABLE IF NOT EXISTS agent_sessions (
   id                  TEXT PRIMARY KEY,
   project_id          TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -196,4 +206,28 @@ CREATE TABLE IF NOT EXISTS insight_dismissals (
  */
 export const SCHEMA_V3 = /* sql */ `
 ALTER TABLE terminal_sessions ADD COLUMN alias TEXT;
+`
+
+/**
+ * v4 — terminal lifecycle honesty + query performance. Append-only.
+ *
+ * - `terminal_sessions.reconciled_at`: pty processes never survive the app
+ *   process, so any row still claiming running/starting at boot is stale. Boot
+ *   reconciliation (TerminalManager) flips its status to 'exited' and stamps
+ *   this column — NULL means the exit was observed live, a timestamp means the
+ *   row was reconciled after a crash/quit.
+ * - `terminal_sessions.command`: the startup command the pane was launched with
+ *   (dev server, `claude`, `codex --resume …`). cwd/shell/project were already
+ *   persisted by V1; with the command stored too, a Phase 6 resume can relaunch
+ *   the session from its row alone.
+ * - `idx_usage_events_project_created`: `UsageService.summarize()` filters by
+ *   project and orders by created_at; V1 only indexed (project_id, provider).
+ *
+ * Like V3, the ALTERs live only here (SQLite has no ADD COLUMN IF NOT EXISTS,
+ * so defining them in V1 as well would throw "duplicate column name").
+ */
+export const SCHEMA_V4 = /* sql */ `
+ALTER TABLE terminal_sessions ADD COLUMN reconciled_at TEXT;
+ALTER TABLE terminal_sessions ADD COLUMN command TEXT;
+CREATE INDEX IF NOT EXISTS idx_usage_events_project_created ON usage_events(project_id, created_at);
 `

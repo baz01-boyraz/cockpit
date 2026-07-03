@@ -197,7 +197,9 @@ describe('TerminalManager lifecycle', () => {
     expect(ptyState.spawned[0].kill).toHaveBeenCalled()
     expect(mgr.list('prj_1')).toEqual([])
 
-    const updates = rec.callsFor('run', 'UPDATE terminal_sessions')
+    // Fragment 'SET name=' isolates per-session updateRow calls from the
+    // boot-reconciliation UPDATE issued at construction.
+    const updates = rec.callsFor('run', 'SET name=')
     expect(updates).toHaveLength(1)
     expect(updates[0].args[0]).toMatchObject({ id: session.id, status: 'killed' })
   })
@@ -214,15 +216,15 @@ describe('TerminalManager lifecycle', () => {
     expect(live.exitCode).toBe(0)
     expect(exitSpy).toHaveBeenCalledWith({ sessionId: session.id, exitCode: 0, signal: null })
 
-    const updates = rec.callsFor('run', 'UPDATE terminal_sessions')
+    const updates = rec.callsFor('run', 'SET name=')
     expect(updates[0].args[0]).toMatchObject({ status: 'exited', exitCode: 0 })
   })
 
-  it('a non-zero pty exit marks the session killed', () => {
+  it('a natural non-zero exit is honest: exited with its code, not killed', () => {
     const { mgr } = makeManager()
     mgr.create({ projectId: 'prj_1' })
     ptyState.spawned[0].emitExit(137, 9)
-    expect(mgr.list('prj_1')[0].status).toBe('killed')
+    expect(mgr.list('prj_1')[0].status).toBe('exited')
     expect(mgr.list('prj_1')[0].exitCode).toBe(137)
   })
 
@@ -236,7 +238,7 @@ describe('TerminalManager lifecycle', () => {
     // Omitted role/alias are left untouched.
     const again = mgr.rename(session.id, 'API server 2')
     expect(again).toMatchObject({ name: 'API server 2', role: 'backend', alias: 'api' })
-    expect(rec.callsFor('run', 'UPDATE terminal_sessions')).toHaveLength(2)
+    expect(rec.callsFor('run', 'SET name=')).toHaveLength(2)
     expect(() => mgr.rename('term_missing', 'x')).toThrow(/not found/)
   })
 

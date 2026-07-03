@@ -221,12 +221,17 @@ export function GitPanel() {
   const openDiff = async (file: GitFileEntry) => {
     if (!activeProjectId) return
     setSelected(file)
-    const d = await cockpit().git.diff({
-      projectId: activeProjectId,
-      path: file.path,
-      staged: file.state === 'staged',
-    })
-    setDiff(d.hunks || '(no textual diff)')
+    try {
+      const d = await cockpit().git.diff({
+        projectId: activeProjectId,
+        path: file.path,
+        staged: file.state === 'staged',
+      })
+      setDiff(d.hunks || '(no textual diff)')
+    } catch (err) {
+      setDiff('')
+      setNotice(err instanceof Error ? err.message : String(err))
+    }
   }
 
   // Spin up a single dev/test process in its own terminal and remember its id so

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useStore } from './store/useStore'
 import { cockpit } from './lib/cockpit'
+import { initBlockCapture } from './store/blockStore'
 import { AppShell } from './components/AppShell'
 import { ProjectSwitcher } from './components/ProjectSwitcher'
 import { NotepadDrawer } from './components/NotepadDrawer'
@@ -10,6 +11,7 @@ export function App() {
   const init = useStore((s) => s.init)
   const switcherOpen = useStore((s) => s.projectSwitcherOpen)
   const refreshApprovals = useStore((s) => s.refreshApprovals)
+  const refreshInsights = useStore((s) => s.refreshInsights)
 
   useEffect(() => {
     void init()
@@ -20,6 +22,16 @@ export function App() {
     const off = cockpit().approvals.onChange(() => void refreshApprovals())
     return off
   }, [refreshApprovals])
+
+  // Live-refresh logs/insights on backend change (evtLogsChanged, wired in 2.1).
+  useEffect(() => {
+    const off = cockpit().logs.onChange(() => void refreshInsights())
+    return off
+  }, [refreshInsights])
+
+  // One app-level subscription captures command blocks for every session —
+  // blocks survive pane unmounts and are addressable by sessionId (see 3.1).
+  useEffect(() => initBlockCapture(), [])
 
   if (!ready) {
     return (

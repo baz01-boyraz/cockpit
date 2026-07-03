@@ -55,10 +55,27 @@ function toOccurrence(r: InsightRow): InsightOccurrence {
  * callers can route it straight into the AI chat context.
  */
 export class LogIntelligenceService {
+  /**
+   * Hot-path statements prepared once — ingest() runs for every interesting
+   * terminal chunk, so re-preparing per call was pure overhead.
+   */
+  private readonly insertLogStmt: ReturnType<Db['prepare']>
+  private readonly insertInsightStmt: ReturnType<Db['prepare']>
+
   constructor(
     private readonly db: Db,
     private readonly events: CockpitEvents,
-  ) {}
+  ) {
+    this.insertLogStmt = this.db.prepare(
+      `INSERT INTO log_events (id, project_id, source_type, source_id, level, message, metadata_json, created_at)
+       VALUES (@id, @projectId, @sourceType, @sourceId, @level, @message, '{}', @createdAt)`,
+    )
+    this.insertInsightStmt = this.db.prepare(
+      `INSERT INTO error_insights
+       (id, project_id, log_event_id, title, likely_cause, suggested_action, suggested_agent, severity, matched_pattern, created_at)
+       VALUES (@id, @projectId, @logEventId, @title, @likelyCause, @suggestedAction, @suggestedAgent, @severity, @pattern, @createdAt)`,
+    )
+  }
 
   ingest(input: {
     projectId: string
@@ -78,22 +95,12 @@ export class LogIntelligenceService {
     if (lines.length === 0) return null
 
     let latestInsight: ErrorInsight | null = null
-    const insertLog = this.db.prepare(
-      `INSERT INTO log_events (id, project_id, source_type, source_id, level, message, metadata_json, created_at)
-       VALUES (@id, @projectId, @sourceType, @sourceId, @level, @message, '{}', @createdAt)`,
-    )
-    const insertInsight = this.db.prepare(
-      `INSERT INTO error_insights
-       (id, project_id, log_event_id, title, likely_cause, suggested_action, suggested_agent, severity, matched_pattern, created_at)
-       VALUES (@id, @projectId, @logEventId, @title, @likelyCause, @suggestedAction, @suggestedAgent, @severity, @pattern, @createdAt)`,
-    )
-
     const tx = this.db.transaction(() => {
       for (const line of lines) {
         const level: LogLevel = inferLogLevel(line)
         const logId = newId('log')
         const createdAt = nowIso()
-        insertLog.run({
+        this.insertLogStmt.run({
           id: logId,
           projectId: input.projectId,
           sourceType: input.sourceType,
@@ -113,7 +120,7 @@ export class LogIntelligenceService {
             logEventId: logId,
             createdAt,
           })
-          insertInsight.run({
+          this.insertInsightStmt.run({
             id: insight.id,
             projectId: insight.projectId,
             logEventId: insight.logEventId,

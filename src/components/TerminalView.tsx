@@ -2,10 +2,10 @@ import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import type { TerminalAttachment, TerminalSession } from '@shared/domain'
-import { type CapturedBlock, CommandBlockModel, OSC_COMMAND } from '@shared/command-blocks'
-import { initialTerminalScanState, scanTerminalChunk } from '@shared/log-sanitize'
+import { OSC_COMMAND } from '@shared/command-blocks'
 import { cockpit } from '../lib/cockpit'
 import { CommandBlockDecorations } from '../lib/commandBlocks'
+import { useSessionBlocks } from '../store/blockStore'
 import { BlocksView } from './BlocksView'
 import {
   IMAGE_ACCEPT,
@@ -62,7 +62,9 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
   const [error, setError] = useState<string | null>(null)
   const [attachment, setAttachment] = useState<AttachmentPreview | null>(null)
   const [mode, setMode] = useState<TerminalViewMode>('stream')
-  const [blocks, setBlocks] = useState<CapturedBlock[]>([])
+  // Block capture lives app-level in blockStore (survives pane unmounts);
+  // this pane only renders its session's published snapshots.
+  const blocks = useSessionBlocks(session.id)
 
   const resetDrag = () => {
     dragDepthRef.current = 0
@@ -104,28 +106,12 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
       return true
     })
 
-    // The block model captures each command's text + output for the foldable
-    // Blocks view. It reads the same raw stream, pausing capture while a
-    // full-screen TUI (Claude/vim) repaints so one app can't bloat a block.
-    const model = new CommandBlockModel()
-    let scan = initialTerminalScanState()
-    let raf: number | null = null
-    const flush = () => {
-      raf = null
-      setBlocks(model.snapshot())
-    }
-    const scheduleFlush = () => {
-      if (raf === null) raf = requestAnimationFrame(flush)
-    }
-
+    // Block capture happens app-level (blockStore's single onData subscriber);
+    // this pane's subscription only paints the live xterm stream.
     const api = cockpit()
     const offData = api.terminals.onData((chunk) => {
       if (chunk.sessionId !== session.id) return
       term.write(chunk.data)
-      const scanned = scanTerminalChunk(chunk.data, scan)
-      scan = scanned.state
-      model.setSuppressed(scanned.suppress)
-      if (model.feed(chunk.data, Date.now())) scheduleFlush()
     })
     const sub = term.onData((data) => void api.terminals.write(session.id, data))
 
@@ -144,7 +130,6 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
     ro.observe(host)
 
     return () => {
-      if (raf !== null) cancelAnimationFrame(raf)
       offData()
       sub.dispose()
       offOsc.dispose()

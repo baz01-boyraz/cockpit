@@ -22,6 +22,12 @@ const MAX_TERMINALS = 6
  * Owns real terminal sessions backed by node-pty. Enforces the per-project cap
  * (max 6), streams output to the renderer via the event bus, and mirrors session
  * lifecycle into SQLite. Roles are optional metadata — never required.
+ *
+ * Row lifecycle: spawned ('running') → 'exited' (the pty ended on its own,
+ * whatever the exit code) or 'killed' (WE ended it via kill()/killAll()/
+ * restart()). Rows still claiming running/starting at boot are stale history
+ * from a previous process — the constructor reconciles them to 'exited' with a
+ * `reconciled_at` stamp, so the DB never reports phantom live sessions.
  */
 export class TerminalManager {
   private readonly live = new Map<string, LiveTerminal>()
@@ -36,13 +42,40 @@ export class TerminalManager {
     private readonly onUsage: (projectId: string, kind: 'session' | 'command') => void,
     /** Directory for cockpit-owned shell-integration startup files (OSC 133). */
     private readonly shellIntegrationDir: string,
-  ) {}
+  ) {
+    // Boot reconciliation runs before any session can spawn, so from the first
+    // moment both the live map and the DB agree: nothing is running yet.
+    this.reconcileStaleRows()
+  }
+
+  /**
+   * Mark rows a previous process left as running/starting as exited-with-
+   * reconciliation. pty processes cannot outlive the app, so these rows are
+   * provably stale. `reconciled_at IS NOT NULL` distinguishes "we inferred the
+   * exit at boot" from "we observed the exit live" (Phase 6 resume will offer
+   * exactly these rows back, relaunching from cwd/shell/command).
+   */
+  private reconcileStaleRows(): void {
+    this.db
+      .prepare(
+        `UPDATE terminal_sessions
+         SET status = 'exited', reconciled_at = @now
+         WHERE status IN ('running', 'starting')`,
+      )
+      .run({ now: nowIso() })
+  }
 
   private defaultShell(): string {
     if (platform() === 'win32') return process.env.COMSPEC ?? 'powershell.exe'
     return process.env.SHELL ?? '/bin/zsh'
   }
 
+  /**
+   * Sessions of THIS process run (the live map). Consistent with the DB by
+   * construction: boot reconciliation cleared every stale running/starting row
+   * before the first spawn, and every lifecycle change here is mirrored to its
+   * row — so no session can appear 'running' anywhere unless its pty is live.
+   */
   list(projectId: string): TerminalSession[] {
     return [...this.live.values()]
       .filter((t) => t.session.projectId === projectId)
@@ -124,7 +157,12 @@ export class TerminalManager {
       if (this.disposed) return
       const live = this.live.get(session.id)
       if (live) {
-        live.session.status = exitCode === 0 ? 'exited' : 'killed'
+        // Any exit that reaches here with the session still live is a NATURAL
+        // exit — 'exited' whatever the code (a failing build is not 'killed').
+        // 'killed' is reserved for exits we initiated: kill()/killAll()/
+        // restart() remove the session from the live map (or set `disposed`)
+        // before the pty's exit event fires, so they never hit this branch.
+        live.session.status = 'exited'
         live.session.exitCode = exitCode
         this.updateRow(live.session)
       }
@@ -136,7 +174,7 @@ export class TerminalManager {
     })
 
     this.live.set(id, { session, proc, command: input.command ?? null })
-    this.insertRow(session)
+    this.insertRow(session, input.command ?? null)
     this.onUsage(input.projectId, 'session')
 
     // Optionally launch a command (e.g. dev server, claude, codex) in the shell.
@@ -256,15 +294,19 @@ export class TerminalManager {
     if (live) live.session.lastActiveAt = nowIso()
   }
 
-  private insertRow(s: TerminalSession): void {
+  /**
+   * `command` is stored alongside the V1 columns so the row alone carries what
+   * a Phase 6 resume needs: project, cwd, shell, and the startup command.
+   */
+  private insertRow(s: TerminalSession, command: string | null): void {
     if (this.disposed) return
     this.db
       .prepare(
         `INSERT INTO terminal_sessions
-         (id, project_id, name, role, alias, cwd, shell, status, pid, exit_code, created_at, last_active_at)
-         VALUES (@id, @projectId, @name, @role, @alias, @cwd, @shell, @status, @pid, @exitCode, @createdAt, @lastActiveAt)`,
+         (id, project_id, name, role, alias, cwd, shell, status, pid, exit_code, command, created_at, last_active_at)
+         VALUES (@id, @projectId, @name, @role, @alias, @cwd, @shell, @status, @pid, @exitCode, @command, @createdAt, @lastActiveAt)`,
       )
-      .run({ ...s })
+      .run({ ...s, command })
   }
 
   private updateRow(s: TerminalSession): void {

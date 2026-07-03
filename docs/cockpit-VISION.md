@@ -268,7 +268,7 @@ IPC contract is now a compile- or test-time failure, never a runtime surprise.
 > Theme: the renderer and the event pipeline get ready for many panes, many agents,
 > many windows. Two of these tasks ARE the first tasks of Phases 4 and 6.
 
-### 3.1 [ ] Lift Command-Block state out of `TerminalView`
+### 3.1 [x] Lift Command-Block state out of `TerminalView`
 **Why:** Block history lives in component-local `useState` + a per-component
 `CommandBlockModel` — lost on unmount, unreachable from anywhere else. This **blocks
 the Feature-4 bridge** ("review this block with AI") and any cross-pane block view.
@@ -280,7 +280,7 @@ a consumer. Blocks survive pane switches/unmounts.
 read a block by `sessionId` + block id.
 **Effort:** M
 
-### 3.2 [ ] Feature-slice the Zustand store
+### 3.2 [x] Feature-slice the Zustand store
 **Why:** One flat ~15-slice store with a wholesale `refreshActive()` (refetch 10
 arrays per project switch) won't hold Diff-Review + Memory + Swarm state. Already a
 mild god-object.
@@ -293,7 +293,7 @@ per-slice refresh where cheap.
 refetches slices whose inputs didn't change.
 **Effort:** M
 
-### 3.3 [ ] Terminal lifecycle: boot reconciliation + honest rows — Swarm's first brick
+### 3.3 [x] Terminal lifecycle: boot reconciliation + honest rows — Swarm's first brick
 **Why:** `list()` reads the in-memory map; SQLite rows are write-only history and
 keep claiming `running` after a restart. Nothing reconciles at boot. Swarm's
 crash/quit-resume is built exactly on this substrate.
@@ -309,7 +309,7 @@ crash/quit-resume is built exactly on this substrate.
 unit test on the reconciler.
 **Effort:** M
 
-### 3.4 [ ] Event pipeline: coalesce + route instead of broadcast
+### 3.4 [x] Event pipeline: coalesce + route instead of broadcast
 **Why:** `forwardEvents` does one `webContents.send` per pty chunk to **all**
 windows. 16 agents + future detachable panels = IPC flood. Renderer-side rAF
 batching exists for block snapshots but the main→renderer sends are per-chunk.
@@ -322,7 +322,7 @@ batching exists for block snapshots but the main→renderer sends are per-chunk.
 terminals stay visually smooth.
 **Effort:** M
 
-### 3.5 [ ] Cleanup batch (all ∥, all S)
+### 3.5 [x] Cleanup batch (all ∥, all S) — see progress log for the one remaining live check
 - [ ] **LocalCommandRunner decision:** it's constructed but wired to nothing, and the
   router's "local" recommendation dead-ends (`RightPanel.act()` falls through). Either
   wire an IPC channel → `LocalCommandRunner.run()`, or delete the class and route
@@ -359,6 +359,13 @@ terminals stay visually smooth.
 **Gate 3:** Blocks addressable outside TerminalView; boot reconciliation proven;
 event flood bounded; cleanup batch merged; Command Blocks verified live.
 **The foundation is now genuinely 10x-ready.**
+> **Gate 3 status (2026-07-02): PASSED** (one rider). Blocks survive full pane
+> unmount (badge 3 → view round-trip → badge 3, screenshots 122–123); boot
+> reconciliation + exited/killed semantics unit-proven; a full zsh boot+command+exit
+> arrived in 3 coalesced chunks in the live app; OSC 133 A/C/D verified from REAL
+> zsh via a real pty (isolated dev-Electron). RIDER: bash injection + packaged-.app
+> pty confirmation ride the next `app:refresh`/release. LocalCommandRunner DELETED
+> (dead code; resurrect from git history if Swarm ever wants an allowlisted runner).
 
 ---
 
@@ -554,6 +561,9 @@ Ordered by leverage, all optional:
 | 2026-07-01 | 1.3 | Redaction: Stripe/URL-creds/AIza/SG./npm_/ghu-ghs-ghr/Bearer patterns + bare *_KEY names + high-entropy env fallback + `redactText()`. TDD, 9 new tests |
 | 2026-07-01 | 1.4 | LogIntelligence ingest + listLogs now scrub secrets (new rows and legacy rows) |
 | 2026-07-01 | 1.5 | Rebuild & relaunch: package-identity check in main (`isCockpitSource`), native confirm dialog, audit entry, button hidden for foreign projects (`refreshEligible` IPC). 5 new tests. Verified both states via screenshots |
+| 2026-07-02 | 3.1–3.2 | Block state lifted to app-level blockStore (single onData capture subscription, per-session rAF snapshots, `findBlock()` seam for Phase 4); store split into 8 feature slices, consumer API unchanged; logs.onChange wired to live insight refresh |
+| 2026-07-02 | 3.3–3.4 | Boot reconciliation (`reconciled_at`, stale running→exited), natural exit-1 no longer labeled 'killed', `command` persisted for Phase 6 resume; TerminalDataCoalescer (~16ms/session, exit flushes session first), window-routing seam. SCHEMA_V4 |
+| 2026-07-02 | 3.5 | Statements hoisted; usage_events index; git_snapshots dedupe+prune (200/project); 'detached' branch-name bug fixed (+regression test); openDiff try/catch; block-mutation invariant documented; agent_sessions reserved for Swarm; LocalCommandRunner deleted. LIVE: zsh OSC 133 + coalescer verified vs real pty; bash+packaged check rides next app:refresh |
 | 2026-07-02 | 2.1 | Contract test scans wiring: every channel needs a main handler + preload invoke; every evt needs a preload subscribe; no unknown/duplicate registrations. Dangling `evtLogsChanged` resolved by adding `logs.onChange` to CockpitApi (preload + mock parity) |
 | 2026-07-02 | 2.2 | `IpcResultMap` in shared/ipc.ts binds each channel key to its handler return type, derived from CockpitApi; `handle()` is now keyed + typed; compile-time completeness guard (`IPC_RESULT_MAP_COMPLETE`) errors on drift |
 | 2026-07-02 | 2.3 | Central error shaping in `handle()` via `shared/ipc-errors.ts`: ZodError → one readable line, $HOME → `~`. DECISION: kept the promise-rejection contract instead of a success/data/error envelope (same UX, far smaller blast radius; panels already render e.message uniformly) — revisit only if structured error codes are needed |

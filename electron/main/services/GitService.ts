@@ -11,6 +11,26 @@ import type { Db } from '../db/Database'
 import type { ProjectService } from './ProjectService'
 import { newId, nowIso } from '../util/ids'
 
+/** Rows kept per project by the opportunistic `git_snapshots` prune. */
+const SNAPSHOT_KEEP_PER_PROJECT = 200
+/** Prune once per this many inserts (per project) — cheap, still bounded. */
+const SNAPSHOT_PRUNE_EVERY = 20
+
+/**
+ * The persistence-relevant identity of a snapshot: everything except the
+ * per-call `id`/`createdAt`. Two snapshots with the same fingerprint describe
+ * the same repo state, so storing both is pure churn. Counts derive from
+ * `files`, so branch + ahead/behind + files covers the full state.
+ */
+function snapshotFingerprint(s: GitSnapshot): string {
+  return JSON.stringify({
+    branch: s.branch,
+    ahead: s.ahead,
+    behind: s.behind,
+    files: s.files.map((f) => [f.path, f.state, f.index, f.workingDir]),
+  })
+}
+
 /**
  * Read/inspect git state for a project via simple-git, plus a real `push` for
  * the developer's own loop. A regular push runs directly; force-push uses
@@ -18,6 +38,11 @@ import { newId, nowIso } from '../util/ids'
  * can rewrite remote history.
  */
 export class GitService {
+  /** Fingerprint of the last persisted snapshot per project (dedupe churn). */
+  private readonly lastPersisted = new Map<string, string>()
+  /** Inserts since the last prune, per project (opportunistic pruning). */
+  private readonly insertsSincePrune = new Map<string, number>()
+
   constructor(
     private readonly db: Db,
     private readonly projects: ProjectService,
@@ -116,7 +141,9 @@ export class GitService {
 
     const status = await git.status()
     const branch = status.current
-    if (!branch || branch === 'detached') {
+    // Use simple-git's own detached flag — a branch literally named "detached"
+    // must remain pushable; only a real detached HEAD blocks.
+    if (!branch || status.detached) {
       throw new Error('Cannot push from a detached HEAD. Check out a branch first.')
     }
     if (!input.force && status.ahead === 0) {
@@ -175,7 +202,17 @@ export class GitService {
     }
   }
 
+  /**
+   * Persist a snapshot row — but only when the repo state actually changed.
+   * status() runs 2–3× per commit/push and on every dashboard refresh, and
+   * used to write an identical JSON row each time. Callers are unaffected:
+   * status() still returns every snapshot; only the history table is deduped.
+   */
   private persist(snapshot: GitSnapshot): void {
+    const fingerprint = snapshotFingerprint(snapshot)
+    if (this.lastPersisted.get(snapshot.projectId) === fingerprint) return
+    this.lastPersisted.set(snapshot.projectId, fingerprint)
+
     this.db
       .prepare(
         `INSERT INTO git_snapshots
@@ -193,5 +230,32 @@ export class GitService {
         json: JSON.stringify(snapshot),
         createdAt: snapshot.createdAt,
       })
+    this.pruneOpportunistically(snapshot.projectId)
+  }
+
+  /**
+   * Keep the newest SNAPSHOT_KEEP_PER_PROJECT rows per project. Runs every
+   * SNAPSHOT_PRUNE_EVERY inserts rather than on each one, so the steady-state
+   * cost is near zero and the table stays bounded at keep + (every − 1) rows.
+   */
+  private pruneOpportunistically(projectId: string): void {
+    const count = (this.insertsSincePrune.get(projectId) ?? 0) + 1
+    if (count < SNAPSHOT_PRUNE_EVERY) {
+      this.insertsSincePrune.set(projectId, count)
+      return
+    }
+    this.insertsSincePrune.set(projectId, 0)
+    this.db
+      .prepare(
+        `DELETE FROM git_snapshots
+         WHERE project_id = @projectId
+           AND id NOT IN (
+             SELECT id FROM git_snapshots
+             WHERE project_id = @projectId
+             ORDER BY created_at DESC, id DESC
+             LIMIT @keep
+           )`,
+      )
+      .run({ projectId, keep: SNAPSHOT_KEEP_PER_PROJECT })
   }
 }

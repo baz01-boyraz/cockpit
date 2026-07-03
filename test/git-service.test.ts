@@ -18,6 +18,7 @@ interface FakeGitFile {
 
 interface FakeStatus {
   current: string | null
+  detached: boolean
   ahead: number
   behind: number
   tracking: string | null
@@ -25,7 +26,15 @@ interface FakeStatus {
 }
 
 function makeStatus(overrides: Partial<FakeStatus> = {}): FakeStatus {
-  return { current: 'main', ahead: 0, behind: 0, tracking: 'origin/main', files: [], ...overrides }
+  return {
+    current: 'main',
+    detached: false,
+    ahead: 0,
+    behind: 0,
+    tracking: 'origin/main',
+    files: [],
+    ...overrides,
+  }
 }
 
 interface FakeGitConfig {
@@ -135,9 +144,19 @@ describe('GitService.push', () => {
   })
 
   it('refuses to push from a detached HEAD', async () => {
-    const { service, git } = makeService({ status: makeStatus({ current: null, ahead: 1 }) })
+    const { service, git } = makeService({
+      status: makeStatus({ current: null, detached: true, ahead: 1 }),
+    })
     await expect(service.push({ projectId: 'prj_1' })).rejects.toThrow(/detached HEAD/)
     expect(git.raw).not.toHaveBeenCalled()
+  })
+
+  it('pushes a branch literally named "detached" (only the real flag blocks)', async () => {
+    const { service, git } = makeService({
+      status: makeStatus({ current: 'detached', tracking: 'origin/detached', ahead: 1 }),
+    })
+    await expect(service.push({ projectId: 'prj_1' })).resolves.toMatchObject({ branch: 'detached' })
+    expect(git.raw).toHaveBeenCalled()
   })
 
   it('refuses when there is nothing to push', async () => {

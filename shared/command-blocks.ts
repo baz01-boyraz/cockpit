@@ -278,7 +278,15 @@ export class CommandBlockModel {
     return changed
   }
 
-  /** Immutable snapshot for React state — never hands out internal references. */
+  /**
+   * Immutable snapshot for React state — never hands out internal references.
+   *
+   * INVARIANT: `this.blocks` entries are mutated IN PLACE by appendOutput/
+   * openBlock/closeBlock/abortDangling (a deliberate perf tradeoff — no
+   * per-chunk allocation). Consumers must therefore ONLY read block data
+   * through `snapshot()`; reading `blocks` directly would observe mid-flight
+   * mutation and alias state across renders.
+   */
   snapshot(): CapturedBlock[] {
     return this.blocks.map((b) => ({ ...b }))
   }

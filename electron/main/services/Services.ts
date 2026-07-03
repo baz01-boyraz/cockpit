@@ -20,7 +20,6 @@ import { ChatService } from './ChatService'
 import { ClaudeSessionsService } from './ClaudeSessionsService'
 import { GitService } from './GitService'
 import { GitHubService } from './GitHubService'
-import { LocalCommandRunner } from './LocalCommandRunner'
 import { LogIntelligenceService } from './LogIntelligenceService'
 import { ProjectService } from './ProjectService'
 import { RailwayService } from './RailwayService'
@@ -49,7 +48,6 @@ export class Services {
   readonly secrets: SecretStore
   readonly terminals: TerminalManager
   readonly claudeSessions: ClaudeSessionsService
-  readonly local: LocalCommandRunner
   readonly chat: ChatService
   readonly appUpdate: AppUpdateService
   private closing = false
@@ -70,7 +68,6 @@ export class Services {
     this.github = new GitHubService(this.projects)
     this.railway = new RailwayService(this.db, this.projects)
     this.claudeSessions = new ClaudeSessionsService()
-    this.local = new LocalCommandRunner()
     this.chat = new ChatService(this.projects)
     this.appUpdate = new AppUpdateService(opts.events)
 
