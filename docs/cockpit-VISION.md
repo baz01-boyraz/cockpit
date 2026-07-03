@@ -512,27 +512,27 @@ session ↔ card, streams status onto the card. Human moves card to In Review; b
 and Diff Review (Phase 4) are the review tools.
 **Effort:** L
 
-### 6.3 [ ] Parallel tasks (the real swarm)
+### 6.3 [x] Parallel tasks (the real swarm)
 **Do:** N cards running concurrently, each in an isolated git worktree (create/
 cleanup owned by the orchestrator service). Concurrency cap configurable (start 3–4;
 the event pipeline from 3.4 is the pressure-tested substrate — validate before
 raising). Live per-card status; kill/park controls.
 **Effort:** L
 
-### 6.4 [ ] Crash/quit resume
+### 6.4 [x] Crash/quit resume
 **Do:** Built on 3.3's persisted session metadata: on launch, offer to resume cards
 whose agents were alive at exit into their original terminals (`claude --resume`
 with the UUID-validated session id pattern already in `shared/schemas.ts`).
 **Effort:** M
 
-### 6.5 [ ] Roles & personas
+### 6.5 [x] Roles & personas
 **Do:** Agent definition = role (builder/reviewer/scout/planner) + persona lens +
 model + tool allow-list, as authored system prompts. Ship a few defaults; user-
 authorable like `.claude/agents/`. Reviewer-council on one diff (N personas, same
 target) is the highest-payoff pattern — wire it to Phase 4's review runner.
 **Effort:** M
 
-### 6.6 [ ] Usage-limit awareness
+### 6.6 [x] Usage-limit awareness
 **Do:** Surface AgentUsageService quota state on the board; warn before spawning
 when near limits; park cards gracefully on limit-hit.
 **Effort:** S–M
@@ -541,6 +541,13 @@ when near limits; park cards gracefully on limit-hit.
 worktrees → review with Diff Review → complete, surviving an app restart mid-run.
 **This is the 10x product moment.** Then, per the roadmap: pivot to revenue projects
 ON this foundation.
+
+> **Gate 6 status: PASSED 2026-07-03** (live E2E vs the real app, real claude workers,
+> this repo as the project): 2 parallel workers in isolated `.cockpit-worktrees/` both
+> produced real files in 12s → app KILLED mid-run → relaunch → both cards orphan-rescued
+> to Parked (2 audit entries) → resume reused the SAME worktree, phase-A work intact →
+> /exit → In review → real Diff Review of the worktree (1 file) → Done → dirty-worktree
+> removal refused verbatim. Scripts: session scratchpad gate6a/gate6b.mjs pattern.
 
 ---
 
@@ -576,6 +583,7 @@ Ordered by leverage, all optional:
 | 2026-07-01 | 1.3 | Redaction: Stripe/URL-creds/AIza/SG./npm_/ghu-ghs-ghr/Bearer patterns + bare *_KEY names + high-entropy env fallback + `redactText()`. TDD, 9 new tests |
 | 2026-07-01 | 1.4 | LogIntelligence ingest + listLogs now scrub secrets (new rows and legacy rows) |
 | 2026-07-01 | 1.5 | Rebuild & relaunch: package-identity check in main (`isCockpitSource`), native confirm dialog, audit entry, button hidden for foreign projects (`refreshEligible` IPC). 5 new tests. Verified both states via screenshots |
+| 2026-07-03 | 6.3–6.6 + GATE 6 | PHASE 6 COMPLETE. 6.3: SwarmWorktrees (worktree/card on swarm/<slug>, info/exclude, dirty=REFUSE, branch survives; 3 integration tests vs real repo), cap 3, parkCard (leaves Running first → kill provably ignored). 6.4: boot orphan-rescue → parked + resume reuses the SAME worktree (stuck-card bug closed). 6.5: shared/agent-roles (4 roles, 3 personas; only IDs cross IPC) folded into worker prompt + reviewer COUNCIL (review.run lens, merged tagged findings, src/lib/council.ts). 6.6: quota gate at 100% (probe failure never blocks) + header usage chips. GATE 6 PASSED live: 2 parallel real workers → kill mid-run → orphan rescue → resume same worktree, work intact → real worktree Diff Review → done → dirty-remove refused. Suite 446 |
 | 2026-07-03 | 6.2 + gate | Card→agent SHIPPED and LIVE-VERIFIED (isolated Electron + CDP, real claude): startCard spawns worker via TerminalManager (role claude), session↔card link, service actor into Running; worker exit → In review (killed + nonzero land there too); audit user/system pair. shared/swarm-worker (TDD 12 tests) is a security boundary: C0-strip (raw \r = early pty submit), single-quote escape, hub POINTERS only (5.6 LANDED here — workers get read-only .cockpit-memory pointers). LOAD-BEARING FIX mid-gate: `; exit` chain (shell hosts the worker; without it cards look Running forever). Gate run: answer in 8s, /exit→In review in 1s, drag-out refused verbatim, kill path verified. UI: Start pill/View terminal/Review diff + conditional 5s poll (agent-built, live Playwright click-through). E2E BONUS FINDING: cards orphaned in_progress across an app restart are unrecoverable until 6.4 — exactly 6.4's job. Suite 428 |
 | 2026-07-03 | 6.1 | Kanban shipped end-to-end: TDD kernel shared/kanban.ts (state machine w/ service-owned in_progress, board assembly, midpoint ordering + renormalize, moveCardInList/appendPosition as the SINGLE rule for service+mock; 26 tests) → V5 migration (kanban_cards, agent_sessions dropped) + SwarmService CRUD (persists only kernel-changed rows; 7 FakeDb tests, transaction() added to fake) + swarm.* on all four legs (zod `to` enum excludes in_progress — a drag can't even ask) → 5-lane board UI (native DnD w/ insertion index, Running lane refuses drops, inline composer/editor, ember live dot; agent-built, 3 screenshot rounds + live drag-refusal check). Suite 378→411 |
 | 2026-07-03 | 6.0 | Phase 6 OPEN: `docs/plans/swarm-plan.md` written (0.1 rule) — hybrid orchestrator confirmed, D1–D7 decisions held (cards-not-boards, drop agent_sessions in V5, worktrees in .cockpit-worktrees/, cap 3, service-owned in_progress); [[swarm-design]] hub note resolved (the Phase 5 deliberate loose end) |

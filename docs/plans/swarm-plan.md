@@ -1,9 +1,13 @@
 # Plan — Multi-agent Swarm + Kanban (VISION Phase 6)
 
 > Status: ACTIVE · Created 2026-07-03 · VISION 6.1–6.6, Gate 6
-> Progress: 6.1 DONE · 6.2 DONE 2026-07-03 (startCard + worker exit→review, live gate PASS,
-> 5.6 hub pointers landed) · next 6.3 parallel worktrees. 6.4 note: E2E surfaced that cards
-> orphaned in_progress across a restart are unrecoverable until 6.4 — build resume first thing.
+> Progress: ALL DONE 2026-07-03 — 6.1…6.6 shipped, **Gate 6 PASSED** (2 parallel real
+> workers in worktrees, kill mid-run, orphan rescue → resume in same worktree, real
+> worktree Diff Review, done, dirty-remove refused). Deviations from this plan, recorded:
+> 6.4 resume = park-orphans + worktree-reuse (no claude --resume — worker commands carry
+> no session id; relaunch-from-card is the path); worktree cleanup on removeCard only
+> (done keeps it for review); queue = cap refusal message (no auto-queue); 6.5 custom
+> user-authored personas parked for Phase 7.
 > Blueprint: design notes in `docs/BRIDGESPACE-ROADMAP.md` §4 (roles vs instances vs
 > personas, two parallelism models, orchestrator question). Read those first.
 
