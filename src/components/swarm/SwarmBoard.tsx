@@ -21,7 +21,7 @@ interface SwarmBoardProps {
   onCreate: (title: string, body: string) => Promise<boolean>
   onSave: (cardId: string, patch: SwarmCardPatch) => Promise<void>
   onDelete: (cardId: string) => Promise<void>
-  /** 6.2 card actions (start / view terminal / review diff). */
+  /** Per-card actions (start/resume, park, view terminal, review, council). */
   cardActions: SwarmCardActions
 }
 

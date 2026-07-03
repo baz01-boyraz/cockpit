@@ -228,6 +228,13 @@ export const IconStop = (p: IconProps) => (
   </svg>
 )
 
+export const IconPause = (p: IconProps) => (
+  <svg {...base(p)} fill="currentColor" stroke="none">
+    <rect x="6.2" y="4.5" width="4.2" height="15" rx="1.6" />
+    <rect x="13.6" y="4.5" width="4.2" height="15" rx="1.6" />
+  </svg>
+)
+
 export const IconServer = (p: IconProps) => (
   <svg {...base(p)}>
     <rect x="3" y="4" width="18" height="7" rx="2" />
@@ -273,5 +280,15 @@ export const IconShieldSearch = (p: IconProps) => (
     <path d="M12 3 5 6v5c0 4 3 7 7 9 4-2 7-5 7-9V6z" />
     <circle cx="11" cy="10.5" r="2.4" />
     <path d="m12.8 12.3 2.2 2.2" />
+  </svg>
+)
+
+/* Three overlapping lenses: the reviewer council — the same diff judged
+ * through several personas. Distinct from IconMemory (linked nodes). */
+export const IconCouncil = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="8.6" cy="9" r="4.6" />
+    <circle cx="15.4" cy="9" r="4.6" />
+    <circle cx="12" cy="14.8" r="4.6" />
   </svg>
 )

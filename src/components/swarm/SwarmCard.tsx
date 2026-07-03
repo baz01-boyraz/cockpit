@@ -1,16 +1,29 @@
 import type { DragEvent, MouseEvent } from 'react'
 import type { KanbanCard } from '@shared/kanban'
-import { IconBranch, IconPlay, IconShieldSearch, IconTerminal } from '../icons'
+import {
+  IconBranch,
+  IconCouncil,
+  IconPause,
+  IconPlay,
+  IconShieldSearch,
+  IconTerminal,
+} from '../icons'
 
-/** 6.2 per-card actions, grouped so board/column signatures stay small. */
+/** 6.2–6.5 per-card actions, grouped so board/column signatures stay small. */
 export interface SwarmCardActions {
   /** Card id with a startCard call in flight, if any. */
   startingId: string | null
+  /** Card id with a parkCard call in flight, if any. */
+  parkingId: string | null
   /** Card id with a diff review in flight, if any. */
   reviewingId: string | null
+  /** Card id with a council run in flight, if any. */
+  councilingId: string | null
   onStart: (cardId: string) => void
+  onPark: (cardId: string) => void
   onViewTerminal: () => void
   onReview: (card: KanbanCard) => void
+  onCouncil: (card: KanbanCard) => void
 }
 
 interface SwarmCardProps {
@@ -19,17 +32,25 @@ interface SwarmCardProps {
   dragging: boolean
   /** True while startCard is in flight for THIS card. */
   starting: boolean
+  /** True while parkCard is in flight for THIS card. */
+  parking: boolean
   /** True while a diff review is running for THIS card. */
   reviewing: boolean
+  /** True while a council run is live for THIS card. */
+  counciling: boolean
   onDragStart: (card: KanbanCard) => void
   onDragEnd: () => void
   onOpen: (cardId: string) => void
   /** 6.2 — spawn a worker (To do / Parked cards only). */
   onStart: (cardId: string) => void
+  /** 6.3 — stop the worker, keep the worktree (Running cards only). */
+  onPark: (cardId: string) => void
   /** Jump to the Terminals view (Running cards only). */
   onViewTerminal: () => void
   /** Run the AI diff review (In review cards only). */
   onReview: (card: KanbanCard) => void
+  /** 6.5 — run the reviewer council: every persona lens over the same diff. */
+  onCouncil: (card: KanbanCard) => void
 }
 
 const startable = (status: KanbanCard['status']): boolean =>
@@ -39,22 +60,31 @@ const startable = (status: KanbanCard['status']): boolean =>
  * One board card: title, role/branch tags, a 1–2 line body preview, and — in
  * the Running column — a pulsing ember live dot (opacity animation only).
  * Click (or Enter/Space) opens the inline editor; the whole card is draggable.
- * 6.2 adds the per-status action row: Start (ember — THE action), View
- * terminal, and Review diff. Action clicks never bubble into the editor.
+ * Per-status action rows: Start/Resume (ember — THE action), Park + View
+ * terminal while Running, Review diff + Council once In review. A parked card
+ * that kept its worktree says "Resume" — the crash-recovery affordance —
+ * and a hint chip marks the kept worktree. Action clicks never bubble into
+ * the editor.
  */
 export function SwarmCard({
   card,
   dragging,
   starting,
+  parking,
   reviewing,
+  counciling,
   onDragStart,
   onDragEnd,
   onOpen,
   onStart,
+  onPark,
   onViewTerminal,
   onReview,
+  onCouncil,
 }: SwarmCardProps) {
   const running = card.status === 'in_progress'
+  /** Parked with a kept worktree → Start resumes where the worker stopped. */
+  const resumable = card.status === 'parked' && card.worktreePath !== null
 
   const handleDragStart = (e: DragEvent<HTMLDivElement>) => {
     e.dataTransfer.setData('text/plain', card.id)
@@ -114,18 +144,31 @@ export function SwarmCard({
             className="swarmStart"
             onClick={act(() => onStart(card.id))}
             disabled={starting}
-            title="Put an agent on this card"
+            title={
+              resumable
+                ? 'Resume the agent in the same worktree it stopped in'
+                : 'Put an agent on this card'
+            }
           >
             {starting ? (
               <>
-                <span className="swarmStart__pulse live-dot" aria-hidden /> Starting…
+                <span className="swarmStart__pulse live-dot" aria-hidden />{' '}
+                {resumable ? 'Resuming…' : 'Starting…'}
               </>
             ) : (
               <>
-                <IconPlay width={10} height={10} /> Start
+                <IconPlay width={10} height={10} /> {resumable ? 'Resume' : 'Start'}
               </>
             )}
           </button>
+          {resumable && (
+            <span
+              className="swarmResumeHint"
+              title="This card kept its git worktree — Resume continues where the worker stopped."
+            >
+              worktree kept
+            </span>
+          )}
         </div>
       )}
 
@@ -138,6 +181,14 @@ export function SwarmCard({
           >
             <IconTerminal width={11} height={11} /> View terminal
           </button>
+          <button
+            className="swarmCardLink"
+            onClick={act(() => onPark(card.id))}
+            disabled={parking}
+            title="Stop the worker but keep its worktree — Resume later picks up there"
+          >
+            <IconPause width={11} height={11} /> {parking ? 'Parking…' : 'Park'}
+          </button>
         </div>
       )}
 
@@ -146,11 +197,20 @@ export function SwarmCard({
           <button
             className="swarmCardLink"
             onClick={act(() => onReview(card))}
-            disabled={reviewing}
-            title="AI review of the working-tree diff"
+            disabled={reviewing || counciling}
+            title="AI review of the card's worktree diff"
           >
             <IconShieldSearch width={11} height={11} />
             {reviewing ? 'Reviewing…' : 'Review diff'}
+          </button>
+          <button
+            className="swarmCardLink"
+            onClick={act(() => onCouncil(card))}
+            disabled={reviewing || counciling}
+            title="Reviewer council — the same diff through every persona lens"
+          >
+            <IconCouncil width={11} height={11} />
+            {counciling ? 'Council…' : 'Council'}
           </button>
         </div>
       )}

@@ -32,8 +32,9 @@ export function SwarmEmptyState({ onCreate }: SwarmEmptyStateProps) {
       <p className="swarmEmpty__sub">
         Each card is one unit of work an agent can own. Describe the task, drop it in{' '}
         <span className="mono">To do</span>, and press <span className="mono">Start</span> to put
-        an agent on it — the swarm walks it <span className="mono">Running → In review</span>{' '}
-        while you stay the reviewer, not the typist.
+        an agent on it. Up to 3 cards run in parallel, each in its own git worktree — the swarm
+        walks them <span className="mono">Running → In review</span> while you stay the reviewer,
+        not the typist.
       </p>
       <div className="swarmEmpty__create">
         <input

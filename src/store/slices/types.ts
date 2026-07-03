@@ -117,6 +117,8 @@ export interface SwarmSlice {
   removeCard: (input: { projectId: string; cardId: string }) => Promise<void>
   /** 6.2: spawn a worker for a To do / Parked card — the service moves it to Running. */
   startCard: (input: { projectId: string; cardId: string }) => Promise<void>
+  /** 6.3: stop a Running card's worker, keep its worktree — Start later resumes it. */
+  parkCard: (input: { projectId: string; cardId: string }) => Promise<void>
 }
 
 export type CockpitState = UiSlice &

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ReviewFinding, ReviewResult, ReviewSeverity } from '@shared/review'
+import type { LensTaggedFinding } from '../lib/council'
 import { IconCheck, IconChevron, IconWarning } from './icons'
 
 /**
@@ -44,6 +45,8 @@ function FindingRow({ finding }: { finding: ReviewFinding }) {
   const [open, setOpen] = useState(false)
   const injection = isInjectionFinding(finding)
   const hasDetail = finding.detail.trim().length > 0
+  // Council runs tag each finding with the persona lens that raised it.
+  const lens = (finding as LensTaggedFinding).lens
   const location = finding.file
     ? `${finding.file}${finding.line !== null ? `:${finding.line}` : ''}`
     : null
@@ -65,6 +68,7 @@ function FindingRow({ finding }: { finding: ReviewFinding }) {
         <span className={`chip revfind__sev ${SEVERITY_CHIP[finding.severity]}`}>
           {finding.severity}
         </span>
+        {lens ? <span className="chip revfind__lensTag">{lens}</span> : null}
         {injection ? (
           <IconWarning width={13} height={13} className="revfind__flag" aria-label="Prompt-injection suspect" />
         ) : null}
@@ -146,7 +150,10 @@ export function ReviewFindings({ result, compact = false }: ReviewFindingsProps)
       {sorted.length > 0 ? (
         <ul className="revfinds">
           {sorted.map((finding, i) => (
-            <FindingRow key={`${finding.file ?? 'global'}:${finding.line ?? i}:${finding.title}`} finding={finding} />
+            <FindingRow
+              key={`${(finding as LensTaggedFinding).lens ?? ''}:${finding.file ?? 'global'}:${finding.line ?? i}:${finding.title}`}
+              finding={finding}
+            />
           ))}
         </ul>
       ) : result.raw === null ? (

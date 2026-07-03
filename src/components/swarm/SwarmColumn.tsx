@@ -26,7 +26,7 @@ interface SwarmColumnProps {
   onCloseEditor: () => void
   onSave: (cardId: string, patch: SwarmCardPatch) => Promise<void>
   onDelete: (cardId: string) => Promise<void>
-  /** 6.2 card actions (start / view terminal / review diff). */
+  /** Per-card actions (start/resume, park, view terminal, review, council). */
   cardActions: SwarmCardActions
   /** Present only on the To do column — enables the "+ New card" composer. */
   onCreate?: (title: string, body: string) => Promise<boolean>
@@ -119,13 +119,17 @@ export function SwarmColumn({
                 card={card}
                 dragging={drag?.cardId === card.id}
                 starting={cardActions.startingId === card.id}
+                parking={cardActions.parkingId === card.id}
                 reviewing={cardActions.reviewingId === card.id}
+                counciling={cardActions.councilingId === card.id}
                 onDragStart={onDragStart}
                 onDragEnd={onDragEnd}
                 onOpen={onOpen}
                 onStart={cardActions.onStart}
+                onPark={cardActions.onPark}
                 onViewTerminal={cardActions.onViewTerminal}
                 onReview={cardActions.onReview}
+                onCouncil={cardActions.onCouncil}
               />
             )}
           </Fragment>

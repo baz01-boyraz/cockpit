@@ -208,6 +208,7 @@
 .swarmCard__actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 2px;
 }
@@ -251,7 +252,23 @@
   border-radius: 50%;
   background: var(--accent);
 }
-/* quiet per-card links: View terminal / Review diff */
+/* 6.3 crash-recovery affordance: a parked card that kept its worktree. The
+ * dashed pill whispers "state preserved" next to the Resume action. */
+.swarmResumeHint {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  border: 1px dashed var(--border-strong);
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  font-weight: 550;
+  white-space: nowrap;
+  cursor: help;
+}
+
+/* quiet per-card links: View terminal / Park / Review diff / Council */
 .swarmCardLink {
   display: inline-flex;
   align-items: center;
@@ -411,6 +428,15 @@
   border-color: rgba(237, 100, 80, 0.45);
   background: var(--danger-wash);
   color: var(--danger);
+}
+
+/* ----- 6.4 board-header quota chips (awareness only, never a throttle) ----- */
+.swarmUsageChip {
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+.swarmUsageChip .mono {
+  font-size: inherit;
 }
 
 /* ----- panel chrome: notice, busy, empty (memory-panel language) ----- */

@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
+import { AGENT_ROLES, PERSONAS } from '@shared/agent-roles'
 import type { KanbanCard } from '@shared/kanban'
 
-/** Assignable agent roles (6.2 executes them; today they only label the card). */
-const ROLES = ['builder', 'reviewer', 'scout', 'planner'] as const
+/** Assignable agent roles — the shared catalog the worker prompt compiles from. */
+const ROLE_IDS = Object.keys(AGENT_ROLES) as (keyof typeof AGENT_ROLES)[]
 
 export interface SwarmCardPatch {
   title: string
   body: string
   role: string | null
+  persona: string | null
 }
 
 interface SwarmCardEditorProps {
@@ -19,14 +21,16 @@ interface SwarmCardEditorProps {
 }
 
 /**
- * The in-place card editor: title, body, role select, and a delete action
- * with an inline arm/confirm step (never a dialog). Rendered where the card
- * was, so editing never leaves the column.
+ * The in-place card editor: title, body, role + persona selects, and a delete
+ * action with an inline arm/confirm step (never a dialog). Rendered where the
+ * card was, so editing never leaves the column. Role = what the worker DOES;
+ * persona = the lens it judges through (6.5) — both compile into its prompt.
  */
 export function SwarmCardEditor({ card, onSave, onDelete, onClose }: SwarmCardEditorProps) {
   const [title, setTitle] = useState(card.title)
   const [body, setBody] = useState(card.body)
   const [role, setRole] = useState(card.role ?? '')
+  const [persona, setPersona] = useState(card.persona ?? '')
   const [deleteArmed, setDeleteArmed] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -43,7 +47,12 @@ export function SwarmCardEditor({ card, onSave, onDelete, onClose }: SwarmCardEd
     if (!canSave) return
     setBusy(true)
     try {
-      await onSave(card.id, { title: title.trim(), body, role: role || null })
+      await onSave(card.id, {
+        title: title.trim(),
+        body,
+        role: role || null,
+        persona: persona || null,
+      })
     } finally {
       setBusy(false)
     }
@@ -96,9 +105,25 @@ export function SwarmCardEditor({ card, onSave, onDelete, onClose }: SwarmCardEd
             aria-label="Card role"
           >
             <option value="">none</option>
-            {ROLES.map((r) => (
+            {ROLE_IDS.map((r) => (
               <option key={r} value={r}>
-                {r}
+                {AGENT_ROLES[r].label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="swarmEdit__row">
+          <span className="swarmEdit__label">persona</span>
+          <select
+            className="swarmEdit__select"
+            value={persona}
+            onChange={(e) => setPersona(e.target.value)}
+            aria-label="Card persona"
+          >
+            <option value="">none</option>
+            {PERSONAS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
               </option>
             ))}
           </select>

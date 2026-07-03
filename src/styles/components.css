@@ -4953,6 +4953,16 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
+/* council: which persona lens raised the finding — data, so glacier */
+.revfind__lensTag {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--glacier-400);
+  background: var(--glacier-wash);
+  border-color: rgba(108, 182, 214, 0.24);
+}
 .revfind__loc {
   flex-shrink: 0;
   max-width: 240px;
