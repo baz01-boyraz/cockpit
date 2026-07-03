@@ -256,6 +256,16 @@ export const IconMemory = (p: IconProps) => (
   </svg>
 )
 
+/* Three kanban columns at staggered fills: the swarm board, where cards drive
+ * agents. Distinct from IconDashboard (2×2 grid) — vertical lanes, not tiles. */
+export const IconSwarm = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="3" y="4" width="5.2" height="11" rx="1.4" />
+    <rect x="9.4" y="4" width="5.2" height="16" rx="1.4" />
+    <rect x="15.8" y="4" width="5.2" height="8" rx="1.4" />
+  </svg>
+)
+
 /* Shield + magnifier: the pre-ship AI review action. Distinct from IconShield
  * (shield-check), which the Git panel already uses for force-push gating. */
 export const IconShieldSearch = (p: IconProps) => (

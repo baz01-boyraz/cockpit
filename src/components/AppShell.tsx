@@ -8,6 +8,7 @@ import { IconBolt } from './icons'
 import { DashboardPanel } from '../panels/DashboardPanel'
 import { TerminalsPanel } from '../panels/TerminalsPanel'
 import { GitPanel } from '../panels/GitPanel'
+import { SwarmPanel } from '../panels/SwarmPanel'
 import { RailwayPanel } from '../panels/RailwayPanel'
 import { LogsPanel } from '../panels/LogsPanel'
 import { MemoryPanel } from '../panels/MemoryPanel'
@@ -43,6 +44,7 @@ export function AppShell() {
             <TerminalsPanel panelActive={view === 'terminals'} />
           </section>
           {view === 'git' && <GitPanel />}
+          {view === 'swarm' && <SwarmPanel />}
           {view === 'railway' && <RailwayPanel />}
           {view === 'logs' && <LogsPanel />}
           {view === 'memory' && <MemoryPanel />}

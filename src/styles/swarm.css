@@ -1,0 +1,480 @@
+/*
+ * cockpiT — Swarm board (VISION 6.1.5).
+ *
+ * Five fixed lanes on inset wells; cards are small raised surfaces. Ember is
+ * spent on exactly three signals: the running live dots, the drop-position
+ * line while dragging, and the one accent CTA (Add card). Everything else
+ * stays neutral so the pilot's eye lands on what is alive.
+ */
+
+/* the board wants width — lift the 1100px panel cap for this view only */
+.swarmPanel {
+  max-width: 1520px;
+}
+
+.swarm__board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(188px, 1fr));
+  gap: var(--sp-3);
+  align-items: start;
+  min-height: 480px;
+}
+
+/* ----- column: an inset lane, half a step below the canvas ----- */
+.swarmCol {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 320px;
+  border-radius: var(--r-lg);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.28);
+  transition:
+    opacity var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out);
+}
+.swarmCol--target {
+  border-color: var(--border-accent);
+}
+/* Running refuses drops (D7): dim while a drag is live, cursor says no. */
+.swarmCol--refuse {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.swarmCol__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+.swarmCol__label {
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+  color: var(--text-faint);
+}
+.swarmCol__count {
+  font-size: var(--fs-micro);
+  line-height: 15px;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.swarmCol__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+}
+.swarmCol__empty {
+  padding: var(--sp-3) var(--sp-2);
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-md);
+  user-select: none;
+}
+
+/* ----- card: a small raised surface, grabbable ----- */
+.swarmCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
+  border: 1px solid var(--border);
+  box-shadow: var(--bevel), 0 1px 3px rgba(0, 0, 0, 0.3);
+  cursor: grab;
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    border-color var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out),
+    opacity var(--dur) var(--ease-out);
+}
+.swarmCard:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--bevel), var(--shadow-1);
+}
+.swarmCard:active {
+  cursor: grabbing;
+  transform: scale(0.99);
+}
+.swarmCard:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* the in-flight card dims in place — the drop line is the moving part */
+.swarmCard--dragging {
+  opacity: 0.35;
+}
+.swarmCard--editing {
+  cursor: default;
+  border-color: var(--border-accent);
+}
+.swarmCard--editing:hover {
+  transform: none;
+  box-shadow: var(--bevel), 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.swarmCard__top {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.swarmCard__title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  color: var(--text);
+  line-height: 1.4;
+  word-break: break-word;
+}
+/* live signal — ember, opacity pulse only (pulse-dot via .live-dot) */
+.swarmCard__live {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+
+.swarmCard__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+.swarmTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 1px 7px;
+  font-size: var(--fs-micro);
+  font-weight: 550;
+  border-radius: var(--r-pill);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.swarmTag svg {
+  flex-shrink: 0;
+}
+/* branch = data → glacier, never interactive */
+.swarmTag--branch {
+  color: var(--glacier-400);
+  background: var(--glacier-wash);
+  border-color: rgba(108, 182, 214, 0.24);
+}
+.swarmTag__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: inherit;
+}
+
+.swarmCard__preview {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  color: var(--text-faint);
+  word-break: break-word;
+}
+
+/* ----- drop-position indicator ----- */
+.swarmDropline {
+  flex-shrink: 0;
+  height: 2px;
+  margin: -3px 2px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+  animation: fade-rise var(--dur-fast) var(--ease-out) both;
+  pointer-events: none;
+}
+
+/* ----- "+ New card" affordance + inline composer (To do only) ----- */
+.swarmNew {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  border-radius: var(--r-md);
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  font-weight: 550;
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    background-color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    color var(--dur) var(--ease-out);
+}
+.swarmNew:hover {
+  color: var(--text);
+  background: var(--surface-1);
+  border-color: var(--border-accent);
+}
+.swarmNew:active {
+  transform: scale(0.98);
+}
+
+.swarmCompose {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: var(--r-md);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
+  border: 1px solid var(--border-accent);
+  box-shadow: var(--bevel), 0 1px 3px rgba(0, 0, 0, 0.3);
+  animation: fade-rise var(--dur) var(--ease-out) both;
+}
+.swarmCompose__input,
+.swarmCompose__body,
+.swarmEdit__input,
+.swarmEdit__body {
+  width: 100%;
+  padding: 6px 9px;
+  border-radius: var(--r-sm);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  outline: none;
+}
+.swarmCompose__input:focus,
+.swarmCompose__body:focus,
+.swarmEdit__input:focus,
+.swarmEdit__body:focus {
+  border-color: var(--border-accent);
+}
+.swarmCompose__body,
+.swarmEdit__body {
+  resize: vertical;
+  min-height: 44px;
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+.swarmCompose__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* ----- in-place card editor ----- */
+.swarmEdit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.swarmEdit__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.swarmEdit__label {
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: var(--text-faint);
+}
+.swarmEdit__select {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  outline: none;
+}
+.swarmEdit__select:focus {
+  border-color: var(--border-accent);
+}
+.swarmEdit__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.swarmEdit__spacer {
+  flex: 1;
+}
+.swarmEdit__confirm {
+  border-color: rgba(237, 100, 80, 0.45);
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+
+/* ----- panel chrome: notice, busy, empty (memory-panel language) ----- */
+.swarmNotice {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--danger-wash);
+  border: 1px solid rgba(237, 100, 80, 0.3);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  animation: fade-rise var(--dur) var(--ease-out) both;
+}
+.swarmNotice svg {
+  flex-shrink: 0;
+}
+.swarmNotice__text {
+  flex: 1;
+  min-width: 0;
+}
+.swarmNotice__dismiss {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  transition:
+    background-color var(--dur) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
+}
+.swarmNotice__dismiss:hover {
+  background: rgba(237, 100, 80, 0.18);
+}
+.swarmNotice__dismiss:active {
+  transform: scale(0.92);
+}
+
+.swarm__busy {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.swarm__pulse {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+.swarmEmpty {
+  padding: var(--sp-7) var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  text-align: center;
+}
+.swarmEmpty__icon {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--r-lg);
+  display: grid;
+  place-items: center;
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  box-shadow: var(--bevel);
+}
+/* pooled ambient light — the view's one resting glow */
+.swarmEmpty__icon::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -26px;
+  width: 300%;
+  height: 44px;
+  transform: translateX(-50%);
+  border-radius: var(--r-pill);
+  background: radial-gradient(50% 100% at 50% 0%, var(--accent-glow), transparent 72%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.swarmEmpty__title {
+  font-size: var(--fs-h1);
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+}
+.swarmEmpty__sub {
+  margin: 0;
+  max-width: 480px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.65;
+}
+.swarmEmpty__sub .mono {
+  color: var(--text);
+  font-size: 0.92em;
+  white-space: nowrap;
+}
+.swarmEmpty__create {
+  display: flex;
+  gap: var(--sp-2);
+  width: min(440px, 100%);
+  margin-top: var(--sp-2);
+}
+.swarmEmpty__input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 11px;
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  outline: none;
+}
+.swarmEmpty__input:focus {
+  border-color: var(--border-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .swarm__pulse,
+  .swarmDropline,
+  .swarmCompose,
+  .swarmNotice {
+    animation: none;
+  }
+}

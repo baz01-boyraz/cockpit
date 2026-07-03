@@ -8,6 +8,7 @@ import {
   IconMemory,
   IconRailway,
   IconSettings,
+  IconSwarm,
   IconTerminal,
   IconUsage,
 } from './icons'
@@ -25,6 +26,7 @@ const NAV: NavItem[] = [
   { view: 'dashboard', label: 'Dashboard', Icon: IconDashboard },
   { view: 'terminals', label: 'Terminals', Icon: IconTerminal },
   { view: 'git', label: 'Git', Icon: IconGit },
+  { view: 'swarm', label: 'Swarm', Icon: IconSwarm },
   { view: 'railway', label: 'Railway', Icon: IconRailway },
   { view: 'logs', label: 'Logs & Errors', Icon: IconLogs },
   { view: 'memory', label: 'Memory', Icon: IconMemory },

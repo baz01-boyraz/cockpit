@@ -4,6 +4,7 @@ import '@xterm/xterm/css/xterm.css'
 import './styles/global.css'
 import './styles/components.css'
 import './styles/notepad.css'
+import './styles/swarm.css'
 import { App } from './App'
 
 createRoot(document.getElementById('root')!).render(

@@ -23,11 +23,13 @@ import type {
   UsageSummary,
 } from '@shared/domain'
 import type { SystemInfo } from '@shared/ipc'
+import type { BoardColumn, CardStatus } from '@shared/kanban'
 
 export type View =
   | 'dashboard'
   | 'terminals'
   | 'git'
+  | 'swarm'
   | 'railway'
   | 'logs'
   | 'memory'
@@ -94,6 +96,27 @@ export interface AppUpdateSlice {
   refreshAppUpdate: () => Promise<void>
 }
 
+export interface SwarmSlice {
+  /** The Kanban board for `boardProjectId`, or null before the first fetch. */
+  board: BoardColumn[] | null
+  /** Which project `board` belongs to — guards against stale cross-project flashes. */
+  boardProjectId: string | null
+  boardLoading: boolean
+  refreshBoard: (projectId: string) => Promise<void>
+  /** Mutations store the fresh board the API returns. Errors propagate to the caller. */
+  createCard: (input: { projectId: string; title: string; body?: string }) => Promise<void>
+  updateCard: (input: {
+    projectId: string
+    cardId: string
+    title?: string
+    body?: string
+    role?: string | null
+    persona?: string | null
+  }) => Promise<void>
+  moveCard: (input: { projectId: string; cardId: string; to: CardStatus; index: number }) => Promise<void>
+  removeCard: (input: { projectId: string; cardId: string }) => Promise<void>
+}
+
 export type CockpitState = UiSlice &
   ProjectSlice &
   GitSlice &
@@ -101,6 +124,7 @@ export type CockpitState = UiSlice &
   LogsSlice &
   ApprovalsSlice &
   InfraSlice &
-  AppUpdateSlice
+  AppUpdateSlice &
+  SwarmSlice
 
 export type SliceCreator<T> = StateCreator<CockpitState, [], [], T>
