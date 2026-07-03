@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { BoardColumn, CardStatus, KanbanCard } from '@shared/kanban'
 import { SwarmColumn, type DragInfo } from './SwarmColumn'
+import type { SwarmCardActions } from './SwarmCard'
 import type { SwarmCardPatch } from './SwarmCardEditor'
 
 const COLUMN_LABELS: Record<CardStatus, string> = {
@@ -20,6 +21,8 @@ interface SwarmBoardProps {
   onCreate: (title: string, body: string) => Promise<boolean>
   onSave: (cardId: string, patch: SwarmCardPatch) => Promise<void>
   onDelete: (cardId: string) => Promise<void>
+  /** 6.2 card actions (start / view terminal / review diff). */
+  cardActions: SwarmCardActions
 }
 
 /**
@@ -38,6 +41,7 @@ export function SwarmBoard({
   onCreate,
   onSave,
   onDelete,
+  cardActions,
 }: SwarmBoardProps) {
   const [drag, setDrag] = useState<DragInfo | null>(null)
   const [drop, setDrop] = useState<{ status: CardStatus; index: number } | null>(null)
@@ -94,6 +98,7 @@ export function SwarmBoard({
           onCloseEditor={onCloseEditor}
           onSave={onSave}
           onDelete={onDelete}
+          cardActions={cardActions}
           onCreate={column.status === 'todo' ? onCreate : undefined}
         />
       ))}

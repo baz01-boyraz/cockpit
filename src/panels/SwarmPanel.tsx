@@ -1,21 +1,34 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
-import type { CardStatus } from '@shared/kanban'
-import { IconWarning, IconX } from '../components/icons'
+import { cockpit } from '../lib/cockpit'
+import type { CardStatus, KanbanCard } from '@shared/kanban'
+import type { ReviewResult } from '@shared/review'
+import { IconShieldSearch, IconWarning, IconX } from '../components/icons'
+import { ReviewFindings, reviewFailure } from '../components/ReviewFindings'
 import { SwarmBoard } from '../components/swarm/SwarmBoard'
 import { SwarmEmptyState } from '../components/swarm/SwarmEmptyState'
+import type { SwarmCardActions } from '../components/swarm/SwarmCard'
 import type { SwarmCardPatch } from '../components/swarm/SwarmCardEditor'
+
+/** Poll cadence while a worker is live — the mock finishes in ~15s. */
+const RUNNING_POLL_MS = 5_000
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong on the board.'
 }
 
+interface CardReviewState {
+  cardTitle: string
+  /** null while the review call is still in flight. */
+  result: ReviewResult | null
+}
+
 /**
- * Swarm — the project's Kanban board (VISION 6.1.5). Cards are units of work
- * that will drive agents once 6.2 lands; today the board is the full CRUD +
- * drag surface. All data flows through the swarm slice: every mutation stores
- * the fresh board the API returns, and API refusals (e.g. dragging a running
- * card) surface in the inline notice, never a dialog.
+ * Swarm — the project's Kanban board (VISION 6.1.5 + 6.2 execution). Cards
+ * drive agents: Start spawns a worker (card → Running), the worker's exit —
+ * or the mock's timed finish, caught by the running-only poll — lands the
+ * card in In review, where "Review diff" runs the shared AI review. All data
+ * flows through the swarm slice; API refusals surface in the inline notice.
  */
 export function SwarmPanel() {
   const projectId = useStore((s) => s.activeProjectId)
@@ -26,14 +39,21 @@ export function SwarmPanel() {
   const updateCard = useStore((s) => s.updateCard)
   const moveCard = useStore((s) => s.moveCard)
   const removeCard = useStore((s) => s.removeCard)
+  const startCard = useStore((s) => s.startCard)
+  const setView = useStore((s) => s.setView)
 
   const [notice, setNotice] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
+  const [startingId, setStartingId] = useState<string | null>(null)
+  const [reviewingId, setReviewingId] = useState<string | null>(null)
+  const [cardReview, setCardReview] = useState<CardReviewState | null>(null)
 
   // Project switch (or first mount): reset the surface, then load the board.
   useEffect(() => {
     setNotice(null)
     setEditing(null)
+    setCardReview(null)
+    setReviewingId(null)
     if (!projectId) return
     refreshBoard(projectId).catch((err: unknown) => setNotice(errorMessage(err)))
   }, [projectId, refreshBoard])
@@ -43,6 +63,26 @@ export function SwarmPanel() {
   const total = current?.reduce((n, col) => n + col.cards.length, 0) ?? 0
   const running = current?.find((col) => col.status === 'in_progress')?.cards.length ?? 0
   const boardEmpty = current !== null && total === 0
+
+  // A worker exiting (real pty or mock) means the service moved its card —
+  // refetch so Running → In review lands without a manual reload.
+  useEffect(() => {
+    if (!projectId) return
+    const off = cockpit().terminals.onExit(() => {
+      refreshBoard(projectId).catch((err: unknown) => setNotice(errorMessage(err)))
+    })
+    return off
+  }, [projectId, refreshBoard])
+
+  // The mock's timed finish fires no event, so while (and only while) a card
+  // is Running, poll the board on a slow cadence.
+  useEffect(() => {
+    if (!projectId || running === 0) return
+    const timer = setInterval(() => {
+      refreshBoard(projectId).catch((err: unknown) => setNotice(errorMessage(err)))
+    }, RUNNING_POLL_MS)
+    return () => clearInterval(timer)
+  }, [projectId, running, refreshBoard])
 
   const handleCreate = useCallback(
     async (title: string, body: string): Promise<boolean> => {
@@ -105,6 +145,52 @@ export function SwarmPanel() {
     [projectId, removeCard],
   )
 
+  const handleStart = useCallback(
+    async (cardId: string) => {
+      if (!projectId || startingId) return
+      setStartingId(cardId)
+      try {
+        await startCard({ projectId, cardId })
+        setNotice(null)
+      } catch (err: unknown) {
+        setNotice(errorMessage(err))
+      } finally {
+        setStartingId(null)
+      }
+    },
+    [projectId, startingId, startCard],
+  )
+
+  // AI diff review for an In review card — shared advisory pass (read-only),
+  // rendered under the header with the same ReviewFindings surface as Git.
+  const handleReview = useCallback(
+    async (card: KanbanCard) => {
+      if (!projectId || reviewingId) return
+      setReviewingId(card.id)
+      setCardReview({ cardTitle: card.title, result: null })
+      try {
+        const result = await cockpit().review.run(projectId)
+        setCardReview({ cardTitle: card.title, result })
+      } catch (err: unknown) {
+        setCardReview({ cardTitle: card.title, result: reviewFailure(err) })
+      } finally {
+        setReviewingId(null)
+      }
+    },
+    [projectId, reviewingId],
+  )
+
+  const cardActions = useMemo<SwarmCardActions>(
+    () => ({
+      startingId,
+      reviewingId,
+      onStart: (cardId) => void handleStart(cardId),
+      onViewTerminal: () => setView('terminals'),
+      onReview: (card) => void handleReview(card),
+    }),
+    [startingId, reviewingId, handleStart, handleReview, setView],
+  )
+
   return (
     <div className="panel panel--stagger swarmPanel">
       <div className="panel__header">
@@ -114,7 +200,9 @@ export function SwarmPanel() {
         </div>
         {current !== null && !boardEmpty && (
           <div className="panel__actions swarm__meta">
-            <span className="chip mono">{total} cards</span>
+            <span className="chip mono">
+              {total} card{total === 1 ? '' : 's'}
+            </span>
             {running > 0 && (
               <span className="chip chip--accent">
                 <span className="chip__dot live-dot" />
@@ -139,6 +227,36 @@ export function SwarmPanel() {
         </div>
       )}
 
+      {cardReview && (
+        <section className="card swarmReview">
+          <div className="swarmReview__head">
+            <span className="swarmReview__icon" aria-hidden>
+              <IconShieldSearch width={14} height={14} />
+            </span>
+            <div className="swarmReview__headText">
+              <div className="eyebrow">diff review</div>
+              <div className="swarmReview__title">{cardReview.cardTitle}</div>
+            </div>
+            <button
+              className="swarmNotice__dismiss swarmReview__dismiss"
+              onClick={() => setCardReview(null)}
+              disabled={reviewingId !== null}
+              aria-label="Dismiss review results"
+            >
+              <IconX width={13} height={13} />
+            </button>
+          </div>
+          {cardReview.result === null ? (
+            <div className="review__busy review__busy--compact">
+              <span className="review__pulse" aria-hidden />
+              Reviewing the working-tree diff…
+            </div>
+          ) : (
+            <ReviewFindings result={cardReview.result} />
+          )}
+        </section>
+      )}
+
       {current === null ? (
         <div className="swarm__busy">
           <span className="swarm__pulse" aria-hidden />
@@ -156,6 +274,7 @@ export function SwarmPanel() {
           onCreate={handleCreate}
           onSave={handleSave}
           onDelete={handleDelete}
+          cardActions={cardActions}
         />
       )}
     </div>

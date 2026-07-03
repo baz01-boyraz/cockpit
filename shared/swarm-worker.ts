@@ -13,6 +13,7 @@ const HUB_POINTER_CAP = 20
  * (safe inside single quotes; the shell treats them as literal text).
  */
 function stripPtyControls(s: string): string {
+  // eslint-disable-next-line no-control-regex -- matching control chars IS this sanitizer's job
   return s.replace(/\r\n/g, '\n').replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, '')
 }
 

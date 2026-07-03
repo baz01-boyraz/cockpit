@@ -42,4 +42,9 @@ export const createSwarmSlice: SliceCreator<SwarmSlice> = (set) => ({
     const board = await cockpit().swarm.removeCard(input)
     set({ board, boardProjectId: input.projectId })
   },
+
+  startCard: async (input) => {
+    const board = await cockpit().swarm.startCard(input)
+    set({ board, boardProjectId: input.projectId })
+  },
 })

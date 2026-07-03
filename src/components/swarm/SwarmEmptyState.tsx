@@ -31,9 +31,9 @@ export function SwarmEmptyState({ onCreate }: SwarmEmptyStateProps) {
       <div className="swarmEmpty__title">Cards drive the swarm</div>
       <p className="swarmEmpty__sub">
         Each card is one unit of work an agent can own. Describe the task, drop it in{' '}
-        <span className="mono">To do</span>, and when execution lands (6.2) the swarm runs it in
-        its own worktree — <span className="mono">Running → In review</span> — while you stay the
-        reviewer, not the typist.
+        <span className="mono">To do</span>, and press <span className="mono">Start</span> to put
+        an agent on it — the swarm walks it <span className="mono">Running → In review</span>{' '}
+        while you stay the reviewer, not the typist.
       </p>
       <div className="swarmEmpty__create">
         <input

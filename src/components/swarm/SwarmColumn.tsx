@@ -1,7 +1,7 @@
 import { Fragment, useRef, useState, type DragEvent } from 'react'
 import type { BoardColumn, CardStatus, KanbanCard } from '@shared/kanban'
 import { IconPlus } from '../icons'
-import { SwarmCard } from './SwarmCard'
+import { SwarmCard, type SwarmCardActions } from './SwarmCard'
 import { SwarmCardEditor, type SwarmCardPatch } from './SwarmCardEditor'
 import { SwarmComposer } from './SwarmComposer'
 
@@ -26,6 +26,8 @@ interface SwarmColumnProps {
   onCloseEditor: () => void
   onSave: (cardId: string, patch: SwarmCardPatch) => Promise<void>
   onDelete: (cardId: string) => Promise<void>
+  /** 6.2 card actions (start / view terminal / review diff). */
+  cardActions: SwarmCardActions
   /** Present only on the To do column — enables the "+ New card" composer. */
   onCreate?: (title: string, body: string) => Promise<boolean>
 }
@@ -51,6 +53,7 @@ export function SwarmColumn({
   onCloseEditor,
   onSave,
   onDelete,
+  cardActions,
   onCreate,
 }: SwarmColumnProps) {
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -115,9 +118,14 @@ export function SwarmColumn({
               <SwarmCard
                 card={card}
                 dragging={drag?.cardId === card.id}
+                starting={cardActions.startingId === card.id}
+                reviewing={cardActions.reviewingId === card.id}
                 onDragStart={onDragStart}
                 onDragEnd={onDragEnd}
                 onOpen={onOpen}
+                onStart={cardActions.onStart}
+                onViewTerminal={cardActions.onViewTerminal}
+                onReview={cardActions.onReview}
               />
             )}
           </Fragment>

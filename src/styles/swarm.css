@@ -204,6 +204,83 @@
   word-break: break-word;
 }
 
+/* ----- 6.2 card action row ----- */
+.swarmCard__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+/* Start — THE product action: unmistakably ember, but washed (the molten
+ * gradient stays reserved for one hero CTA per view, never a card grid). */
+.swarmStart {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-accent);
+  background: var(--accent-wash);
+  color: var(--accent-hi);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    background-color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    color var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
+}
+.swarmStart:hover {
+  background: rgba(238, 124, 66, 0.18);
+  border-color: var(--accent);
+  color: var(--ember-100);
+  box-shadow: 0 2px 10px -2px rgba(238, 124, 66, 0.35);
+}
+.swarmStart:active {
+  transform: scale(0.96);
+}
+.swarmStart:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.swarmStart__pulse {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent);
+}
+/* quiet per-card links: View terminal / Review diff */
+.swarmCardLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  margin-left: -8px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 550;
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    background-color var(--dur) var(--ease-out),
+    color var(--dur) var(--ease-out);
+}
+.swarmCardLink:hover {
+  color: var(--text);
+  background: var(--surface-3);
+}
+.swarmCardLink:active {
+  transform: scale(0.97);
+}
+.swarmCardLink:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
 /* ----- drop-position indicator ----- */
 .swarmDropline {
   flex-shrink: 0;
@@ -375,6 +452,56 @@
 }
 .swarmNotice__dismiss:active {
   transform: scale(0.92);
+}
+
+/* ----- per-card diff review results (shared ReviewFindings surface) ----- */
+.swarmReview {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: fade-rise var(--dur) var(--ease-out) both;
+}
+.swarmReview__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+.swarmReview__icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: var(--r-sm);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.swarmReview__headText {
+  flex: 1;
+  min-width: 0;
+}
+.swarmReview__title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.swarmReview__dismiss {
+  color: var(--text-muted);
+}
+.swarmReview__dismiss:hover {
+  background: var(--surface-3);
+}
+.swarmReview .review__busy--compact,
+.swarmReview .review__result,
+.swarmReview .review__notice,
+.swarmReview .review__empty {
+  margin: var(--sp-2) var(--sp-3) var(--sp-3);
 }
 
 .swarm__busy {
