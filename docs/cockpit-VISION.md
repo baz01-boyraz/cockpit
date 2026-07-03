@@ -496,7 +496,7 @@ storage map documented; graph view shipped or consciously parked.
 > TS **orchestrator service owns** board state, lifecycle, worktrees, resume, and
 > usage-limit awareness; a **planner-Claude is invoked as a worker** for task
 > decomposition. Kanban state and crash-resume cannot durably live in a chat session.
-> Write `docs/plans/swarm-plan.md` first.
+> Plan doc: `docs/plans/swarm-plan.md` (written 2026-07-03 — decisions D1–D7 live there).
 
 ### 6.1 [ ] Kanban data model + board UI
 **Do:** SQLite (appended migration): boards/cards with status
@@ -576,6 +576,8 @@ Ordered by leverage, all optional:
 | 2026-07-01 | 1.3 | Redaction: Stripe/URL-creds/AIza/SG./npm_/ghu-ghs-ghr/Bearer patterns + bare *_KEY names + high-entropy env fallback + `redactText()`. TDD, 9 new tests |
 | 2026-07-01 | 1.4 | LogIntelligence ingest + listLogs now scrub secrets (new rows and legacy rows) |
 | 2026-07-01 | 1.5 | Rebuild & relaunch: package-identity check in main (`isCockpitSource`), native confirm dialog, audit entry, button hidden for foreign projects (`refreshEligible` IPC). 5 new tests. Verified both states via screenshots |
+| 2026-07-03 | 6.0 | Phase 6 OPEN: `docs/plans/swarm-plan.md` written (0.1 rule) — hybrid orchestrator confirmed, D1–D7 decisions held (cards-not-boards, drop agent_sessions in V5, worktrees in .cockpit-worktrees/, cap 3, service-owned in_progress); [[swarm-design]] hub note resolved (the Phase 5 deliberate loose end) |
+| 2026-07-03 | release | v0.1.27 SHIPPED via CI (run 28636921244): tag mishap (first tag pre-bump → CI built 0.1.26, no release) fixed by bump 2ea7c94 + retag; all 5 assets from ONE run, ZIP sha512 verified == latest-mac.yml; signed Path B self-signed (hardened-runtime verify still parked — needs Apple certs); GitHub push protection flagged our FAKE redaction test fixtures (sk_live_/ghp_ patterns in test/) — bypassed correctly, sweep confirmed 0 real secrets in pushed range; installed app already 0.1.27 |
 | 2026-07-02 | 5.5 | Graph view shipped IN time-box: shared/forceGraph.ts (deterministic — no Math.random, golden-angle seeding, immutable ticks, 13 tests) + canvas MemoryGraph (DPR-aware, hover bloom, drag-pin, click-to-open, ghost nodes for unresolved, reduced-motion static). Phase 5 COMPLETE |
 | 2026-07-02 | 5.4 + Gate 5 dogfood | Memory view shipped (3-zone: filterable list / wikilink-decorated reader+editor / connections pane, React-segment rendering — no innerHTML, 2 screenshot rounds); mock trash parity fixed; REAL hub seeded: 5 interlinked knowledge notes in .cockpit-memory/ committed with the repo (deliberate unresolved [[swarm-design]] awaits Phase 6). 5.6 deferred to Phase 6 by decision |
 | 2026-07-02 | 5.1–5.3 | Memory hub core: plan doc + storage-map table; shared/wikilink kernel (parse w/ code-region awareness, slug-by-construction names, forward/backlink/unresolved index, rename-refresh) TDD 10 tests; shared/memory-hub pure assembly (single rule, both bridges); MemoryHubService (atomic writes, soft-delete to .trash, foreign files ignored) 7 tests; 5 IPC channels all legs; seeded interlinked mock. mock.ts split (942→619 + mockData.ts) to respect the 800 cap |
