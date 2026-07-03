@@ -82,7 +82,8 @@ const api: CockpitApi = {
     route: (projectId, query) => invoke(IPC.routerRoute, { projectId, query }),
   },
   review: {
-    run: (projectId, opts) => invoke(IPC.reviewRun, { projectId, model: opts?.model, dir: opts?.dir }),
+    run: (projectId, opts) =>
+      invoke(IPC.reviewRun, { projectId, model: opts?.model, dir: opts?.dir, lens: opts?.lens }),
     runText: (projectId, input, opts) =>
       invoke(IPC.reviewRunText, { projectId, ...input, model: opts?.model }),
   },

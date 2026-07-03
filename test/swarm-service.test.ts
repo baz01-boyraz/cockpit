@@ -311,6 +311,42 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
   })
 })
 
+describe('SwarmService quota gate (6.6)', () => {
+  const seed = () => makeStore([{ id: 'a', status: 'todo', position: POSITION_GAP, role: 'reviewer', persona: 'security-paranoid' }])
+
+  it('refuses a start when a Claude window is exhausted; unavailable/failing probes never block', async () => {
+    const store = seed()
+    const deps = makeDeps()
+    const usage = (percent: number, available = true) => ({
+      getReport: async () => ({
+        providers: [
+          { provider: 'claude' as const, label: 'Claude', available, plan: null, windows: [{ label: '5h', usedPercent: percent, resetAt: null }], reason: null, fetchedAt: '' },
+        ],
+      }),
+    })
+    const blocked = new SwarmService(store.db, deps.terminals, deps.memory, deps.audit, deps.events, deps.projects, deps.worktrees, usage(100) as never)
+    await expect(blocked.startCard({ projectId: 'p1', cardId: 'a' })).rejects.toThrow(/exhausted/)
+
+    const warm = new SwarmService(seed().db, deps.terminals, deps.memory, deps.audit, deps.events, deps.projects, deps.worktrees, usage(85) as never)
+    await expect(warm.startCard({ projectId: 'p1', cardId: 'a' })).resolves.toBeTruthy()
+
+    const offline = new SwarmService(seed().db, deps.terminals, deps.memory, deps.audit, deps.events, deps.projects, deps.worktrees, usage(100, false) as never)
+    await expect(offline.startCard({ projectId: 'p1', cardId: 'a' })).resolves.toBeTruthy()
+
+    const broken = new SwarmService(seed().db, deps.terminals, deps.memory, deps.audit, deps.events, deps.projects, deps.worktrees, { getReport: async () => { throw new Error('probe down') } } as never)
+    await expect(broken.startCard({ projectId: 'p1', cardId: 'a' })).resolves.toBeTruthy()
+  })
+
+  it('folds the card role + persona into the worker prompt (6.5)', async () => {
+    const store = seed()
+    const deps = makeDeps()
+    const svc = build(store, deps)
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    expect(deps.spawned[0].command).toContain('REVIEWER')
+    expect(deps.spawned[0].command).toContain('security veteran')
+  })
+})
+
 describe('SwarmService boot orphan reconcile (6.4)', () => {
   it('parks cards left in_progress by a dead app instance, with an audit entry', () => {
     const store = makeStore([

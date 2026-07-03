@@ -30,9 +30,11 @@ export function shellQuote(s: string): string {
 export function buildWorkerPrompt(
   card: { title: string; body: string },
   hubNoteNames: readonly string[],
+  roleText = '',
 ): string {
   const lines = [
     `You are a swarm worker in the cockpiT Kanban board, started for one card.`,
+    ...(roleText ? [``, roleText] : []),
     ``,
     `CARD: ${card.title}`,
   ]
@@ -63,6 +65,7 @@ export function buildWorkerPrompt(
 export function buildWorkerCommand(
   card: { title: string; body: string },
   hubNoteNames: readonly string[],
+  roleText = '',
 ): string {
-  return `claude ${shellQuote(buildWorkerPrompt(card, hubNoteNames))}; exit`
+  return `claude ${shellQuote(buildWorkerPrompt(card, hubNoteNames, roleText))}; exit`
 }

@@ -18,6 +18,7 @@ import {
   type ReviewStats,
 } from '@shared/review'
 import { resolveChatModel } from '@shared/chat-models'
+import { personaById } from '@shared/agent-roles'
 import { buildClaudeArgs } from '@shared/claude-run'
 import type { AuditLogService } from './AuditLogService'
 import type { ProjectService } from './ProjectService'
@@ -120,7 +121,10 @@ export class ReviewService {
     private readonly runner: ClaudeRunner = defaultRunner,
   ) {}
 
-  async run(projectId: string, opts: { model?: string; dir?: string } = {}): Promise<ReviewResult> {
+  async run(
+    projectId: string,
+    opts: { model?: string; dir?: string; lens?: string } = {},
+  ): Promise<ReviewResult> {
     const started = Date.now()
     const project = this.projects.get(projectId)
     // `dir` reviews a swarm worktree instead of the project root. The renderer
@@ -155,7 +159,7 @@ export class ReviewService {
     projectId: string,
     project: { name: string; path: string },
     inputs: DiffFileInput[],
-    opts: { model?: string },
+    opts: { model?: string; lens?: string },
     started: number,
   ): Promise<ReviewResult> {
     const sanitized = sanitizeDiff(inputs)
@@ -193,7 +197,12 @@ export class ReviewService {
     }
 
     const fenceTag = `====COCKPIT-UNTRUSTED-DIFF-${randomUUID()}====`
-    const prompt = buildReviewPrompt(sanitized, { fenceTag, projectName: project.name })
+    // Persona lens (6.5 council): the text ALWAYS comes from our own catalog,
+    // keyed by id — renderer-supplied prose never reaches the prompt.
+    const lens = opts.lens ? personaById(opts.lens) : null
+    if (opts.lens && !lens) throw new Error('Unknown review lens.')
+    const basePrompt = buildReviewPrompt(sanitized, { fenceTag, projectName: project.name })
+    const prompt = lens ? `${lens.lens}\n\n${basePrompt}` : basePrompt
 
     try {
       const { stdout } = await this.runner(resolveBin('claude'), buildClaudeArgs(prompt, { model: model.id }), {

@@ -208,8 +208,8 @@ export function registerIpc(services: Services): void {
 
   // --- review (read-only pre-ship AI diff review) ---
   handle('reviewRun', (p) => {
-    const { projectId, model, dir } = reviewRunSchema.parse(p)
-    return services.review.run(projectId, { model, dir })
+    const { projectId, model, dir, lens } = reviewRunSchema.parse(p)
+    return services.review.run(projectId, { model, dir, lens })
   })
   handle('reviewRunText', (p) => {
     const { projectId, label, content, model } = reviewRunTextSchema.parse(p)

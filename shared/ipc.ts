@@ -256,7 +256,7 @@ export interface CockpitApi {
      * through the sanitizer boundary, reviewed read-only by the local
      * `claude` CLI. Never mutates anything.
      */
-    run(projectId: string, opts?: { model?: string; dir?: string }): Promise<ReviewResult>
+    run(projectId: string, opts?: { model?: string; dir?: string; lens?: string }): Promise<ReviewResult>
     /**
      * Review one piece of captured text (a command block's command + output)
      * through the SAME sanitizer boundary as a diff review.

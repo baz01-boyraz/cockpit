@@ -7,7 +7,8 @@ import {
   type KanbanCard,
 } from '@shared/kanban'
 import { buildWorkerCommand } from '@shared/swarm-worker'
-import type { TerminalSession } from '@shared/domain'
+import { rolePromptFor } from '@shared/agent-roles'
+import type { AgentUsageReport, TerminalSession } from '@shared/domain'
 import type { Db } from '../db/Database'
 import type { CockpitEvents } from '../events'
 import { newId, nowIso } from '../util/ids'
@@ -69,6 +70,7 @@ export class SwarmService {
     events: CockpitEvents,
     private readonly projects: { get(projectId: string): { path: string } },
     private readonly worktrees: WorktreeOps,
+    private readonly agentUsage?: { getReport(): Promise<AgentUsageReport> },
   ) {
     // 6.4: any card still in_progress at construction is an orphan — its
     // worker died with the previous app instance (TerminalManager already
@@ -125,6 +127,8 @@ export class SwarmService {
       throw new Error(`Concurrency cap reached (${RUNNING_CAP}) — park or finish a running card first.`)
     }
 
+    await this.assertQuotaAllows()
+
     const projectPath = this.projects.get(input.projectId).path
     let worktree: { path: string; branch: string } | null =
       card.worktreePath && card.branch ? { path: card.worktreePath, branch: card.branch } : null
@@ -142,7 +146,11 @@ export class SwarmService {
       name: `Swarm — ${card.title.slice(0, 40)}`,
       role: 'claude',
       cwd: worktree?.path,
-      command: buildWorkerCommand({ title: card.title, body: card.body }, hubNames),
+      command: buildWorkerCommand(
+        { title: card.title, body: card.body },
+        hubNames,
+        rolePromptFor(card.role, card.persona),
+      ),
     })
 
     const now = nowIso()
@@ -210,6 +218,28 @@ export class SwarmService {
       summary: `Swarm card "${row.title}" finished (exit ${exitCode}) — moved to In review`,
       payload: { cardId: row.id, sessionId, exitCode },
     })
+  }
+
+  /**
+   * 6.6: refuse new spawns when a Claude quota window is exhausted (existing
+   * workers keep running — parking is graceful, never a kill). A probe
+   * failure or unavailable provider never blocks work.
+   */
+  private async assertQuotaAllows(): Promise<void> {
+    if (!this.agentUsage) return
+    let exhausted = false
+    try {
+      const report = await this.agentUsage.getReport()
+      const claude = report.providers.find((p) => p.provider === 'claude')
+      exhausted = Boolean(claude?.available && claude.windows.some((w) => w.usedPercent >= 100))
+    } catch {
+      return
+    }
+    if (exhausted) {
+      throw new Error(
+        'Claude usage window is exhausted — the card stays put; start it again after the window resets.',
+      )
+    }
   }
 
   /** Read-only hub pointers for the worker prompt; a missing hub is fine. */

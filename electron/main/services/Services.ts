@@ -105,6 +105,7 @@ export class Services {
       opts.events,
       this.projects,
       new SwarmWorktrees(),
+      this.agentUsage,
     )
     // Forget a pane's TUI-mode state once it exits, so session ids never leak.
     opts.events.onTyped('terminal:exit', ({ sessionId }) => this.tuiState.delete(sessionId))
