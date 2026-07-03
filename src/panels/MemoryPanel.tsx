@@ -7,6 +7,7 @@ import { MemoryNoteList } from '../components/memory/MemoryNoteList'
 import { MemoryReader } from '../components/memory/MemoryReader'
 import { MemoryConnections } from '../components/memory/MemoryConnections'
 import { MemoryEmptyState } from '../components/memory/MemoryEmptyState'
+import { MemoryGraph } from '../components/memory/MemoryGraph'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong writing to the hub.'
@@ -41,6 +42,7 @@ export function MemoryPanel() {
   const [savedFlash, setSavedFlash] = useState(false)
   const [pendingCreate, setPendingCreate] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [layout, setLayout] = useState<'list' | 'graph'>('list')
 
   const isDirty = mode === 'edit' && note !== null && draft !== note.content
 
@@ -66,6 +68,7 @@ export function MemoryPanel() {
     setMode('read')
     setPendingCreate(null)
     setNotice(null)
+    setLayout('list')
     if (!projectId) {
       setLoading(false)
       return
@@ -205,6 +208,22 @@ export function MemoryPanel() {
             <span className="chip mono" title="Plain markdown, next to the repo">
               .cockpit-memory/
             </span>
+            <div className="memtoggle" role="group" aria-label="Memory layout">
+              <button
+                className={`memtoggle__btn ${layout === 'list' ? 'memtoggle__btn--active' : ''}`}
+                onClick={() => setLayout('list')}
+                aria-pressed={layout === 'list'}
+              >
+                List
+              </button>
+              <button
+                className={`memtoggle__btn ${layout === 'graph' ? 'memtoggle__btn--active' : ''}`}
+                onClick={() => setLayout('graph')}
+                aria-pressed={layout === 'graph'}
+              >
+                Graph
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -239,7 +258,16 @@ export function MemoryPanel() {
             onCreate={createNote}
           />
 
-          {note && !noteLoading ? (
+          {layout === 'graph' && projectId && snapshot ? (
+            <MemoryGraph
+              projectId={projectId}
+              snapshot={snapshot}
+              onOpen={(name) => {
+                setLayout('list')
+                void openNote(name)
+              }}
+            />
+          ) : note && !noteLoading ? (
             <MemoryReader
               key={note.name}
               note={note}

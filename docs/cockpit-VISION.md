@@ -465,7 +465,7 @@ project limits), backlinks pane per note, unresolved-link affordance ("create th
 note"). Mock parity with seeded notes. 2 screenshot rounds.
 **Effort:** M
 
-### 5.5 [ ] Graph view — LAST, time-boxed
+### 5.5 [x] Graph view — LAST, time-boxed
 **Do:** Force-directed graph of the link index. Time-box hard (e.g. 3 days): 80% of
 the value is backlinks, which already shipped in 5.4. If the box overruns, ship
 without it and park it.
@@ -479,6 +479,12 @@ agents will use for compounding context.
 
 **Gate 5:** Notes + backlinks usable daily on this repo; link kernel fully tested;
 storage map documented; graph view shipped or consciously parked.
+> **Gate 5 status (2026-07-02): PASSED.** Real hub live on this repo (5 interlinked
+> knowledge notes committed; [[swarm-design]] deliberately unresolved for Phase 6);
+> kernel + service + assembly fully tested; storage map in the plan doc; graph view
+> SHIPPED inside its time-box (deterministic pure physics in shared/forceGraph.ts,
+> 13 tests; canvas render, hover/click/drag, reduced-motion static layout).
+> 5.6 deferred to Phase 6 by decision.
 
 ---
 
@@ -570,6 +576,7 @@ Ordered by leverage, all optional:
 | 2026-07-01 | 1.3 | Redaction: Stripe/URL-creds/AIza/SG./npm_/ghu-ghs-ghr/Bearer patterns + bare *_KEY names + high-entropy env fallback + `redactText()`. TDD, 9 new tests |
 | 2026-07-01 | 1.4 | LogIntelligence ingest + listLogs now scrub secrets (new rows and legacy rows) |
 | 2026-07-01 | 1.5 | Rebuild & relaunch: package-identity check in main (`isCockpitSource`), native confirm dialog, audit entry, button hidden for foreign projects (`refreshEligible` IPC). 5 new tests. Verified both states via screenshots |
+| 2026-07-02 | 5.5 | Graph view shipped IN time-box: shared/forceGraph.ts (deterministic — no Math.random, golden-angle seeding, immutable ticks, 13 tests) + canvas MemoryGraph (DPR-aware, hover bloom, drag-pin, click-to-open, ghost nodes for unresolved, reduced-motion static). Phase 5 COMPLETE |
 | 2026-07-02 | 5.4 + Gate 5 dogfood | Memory view shipped (3-zone: filterable list / wikilink-decorated reader+editor / connections pane, React-segment rendering — no innerHTML, 2 screenshot rounds); mock trash parity fixed; REAL hub seeded: 5 interlinked knowledge notes in .cockpit-memory/ committed with the repo (deliberate unresolved [[swarm-design]] awaits Phase 6). 5.6 deferred to Phase 6 by decision |
 | 2026-07-02 | 5.1–5.3 | Memory hub core: plan doc + storage-map table; shared/wikilink kernel (parse w/ code-region awareness, slug-by-construction names, forward/backlink/unresolved index, rename-refresh) TDD 10 tests; shared/memory-hub pure assembly (single rule, both bridges); MemoryHubService (atomic writes, soft-delete to .trash, foreign files ignored) 7 tests; 5 IPC channels all legs; seeded interlinked mock. mock.ts split (942→619 + mockData.ts) to respect the 800 cap |
 | 2026-07-02 | 4.5–4.6 + Gate 4 | Review UI shipped (GitPanel card + block bridge + shared ReviewFindings, Molten Obsidian, 2 screenshot rounds by UI agent); Gate 4 dogfood: real CLI reviewed this repo's own diff 3× — found a real false-"ship it" bug in the fresh UI (fixed); parser hardened; timeout 360s. Phase 4 COMPLETE |

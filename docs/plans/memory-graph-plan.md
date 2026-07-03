@@ -1,6 +1,6 @@
 # Plan: Memory Graph + Wikilinks (Feature #3 of BridgeSpace roadmap · VISION Phase 5)
 
-> Status: IN PROGRESS — written 2026-07-02 before any Phase 5 code (0.1 rule).
+> Status: SHIPPED 2026-07-02 (graph included — landed inside its time-box). Originally written before any Phase 5 code (0.1 rule).
 > Vision context: [BRIDGESPACE-ROADMAP.md](../BRIDGESPACE-ROADMAP.md) §3.
 > Sequencing law: **backlinks before graph view**; graph is last and time-boxed.
 
@@ -76,12 +76,12 @@ destructive happens, recovery is a file move.
 3. [x] 5.3 MemoryHubService + tests + IPC all legs + seeded mock
 4. [x] 5.4 UI: left-rail "Memory" view — note list, editor (textarea), backlink
        pane, unresolved "create this note" affordance; 2 screenshot rounds
-5. [ ] 5.5 Graph view — force-directed canvas, TIME-BOXED (ship without it if
+5. [x] 5.5 Graph view — force-directed canvas, TIME-BOXED (ship without it if
        it overruns; backlinks already carry 80% of the value)
 6. [x] 5.6 DECISION: deferred to Phase 6 — agent access's first real consumer
        is the Swarm orchestrator; building a consumer-less API now is speculative.
        Recorded in the hub itself ([[memory-hub]] note).
-7. [ ] Gate 5: notes + backlinks usable daily on THIS repo (dogfood: port the
+7. [x] Gate 5: notes + backlinks usable daily on THIS repo (dogfood: port the
        VISION progress log habit into hub notes), kernel fully tested, storage
        map documented, graph shipped or consciously parked
 

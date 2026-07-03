@@ -5682,3 +5682,77 @@
 @media (prefers-reduced-motion: reduce) {
   .memory__pulse { animation: none; }
 }
+
+/* --- memory graph --- */
+/* Force-directed canvas view of the hub (VISION 5.5). The canvas animates
+   positions itself (allowed — physics settle, then stop); CSS only styles the
+   frame, the layout toggle, and the hint line. */
+
+.memtoggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface-inset);
+}
+.memtoggle__btn {
+  padding: 3px 12px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--dur-fast, 120ms) ease;
+}
+.memtoggle__btn:hover { color: var(--text); }
+.memtoggle__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.memtoggle__btn:active { transform: translateY(0.5px); }
+.memtoggle__btn--active {
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.memgraph {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.memgraph__stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  /* faint pooled light behind the constellation — composed, not dead air */
+  background: radial-gradient(70% 60% at 50% 42%, var(--accent-wash), transparent 72%);
+}
+.memgraph__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.memgraph__status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.memgraph__hint {
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.02em;
+  user-select: none;
+}
