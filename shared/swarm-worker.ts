@@ -52,10 +52,17 @@ export function buildWorkerPrompt(
   return stripPtyControls(lines.join('\n'))
 }
 
-/** The full shell command the pty runs to start the worker. */
+/**
+ * The full shell command the pty runs to start the worker. The `; exit`
+ * chain is load-bearing: the pty hosts a shell, so without it a finished
+ * worker would drop back to a prompt and the session (and therefore the
+ * card, which moves on `terminal:exit`) would look Running forever. `exit`
+ * with no argument re-uses the last status, so the worker's exit code
+ * survives to the card transition.
+ */
 export function buildWorkerCommand(
   card: { title: string; body: string },
   hubNoteNames: readonly string[],
 ): string {
-  return `claude ${shellQuote(buildWorkerPrompt(card, hubNoteNames))}`
+  return `claude ${shellQuote(buildWorkerPrompt(card, hubNoteNames))}; exit`
 }

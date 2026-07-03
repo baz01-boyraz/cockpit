@@ -61,7 +61,11 @@ describe('buildWorkerCommand', () => {
   it('is a single claude invocation with the whole prompt quoted', () => {
     const cmd = buildWorkerCommand({ title: 'T', body: 'B' }, [])
     expect(cmd.startsWith(`claude '`)).toBe(true)
-    expect(cmd.endsWith(`'`)).toBe(true)
+  })
+
+  it('chains `; exit` so the pane (and card) actually finishes with the worker', () => {
+    const cmd = buildWorkerCommand({ title: 'T', body: 'B' }, [])
+    expect(cmd.endsWith(`'; exit`)).toBe(true)
   })
 
   it('never contains a carriage return (a \\r would submit the pty line early)', () => {
