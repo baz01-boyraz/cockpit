@@ -498,7 +498,7 @@ storage map documented; graph view shipped or consciously parked.
 > decomposition. Kanban state and crash-resume cannot durably live in a chat session.
 > Plan doc: `docs/plans/swarm-plan.md` (written 2026-07-03 — decisions D1–D7 live there).
 
-### 6.1 [ ] Kanban data model + board UI
+### 6.1 [x] Kanban data model + board UI
 **Do:** SQLite (appended migration): boards/cards with status
 (Todo → In Progress → In Review → Complete), project link, assigned role/instance,
 terminal session link. Board UI with drag/move. Mock parity. No agent execution yet.
@@ -576,6 +576,7 @@ Ordered by leverage, all optional:
 | 2026-07-01 | 1.3 | Redaction: Stripe/URL-creds/AIza/SG./npm_/ghu-ghs-ghr/Bearer patterns + bare *_KEY names + high-entropy env fallback + `redactText()`. TDD, 9 new tests |
 | 2026-07-01 | 1.4 | LogIntelligence ingest + listLogs now scrub secrets (new rows and legacy rows) |
 | 2026-07-01 | 1.5 | Rebuild & relaunch: package-identity check in main (`isCockpitSource`), native confirm dialog, audit entry, button hidden for foreign projects (`refreshEligible` IPC). 5 new tests. Verified both states via screenshots |
+| 2026-07-03 | 6.1 | Kanban shipped end-to-end: TDD kernel shared/kanban.ts (state machine w/ service-owned in_progress, board assembly, midpoint ordering + renormalize, moveCardInList/appendPosition as the SINGLE rule for service+mock; 26 tests) → V5 migration (kanban_cards, agent_sessions dropped) + SwarmService CRUD (persists only kernel-changed rows; 7 FakeDb tests, transaction() added to fake) + swarm.* on all four legs (zod `to` enum excludes in_progress — a drag can't even ask) → 5-lane board UI (native DnD w/ insertion index, Running lane refuses drops, inline composer/editor, ember live dot; agent-built, 3 screenshot rounds + live drag-refusal check). Suite 378→411 |
 | 2026-07-03 | 6.0 | Phase 6 OPEN: `docs/plans/swarm-plan.md` written (0.1 rule) — hybrid orchestrator confirmed, D1–D7 decisions held (cards-not-boards, drop agent_sessions in V5, worktrees in .cockpit-worktrees/, cap 3, service-owned in_progress); [[swarm-design]] hub note resolved (the Phase 5 deliberate loose end) |
 | 2026-07-03 | release | v0.1.27 SHIPPED via CI (run 28636921244): tag mishap (first tag pre-bump → CI built 0.1.26, no release) fixed by bump 2ea7c94 + retag; all 5 assets from ONE run, ZIP sha512 verified == latest-mac.yml; signed Path B self-signed (hardened-runtime verify still parked — needs Apple certs); GitHub push protection flagged our FAKE redaction test fixtures (sk_live_/ghp_ patterns in test/) — bypassed correctly, sweep confirmed 0 real secrets in pushed range; installed app already 0.1.27 |
 | 2026-07-02 | 5.5 | Graph view shipped IN time-box: shared/forceGraph.ts (deterministic — no Math.random, golden-angle seeding, immutable ticks, 13 tests) + canvas MemoryGraph (DPR-aware, hover bloom, drag-pin, click-to-open, ghost nodes for unresolved, reduced-motion static). Phase 5 COMPLETE |
