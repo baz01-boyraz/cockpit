@@ -77,7 +77,6 @@ export class Services {
     this.chat = new ChatService(this.projects)
     this.review = new ReviewService(this.projects, this.audit)
     this.memory = new MemoryHubService(this.projects)
-    this.swarm = new SwarmService(this.db)
     this.appUpdate = new AppUpdateService(opts.events)
 
     this.terminals = new TerminalManager(
@@ -95,6 +94,9 @@ export class Services {
       },
       join(opts.userDataDir, 'shell-integration'),
     )
+    // After terminals: the swarm spawns workers through the TerminalManager
+    // and listens for their exits on the same bus.
+    this.swarm = new SwarmService(this.db, this.terminals, this.memory, this.audit, opts.events)
     // Forget a pane's TUI-mode state once it exits, so session ids never leak.
     opts.events.onTyped('terminal:exit', ({ sessionId }) => this.tuiState.delete(sessionId))
   }

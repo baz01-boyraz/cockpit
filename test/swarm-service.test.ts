@@ -1,6 +1,9 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { SwarmService } from '../electron/main/services/SwarmService'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { SwarmService, type WorkerSpawner } from '../electron/main/services/SwarmService'
+import type { AuditLogService } from '../electron/main/services/AuditLogService'
+import { CockpitEvents } from '../electron/main/events'
 import { POSITION_GAP } from '../shared/kanban'
+import type { TerminalSession } from '../shared/domain'
 import { makeRecordingDb } from './helpers/fakeDb'
 
 interface Row {
@@ -40,7 +43,11 @@ function makeStore(seed: Partial<Row>[] = []) {
 
   const { db } = makeRecordingDb({
     all: (_sql, args) => rows.filter((r) => r.project_id === args[0]).map((r) => ({ ...r })),
-    get: (_sql, args) => {
+    get: (sql, args) => {
+      if (sql.includes('terminal_session_id = ?')) {
+        const r = rows.find((x) => x.terminal_session_id === args[0] && x.status === 'in_progress')
+        return r ? { ...r } : undefined
+      }
       const r = rows.find((x) => x.id === args[0] && x.project_id === args[1])
       return r ? { ...r } : undefined
     },
@@ -75,6 +82,12 @@ function makeStore(seed: Partial<Row>[] = []) {
           r.persona = p.persona
           r.updated_at = String(p.now)
         }
+      } else if (sql.includes('SET terminal_session_id')) {
+        const r = rows.find((x) => x.id === args[2])
+        if (r) {
+          r.terminal_session_id = String(args[0])
+          r.updated_at = String(args[1])
+        }
       } else if (sql.includes('SET status')) {
         const r = rows.find((x) => x.id === args[3])
         if (r) {
@@ -95,6 +108,26 @@ const columnCards = (svc: SwarmService, status: string) =>
     .find((c) => c.status === status)!
     .cards.map((c) => c.id)
 
+function makeDeps() {
+  const spawned: { name?: string; command?: string | null }[] = []
+  const terminals: WorkerSpawner = {
+    create(input) {
+      spawned.push({ name: input.name, command: input.command })
+      return { id: `term_${spawned.length}`, projectId: input.projectId } as TerminalSession
+    },
+  }
+  const audits: string[] = []
+  const audit = {
+    record: vi.fn((input: { actionType: string }) => {
+      audits.push(input.actionType)
+      return {} as never
+    }),
+  } as unknown as AuditLogService
+  const memory = { list: () => ({ notes: [{ name: 'swarm-design' }], unresolved: [] }) }
+  const events = new CockpitEvents()
+  return { terminals, spawned, audit, audits, memory: memory as never, events }
+}
+
 describe('SwarmService CRUD', () => {
   let store: ReturnType<typeof makeStore>
   let svc: SwarmService
@@ -106,7 +139,8 @@ describe('SwarmService CRUD', () => {
       { id: 'run', status: 'in_progress', position: POSITION_GAP },
       { id: 'r', status: 'in_review', position: POSITION_GAP },
     ])
-    svc = new SwarmService(store.db)
+    const deps = makeDeps()
+    svc = new SwarmService(store.db, deps.terminals, deps.memory, deps.audit, deps.events)
   })
 
   it('board() assembles all five columns from rows', () => {
@@ -156,5 +190,71 @@ describe('SwarmService CRUD', () => {
     expect(store.rows.some((r) => r.id === 'a')).toBe(false)
     expect(() => svc.removeCard({ projectId: 'p1', cardId: 'run' })).toThrow(/kill or park/)
     expect(store.rows.some((r) => r.id === 'run')).toBe(true)
+  })
+})
+
+describe('SwarmService startCard + worker exit (6.2)', () => {
+  let store: ReturnType<typeof makeStore>
+  let deps: ReturnType<typeof makeDeps>
+  let svc: SwarmService
+
+  beforeEach(() => {
+    store = makeStore([
+      { id: 'a', status: 'todo', position: POSITION_GAP, title: 'Fix the form' },
+      { id: 'p', status: 'parked', position: POSITION_GAP },
+      { id: 'd', status: 'done', position: POSITION_GAP },
+    ])
+    deps = makeDeps()
+    svc = new SwarmService(store.db, deps.terminals, deps.memory, deps.audit, deps.events)
+  })
+
+  it('spawns a claude worker, links the session, and moves the card to Running', () => {
+    svc.startCard({ projectId: 'p1', cardId: 'a' })
+    expect(deps.spawned).toHaveLength(1)
+    expect(deps.spawned[0].name).toBe('Swarm — Fix the form')
+    expect(deps.spawned[0].command).toContain(`claude '`)
+    expect(deps.spawned[0].command).toContain('Fix the form')
+    expect(deps.spawned[0].command).toContain('.cockpit-memory/swarm-design.md')
+    const row = store.rows.find((r) => r.id === 'a')!
+    expect(row.status).toBe('in_progress')
+    expect(row.terminal_session_id).toBe('term_1')
+    expect(deps.audits).toContain('swarm.start_card')
+  })
+
+  it('starts a parked card too, but never a done one', () => {
+    svc.startCard({ projectId: 'p1', cardId: 'p' })
+    expect(store.rows.find((r) => r.id === 'p')!.status).toBe('in_progress')
+    expect(() => svc.startCard({ projectId: 'p1', cardId: 'd' })).toThrow(/To do or Parked/)
+  })
+
+  it('refuses a second concurrent run (6.2 parallelism = 1)', () => {
+    svc.startCard({ projectId: 'p1', cardId: 'a' })
+    expect(() => svc.startCard({ projectId: 'p1', cardId: 'p' })).toThrow(/already running/)
+    expect(deps.spawned).toHaveLength(1)
+  })
+
+  it('moves the card to In review when its worker exits', () => {
+    svc.startCard({ projectId: 'p1', cardId: 'a' })
+    deps.events.emitTyped('terminal:exit', { sessionId: 'term_1', exitCode: 0, signal: null })
+    expect(store.rows.find((r) => r.id === 'a')!.status).toBe('in_review')
+    expect(deps.audits).toContain('swarm.card_exited')
+  })
+
+  it('ignores exits of terminals that are not linked to a running card', () => {
+    deps.events.emitTyped('terminal:exit', { sessionId: 'term_ghost', exitCode: 1, signal: null })
+    expect(store.rows.find((r) => r.id === 'a')!.status).toBe('todo')
+  })
+
+  it('spawns with an empty pointer list when the hub is unreadable', () => {
+    const broken = makeDeps()
+    const svc2 = new SwarmService(
+      store.db,
+      broken.terminals,
+      { list: () => { throw new Error('no hub') } } as never,
+      broken.audit,
+      broken.events,
+    )
+    svc2.startCard({ projectId: 'p1', cardId: 'a' })
+    expect(broken.spawned[0].command).not.toContain('.cockpit-memory')
   })
 })

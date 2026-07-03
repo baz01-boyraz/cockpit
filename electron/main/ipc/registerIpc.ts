@@ -31,6 +31,7 @@ import {
   swarmMoveCardSchema,
   swarmProjectSchema,
   swarmRemoveCardSchema,
+  swarmStartCardSchema,
   swarmUpdateCardSchema,
   terminalAttachmentInputSchema,
   terminalIdSchema,
@@ -240,6 +241,7 @@ export function registerIpc(services: Services): void {
   handle('swarmUpdateCard', (p) => services.swarm.updateCard(swarmUpdateCardSchema.parse(p)))
   handle('swarmMoveCard', (p) => services.swarm.moveCard(swarmMoveCardSchema.parse(p)))
   handle('swarmRemoveCard', (p) => services.swarm.removeCard(swarmRemoveCardSchema.parse(p)))
+  handle('swarmStartCard', (p) => services.swarm.startCard(swarmStartCardSchema.parse(p)))
 
   // --- chat (real answers via the local Claude Code CLI) ---
   handle('chatAsk', (p) => {

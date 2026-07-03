@@ -102,6 +102,7 @@ export const IPC = {
   swarmUpdateCard: 'swarm:updateCard',
   swarmMoveCard: 'swarm:moveCard',
   swarmRemoveCard: 'swarm:removeCard',
+  swarmStartCard: 'swarm:startCard',
 
   auditList: 'audit:list',
 
@@ -303,6 +304,12 @@ export interface CockpitApi {
       index: number
     }): Promise<BoardColumn[]>
     removeCard(input: { projectId: string; cardId: string }): Promise<BoardColumn[]>
+    /**
+     * Card → running agent: main spawns a `claude` worker into a fresh
+     * terminal session, links it to the card, and moves the card to Running.
+     * 6.2 runs one card at a time; parallel worktrees arrive with 6.3.
+     */
+    startCard(input: { projectId: string; cardId: string }): Promise<BoardColumn[]>
   }
   chat: {
     /**
@@ -407,6 +414,7 @@ export interface IpcResultMap {
   swarmUpdateCard: R<CockpitApi['swarm']['updateCard']>
   swarmMoveCard: R<CockpitApi['swarm']['moveCard']>
   swarmRemoveCard: R<CockpitApi['swarm']['removeCard']>
+  swarmStartCard: R<CockpitApi['swarm']['startCard']>
   auditList: R<CockpitApi['audit']['list']>
 
   systemInfo: R<CockpitApi['system']['info']>

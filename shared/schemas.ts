@@ -225,6 +225,8 @@ export const swarmRemoveCardSchema = z.object({
   cardId: z.string().min(1),
 })
 
+export const swarmStartCardSchema = swarmRemoveCardSchema
+
 export const gitDiffInputSchema = z.object({
   projectId: z.string().min(1),
   path: z.string().min(1),

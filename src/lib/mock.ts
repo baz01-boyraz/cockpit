@@ -558,6 +558,34 @@ export function createMockApi(): CockpitApi {
         kanbanSeed.set(projectId, next)
         return assembleBoard(next)
       },
+      startCard: async ({ projectId, cardId }) => {
+        const cards = kanbanFor(projectId)
+        const card = cards.find((c) => c.id === cardId)
+        if (!card) throw new Error(`Card ${cardId} not found in this project.`)
+        if (card.status !== 'todo' && card.status !== 'parked') {
+          throw new Error('Only a To do or Parked card can start.')
+        }
+        if (cards.some((c) => c.status === 'in_progress')) {
+          throw new Error('Another card is already running — parallel cards arrive with worktrees (6.3).')
+        }
+        const linked = cards.map((c) =>
+          c.id === cardId ? { ...c, terminalSessionId: id('term') } : c,
+        )
+        const next = moveCardInList(linked, cardId, 'in_progress', 0, 'service', now())
+        kanbanSeed.set(projectId, next)
+        // Simulated worker: finishes after a short run so the board polling
+        // shows the same Running → In review transition the real exit drives.
+        setTimeout(() => {
+          const current = kanbanFor(projectId)
+          const still = current.find((c) => c.id === cardId && c.status === 'in_progress')
+          if (!still) return
+          kanbanSeed.set(
+            projectId,
+            moveCardInList(current, cardId, 'in_review', 0, 'service', now()),
+          )
+        }, 15_000)
+        return assembleBoard(next)
+      },
     },
     review: {
       // Staged review session so the surface is fully explorable in the
