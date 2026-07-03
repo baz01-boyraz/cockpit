@@ -1,7 +1,9 @@
 # Plan — Multi-agent Swarm + Kanban (VISION Phase 6)
 
 > Status: ACTIVE · Created 2026-07-03 · VISION 6.1–6.6, Gate 6
-> Progress: 6.1 DONE 2026-07-03 (kernel + V5 + SwarmService + swarm.* IPC + board UI) · next 6.2
+> Progress: 6.1 DONE · 6.2 DONE 2026-07-03 (startCard + worker exit→review, live gate PASS,
+> 5.6 hub pointers landed) · next 6.3 parallel worktrees. 6.4 note: E2E surfaced that cards
+> orphaned in_progress across a restart are unrecoverable until 6.4 — build resume first thing.
 > Blueprint: design notes in `docs/BRIDGESPACE-ROADMAP.md` §4 (roles vs instances vs
 > personas, two parallelism models, orchestrator question). Read those first.
 
