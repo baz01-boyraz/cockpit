@@ -294,7 +294,9 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
       onPasteCapture={handlePaste}
     >
       <div className="termview__host" ref={hostRef} />
-      {mode === 'blocks' && <BlocksView blocks={blocks} onRerun={rerunCommand} />}
+      {mode === 'blocks' && (
+        <BlocksView blocks={blocks} projectId={session.projectId} onRerun={rerunCommand} />
+      )}
       <input
         ref={fileInputRef}
         className="termview__file"

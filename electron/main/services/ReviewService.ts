@@ -188,7 +188,9 @@ export class ReviewService {
     try {
       const { stdout } = await this.runner(resolveBin('claude'), buildClaudeArgs(prompt, { model: model.id }), {
         cwd: project.path,
-        timeout: 240_000,
+        // Sonnet grounded in a real repo can legitimately take minutes; the
+        // timeout is a hang-guard, not a latency target.
+        timeout: 360_000,
         maxBuffer: 8 * 1024 * 1024,
       })
       const parsed = parseFindings(stdout)
@@ -203,13 +205,16 @@ export class ReviewService {
       this.record(projectId, result)
       return result
     } catch (err) {
-      const e = err as { stderr?: string; message?: string }
+      const e = err as { stderr?: string; message?: string; killed?: boolean; signal?: string }
+      const timedOut = e.killed === true || e.signal === 'SIGTERM'
       const result: ReviewResult = {
         ok: false,
         findings: suspectFindings,
         raw: null,
         model: model.label,
-        error: e.stderr?.trim() || e.message || 'Review run failed.',
+        error: timedOut
+          ? 'Review timed out after 6 minutes — try a smaller change set or a faster model.'
+          : e.stderr?.trim() || e.message || 'Review run failed.',
         stats: stats(Date.now() - started),
       }
       this.record(projectId, result)

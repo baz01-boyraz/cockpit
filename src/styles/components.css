@@ -4808,3 +4808,249 @@
 @media (prefers-reduced-motion: reduce) {
   .adl__barFill { transition: none; }
 }
+
+/* --- review --- */
+/* Pre-ship AI diff review (VISION 4.5/4.6): the GitPanel "Review before ship"
+   card plus the per-block bridge in BlocksView. Finding rows come from the
+   shared renderer (src/components/ReviewFindings.tsx). */
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
+}
+.review__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.review__icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.review__headText { flex: 1; min-width: 0; }
+.review__title {
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  letter-spacing: var(--tracking-snug);
+  margin: 2px 0 3px;
+}
+.review__sub {
+  margin: 0;
+  max-width: 560px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+}
+.review__cta { flex-shrink: 0; }
+
+/* Calm busy state: one breathing dot (opacity only), no spinner. */
+.review__busy {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.review__busy--compact {
+  padding: 7px 10px;
+  font-size: var(--fs-xs);
+  background: transparent;
+  border: 0;
+}
+.review__pulse {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+.review__result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.review__result--compact { gap: var(--sp-2); }
+
+/* Stats line: "4 files reviewed · 1 sensitive excluded · 1 summarized" */
+.revstats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.revstats__part { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.revstats__part--warn { color: var(--warning); }
+.revstats__sep { color: var(--text-faint); }
+.revstats__model { margin-left: auto; }
+
+/* Findings list: recessed data well, one hairline per row. */
+.revfinds {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  overflow: hidden;
+}
+.revfind { border-top: 1px solid var(--border); }
+.revfind:first-child { border-top: 0; }
+/* Expanded finding: tint row + detail together so they read as one unit. */
+.revfind--open { background: var(--surface-1); }
+.revfind__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: 8px var(--sp-3);
+  background: transparent;
+  border: 0;
+  text-align: left;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  transition: background-color var(--dur) var(--ease-out);
+}
+.revfind__row:hover:not(:disabled) { background: var(--surface-1); }
+.revfind__row:active:not(:disabled) { background: var(--surface-2); }
+.revfind__row:disabled { cursor: default; }
+.revfind__chevron {
+  flex-shrink: 0;
+  color: var(--text-faint);
+  transition: transform var(--dur) var(--ease-out);
+}
+.revfind__chevron--open { transform: rotate(90deg); }
+.revfind__row:disabled .revfind__chevron { opacity: 0.25; }
+.revfind__sev {
+  flex-shrink: 0;
+  min-width: 64px;
+  justify-content: center;
+  padding: 2px 7px;
+  font-size: var(--fs-micro);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.revfind__loc {
+  flex-shrink: 0;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.revfind__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-weight: 550;
+}
+.revfind__detail {
+  padding: 0 var(--sp-3) var(--sp-3) calc(var(--sp-3) + 20px);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+}
+/* Sanitizer-flagged prompt-injection findings: warm warning treatment. */
+.revfind--injection {
+  background: var(--warning-wash);
+  box-shadow: inset 2px 0 0 var(--warning);
+}
+.revfind--injection .revfind__row:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+}
+.revfind--injection .revfind__row:active:not(:disabled) {
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+}
+.revfind__flag { flex-shrink: 0; color: var(--warning); }
+
+/* Clean pass — the one place signal lime speaks: safe to go. */
+.review__clean {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--signal-dim);
+  border: 1px solid rgba(205, 232, 95, 0.28);
+  color: var(--signal);
+  font-size: var(--fs-sm);
+  font-weight: 550;
+}
+.review__clean svg { flex-shrink: 0; }
+
+.review__empty {
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  border: 1px dashed var(--border-strong);
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+}
+
+.review__notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--danger-wash);
+  border: 1px solid rgba(237, 100, 80, 0.3);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.review__notice svg { flex-shrink: 0; margin-top: 2px; }
+
+/* Raw-degraded output: the model replied, the parser could not type it. */
+.review__raw {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 260px;
+  overflow: auto;
+}
+
+/* Block → review bridge: inline result zone under a command block. */
+.cmdcard__review {
+  border-top: 1px solid var(--border);
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
+}
+.cmdcard__review .revfinds { background: transparent; }
+.iconbtn--busy { color: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .review__pulse { animation: none; }
+}

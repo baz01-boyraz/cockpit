@@ -1,6 +1,6 @@
 # Plan: Pre-ship AI Diff Review (Feature #2 of BridgeSpace roadmap · VISION Phase 4)
 
-> Status: PLANNED — written 2026-07-02, before any Phase 4 code, per the
+> Status: SHIPPED 2026-07-02 (see Gate 4 log in cockpit-VISION.md). Originally written before any Phase 4 code, per the
 > plan-doc rule in [cockpit-VISION.md](../cockpit-VISION.md) (task 0.1).
 > Vision context: [BRIDGESPACE-ROADMAP.md](../BRIDGESPACE-ROADMAP.md) §2.
 > Prerequisites from Phase 3: addressable block state (3.1 ✅) for the
@@ -80,10 +80,10 @@ New pure module `shared/diff-sanitize.ts` (TDD; no runtime deps):
        staged/unstaged/untracked/binary/rename cases) → sanitized request
 4. [x] 4.3 CLI runner wiring + defensive output parsing + audit entry
 5. [x] 4.4 IPC channel + preload + mock (contract test forces all three legs) — plus `reviewRunText` for the block bridge
-6. [ ] 4.5 GitPanel review surface (2 screenshot rounds; design per
+6. [x] 4.5 GitPanel review surface (2 screenshot rounds; design per
        DESIGN-VISION/Molten Obsidian tokens)
-7. [ ] 4.6 Block→review bridge in BlocksView (uses findBlock + same boundary)
-8. [ ] Gate 4: run a real pre-commit review ON THIS REPO end-to-end; sanitizer
+7. [x] 4.6 Block→review bridge in BlocksView (uses findBlock + same boundary)
+8. [x] Gate 4: run a real pre-commit review ON THIS REPO end-to-end; sanitizer
        tests green; audit entries present; then use it for every VISION commit
        from that point on (dogfood).
 

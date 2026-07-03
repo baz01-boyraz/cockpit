@@ -40,24 +40,39 @@ export interface ReviewResult {
 }
 
 const findingSchema = z.object({
-  severity: z.enum(REVIEW_SEVERITIES),
+  // Loose models shout ("HIGH") — normalize before validating.
+  severity: z.preprocess(
+    (v) => (typeof v === 'string' ? v.toLowerCase().trim() : v),
+    z.enum(REVIEW_SEVERITIES),
+  ),
   file: z.string().nullable().optional(),
-  line: z.number().int().nullable().optional(),
+  line: z.preprocess(
+    (v) => (typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : v),
+    z.number().int().nullable().optional(),
+  ),
   title: z.string().min(1),
   detail: z.string().optional(),
 })
 
 /**
- * Parse model output defensively: exact JSON first, then the outermost
- * array embedded in prose; entries validate individually so one malformed
- * element never sinks the run. Anything unparseable degrades to `raw`.
+ * Parse model output defensively: exact JSON first, then the outermost array
+ * embedded in prose/markdown fences, then a `{"findings":[…]}` object root;
+ * entries validate individually (severity case-normalized, numeric-string
+ * lines coerced) so one malformed element never sinks the run. Anything
+ * unparseable degrades to `raw` — visible in the UI, never silent.
  */
 export function parseFindings(output: string): { findings: ReviewFinding[]; raw: string | null } {
   const text = output.trim()
-  const candidates: string[] = [text]
-  const first = text.indexOf('[')
-  const last = text.lastIndexOf(']')
-  if (first !== -1 && last > first) candidates.push(text.slice(first, last + 1))
+  const unfenced = text.replace(/```(?:json)?/gi, '').trim()
+  const candidates: string[] = [text, unfenced]
+  for (const source of [text, unfenced]) {
+    const first = source.indexOf('[')
+    const last = source.lastIndexOf(']')
+    if (first !== -1 && last > first) candidates.push(source.slice(first, last + 1))
+    const firstObj = source.indexOf('{')
+    const lastObj = source.lastIndexOf('}')
+    if (firstObj !== -1 && lastObj > firstObj) candidates.push(source.slice(firstObj, lastObj + 1))
+  }
 
   for (const candidate of candidates) {
     let parsed: unknown
@@ -65,6 +80,12 @@ export function parseFindings(output: string): { findings: ReviewFinding[]; raw:
       parsed = JSON.parse(candidate)
     } catch {
       continue
+    }
+    // Accept an object root carrying the array under a conventional key.
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const obj = parsed as Record<string, unknown>
+      const nested = obj.findings ?? obj.issues ?? obj.results
+      if (Array.isArray(nested)) parsed = nested
     }
     if (!Array.isArray(parsed)) continue
     const findings: ReviewFinding[] = []
@@ -133,6 +154,14 @@ export function buildReviewPrompt(
     parts.push(`### summarized: ${s.path} — ${s.note}`)
   }
   parts.push(fenceTag)
+
+  // Recency wins with long prompts: restate the output contract at the very
+  // end so a large diff can't dilute it into prose answers.
+  parts.push(
+    '',
+    'REMINDER: reply with ONLY the JSON array of findings now — no prose,',
+    'no markdown fences, [] if clean.',
+  )
 
   return parts.join('\n')
 }

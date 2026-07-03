@@ -68,4 +68,26 @@ describe('parseFindings', () => {
     expect(out.findings).toEqual([])
     expect(out.raw).toBeNull()
   })
+
+  it('normalizes uppercase severities from a loose model', () => {
+    const out = parseFindings('[{"severity":"HIGH","title":"Case","detail":"d"}]')
+    expect(out.findings).toHaveLength(1)
+    expect(out.findings[0].severity).toBe('high')
+  })
+
+  it('accepts a {"findings":[…]} object root', () => {
+    const out = parseFindings('{"findings":[{"severity":"low","title":"Obj root","detail":"d"}]}')
+    expect(out.findings).toHaveLength(1)
+    expect(out.raw).toBeNull()
+  })
+
+  it('accepts markdown-fenced JSON', () => {
+    const out = parseFindings('```json\n[{"severity":"medium","title":"Fenced","detail":"d"}]\n```')
+    expect(out.findings).toHaveLength(1)
+  })
+
+  it('coerces a numeric-string line', () => {
+    const out = parseFindings('[{"severity":"low","file":"a.ts","line":"42","title":"t","detail":"d"}]')
+    expect(out.findings[0].line).toBe(42)
+  })
 })

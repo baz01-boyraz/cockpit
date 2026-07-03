@@ -374,7 +374,7 @@ event flood bounded; cleanup batch merged; Command Blocks verified live.
 > Security-critical feature. The sanitizer comes FIRST, the AI call comes LAST.
 > Write `docs/plans/ai-diff-review-plan.md` before starting (per 0.1).
 
-### 4.1 [ ] `shared/diff-sanitize.ts` — build the boundary first (TDD)
+### 4.1 [x] `shared/diff-sanitize.ts` — build the boundary first (TDD)
 **Why:** "Treat every diff line as untrusted input" is a hard requirement in the
 roadmap; it must exist as tested code before any prompt is composed.
 **Do:** Pure module with unit tests:
@@ -390,32 +390,32 @@ roadmap; it must exist as tested code before any prompt is composed.
 "ignore previous instructions" line comes out masked/excluded/neutralized.
 **Effort:** M
 
-### 4.2 [ ] Diff packaging service
+### 4.2 [x] Diff packaging service
 **Do:** Main-process service assembling working-tree + staged + untracked changes
 (via existing GitService/simple-git), through the sanitizer, into a review request
 object. New IPC (typed via 2.2, guarded via 1.2 if it ever mutates — it shouldn't;
 review is read-only by design).
 **Effort:** M
 
-### 4.3 [ ] AI runner
+### 4.3 [x] AI runner
 **Do:** Reuse the `claude` CLI pattern from ChatService/`shared/claude-run.ts`
 (argv arrays, no shell strings). Read-only advisory output; structured result
 (findings with severity/file/line) parsed defensively.
 **Effort:** M
 
-### 4.4 [ ] Review surface UI in GitPanel
+### 4.4 [x] Review surface UI in GitPanel
 **Do:** "Review before ship" action → findings list (severity, file, line, note) →
 each finding links to the diff view. Human decides; no auto-fix, no auto-commit.
 Audit-log each review run (redacted). 2 screenshot rounds.
 **Effort:** M
 
-### 4.5 [ ] Block → AI review bridge (deferred item from Feature #1)
+### 4.5 [x] Block → AI review bridge (deferred item from Feature #1)
 **Do:** Per-block "review with AI" action using 3.1's addressable block state; a
 block's command+output (sanitized through 4.1's redaction path) becomes review
 context.
 **Effort:** S–M
 
-### 4.6 [ ] Mock parity + polish
+### 4.6 [x] Mock parity + polish
 **Do:** Mock scripts a realistic review session (like the OSC-133 staged session);
 empty-diff, huge-diff, all-files-blocked edge states designed in UI.
 **Effort:** S
@@ -423,6 +423,15 @@ empty-diff, huge-diff, all-files-blocked edge states designed in UI.
 **Gate 4:** A real pre-commit review runs end-to-end on this repo; sanitizer tests
 green; audit entries present; screenshots reviewed. Ship it, use it daily —
 **cockpiT now reviews its own diffs before every release.**
+> **Gate 4 status (2026-07-02): PASSED.** Three live dogfood runs against THIS repo's
+> real uncommitted diff via the real claude CLI: (1) 166s success E2E — 7 files incl.
+> untracked collected, audit written; (2) timeout path exercised → raised to 360s +
+> friendly error; (3) 318s run in which **the feature found a real bug in its own
+> fresh UI code** (blocked-only change sets showed a false "ship it") — fixed, plus
+> parser hardened (case-normalized severities, object roots, fenced JSON, coerced
+> lines) and the output contract restated at prompt tail. POLISH ITEM: sonnet
+> sometimes answers in prose (raw-degrade is visible, never silent); tail-reminder
+> should reduce it — observe over daily use.
 
 ---
 
@@ -561,6 +570,7 @@ Ordered by leverage, all optional:
 | 2026-07-01 | 1.3 | Redaction: Stripe/URL-creds/AIza/SG./npm_/ghu-ghs-ghr/Bearer patterns + bare *_KEY names + high-entropy env fallback + `redactText()`. TDD, 9 new tests |
 | 2026-07-01 | 1.4 | LogIntelligence ingest + listLogs now scrub secrets (new rows and legacy rows) |
 | 2026-07-01 | 1.5 | Rebuild & relaunch: package-identity check in main (`isCockpitSource`), native confirm dialog, audit entry, button hidden for foreign projects (`refreshEligible` IPC). 5 new tests. Verified both states via screenshots |
+| 2026-07-02 | 4.5–4.6 + Gate 4 | Review UI shipped (GitPanel card + block bridge + shared ReviewFindings, Molten Obsidian, 2 screenshot rounds by UI agent); Gate 4 dogfood: real CLI reviewed this repo's own diff 3× — found a real false-"ship it" bug in the fresh UI (fixed); parser hardened; timeout 360s. Phase 4 COMPLETE |
 | 2026-07-02 | 4.1–4.4 | Security boundary shipped TDD-first: shared/diff-sanitize (blocklist, redaction, caps+markers, injection suspects, lockfile/binary summaries, parseUnifiedDiff) + shared/review (prompt builder w/ per-run fence, defensive JSON parser); ReviewService (staged+worktree+untracked collection, traversal guard, injectable runner, audit=stats-only) + runText for the block bridge; IPC reviewRun/reviewRunText wired all legs. +31 tests |
 | 2026-07-02 | 3.1–3.2 | Block state lifted to app-level blockStore (single onData capture subscription, per-session rAF snapshots, `findBlock()` seam for Phase 4); store split into 8 feature slices, consumer API unchanged; logs.onChange wired to live insight refresh |
 | 2026-07-02 | 3.3–3.4 | Boot reconciliation (`reconciled_at`, stale running→exited), natural exit-1 no longer labeled 'killed', `command` persisted for Phase 6 resume; TerminalDataCoalescer (~16ms/session, exit flushes session first), window-routing seam. SCHEMA_V4 |

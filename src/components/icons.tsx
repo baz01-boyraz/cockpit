@@ -244,3 +244,13 @@ export const IconBeaker = (p: IconProps) => (
     <path d="M7.5 14h9" />
   </svg>
 )
+
+/* Shield + magnifier: the pre-ship AI review action. Distinct from IconShield
+ * (shield-check), which the Git panel already uses for force-push gating. */
+export const IconShieldSearch = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 3 5 6v5c0 4 3 7 7 9 4-2 7-5 7-9V6z" />
+    <circle cx="11" cy="10.5" r="2.4" />
+    <path d="m12.8 12.3 2.2 2.2" />
+  </svg>
+)
