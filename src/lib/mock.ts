@@ -26,6 +26,12 @@ import { resolveChatModel } from '@shared/chat-models'
 import { assembleDashboard, countActiveAgents } from '@shared/dashboard-assembly'
 import { aggregateInsights, insightFromMatch } from '@shared/insight-aggregation'
 import { assembleHubSnapshot, assembleNote, type MemoryDoc } from '@shared/memory-hub'
+import {
+  appendPosition,
+  assembleBoard,
+  moveCardInList,
+  type KanbanCard,
+} from '@shared/kanban'
 import { normalizeNoteName, renameLinkTargets } from '@shared/wikilink'
 import { classifyRoute } from '@shared/router'
 import { matchLogLine } from '@shared/log-patterns'
@@ -42,6 +48,7 @@ import {
   id,
   insightEvents,
   logs,
+  kanbanSeed,
   memoryHub,
   now,
   projects,
@@ -98,6 +105,7 @@ const logsListeners = new Set<() => void>()
 const notifyLogsChanged = () => logsListeners.forEach((cb) => cb())
 
 const memoryDocsFor = (projectId: string): MemoryDoc[] => memoryHub.get(projectId) ?? []
+const kanbanFor = (projectId: string): KanbanCard[] => kanbanSeed.get(projectId) ?? []
 
 function emit(sessionId: string, data: string) {
   for (const cb of dataListeners) cb({ sessionId, data, at: now() })
@@ -485,6 +493,70 @@ export function createMockApi(): CockpitApi {
         const next = memoryDocsFor(projectId).filter((d) => d.name !== slug)
         memoryHub.set(projectId, next)
         return assembleHubSnapshot(next)
+      },
+    },
+    swarm: {
+      // Same kernel as the real SwarmService (single-rule principle): the
+      // mock persists to a Map instead of SQLite, nothing else differs.
+      board: async (projectId) => assembleBoard(kanbanFor(projectId)),
+      createCard: async ({ projectId, title, body }) => {
+        const cards = kanbanFor(projectId)
+        const next: KanbanCard[] = [
+          ...cards,
+          {
+            id: id('card'),
+            projectId,
+            title,
+            body: body ?? '',
+            status: 'todo',
+            position: appendPosition(cards, 'todo'),
+            role: null,
+            persona: null,
+            terminalSessionId: null,
+            worktreePath: null,
+            branch: null,
+            createdAt: now(),
+            updatedAt: now(),
+          },
+        ]
+        kanbanSeed.set(projectId, next)
+        return assembleBoard(next)
+      },
+      updateCard: async ({ projectId, cardId, title, body, role, persona }) => {
+        const cards = kanbanFor(projectId)
+        if (!cards.some((c) => c.id === cardId)) {
+          throw new Error(`Card ${cardId} not found in this project.`)
+        }
+        const next = cards.map((c) =>
+          c.id === cardId
+            ? {
+                ...c,
+                title: title ?? c.title,
+                body: body ?? c.body,
+                role: role === undefined ? c.role : role,
+                persona: persona === undefined ? c.persona : persona,
+                updatedAt: now(),
+              }
+            : c,
+        )
+        kanbanSeed.set(projectId, next)
+        return assembleBoard(next)
+      },
+      moveCard: async ({ projectId, cardId, to, index }) => {
+        const next = moveCardInList(kanbanFor(projectId), cardId, to, index, 'user', now())
+        kanbanSeed.set(projectId, next)
+        return assembleBoard(next)
+      },
+      removeCard: async ({ projectId, cardId }) => {
+        const cards = kanbanFor(projectId)
+        const card = cards.find((c) => c.id === cardId)
+        if (!card) throw new Error(`Card ${cardId} not found in this project.`)
+        if (card.status === 'in_progress') {
+          throw new Error('Card has a running agent — kill or park it before deleting.')
+        }
+        const next = cards.filter((c) => c.id !== cardId)
+        kanbanSeed.set(projectId, next)
+        return assembleBoard(next)
       },
     },
     review: {

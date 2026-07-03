@@ -29,6 +29,11 @@ export interface RecordingDb {
 export function makeRecordingDb(handlers: RecordingDbHandlers = {}): RecordingDb {
   const calls: DbCall[] = []
   const fake = {
+    // Real SQLite transactions only matter under concurrency; for tests the
+    // wrapped function simply runs.
+    transaction(fn: (...args: unknown[]) => unknown) {
+      return (...args: unknown[]) => fn(...args)
+    },
     prepare(sql: string) {
       return {
         run: (...args: unknown[]) => {

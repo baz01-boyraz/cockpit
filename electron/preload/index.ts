@@ -93,6 +93,13 @@ const api: CockpitApi = {
     rename: (projectId, from, to) => invoke(IPC.memoryRename, { projectId, from, to }),
     trash: (projectId, name) => invoke(IPC.memoryTrash, { projectId, name }),
   },
+  swarm: {
+    board: (projectId) => invoke(IPC.swarmBoard, { projectId }),
+    createCard: (input) => invoke(IPC.swarmCreateCard, input),
+    updateCard: (input) => invoke(IPC.swarmUpdateCard, input),
+    moveCard: (input) => invoke(IPC.swarmMoveCard, input),
+    removeCard: (input) => invoke(IPC.swarmRemoveCard, input),
+  },
   chat: {
     ask: (projectId, prompt, opts) => invoke(IPC.chatAsk, { projectId, prompt, opts }),
   },

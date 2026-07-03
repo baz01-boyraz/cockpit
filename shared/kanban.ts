@@ -82,6 +82,49 @@ export function renormalize(column: readonly KanbanCard[]): KanbanCard[] {
   return column.map((c, i) => ({ ...c, position: (i + 1) * POSITION_GAP }))
 }
 
+const byPosition = (a: KanbanCard, b: KanbanCard): number =>
+  a.position - b.position || (a.id < b.id ? -1 : 1)
+
+/** Position for appending a card to the end of a column. */
+export function appendPosition(cards: readonly KanbanCard[], status: CardStatus): number {
+  const tail = cards
+    .filter((c) => c.status === status)
+    .reduce((max, c) => Math.max(max, c.position), 0)
+  return tail + POSITION_GAP
+}
+
+/**
+ * Move a card to `index` of the `to` column, immutably. Same-column reorders
+ * are always allowed (position is only visual); status *transitions* go
+ * through `canMove`. When midpoint precision runs out, the destination column
+ * is renormalized in the same result. `at` stamps the card's updatedAt.
+ */
+export function moveCardInList(
+  cards: readonly KanbanCard[],
+  cardId: string,
+  to: CardStatus,
+  index: number,
+  actor: CardActor,
+  at: string,
+): KanbanCard[] {
+  const card = cards.find((c) => c.id === cardId)
+  if (!card) throw new Error(`Card ${cardId} not found in this project.`)
+  if (card.status !== to && !canMove(card.status, to, actor)) {
+    throw new Error('A running card can only be moved by the swarm itself — park or kill it instead.')
+  }
+  let column = cards.filter((c) => c.status === to && c.id !== cardId).sort(byPosition)
+  let rest = cards.filter((c) => c.id !== cardId)
+  const slot = Math.min(index, column.length)
+  let pos = positionBetween(column[slot - 1]?.position ?? null, column[slot]?.position ?? null)
+  if (pos === null) {
+    column = renormalize(column)
+    const spaced = new Map(column.map((c) => [c.id, c]))
+    rest = rest.map((c) => spaced.get(c.id) ?? c)
+    pos = positionBetween(column[slot - 1]?.position ?? null, column[slot]?.position ?? null)
+  }
+  return [...rest, { ...card, status: to, position: pos as number, updatedAt: at }]
+}
+
 const SLUG_MAX = 40
 
 /**

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  appendPosition,
   assembleBoard,
   canMove,
   cardBranch,
   COLUMN_ORDER,
+  moveCardInList,
   positionBetween,
   POSITION_GAP,
   renormalize,
@@ -138,6 +140,69 @@ describe('renormalize', () => {
     expect(out.map((c) => c.position)).toEqual([POSITION_GAP, 2 * POSITION_GAP, 3 * POSITION_GAP])
     expect(out.map((c) => c.id)).toEqual(['a', 'b', 'c'])
     expect(crowded[0].position).toBe(1)
+  })
+})
+
+describe('appendPosition', () => {
+  it('starts an empty column at one gap and appends after the tail', () => {
+    expect(appendPosition([], 'todo')).toBe(POSITION_GAP)
+    const cards = [card({ id: 'a', position: 3 * POSITION_GAP })]
+    expect(appendPosition(cards, 'todo')).toBe(4 * POSITION_GAP)
+    expect(appendPosition(cards, 'done')).toBe(POSITION_GAP)
+  })
+})
+
+describe('moveCardInList', () => {
+  const AT = '2026-07-03T01:00:00.000Z'
+  const board = [
+    card({ id: 'a', status: 'todo', position: POSITION_GAP }),
+    card({ id: 'b', status: 'todo', position: 2 * POSITION_GAP }),
+    card({ id: 'r', status: 'in_review', position: POSITION_GAP }),
+    card({ id: 'run', status: 'in_progress', position: POSITION_GAP }),
+  ]
+
+  it('moves a card across columns at the requested index', () => {
+    const next = moveCardInList(board, 'a', 'in_review', 0, 'user', AT)
+    const moved = next.find((c) => c.id === 'a')
+    expect(moved?.status).toBe('in_review')
+    expect(moved?.position).toBeLessThan(POSITION_GAP)
+    expect(moved?.updatedAt).toBe(AT)
+    expect(board.find((c) => c.id === 'a')?.status).toBe('todo')
+  })
+
+  it('allows a same-column reorder without a canMove transition', () => {
+    const next = moveCardInList(board, 'b', 'todo', 0, 'user', AT)
+    const column = assembleBoard(next).find((c) => c.status === 'todo')
+    expect(column?.cards.map((c) => c.id)).toEqual(['b', 'a'])
+  })
+
+  it('refuses a user drag out of in_progress but obeys the service', () => {
+    expect(() => moveCardInList(board, 'run', 'in_review', 0, 'user', AT)).toThrow(/swarm itself/)
+    const next = moveCardInList(board, 'run', 'in_review', 0, 'service', AT)
+    expect(next.find((c) => c.id === 'run')?.status).toBe('in_review')
+  })
+
+  it('throws for an unknown card', () => {
+    expect(() => moveCardInList(board, 'ghost', 'todo', 0, 'user', AT)).toThrow(/not found/)
+  })
+
+  it('renormalizes a collapsed destination column and still lands the card', () => {
+    const crowded = [
+      card({ id: 'x', status: 'in_review', position: 1 }),
+      card({ id: 'y', status: 'in_review', position: 1 + 1e-9 }),
+      card({ id: 'mover', status: 'todo', position: POSITION_GAP }),
+    ]
+    const next = moveCardInList(crowded, 'mover', 'in_review', 1, 'user', AT)
+    const column = assembleBoard(next).find((c) => c.status === 'in_review')
+    expect(column?.cards.map((c) => c.id)).toEqual(['x', 'mover', 'y'])
+    const positions = column!.cards.map((c) => c.position)
+    expect(new Set(positions).size).toBe(3)
+  })
+
+  it('clamps an out-of-range index to the end of the column', () => {
+    const next = moveCardInList(board, 'a', 'in_review', 99, 'user', AT)
+    const column = assembleBoard(next).find((c) => c.status === 'in_review')
+    expect(column?.cards.map((c) => c.id)).toEqual(['r', 'a'])
   })
 })
 

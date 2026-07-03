@@ -51,9 +51,9 @@ CREATE TABLE IF NOT EXISTS terminal_layouts (
   updated_at  TEXT NOT NULL
 );
 
--- RESERVED for Phase 6 (Swarm agent lifecycle). Nothing writes this table yet
--- (the old dashboard agent-count read it; that now counts live agent panes).
--- Kept, not dropped: Swarm's spawn/track/resume work will claim it.
+-- Was reserved for Phase 6; V5 drops it (plan D3: the kanban card row itself
+-- carries the terminal-session link, so a second instance registry would
+-- duplicate the same fact). Still created here so V1..V5 replay identically.
 CREATE TABLE IF NOT EXISTS agent_sessions (
   id                  TEXT PRIMARY KEY,
   project_id          TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -230,4 +230,32 @@ export const SCHEMA_V4 = /* sql */ `
 ALTER TABLE terminal_sessions ADD COLUMN reconciled_at TEXT;
 ALTER TABLE terminal_sessions ADD COLUMN command TEXT;
 CREATE INDEX IF NOT EXISTS idx_usage_events_project_created ON usage_events(project_id, created_at);
+`
+
+/**
+ * V5 — Phase 6 (Swarm + Kanban), plan decisions D2/D3.
+ *
+ * The Kanban card is the unit of agent work: one implicit board per project,
+ * and the card row itself links to its terminal session, worktree, and branch.
+ * That makes the never-written agent_sessions table a duplicate registry of
+ * the same fact, so it goes away here.
+ */
+export const SCHEMA_V5 = /* sql */ `
+DROP TABLE IF EXISTS agent_sessions;
+CREATE TABLE IF NOT EXISTS kanban_cards (
+  id                  TEXT PRIMARY KEY,
+  project_id          TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  title               TEXT NOT NULL,
+  body                TEXT NOT NULL DEFAULT '',
+  status              TEXT NOT NULL,
+  position            REAL NOT NULL,
+  role                TEXT,
+  persona             TEXT,
+  terminal_session_id TEXT REFERENCES terminal_sessions(id) ON DELETE SET NULL,
+  worktree_path       TEXT,
+  branch              TEXT,
+  created_at          TEXT NOT NULL,
+  updated_at          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_kanban_cards_project ON kanban_cards(project_id);
 `

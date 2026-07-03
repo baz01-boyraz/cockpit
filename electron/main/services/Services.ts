@@ -18,6 +18,7 @@ import { ApprovalService } from './ApprovalService'
 import { AppUpdateService } from './AppUpdateService'
 import { ChatService } from './ChatService'
 import { MemoryHubService } from './MemoryHubService'
+import { SwarmService } from './SwarmService'
 import { ReviewService } from './ReviewService'
 import { ClaudeSessionsService } from './ClaudeSessionsService'
 import { GitService } from './GitService'
@@ -53,6 +54,7 @@ export class Services {
   readonly chat: ChatService
   readonly review: ReviewService
   readonly memory: MemoryHubService
+  readonly swarm: SwarmService
   readonly appUpdate: AppUpdateService
   private closing = false
   /** Per-pane full-screen-TUI mode, so repaint frames never reach the matchers. */
@@ -75,6 +77,7 @@ export class Services {
     this.chat = new ChatService(this.projects)
     this.review = new ReviewService(this.projects, this.audit)
     this.memory = new MemoryHubService(this.projects)
+    this.swarm = new SwarmService(this.db)
     this.appUpdate = new AppUpdateService(opts.events)
 
     this.terminals = new TerminalManager(

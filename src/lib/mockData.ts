@@ -18,6 +18,7 @@ import type {
 } from '@shared/domain'
 import { insightFromMatch } from '@shared/insight-aggregation'
 import type { MemoryDoc } from '@shared/memory-hub'
+import type { KanbanCard } from '@shared/kanban'
 
 export const now = () => new Date().toISOString()
 export const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString()
@@ -358,3 +359,73 @@ export const MOCK_SESSION: MockCommand[] = [
 // duration (C→D gap) and the terminal feels live: prompt + command appear, then
 // the output and exit land after `runMs`. A `null` exit leaves the last command
 // running, so the Blocks view shows a live "running" card.
+
+// Kanban board seed (Phase 6). Cards for the demo project only — the cockpit
+// project starts with an empty board so the empty state is explorable too.
+export const kanbanSeed = new Map<string, KanbanCard[]>([
+  [
+    'prj_serbest',
+    [
+      {
+        id: 'card_hero01',
+        projectId: 'prj_serbest',
+        title: 'Rewrite hero section copy',
+        body: 'Tone: confident, calm. Reference the brand voice note in the memory hub.',
+        status: 'todo',
+        position: 1024,
+        role: null,
+        persona: null,
+        terminalSessionId: null,
+        worktreePath: null,
+        branch: null,
+        createdAt: ago(190),
+        updatedAt: ago(190),
+      },
+      {
+        id: 'card_form02',
+        projectId: 'prj_serbest',
+        title: 'Contact form: server-side validation',
+        body: 'Zod schema on the API route; mirror errors under each field.',
+        status: 'todo',
+        position: 2048,
+        role: 'builder',
+        persona: null,
+        terminalSessionId: null,
+        worktreePath: null,
+        branch: null,
+        createdAt: ago(120),
+        updatedAt: ago(60),
+      },
+      {
+        id: 'card_seo03',
+        projectId: 'prj_serbest',
+        title: 'Add structured data for attorney profiles',
+        body: 'schema.org/Attorney JSON-LD on each profile page.',
+        status: 'in_review',
+        position: 1024,
+        role: 'builder',
+        persona: null,
+        terminalSessionId: null,
+        worktreePath: null,
+        branch: 'swarm/attorney-jsonld-eo03',
+        createdAt: ago(300),
+        updatedAt: ago(15),
+      },
+      {
+        id: 'card_a11y04',
+        projectId: 'prj_serbest',
+        title: 'Audit color contrast on dark sections',
+        body: '',
+        status: 'done',
+        position: 1024,
+        role: 'reviewer',
+        persona: null,
+        terminalSessionId: null,
+        worktreePath: null,
+        branch: null,
+        createdAt: ago(1500),
+        updatedAt: ago(720),
+      },
+    ],
+  ],
+])

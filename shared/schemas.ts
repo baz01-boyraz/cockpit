@@ -192,6 +192,39 @@ export const memoryRenameSchema = z.object({
   to: z.string().min(1).max(120),
 })
 
+export const swarmProjectSchema = z.object({
+  projectId: z.string().min(1),
+})
+
+export const swarmCreateCardSchema = z.object({
+  projectId: z.string().min(1),
+  title: z.string().min(1).max(200),
+  body: z.string().max(20_000).optional(),
+})
+
+export const swarmUpdateCardSchema = z.object({
+  projectId: z.string().min(1),
+  cardId: z.string().min(1),
+  title: z.string().min(1).max(200).optional(),
+  body: z.string().max(20_000).optional(),
+  role: z.string().min(1).max(60).nullable().optional(),
+  persona: z.string().min(1).max(60).nullable().optional(),
+})
+
+// The renderer is always the "user" actor: schema-level status choices exclude
+// in_progress, so a drag can never even *ask* for a service-owned transition.
+export const swarmMoveCardSchema = z.object({
+  projectId: z.string().min(1),
+  cardId: z.string().min(1),
+  to: z.enum(['todo', 'in_review', 'done', 'parked']),
+  index: z.number().int().min(0).max(10_000),
+})
+
+export const swarmRemoveCardSchema = z.object({
+  projectId: z.string().min(1),
+  cardId: z.string().min(1),
+})
+
 export const gitDiffInputSchema = z.object({
   projectId: z.string().min(1),
   path: z.string().min(1),

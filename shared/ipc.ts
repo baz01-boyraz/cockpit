@@ -12,6 +12,7 @@
 import type { ClaudeRunOptions } from './claude-run'
 import type { ReviewResult } from './review'
 import type { MemoryHubSnapshot, MemoryNote } from './memory-hub'
+import type { BoardColumn, CardStatus } from './kanban'
 import type {
   AgentType,
   AgentUsageReport,
@@ -95,6 +96,12 @@ export const IPC = {
   memoryWrite: 'memory:write',
   memoryRename: 'memory:rename',
   memoryTrash: 'memory:trash',
+
+  swarmBoard: 'swarm:board',
+  swarmCreateCard: 'swarm:createCard',
+  swarmUpdateCard: 'swarm:updateCard',
+  swarmMoveCard: 'swarm:moveCard',
+  swarmRemoveCard: 'swarm:removeCard',
 
   auditList: 'audit:list',
 
@@ -269,6 +276,34 @@ export interface CockpitApi {
     rename(projectId: string, from: string, to: string): Promise<MemoryHubSnapshot>
     trash(projectId: string, name: string): Promise<MemoryHubSnapshot>
   }
+  swarm: {
+    /**
+     * The project's Kanban board (Phase 6): fixed columns, cards ordered by
+     * position. Every mutation returns the fresh board to save a round trip.
+     */
+    board(projectId: string): Promise<BoardColumn[]>
+    createCard(input: { projectId: string; title: string; body?: string }): Promise<BoardColumn[]>
+    updateCard(input: {
+      projectId: string
+      cardId: string
+      title?: string
+      body?: string
+      role?: string | null
+      persona?: string | null
+    }): Promise<BoardColumn[]>
+    /**
+     * Human drag/drop. `index` is the insertion index in the destination
+     * column. Transitions entering or leaving `in_progress` are refused in
+     * main — those mirror real spawns/exits and belong to the SwarmService.
+     */
+    moveCard(input: {
+      projectId: string
+      cardId: string
+      to: CardStatus
+      index: number
+    }): Promise<BoardColumn[]>
+    removeCard(input: { projectId: string; cardId: string }): Promise<BoardColumn[]>
+  }
   chat: {
     /**
      * Ask Claude a question via the local `claude` CLI; returns its reply.
@@ -367,6 +402,11 @@ export interface IpcResultMap {
   memoryWrite: R<CockpitApi['memory']['write']>
   memoryRename: R<CockpitApi['memory']['rename']>
   memoryTrash: R<CockpitApi['memory']['trash']>
+  swarmBoard: R<CockpitApi['swarm']['board']>
+  swarmCreateCard: R<CockpitApi['swarm']['createCard']>
+  swarmUpdateCard: R<CockpitApi['swarm']['updateCard']>
+  swarmMoveCard: R<CockpitApi['swarm']['moveCard']>
+  swarmRemoveCard: R<CockpitApi['swarm']['removeCard']>
   auditList: R<CockpitApi['audit']['list']>
 
   systemInfo: R<CockpitApi['system']['info']>

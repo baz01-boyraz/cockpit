@@ -27,6 +27,11 @@ import {
   reviewRunTextSchema,
   resumeClaudeSchema,
   routeQuerySchema,
+  swarmCreateCardSchema,
+  swarmMoveCardSchema,
+  swarmProjectSchema,
+  swarmRemoveCardSchema,
+  swarmUpdateCardSchema,
   terminalAttachmentInputSchema,
   terminalIdSchema,
   terminalInputSchema,
@@ -228,6 +233,13 @@ export function registerIpc(services: Services): void {
     const { projectId, name } = memoryNameSchema.parse(p)
     return services.memory.trash(projectId, name)
   })
+
+  // --- swarm (Phase 6 Kanban board; agent execution arrives in 6.2) ---
+  handle('swarmBoard', (p) => services.swarm.board(swarmProjectSchema.parse(p).projectId))
+  handle('swarmCreateCard', (p) => services.swarm.createCard(swarmCreateCardSchema.parse(p)))
+  handle('swarmUpdateCard', (p) => services.swarm.updateCard(swarmUpdateCardSchema.parse(p)))
+  handle('swarmMoveCard', (p) => services.swarm.moveCard(swarmMoveCardSchema.parse(p)))
+  handle('swarmRemoveCard', (p) => services.swarm.removeCard(swarmRemoveCardSchema.parse(p)))
 
   // --- chat (real answers via the local Claude Code CLI) ---
   handle('chatAsk', (p) => {
