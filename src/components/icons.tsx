@@ -245,6 +245,17 @@ export const IconBeaker = (p: IconProps) => (
   </svg>
 )
 
+/* Three linked nodes: the per-project knowledge hub (memory graph). Distinct
+ * from IconGit/IconBranch — a closed triangle, not a branch fork. */
+export const IconMemory = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="5" r="2.3" />
+    <circle cx="5" cy="18" r="2.3" />
+    <circle cx="19" cy="18" r="2.3" />
+    <path d="M10.9 7 6 16M13.1 7l4.9 9M7.3 18h9.4" />
+  </svg>
+)
+
 /* Shield + magnifier: the pre-ship AI review action. Distinct from IconShield
  * (shield-check), which the Git panel already uses for force-push gating. */
 export const IconShieldSearch = (p: IconProps) => (

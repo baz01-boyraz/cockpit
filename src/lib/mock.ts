@@ -479,7 +479,9 @@ export function createMockApi(): CockpitApi {
         return assembleHubSnapshot(next)
       },
       trash: async (projectId, name) => {
+        // Mirror the real service: invalid slugs are rejected, not ignored.
         const slug = normalizeNoteName(name)
+        if (!slug) throw new Error(`Invalid note name: ${JSON.stringify(name)}`)
         const next = memoryDocsFor(projectId).filter((d) => d.name !== slug)
         memoryHub.set(projectId, next)
         return assembleHubSnapshot(next)

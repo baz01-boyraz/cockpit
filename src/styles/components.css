@@ -5054,3 +5054,631 @@
 @media (prefers-reduced-motion: reduce) {
   .review__pulse { animation: none; }
 }
+
+/* --- memory --- */
+/* Per-project markdown knowledge hub (VISION 5.4): three zones — note list ·
+   reader/editor · connections. Files are the truth; the UI renders content as
+   text with wikilinks decorated by parsing (never innerHTML). */
+
+.memory__cols {
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr) 264px;
+  gap: var(--sp-3);
+  align-items: stretch;
+  min-height: 560px;
+}
+
+/* calm busy state — one breathing dot, same language as review */
+.memory__busy {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.memory__busy--bare {
+  background: transparent;
+  border: 0;
+  justify-content: center;
+}
+.memory__pulse {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+/* write-error notice */
+.memnotice {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--danger-wash);
+  border: 1px solid rgba(237, 100, 80, 0.3);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  animation: fade-rise var(--dur) var(--ease-out) both;
+}
+.memnotice svg { flex-shrink: 0; }
+.memnotice__text { flex: 1; min-width: 0; }
+.memnotice__dismiss {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  transition: background-color var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+}
+.memnotice__dismiss:hover { background: rgba(237, 100, 80, 0.18); }
+.memnotice__dismiss:active { transform: scale(0.92); }
+
+/* ----- left zone: note list ----- */
+.memory__list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+.memlist__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--border);
+}
+.memlist__search {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.memlist__searchIcon {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-faint);
+  pointer-events: none;
+}
+.memlist__searchInput {
+  width: 100%;
+  padding: 6px 9px 6px 28px;
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  outline: none;
+}
+.memlist__searchInput:focus { border-color: var(--border-accent); }
+.memlist__new {
+  flex-shrink: 0;
+  padding: 5px 7px;
+}
+.memlist__create {
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-inset);
+  animation: fade-rise var(--dur) var(--ease-out) both;
+}
+.memlist__body {
+  flex: 1;
+  min-height: 0;
+  padding: var(--sp-2);
+}
+.memlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.memnote {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  padding: 7px var(--sp-2);
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  transition:
+    background-color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-spring);
+}
+.memnote:hover { background: var(--surface-1); transform: translateX(2px); }
+.memnote:active { transform: translateX(2px) scale(0.99); }
+.memnote--active {
+  background: var(--surface-2);
+  border-color: var(--border-accent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.memnote__top {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.memnote__title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.memnote__time {
+  flex-shrink: 0;
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.memnote__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.memnote__name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.memnote__count {
+  flex-shrink: 0;
+  font-size: var(--fs-micro);
+  line-height: 15px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.memnote__count--zero { opacity: 0.45; }
+
+/* ----- shared note-name capture (list create + empty state) ----- */
+.memname {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.memname__row {
+  display: flex;
+  gap: 6px;
+}
+.memname__input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 9px;
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  outline: none;
+}
+.memname__input:focus { border-color: var(--border-accent); }
+.memname__hint {
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.memname__hint--invalid { color: var(--warning); }
+
+/* ----- center zone: reader / editor ----- */
+.memory__reader {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+.memory__reader--idle {
+  align-items: center;
+  justify-content: center;
+}
+.memreader__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+.memreader__headText {
+  flex: 1;
+  min-width: 0;
+}
+.memreader__title {
+  margin: 0 0 3px;
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  letter-spacing: var(--tracking-snug);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.memreader__sub {
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.memreader__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+/* the one lime moment: a save confirmed, then quiet again */
+.memreader__saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--signal);
+  font-size: var(--fs-xs);
+  font-weight: 550;
+  animation: fade-rise var(--dur) var(--ease-out) both;
+}
+.memreader__trashConfirm {
+  border-color: rgba(237, 100, 80, 0.45);
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+.memreader__trashNote {
+  padding: 5px var(--sp-4);
+  font-size: var(--fs-micro);
+  color: var(--danger);
+  background: var(--danger-wash);
+  border-bottom: 1px solid var(--border);
+  animation: fade-rise var(--dur) var(--ease-out) both;
+}
+.memreader__rename {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.memreader__renameInput {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 9px;
+  border-radius: var(--r-sm);
+  background: var(--surface-inset);
+  border: 1px solid var(--border-accent);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  outline: none;
+}
+.memreader__renameHint {
+  margin-top: 5px;
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+}
+.memreader__body {
+  flex: 1;
+  min-height: 0;
+  padding: var(--sp-4) var(--sp-5);
+}
+.wikitext {
+  max-width: 640px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--fs-body);
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+/* wikilinks: ember owns interaction — resolved links are the reader's accent */
+.wikilink {
+  display: inline;
+  margin: 0 -1px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font: inherit;
+  color: var(--accent-hi);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color var(--dur) var(--ease-out), background-color var(--dur) var(--ease-out);
+}
+.wikilink:hover {
+  color: var(--ember-100);
+  background: var(--accent-wash);
+  text-decoration-color: var(--accent);
+}
+.wikilink:active { color: var(--ember-200); }
+/* unresolved: quiet dashed invitation, a small + marks "will create" */
+.wikilink--unresolved {
+  color: var(--text-muted);
+  text-decoration-style: dashed;
+  text-decoration-color: var(--text-faint);
+}
+.wikilink--unresolved::after {
+  content: '+';
+  margin-left: 1px;
+  font-size: 0.78em;
+  vertical-align: super;
+  color: var(--text-faint);
+}
+.wikilink--unresolved:hover {
+  color: var(--text);
+  background: var(--surface-2);
+  text-decoration-color: var(--text-muted);
+}
+/* unresolved-link offer bar (create is always explicit, never implicit) */
+.memoffer {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: var(--sp-3) var(--sp-4) 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  border: 1px dashed var(--border-strong);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  animation: fade-rise var(--dur) var(--ease-out) both;
+}
+.memoffer__text {
+  flex: 1;
+  min-width: 0;
+}
+.memreader__editWrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+}
+.memedit {
+  flex: 1;
+  width: 100%;
+  min-height: 320px;
+  resize: none;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+  outline: none;
+}
+.memedit:focus { border-color: var(--border-accent); }
+.memedit__hint {
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+}
+/* idle center: quiet, composed — no glow (the glow budget stays on empty hub) */
+.memidle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-6);
+  text-align: center;
+}
+.memidle__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-md);
+  display: grid;
+  place-items: center;
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  box-shadow: var(--bevel);
+}
+.memidle__title {
+  font-size: var(--fs-h2);
+  font-weight: 600;
+}
+.memidle__sub {
+  margin: 0;
+  max-width: 300px;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+
+/* ----- right zone: connections ----- */
+.memory__conns {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--sp-3);
+  overflow-y: auto;
+}
+.memconn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0 var(--sp-3);
+}
+.memconn + .memconn { border-top: 1px solid var(--border); padding-top: var(--sp-3); }
+.memconn__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-1);
+}
+.memconn__badge {
+  font-size: var(--fs-micro);
+  line-height: 15px;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.memconn__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.memconn__row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  text-align: left;
+  padding: 6px var(--sp-2);
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  transition:
+    background-color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-spring);
+}
+.memconn__row:hover { background: var(--surface-1); transform: translateX(2px); }
+.memconn__row:active { transform: translateX(2px) scale(0.99); }
+.memconn__rowTitle {
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.memconn__rowName {
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.memconn__empty {
+  padding: 2px var(--sp-1) 0;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  line-height: 1.55;
+  word-break: break-word;
+}
+.memconn__missing {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 5px var(--sp-2);
+  border-radius: var(--r-sm);
+  border: 1px dashed var(--border);
+  background: var(--surface-inset);
+}
+.memconn__missingBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.memconn__missingName {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.memconn__missingBody .memconn__missingName { flex: none; }
+.memconn__wantedBy {
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+}
+.memconn__create {
+  flex-shrink: 0;
+  padding: 2px 7px;
+}
+
+/* ----- empty hub: composed invitation (termEmpty pattern) ----- */
+.memEmpty {
+  padding: var(--sp-7) var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  text-align: center;
+}
+.memEmpty__icon {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--r-lg);
+  display: grid;
+  place-items: center;
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  box-shadow: var(--bevel);
+}
+/* pooled ambient light — the view's one resting glow */
+.memEmpty__icon::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -26px;
+  width: 300%;
+  height: 44px;
+  transform: translateX(-50%);
+  border-radius: var(--r-pill);
+  background: radial-gradient(50% 100% at 50% 0%, var(--accent-glow), transparent 72%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.memEmpty__title {
+  font-size: var(--fs-h1);
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+}
+.memEmpty__sub {
+  margin: 0;
+  max-width: 470px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.65;
+}
+.memEmpty__sub .mono {
+  color: var(--text);
+  font-size: 0.92em;
+}
+.memEmpty__create {
+  width: min(380px, 100%);
+  margin-top: var(--sp-2);
+  text-align: left;
+}
+.memEmpty__create .memname__hint { text-align: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .memory__pulse { animation: none; }
+}

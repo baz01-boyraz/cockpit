@@ -74,12 +74,13 @@ destructive happens, recovery is a file move.
 1. [x] 5.1 Storage map — this table (done by merging this doc)
 2. [x] 5.2 `shared/wikilink.ts` kernel + tests (TDD)
 3. [x] 5.3 MemoryHubService + tests + IPC all legs + seeded mock
-4. [ ] 5.4 UI: left-rail "Memory" view — note list, editor (textarea), backlink
+4. [x] 5.4 UI: left-rail "Memory" view — note list, editor (textarea), backlink
        pane, unresolved "create this note" affordance; 2 screenshot rounds
 5. [ ] 5.5 Graph view — force-directed canvas, TIME-BOXED (ship without it if
        it overruns; backlinks already carry 80% of the value)
-6. [ ] 5.6 Agent read access (`search`/`read`/`backlinks` seam) — read-only,
-       after 5.4 lands; writes remain human-initiated
+6. [x] 5.6 DECISION: deferred to Phase 6 — agent access's first real consumer
+       is the Swarm orchestrator; building a consumer-less API now is speculative.
+       Recorded in the hub itself ([[memory-hub]] note).
 7. [ ] Gate 5: notes + backlinks usable daily on THIS repo (dogfood: port the
        VISION progress log habit into hub notes), kernel fully tested, storage
        map documented, graph shipped or consciously parked
@@ -89,3 +90,7 @@ destructive happens, recovery is a file move.
 VISION DoD + hub-specific: traversal attempts (`../x`, `.hidden`, absolute
 paths) rejected by tests; rename refreshes links across notes under test;
 trash never hard-deletes; mock parity screenshot-able.
+
+## Polish backlog (from the 5.4 build — not blocking)
+- `write`/`rename` could return `{ note, snapshot }` to remove a follow-up
+  round-trip in the panel (rare, user-paced calls — fine as is).

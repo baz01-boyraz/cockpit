@@ -30,6 +30,7 @@ export type View =
   | 'git'
   | 'railway'
   | 'logs'
+  | 'memory'
   | 'usage'
   | 'settings'
 

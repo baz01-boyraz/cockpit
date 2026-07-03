@@ -10,6 +10,7 @@ import { TerminalsPanel } from '../panels/TerminalsPanel'
 import { GitPanel } from '../panels/GitPanel'
 import { RailwayPanel } from '../panels/RailwayPanel'
 import { LogsPanel } from '../panels/LogsPanel'
+import { MemoryPanel } from '../panels/MemoryPanel'
 import { UsagePanel } from '../panels/UsagePanel'
 import { SettingsPanel } from '../panels/SettingsPanel'
 
@@ -44,6 +45,7 @@ export function AppShell() {
           {view === 'git' && <GitPanel />}
           {view === 'railway' && <RailwayPanel />}
           {view === 'logs' && <LogsPanel />}
+          {view === 'memory' && <MemoryPanel />}
           {view === 'usage' && <UsagePanel />}
           {view === 'settings' && <SettingsPanel />}
         </main>

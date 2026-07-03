@@ -5,6 +5,7 @@ import {
   IconDashboard,
   IconGit,
   IconLogs,
+  IconMemory,
   IconRailway,
   IconSettings,
   IconTerminal,
@@ -26,6 +27,7 @@ const NAV: NavItem[] = [
   { view: 'git', label: 'Git', Icon: IconGit },
   { view: 'railway', label: 'Railway', Icon: IconRailway },
   { view: 'logs', label: 'Logs & Errors', Icon: IconLogs },
+  { view: 'memory', label: 'Memory', Icon: IconMemory },
   { view: 'usage', label: 'Usage', Icon: IconUsage },
   { view: 'settings', label: 'Settings', Icon: IconSettings },
 ]

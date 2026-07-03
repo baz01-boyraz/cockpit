@@ -459,7 +459,7 @@ only indexes (SQLite cache of the link graph is fine; files must remain the trut
 Paths constrained to the hub root (no traversal). Typed IPC via the 2.x foundation.
 **Effort:** M
 
-### 5.4 [ ] Notes UI + backlinks panel
+### 5.4 [x] Notes UI + backlinks panel
 **Do:** Note list + editor (plain textarea/CodeMirror-light — **no Monaco**, per
 project limits), backlinks pane per note, unresolved-link affordance ("create this
 note"). Mock parity with seeded notes. 2 screenshot rounds.
@@ -471,7 +471,7 @@ the value is backlinks, which already shipped in 5.4. If the box overruns, ship
 without it and park it.
 **Effort:** M (boxed)
 
-### 5.6 [ ] Agent access to the hub
+### 5.6 [x] Agent access to the hub — DECISION: deferred to Phase 6 (first real consumer = Swarm); recorded in plan doc + hub note
 **Do:** Read/search tools for agents (`search_memories`, `find_backlinks`-style),
 gated read-only first; writes route through approval. This is the seam Feature 6's
 agents will use for compounding context.
@@ -570,6 +570,7 @@ Ordered by leverage, all optional:
 | 2026-07-01 | 1.3 | Redaction: Stripe/URL-creds/AIza/SG./npm_/ghu-ghs-ghr/Bearer patterns + bare *_KEY names + high-entropy env fallback + `redactText()`. TDD, 9 new tests |
 | 2026-07-01 | 1.4 | LogIntelligence ingest + listLogs now scrub secrets (new rows and legacy rows) |
 | 2026-07-01 | 1.5 | Rebuild & relaunch: package-identity check in main (`isCockpitSource`), native confirm dialog, audit entry, button hidden for foreign projects (`refreshEligible` IPC). 5 new tests. Verified both states via screenshots |
+| 2026-07-02 | 5.4 + Gate 5 dogfood | Memory view shipped (3-zone: filterable list / wikilink-decorated reader+editor / connections pane, React-segment rendering — no innerHTML, 2 screenshot rounds); mock trash parity fixed; REAL hub seeded: 5 interlinked knowledge notes in .cockpit-memory/ committed with the repo (deliberate unresolved [[swarm-design]] awaits Phase 6). 5.6 deferred to Phase 6 by decision |
 | 2026-07-02 | 5.1–5.3 | Memory hub core: plan doc + storage-map table; shared/wikilink kernel (parse w/ code-region awareness, slug-by-construction names, forward/backlink/unresolved index, rename-refresh) TDD 10 tests; shared/memory-hub pure assembly (single rule, both bridges); MemoryHubService (atomic writes, soft-delete to .trash, foreign files ignored) 7 tests; 5 IPC channels all legs; seeded interlinked mock. mock.ts split (942→619 + mockData.ts) to respect the 800 cap |
 | 2026-07-02 | 4.5–4.6 + Gate 4 | Review UI shipped (GitPanel card + block bridge + shared ReviewFindings, Molten Obsidian, 2 screenshot rounds by UI agent); Gate 4 dogfood: real CLI reviewed this repo's own diff 3× — found a real false-"ship it" bug in the fresh UI (fixed); parser hardened; timeout 360s. Phase 4 COMPLETE |
 | 2026-07-02 | 4.1–4.4 | Security boundary shipped TDD-first: shared/diff-sanitize (blocklist, redaction, caps+markers, injection suspects, lockfile/binary summaries, parseUnifiedDiff) + shared/review (prompt builder w/ per-run fence, defensive JSON parser); ReviewService (staged+worktree+untracked collection, traversal guard, injectable runner, audit=stats-only) + runText for the block bridge; IPC reviewRun/reviewRunText wired all legs. +31 tests |
