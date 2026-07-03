@@ -103,6 +103,7 @@ export const IPC = {
   swarmMoveCard: 'swarm:moveCard',
   swarmRemoveCard: 'swarm:removeCard',
   swarmStartCard: 'swarm:startCard',
+  swarmParkCard: 'swarm:parkCard',
 
   auditList: 'audit:list',
 
@@ -255,7 +256,7 @@ export interface CockpitApi {
      * through the sanitizer boundary, reviewed read-only by the local
      * `claude` CLI. Never mutates anything.
      */
-    run(projectId: string, opts?: { model?: string }): Promise<ReviewResult>
+    run(projectId: string, opts?: { model?: string; dir?: string }): Promise<ReviewResult>
     /**
      * Review one piece of captured text (a command block's command + output)
      * through the SAME sanitizer boundary as a diff review.
@@ -310,6 +311,8 @@ export interface CockpitApi {
      * 6.2 runs one card at a time; parallel worktrees arrive with 6.3.
      */
     startCard(input: { projectId: string; cardId: string }): Promise<BoardColumn[]>
+    /** Park a running card (worker is stopped; Start later resumes in the same worktree). */
+    parkCard(input: { projectId: string; cardId: string }): Promise<BoardColumn[]>
   }
   chat: {
     /**
@@ -415,6 +418,7 @@ export interface IpcResultMap {
   swarmMoveCard: R<CockpitApi['swarm']['moveCard']>
   swarmRemoveCard: R<CockpitApi['swarm']['removeCard']>
   swarmStartCard: R<CockpitApi['swarm']['startCard']>
+  swarmParkCard: R<CockpitApi['swarm']['parkCard']>
   auditList: R<CockpitApi['audit']['list']>
 
   systemInfo: R<CockpitApi['system']['info']>

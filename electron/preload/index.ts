@@ -82,7 +82,7 @@ const api: CockpitApi = {
     route: (projectId, query) => invoke(IPC.routerRoute, { projectId, query }),
   },
   review: {
-    run: (projectId, opts) => invoke(IPC.reviewRun, { projectId, model: opts?.model }),
+    run: (projectId, opts) => invoke(IPC.reviewRun, { projectId, model: opts?.model, dir: opts?.dir }),
     runText: (projectId, input, opts) =>
       invoke(IPC.reviewRunText, { projectId, ...input, model: opts?.model }),
   },
@@ -100,6 +100,7 @@ const api: CockpitApi = {
     moveCard: (input) => invoke(IPC.swarmMoveCard, input),
     removeCard: (input) => invoke(IPC.swarmRemoveCard, input),
     startCard: (input) => invoke(IPC.swarmStartCard, input),
+    parkCard: (input) => invoke(IPC.swarmParkCard, input),
   },
   chat: {
     ask: (projectId, prompt, opts) => invoke(IPC.chatAsk, { projectId, prompt, opts }),

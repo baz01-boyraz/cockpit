@@ -42,7 +42,12 @@ function makeStore(seed: Partial<Row>[] = []) {
   }))
 
   const { db } = makeRecordingDb({
-    all: (_sql, args) => rows.filter((r) => r.project_id === args[0]).map((r) => ({ ...r })),
+    all: (sql, args) => {
+      if (sql.includes(`status = 'in_progress'`) && !args.length) {
+        return rows.filter((r) => r.status === 'in_progress').map((r) => ({ ...r }))
+      }
+      return rows.filter((r) => r.project_id === args[0]).map((r) => ({ ...r }))
+    },
     get: (sql, args) => {
       if (sql.includes('terminal_session_id = ?')) {
         const r = rows.find((x) => x.terminal_session_id === args[0] && x.status === 'in_progress')
@@ -83,10 +88,18 @@ function makeStore(seed: Partial<Row>[] = []) {
           r.updated_at = String(p.now)
         }
       } else if (sql.includes('SET terminal_session_id')) {
-        const r = rows.find((x) => x.id === args[2])
+        const r = rows.find((x) => x.id === args[4])
         if (r) {
           r.terminal_session_id = String(args[0])
-          r.updated_at = String(args[1])
+          r.worktree_path = args[1] === null ? null : String(args[1])
+          r.branch = args[2] === null ? null : String(args[2])
+          r.updated_at = String(args[3])
+        }
+      } else if (sql.includes(`SET status = 'parked'`)) {
+        const r = rows.find((x) => x.id === args[1])
+        if (r) {
+          r.status = 'parked'
+          r.updated_at = String(args[0])
         }
       } else if (sql.includes('SET status')) {
         const r = rows.find((x) => x.id === args[3])
@@ -109,11 +122,15 @@ const columnCards = (svc: SwarmService, status: string) =>
     .cards.map((c) => c.id)
 
 function makeDeps() {
-  const spawned: { name?: string; command?: string | null }[] = []
+  const spawned: { name?: string; command?: string | null; cwd?: string }[] = []
+  const killed: string[] = []
   const terminals: WorkerSpawner = {
     create(input) {
-      spawned.push({ name: input.name, command: input.command })
+      spawned.push({ name: input.name, command: input.command, cwd: input.cwd })
       return { id: `term_${spawned.length}`, projectId: input.projectId } as TerminalSession
+    },
+    kill(sessionId) {
+      killed.push(sessionId)
     },
   }
   const audits: string[] = []
@@ -125,8 +142,22 @@ function makeDeps() {
   } as unknown as AuditLogService
   const memory = { list: () => ({ notes: [{ name: 'swarm-design' }], unresolved: [] }) }
   const events = new CockpitEvents()
-  return { terminals, spawned, audit, audits, memory: memory as never, events }
+  const projects = { get: () => ({ path: '/proj' }) }
+  const wtCalls: string[] = []
+  const worktrees = {
+    create: vi.fn(async (_p: string, title: string, cardId: string) => {
+      wtCalls.push(`create:${cardId}`)
+      return { path: `/proj/.cockpit-worktrees/${cardId}`, branch: `swarm/${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${cardId.slice(-4)}` }
+    }),
+    removeIfClean: vi.fn(async (_p: string, path: string) => {
+      wtCalls.push(`remove:${path}`)
+    }),
+  }
+  return { terminals, spawned, killed, audit, audits, memory: memory as never, events, projects, worktrees, wtCalls }
 }
+
+const build = (store: ReturnType<typeof makeStore>, deps: ReturnType<typeof makeDeps>) =>
+  new SwarmService(store.db, deps.terminals, deps.memory, deps.audit, deps.events, deps.projects, deps.worktrees)
 
 describe('SwarmService CRUD', () => {
   let store: ReturnType<typeof makeStore>
@@ -136,11 +167,9 @@ describe('SwarmService CRUD', () => {
     store = makeStore([
       { id: 'a', status: 'todo', position: POSITION_GAP },
       { id: 'b', status: 'todo', position: 2 * POSITION_GAP },
-      { id: 'run', status: 'in_progress', position: POSITION_GAP },
       { id: 'r', status: 'in_review', position: POSITION_GAP },
     ])
-    const deps = makeDeps()
-    svc = new SwarmService(store.db, deps.terminals, deps.memory, deps.audit, deps.events)
+    svc = build(store, makeDeps())
   })
 
   it('board() assembles all five columns from rows', () => {
@@ -171,13 +200,6 @@ describe('SwarmService CRUD', () => {
     expect(columnCards(svc, 'todo')).toEqual(['b'])
   })
 
-  it('moveCard refuses to drag a running card out (kernel rule reaches the DB layer)', () => {
-    expect(() => svc.moveCard({ projectId: 'p1', cardId: 'run', to: 'done', index: 0 })).toThrow(
-      /swarm itself/,
-    )
-    expect(store.rows.find((r) => r.id === 'run')!.status).toBe('in_progress')
-  })
-
   it('moveCard throws for a card from another project', () => {
     store.rows.push({ ...store.rows[0], id: 'foreign', project_id: 'p2' })
     expect(() => svc.moveCard({ projectId: 'p1', cardId: 'foreign', to: 'done', index: 0 })).toThrow(
@@ -185,15 +207,13 @@ describe('SwarmService CRUD', () => {
     )
   })
 
-  it('removeCard deletes an idle card but refuses a running one', () => {
-    svc.removeCard({ projectId: 'p1', cardId: 'a' })
+  it('removeCard deletes an idle card', async () => {
+    await svc.removeCard({ projectId: 'p1', cardId: 'a' })
     expect(store.rows.some((r) => r.id === 'a')).toBe(false)
-    expect(() => svc.removeCard({ projectId: 'p1', cardId: 'run' })).toThrow(/kill or park/)
-    expect(store.rows.some((r) => r.id === 'run')).toBe(true)
   })
 })
 
-describe('SwarmService startCard + worker exit (6.2)', () => {
+describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
   let store: ReturnType<typeof makeStore>
   let deps: ReturnType<typeof makeDeps>
   let svc: SwarmService
@@ -201,60 +221,106 @@ describe('SwarmService startCard + worker exit (6.2)', () => {
   beforeEach(() => {
     store = makeStore([
       { id: 'a', status: 'todo', position: POSITION_GAP, title: 'Fix the form' },
+      { id: 'b', status: 'todo', position: 2 * POSITION_GAP },
+      { id: 'c', status: 'todo', position: 3 * POSITION_GAP },
+      { id: 'e', status: 'todo', position: 4 * POSITION_GAP },
       { id: 'p', status: 'parked', position: POSITION_GAP },
       { id: 'd', status: 'done', position: POSITION_GAP },
     ])
     deps = makeDeps()
-    svc = new SwarmService(store.db, deps.terminals, deps.memory, deps.audit, deps.events)
+    svc = build(store, deps)
   })
 
-  it('spawns a claude worker, links the session, and moves the card to Running', () => {
-    svc.startCard({ projectId: 'p1', cardId: 'a' })
+  it('spawns a claude worker in a fresh worktree and moves the card to Running', async () => {
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
     expect(deps.spawned).toHaveLength(1)
     expect(deps.spawned[0].name).toBe('Swarm — Fix the form')
     expect(deps.spawned[0].command).toContain(`claude '`)
-    expect(deps.spawned[0].command).toContain('Fix the form')
     expect(deps.spawned[0].command).toContain('.cockpit-memory/swarm-design.md')
+    expect(deps.spawned[0].cwd).toBe('/proj/.cockpit-worktrees/a')
     const row = store.rows.find((r) => r.id === 'a')!
     expect(row.status).toBe('in_progress')
     expect(row.terminal_session_id).toBe('term_1')
+    expect(row.worktree_path).toBe('/proj/.cockpit-worktrees/a')
+    expect(row.branch).toMatch(/^swarm\/fix-the-form/)
     expect(deps.audits).toContain('swarm.start_card')
   })
 
-  it('starts a parked card too, but never a done one', () => {
-    svc.startCard({ projectId: 'p1', cardId: 'p' })
-    expect(store.rows.find((r) => r.id === 'p')!.status).toBe('in_progress')
-    expect(() => svc.startCard({ projectId: 'p1', cardId: 'd' })).toThrow(/To do or Parked/)
+  it('reuses an existing worktree on resume and never starts a done card', async () => {
+    store.rows.find((r) => r.id === 'p')!.worktree_path = '/proj/.cockpit-worktrees/old'
+    store.rows.find((r) => r.id === 'p')!.branch = 'swarm/old-1234'
+    await svc.startCard({ projectId: 'p1', cardId: 'p' })
+    expect(deps.worktrees.create).not.toHaveBeenCalled()
+    expect(deps.spawned[0].cwd).toBe('/proj/.cockpit-worktrees/old')
+    await expect(svc.startCard({ projectId: 'p1', cardId: 'd' })).rejects.toThrow(/To do or Parked/)
   })
 
-  it('refuses a second concurrent run (6.2 parallelism = 1)', () => {
-    svc.startCard({ projectId: 'p1', cardId: 'a' })
-    expect(() => svc.startCard({ projectId: 'p1', cardId: 'p' })).toThrow(/already running/)
-    expect(deps.spawned).toHaveLength(1)
+  it('allows 3 concurrent cards and refuses the 4th (plan D6)', async () => {
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'b' })
+    await svc.startCard({ projectId: 'p1', cardId: 'c' })
+    await expect(svc.startCard({ projectId: 'p1', cardId: 'e' })).rejects.toThrow(/Concurrency cap/)
+    expect(deps.spawned).toHaveLength(3)
   })
 
-  it('moves the card to In review when its worker exits', () => {
-    svc.startCard({ projectId: 'p1', cardId: 'a' })
+  it('falls back to the project root when worktree creation fails', async () => {
+    deps.worktrees.create.mockRejectedValueOnce(new Error('not a git repo'))
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    expect(deps.spawned[0].cwd).toBeUndefined()
+    expect(store.rows.find((r) => r.id === 'a')!.worktree_path).toBeNull()
+  })
+
+  it('moves the card to In review when its worker exits', async () => {
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
     deps.events.emitTyped('terminal:exit', { sessionId: 'term_1', exitCode: 0, signal: null })
     expect(store.rows.find((r) => r.id === 'a')!.status).toBe('in_review')
     expect(deps.audits).toContain('swarm.card_exited')
+  })
+
+  it('parkCard leaves Running first, then kills the worker — the exit is ignored', async () => {
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    svc.parkCard({ projectId: 'p1', cardId: 'a' })
+    expect(deps.killed).toEqual(['term_1'])
+    expect(store.rows.find((r) => r.id === 'a')!.status).toBe('parked')
+    deps.events.emitTyped('terminal:exit', { sessionId: 'term_1', exitCode: 143, signal: null })
+    expect(store.rows.find((r) => r.id === 'a')!.status).toBe('parked')
+  })
+
+  it('user cannot drag a running card out; removeCard also refuses it', async () => {
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    expect(() => svc.moveCard({ projectId: 'p1', cardId: 'a', to: 'done', index: 0 })).toThrow(
+      /swarm itself/,
+    )
+    await expect(svc.removeCard({ projectId: 'p1', cardId: 'a' })).rejects.toThrow(/kill or park/)
+  })
+
+  it('removeCard cleans the worktree first and aborts when it is dirty', async () => {
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    deps.events.emitTyped('terminal:exit', { sessionId: 'term_1', exitCode: 0, signal: null })
+    deps.worktrees.removeIfClean.mockRejectedValueOnce(new Error('uncommitted changes'))
+    await expect(svc.removeCard({ projectId: 'p1', cardId: 'a' })).rejects.toThrow(/uncommitted/)
+    expect(store.rows.some((r) => r.id === 'a')).toBe(true)
+    await svc.removeCard({ projectId: 'p1', cardId: 'a' })
+    expect(store.rows.some((r) => r.id === 'a')).toBe(false)
+    expect(deps.wtCalls).toContain('remove:/proj/.cockpit-worktrees/a')
   })
 
   it('ignores exits of terminals that are not linked to a running card', () => {
     deps.events.emitTyped('terminal:exit', { sessionId: 'term_ghost', exitCode: 1, signal: null })
     expect(store.rows.find((r) => r.id === 'a')!.status).toBe('todo')
   })
+})
 
-  it('spawns with an empty pointer list when the hub is unreadable', () => {
-    const broken = makeDeps()
-    const svc2 = new SwarmService(
-      store.db,
-      broken.terminals,
-      { list: () => { throw new Error('no hub') } } as never,
-      broken.audit,
-      broken.events,
-    )
-    svc2.startCard({ projectId: 'p1', cardId: 'a' })
-    expect(broken.spawned[0].command).not.toContain('.cockpit-memory')
+describe('SwarmService boot orphan reconcile (6.4)', () => {
+  it('parks cards left in_progress by a dead app instance, with an audit entry', () => {
+    const store = makeStore([
+      { id: 'orphan', status: 'in_progress', position: POSITION_GAP, terminal_session_id: 'term_old' },
+      { id: 'ok', status: 'todo', position: POSITION_GAP },
+    ])
+    const deps = makeDeps()
+    build(store, deps)
+    expect(store.rows.find((r) => r.id === 'orphan')!.status).toBe('parked')
+    expect(store.rows.find((r) => r.id === 'ok')!.status).toBe('todo')
+    expect(deps.audits).toContain('swarm.card_orphaned')
   })
 })

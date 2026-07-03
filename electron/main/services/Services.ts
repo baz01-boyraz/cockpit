@@ -19,6 +19,7 @@ import { AppUpdateService } from './AppUpdateService'
 import { ChatService } from './ChatService'
 import { MemoryHubService } from './MemoryHubService'
 import { SwarmService } from './SwarmService'
+import { SwarmWorktrees } from './SwarmWorktrees'
 import { ReviewService } from './ReviewService'
 import { ClaudeSessionsService } from './ClaudeSessionsService'
 import { GitService } from './GitService'
@@ -96,7 +97,15 @@ export class Services {
     )
     // After terminals: the swarm spawns workers through the TerminalManager
     // and listens for their exits on the same bus.
-    this.swarm = new SwarmService(this.db, this.terminals, this.memory, this.audit, opts.events)
+    this.swarm = new SwarmService(
+      this.db,
+      this.terminals,
+      this.memory,
+      this.audit,
+      opts.events,
+      this.projects,
+      new SwarmWorktrees(),
+    )
     // Forget a pane's TUI-mode state once it exits, so session ids never leak.
     opts.events.onTyped('terminal:exit', ({ sessionId }) => this.tuiState.delete(sessionId))
   }

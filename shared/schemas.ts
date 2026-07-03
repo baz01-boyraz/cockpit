@@ -166,6 +166,8 @@ export const chatAskSchema = z.object({
 export const reviewRunSchema = z.object({
   projectId: z.string().min(1),
   model: z.string().min(1).max(120).optional(),
+  // Absolute path of a swarm worktree; main re-validates it sits inside the project.
+  dir: z.string().min(1).max(1024).optional(),
 })
 
 export const reviewRunTextSchema = z.object({

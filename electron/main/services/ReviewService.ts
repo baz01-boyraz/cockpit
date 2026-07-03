@@ -120,10 +120,20 @@ export class ReviewService {
     private readonly runner: ClaudeRunner = defaultRunner,
   ) {}
 
-  async run(projectId: string, opts: { model?: string } = {}): Promise<ReviewResult> {
+  async run(projectId: string, opts: { model?: string; dir?: string } = {}): Promise<ReviewResult> {
     const started = Date.now()
     const project = this.projects.get(projectId)
-    const inputs = await collectDiffInputs(project.path)
+    // `dir` reviews a swarm worktree instead of the project root. The renderer
+    // is untrusted: only paths inside the project are ever used as a git cwd.
+    let base = project.path
+    if (opts.dir) {
+      const target = resolve(opts.dir)
+      if (!target.startsWith(resolve(project.path) + sep)) {
+        throw new Error('Review dir must be inside the project.')
+      }
+      base = target
+    }
+    const inputs = await collectDiffInputs(base)
     return this.review(projectId, project, inputs, opts, started)
   }
 

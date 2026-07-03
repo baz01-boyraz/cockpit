@@ -29,6 +29,7 @@ import { assembleHubSnapshot, assembleNote, type MemoryDoc } from '@shared/memor
 import {
   appendPosition,
   assembleBoard,
+  cardBranch,
   moveCardInList,
   type KanbanCard,
 } from '@shared/kanban'
@@ -565,11 +566,20 @@ export function createMockApi(): CockpitApi {
         if (card.status !== 'todo' && card.status !== 'parked') {
           throw new Error('Only a To do or Parked card can start.')
         }
-        if (cards.some((c) => c.status === 'in_progress')) {
-          throw new Error('Another card is already running — parallel cards arrive with worktrees (6.3).')
+        if (cards.filter((c) => c.status === 'in_progress').length >= 3) {
+          throw new Error('Concurrency cap reached (3) — park or finish a running card first.')
         }
+        // Same worktree rule as main: create on first start, reuse on resume.
+        const branch = card.branch ?? cardBranch(card.title, card.id)
         const linked = cards.map((c) =>
-          c.id === cardId ? { ...c, terminalSessionId: id('term') } : c,
+          c.id === cardId
+            ? {
+                ...c,
+                terminalSessionId: id('term'),
+                branch,
+                worktreePath: c.worktreePath ?? `/mock/worktrees/${branch.slice(6)}`,
+              }
+            : c,
         )
         const next = moveCardInList(linked, cardId, 'in_progress', 0, 'service', now())
         kanbanSeed.set(projectId, next)
@@ -584,6 +594,15 @@ export function createMockApi(): CockpitApi {
             moveCardInList(current, cardId, 'in_review', 0, 'service', now()),
           )
         }, 15_000)
+        return assembleBoard(next)
+      },
+      parkCard: async ({ projectId, cardId }) => {
+        const cards = kanbanFor(projectId)
+        const card = cards.find((c) => c.id === cardId)
+        if (!card) throw new Error(`Card ${cardId} not found in this project.`)
+        if (card.status !== 'in_progress') throw new Error('Only a running card can be parked.')
+        const next = moveCardInList(cards, cardId, 'parked', 0, 'service', now())
+        kanbanSeed.set(projectId, next)
         return assembleBoard(next)
       },
     },

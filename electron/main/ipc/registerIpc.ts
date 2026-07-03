@@ -208,8 +208,8 @@ export function registerIpc(services: Services): void {
 
   // --- review (read-only pre-ship AI diff review) ---
   handle('reviewRun', (p) => {
-    const { projectId, model } = reviewRunSchema.parse(p)
-    return services.review.run(projectId, { model })
+    const { projectId, model, dir } = reviewRunSchema.parse(p)
+    return services.review.run(projectId, { model, dir })
   })
   handle('reviewRunText', (p) => {
     const { projectId, label, content, model } = reviewRunTextSchema.parse(p)
@@ -242,6 +242,7 @@ export function registerIpc(services: Services): void {
   handle('swarmMoveCard', (p) => services.swarm.moveCard(swarmMoveCardSchema.parse(p)))
   handle('swarmRemoveCard', (p) => services.swarm.removeCard(swarmRemoveCardSchema.parse(p)))
   handle('swarmStartCard', (p) => services.swarm.startCard(swarmStartCardSchema.parse(p)))
+  handle('swarmParkCard', (p) => services.swarm.parkCard(swarmStartCardSchema.parse(p)))
 
   // --- chat (real answers via the local Claude Code CLI) ---
   handle('chatAsk', (p) => {
