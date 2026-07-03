@@ -20,6 +20,8 @@ import {
   ingestLogSchema,
   projectIdSchema,
   requestApprovalSchema,
+  reviewRunSchema,
+  reviewRunTextSchema,
   resumeClaudeSchema,
   routeQuerySchema,
   terminalAttachmentInputSchema,
@@ -193,6 +195,16 @@ export function registerIpc(services: Services): void {
   handle('routerRoute', (p) => {
     const { projectId, query } = routeQuerySchema.parse(p)
     return services.route(projectId, query)
+  })
+
+  // --- review (read-only pre-ship AI diff review) ---
+  handle('reviewRun', (p) => {
+    const { projectId, model } = reviewRunSchema.parse(p)
+    return services.review.run(projectId, { model })
+  })
+  handle('reviewRunText', (p) => {
+    const { projectId, label, content, model } = reviewRunTextSchema.parse(p)
+    return services.review.runText(projectId, { label, content }, { model })
   })
 
   // --- chat (real answers via the local Claude Code CLI) ---

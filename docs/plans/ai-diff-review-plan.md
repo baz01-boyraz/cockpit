@@ -73,13 +73,13 @@ New pure module `shared/diff-sanitize.ts` (TDD; no runtime deps):
 
 ## Task list (order matters)
 
-1. [ ] 4.1 `shared/diff-sanitize.ts` + tests (blocklist, redaction, caps,
+1. [x] 4.1 `shared/diff-sanitize.ts` + tests (blocklist, redaction, caps,
        truncation markers, injection suspects, lockfile summarization)
-2. [ ] 4.1b `shared/review.ts` types + Zod schema + prompt builder + tests
-3. [ ] 4.2 ReviewService: diff collection (unit-test with mocked simple-git:
+2. [x] 4.1b `shared/review.ts` types + Zod schema + prompt builder + tests
+3. [x] 4.2 ReviewService: diff collection (unit-test with mocked simple-git:
        staged/unstaged/untracked/binary/rename cases) → sanitized request
-4. [ ] 4.3 CLI runner wiring + defensive output parsing + audit entry
-5. [ ] 4.4 IPC channel + preload + mock (contract test forces all three legs)
+4. [x] 4.3 CLI runner wiring + defensive output parsing + audit entry
+5. [x] 4.4 IPC channel + preload + mock (contract test forces all three legs) — plus `reviewRunText` for the block bridge
 6. [ ] 4.5 GitPanel review surface (2 screenshot rounds; design per
        DESIGN-VISION/Molten Obsidian tokens)
 7. [ ] 4.6 Block→review bridge in BlocksView (uses findBlock + same boundary)

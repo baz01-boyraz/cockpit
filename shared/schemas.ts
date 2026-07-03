@@ -163,6 +163,18 @@ export const chatAskSchema = z.object({
     .optional(),
 })
 
+export const reviewRunSchema = z.object({
+  projectId: z.string().min(1),
+  model: z.string().min(1).max(120).optional(),
+})
+
+export const reviewRunTextSchema = z.object({
+  projectId: z.string().min(1),
+  label: z.string().min(1).max(200),
+  content: z.string().min(1).max(400_000),
+  model: z.string().min(1).max(120).optional(),
+})
+
 export const gitDiffInputSchema = z.object({
   projectId: z.string().min(1),
   path: z.string().min(1),

@@ -17,6 +17,7 @@ import { AgentUsageService } from './AgentUsageService'
 import { ApprovalService } from './ApprovalService'
 import { AppUpdateService } from './AppUpdateService'
 import { ChatService } from './ChatService'
+import { ReviewService } from './ReviewService'
 import { ClaudeSessionsService } from './ClaudeSessionsService'
 import { GitService } from './GitService'
 import { GitHubService } from './GitHubService'
@@ -49,6 +50,7 @@ export class Services {
   readonly terminals: TerminalManager
   readonly claudeSessions: ClaudeSessionsService
   readonly chat: ChatService
+  readonly review: ReviewService
   readonly appUpdate: AppUpdateService
   private closing = false
   /** Per-pane full-screen-TUI mode, so repaint frames never reach the matchers. */
@@ -69,6 +71,7 @@ export class Services {
     this.railway = new RailwayService(this.db, this.projects)
     this.claudeSessions = new ClaudeSessionsService()
     this.chat = new ChatService(this.projects)
+    this.review = new ReviewService(this.projects, this.audit)
     this.appUpdate = new AppUpdateService(opts.events)
 
     this.terminals = new TerminalManager(

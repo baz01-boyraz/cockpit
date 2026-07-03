@@ -10,6 +10,7 @@
  * `handle` registrations in lockstep.
  */
 import type { ClaudeRunOptions } from './claude-run'
+import type { ReviewResult } from './review'
 import type {
   AgentType,
   AgentUsageReport,
@@ -85,6 +86,8 @@ export const IPC = {
 
   routerRoute: 'router:route',
   chatAsk: 'chat:ask',
+  reviewRun: 'review:run',
+  reviewRunText: 'review:runText',
 
   auditList: 'audit:list',
 
@@ -231,6 +234,23 @@ export interface CockpitApi {
   router: {
     route(projectId: string, query: string): Promise<RouterResult>
   }
+  review: {
+    /**
+     * Pre-ship AI diff review: working tree + staged + untracked, pushed
+     * through the sanitizer boundary, reviewed read-only by the local
+     * `claude` CLI. Never mutates anything.
+     */
+    run(projectId: string, opts?: { model?: string }): Promise<ReviewResult>
+    /**
+     * Review one piece of captured text (a command block's command + output)
+     * through the SAME sanitizer boundary as a diff review.
+     */
+    runText(
+      projectId: string,
+      input: { label: string; content: string },
+      opts?: { model?: string },
+    ): Promise<ReviewResult>
+  }
   chat: {
     /**
      * Ask Claude a question via the local `claude` CLI; returns its reply.
@@ -322,6 +342,8 @@ export interface IpcResultMap {
 
   routerRoute: R<CockpitApi['router']['route']>
   chatAsk: R<CockpitApi['chat']['ask']>
+  reviewRun: R<CockpitApi['review']['run']>
+  reviewRunText: R<CockpitApi['review']['runText']>
   auditList: R<CockpitApi['audit']['list']>
 
   systemInfo: R<CockpitApi['system']['info']>

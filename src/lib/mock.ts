@@ -736,6 +736,79 @@ export function createMockApi(): CockpitApi {
       },
     },
     router: { route: async (_projectId, query) => classifyRoute(query) },
+    review: {
+      // Staged review session so the surface is fully explorable in the
+      // browser preview: a short "thinking" delay, then realistic findings.
+      run: async (_projectId, opts) => {
+        await new Promise((r) => setTimeout(r, 1100))
+        return {
+          ok: true,
+          findings: [
+            {
+              severity: 'high' as const,
+              file: 'components/Hero.tsx',
+              line: 42,
+              title: 'Unvalidated intake form payload reaches the API call',
+              detail:
+                'The submit handler posts `formData` without schema validation. A crafted payload can hit the backend unchecked — validate with the shared zod schema before posting.',
+            },
+            {
+              severity: 'medium' as const,
+              file: 'app/page.tsx',
+              line: 18,
+              title: 'useEffect fetch races project switches',
+              detail:
+                'The fetch result is applied without checking whether the component is still mounted for the same project — add an abort/cancelled guard.',
+            },
+            {
+              severity: 'low' as const,
+              file: 'styles/tokens.css',
+              line: null,
+              title: 'Duplicate --accent-2 definition',
+              detail: 'The token is declared twice; the second silently wins. Remove one.',
+            },
+          ],
+          raw: null,
+          model: `Claude · ${resolveChatModel(opts?.model).label}`,
+          error: null,
+          stats: {
+            filesReviewed: 4,
+            filesBlocked: 1,
+            filesSummarized: 1,
+            injectionSuspects: 0,
+            truncated: false,
+            durationMs: 1100,
+          },
+        }
+      },
+      runText: async (_projectId, input, opts) => {
+        await new Promise((r) => setTimeout(r, 900))
+        return {
+          ok: true,
+          findings: [
+            {
+              severity: 'medium' as const,
+              file: input.label,
+              line: null,
+              title: 'Exit-1 caused by a missing dev dependency',
+              detail:
+                'The output shows the failure starts at the first unresolved import — run the install step before re-running this command.',
+            },
+          ],
+          raw: null,
+          model: `Claude · ${resolveChatModel(opts?.model).label}`,
+          error: null,
+          stats: {
+            filesReviewed: 1,
+            filesBlocked: 0,
+            filesSummarized: 0,
+            injectionSuspects: 0,
+            truncated: false,
+            durationMs: 900,
+          },
+        }
+      },
+    },
     chat: {
       ask: async (_projectId, prompt, opts) => ({
         ok: true,
