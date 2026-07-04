@@ -213,6 +213,7 @@ export const swarmUpdateCardSchema = z.object({
   body: z.string().max(20_000).optional(),
   role: z.string().min(1).max(60).nullable().optional(),
   persona: z.string().min(1).max(60).nullable().optional(),
+  agent: z.string().min(1).max(60).nullable().optional(),
 })
 
 // The renderer is always the "user" actor: schema-level status choices exclude

@@ -21,6 +21,7 @@ const card = (over: Partial<KanbanCard>): KanbanCard => ({
   position: POSITION_GAP,
   role: null,
   persona: null,
+  agent: null,
   terminalSessionId: null,
   worktreePath: null,
   branch: null,

@@ -19,6 +19,7 @@ import type {
 import { insightFromMatch } from '@shared/insight-aggregation'
 import type { MemoryDoc } from '@shared/memory-hub'
 import type { KanbanCard } from '@shared/kanban'
+import type { NamedAgentSummary } from '@shared/named-agents'
 
 export const now = () => new Date().toISOString()
 export const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString()
@@ -375,6 +376,7 @@ export const kanbanSeed = new Map<string, KanbanCard[]>([
         position: 1024,
         role: null,
         persona: null,
+        agent: null,
         terminalSessionId: null,
         worktreePath: null,
         branch: null,
@@ -390,6 +392,7 @@ export const kanbanSeed = new Map<string, KanbanCard[]>([
         position: 2048,
         role: 'builder',
         persona: null,
+        agent: null,
         terminalSessionId: null,
         worktreePath: null,
         branch: null,
@@ -405,6 +408,7 @@ export const kanbanSeed = new Map<string, KanbanCard[]>([
         position: 1024,
         role: 'builder',
         persona: null,
+        agent: null,
         terminalSessionId: null,
         worktreePath: null,
         branch: 'swarm/attorney-jsonld-eo03',
@@ -420,6 +424,7 @@ export const kanbanSeed = new Map<string, KanbanCard[]>([
         position: 1024,
         role: 'reviewer',
         persona: null,
+        agent: null,
         terminalSessionId: null,
         worktreePath: null,
         branch: null,
@@ -435,6 +440,7 @@ export const kanbanSeed = new Map<string, KanbanCard[]>([
         position: 1024,
         role: 'builder',
         persona: null,
+        agent: null,
         terminalSessionId: 'term_mock_1',
         worktreePath: '/Users/baz/dev/serbest-law/.swarm/contact-form-x9k2',
         branch: 'swarm/contact-form-x9k2',
@@ -444,3 +450,13 @@ export const kanbanSeed = new Map<string, KanbanCard[]>([
     ],
   ],
 ])
+
+// Named Agents roster (browser preview mirror of ~/.claude/agents).
+export const namedAgentsMock: NamedAgentSummary[] = [
+  { slug: 'apollo', displayName: 'Apollo', tagline: 'Light and form', color: 'ember', role: 'builder', description: 'Frontend builder with a pixel eye.' },
+  { slug: 'argos', displayName: 'Argos', tagline: 'A hundred eyes, nothing passes', color: 'signal', role: 'reviewer', description: 'Security reviewer; findings need failure scenarios.' },
+  { slug: 'atlas', displayName: 'Atlas', tagline: 'Holds the big picture', color: 'glacier', role: 'planner', description: 'Planner-architect; staged file-level plans.' },
+  { slug: 'calliope', displayName: 'Calliope', tagline: 'The client\'s voice, perfected', color: 'ember', role: 'builder', description: 'Copywriter; words that sell.' },
+  { slug: 'huginn', displayName: 'Huginn', tagline: 'Flies far, returns with truth', color: 'glacier', role: 'scout', description: 'Scout; returns with one recommendation.' },
+  { slug: 'vulcan', displayName: 'Vulcan', tagline: 'The forge never lies', color: 'copper', role: 'builder', description: 'Backend builder; hostile-boundary validation.' },
+]

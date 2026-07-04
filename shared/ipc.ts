@@ -13,6 +13,7 @@ import type { ClaudeRunOptions } from './claude-run'
 import type { ReviewResult } from './review'
 import type { MemoryHubSnapshot, MemoryNote } from './memory-hub'
 import type { BoardColumn, CardStatus } from './kanban'
+import type { NamedAgentSummary } from './named-agents'
 import type {
   AgentType,
   AgentUsageReport,
@@ -104,6 +105,7 @@ export const IPC = {
   swarmRemoveCard: 'swarm:removeCard',
   swarmStartCard: 'swarm:startCard',
   swarmParkCard: 'swarm:parkCard',
+  swarmAgents: 'swarm:agents',
 
   auditList: 'audit:list',
 
@@ -292,6 +294,7 @@ export interface CockpitApi {
       body?: string
       role?: string | null
       persona?: string | null
+      agent?: string | null
     }): Promise<BoardColumn[]>
     /**
      * Human drag/drop. `index` is the insertion index in the destination
@@ -313,6 +316,8 @@ export interface CockpitApi {
     startCard(input: { projectId: string; cardId: string }): Promise<BoardColumn[]>
     /** Park a running card (worker is stopped; Start later resumes in the same worktree). */
     parkCard(input: { projectId: string; cardId: string }): Promise<BoardColumn[]>
+    /** Named Agents roster from .claude/agents (user + project scope; project wins). */
+    agents(projectId: string): Promise<NamedAgentSummary[]>
   }
   chat: {
     /**
@@ -419,6 +424,7 @@ export interface IpcResultMap {
   swarmRemoveCard: R<CockpitApi['swarm']['removeCard']>
   swarmStartCard: R<CockpitApi['swarm']['startCard']>
   swarmParkCard: R<CockpitApi['swarm']['parkCard']>
+  swarmAgents: R<CockpitApi['swarm']['agents']>
   auditList: R<CockpitApi['audit']['list']>
 
   systemInfo: R<CockpitApi['system']['info']>

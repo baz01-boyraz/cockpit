@@ -51,6 +51,7 @@ import {
   logs,
   kanbanSeed,
   memoryHub,
+  namedAgentsMock,
   now,
   projects,
   usage,
@@ -513,6 +514,7 @@ export function createMockApi(): CockpitApi {
             position: appendPosition(cards, 'todo'),
             role: null,
             persona: null,
+            agent: null,
             terminalSessionId: null,
             worktreePath: null,
             branch: null,
@@ -523,7 +525,7 @@ export function createMockApi(): CockpitApi {
         kanbanSeed.set(projectId, next)
         return assembleBoard(next)
       },
-      updateCard: async ({ projectId, cardId, title, body, role, persona }) => {
+      updateCard: async ({ projectId, cardId, title, body, role, persona, agent }) => {
         const cards = kanbanFor(projectId)
         if (!cards.some((c) => c.id === cardId)) {
           throw new Error(`Card ${cardId} not found in this project.`)
@@ -536,6 +538,7 @@ export function createMockApi(): CockpitApi {
                 body: body ?? c.body,
                 role: role === undefined ? c.role : role,
                 persona: persona === undefined ? c.persona : persona,
+                agent: agent === undefined ? c.agent : agent,
                 updatedAt: now(),
               }
             : c,
@@ -596,6 +599,7 @@ export function createMockApi(): CockpitApi {
         }, 15_000)
         return assembleBoard(next)
       },
+      agents: async (_projectId) => namedAgentsMock,
       parkCard: async ({ projectId, cardId }) => {
         const cards = kanbanFor(projectId)
         const card = cards.find((c) => c.id === cardId)

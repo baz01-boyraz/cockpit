@@ -8,6 +8,7 @@ import {
 } from '@shared/kanban'
 import { buildWorkerCommand } from '@shared/swarm-worker'
 import { rolePromptFor } from '@shared/agent-roles'
+import { composeAgentText, type NamedAgent } from '@shared/named-agents'
 import type { AgentUsageReport, TerminalSession } from '@shared/domain'
 import type { Db } from '../db/Database'
 import type { CockpitEvents } from '../events'
@@ -45,6 +46,7 @@ interface CardRow {
   position: number
   role: string | null
   persona: string | null
+  agent: string | null
   terminal_session_id: string | null
   worktree_path: string | null
   branch: string | null
@@ -71,6 +73,7 @@ export class SwarmService {
     private readonly projects: { get(projectId: string): { path: string } },
     private readonly worktrees: WorktreeOps,
     private readonly agentUsage?: { getReport(): Promise<AgentUsageReport> },
+    private readonly namedAgents?: { find(projectId: string, slug: string): NamedAgent | null },
   ) {
     // 6.4: any card still in_progress at construction is an orphan — its
     // worker died with the previous app instance (TerminalManager already
@@ -141,16 +144,17 @@ export class SwarmService {
     }
 
     const hubNames = this.hubNoteNames(input.projectId)
+    // Identity precedence: an assigned Named Agent speaks with its authored
+    // voice (body + its default role/persona); otherwise the card's manual
+    // role/persona catalog text applies.
+    const named = card.agent ? (this.namedAgents?.find(input.projectId, card.agent) ?? null) : null
+    const identityText = named ? composeAgentText(named) : rolePromptFor(card.role, card.persona)
     const session = this.terminals.create({
       projectId: input.projectId,
-      name: `Swarm — ${card.title.slice(0, 40)}`,
+      name: `Swarm — ${named ? `${named.displayName}: ` : ''}${card.title.slice(0, 40)}`,
       role: 'claude',
       cwd: worktree?.path,
-      command: buildWorkerCommand(
-        { title: card.title, body: card.body },
-        hubNames,
-        rolePromptFor(card.role, card.persona),
-      ),
+      command: buildWorkerCommand({ title: card.title, body: card.body }, hubNames, identityText),
     })
 
     const now = nowIso()
@@ -277,12 +281,13 @@ export class SwarmService {
     body?: string
     role?: string | null
     persona?: string | null
+    agent?: string | null
   }): BoardColumn[] {
     const card = this.cardOrThrow(input.projectId, input.cardId)
     this.db
       .prepare(
         `UPDATE kanban_cards SET title = @title, body = @body, role = @role,
-         persona = @persona, updated_at = @now WHERE id = @id`,
+         persona = @persona, agent = @agent, updated_at = @now WHERE id = @id`,
       )
       .run({
         id: card.id,
@@ -290,6 +295,7 @@ export class SwarmService {
         body: input.body ?? card.body,
         role: input.role === undefined ? card.role : input.role,
         persona: input.persona === undefined ? card.persona : input.persona,
+        agent: input.agent === undefined ? card.agent : input.agent,
         now: nowIso(),
       })
     return this.board(input.projectId)
@@ -362,6 +368,7 @@ export class SwarmService {
       position: row.position,
       role: row.role,
       persona: row.persona,
+      agent: row.agent,
       terminalSessionId: row.terminal_session_id,
       worktreePath: row.worktree_path,
       branch: row.branch,

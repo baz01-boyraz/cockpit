@@ -19,6 +19,7 @@ import { AppUpdateService } from './AppUpdateService'
 import { ChatService } from './ChatService'
 import { MemoryHubService } from './MemoryHubService'
 import { SwarmService } from './SwarmService'
+import { NamedAgentsService } from './NamedAgentsService'
 import { SwarmWorktrees } from './SwarmWorktrees'
 import { ReviewService } from './ReviewService'
 import { ClaudeSessionsService } from './ClaudeSessionsService'
@@ -56,6 +57,7 @@ export class Services {
   readonly review: ReviewService
   readonly memory: MemoryHubService
   readonly swarm: SwarmService
+  readonly namedAgents: NamedAgentsService
   readonly appUpdate: AppUpdateService
   private closing = false
   /** Per-pane full-screen-TUI mode, so repaint frames never reach the matchers. */
@@ -97,6 +99,7 @@ export class Services {
     )
     // After terminals: the swarm spawns workers through the TerminalManager
     // and listens for their exits on the same bus.
+    this.namedAgents = new NamedAgentsService(this.projects)
     this.swarm = new SwarmService(
       this.db,
       this.terminals,
@@ -106,6 +109,7 @@ export class Services {
       this.projects,
       new SwarmWorktrees(),
       this.agentUsage,
+      this.namedAgents,
     )
     // Forget a pane's TUI-mode state once it exits, so session ids never leak.
     opts.events.onTyped('terminal:exit', ({ sessionId }) => this.tuiState.delete(sessionId))

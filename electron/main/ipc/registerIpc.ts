@@ -5,6 +5,7 @@ import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { IPC, type IpcResultMap, type RequestChannelKey, type SystemInfo } from '@shared/ipc'
 import { formatIpcError } from '@shared/ipc-errors'
 import { requiresApproval } from '@shared/approval-rules'
+import { toSummary } from '@shared/named-agents'
 import type { ApprovalActionType } from '@shared/domain'
 import {
   addProjectInputSchema,
@@ -243,6 +244,9 @@ export function registerIpc(services: Services): void {
   handle('swarmRemoveCard', (p) => services.swarm.removeCard(swarmRemoveCardSchema.parse(p)))
   handle('swarmStartCard', (p) => services.swarm.startCard(swarmStartCardSchema.parse(p)))
   handle('swarmParkCard', (p) => services.swarm.parkCard(swarmStartCardSchema.parse(p)))
+  handle('swarmAgents', (p) =>
+    services.namedAgents.list(swarmProjectSchema.parse(p).projectId).map(toSummary),
+  )
 
   // --- chat (real answers via the local Claude Code CLI) ---
   handle('chatAsk', (p) => {

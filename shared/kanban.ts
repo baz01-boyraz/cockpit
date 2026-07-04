@@ -16,6 +16,8 @@ export interface KanbanCard {
   position: number
   role: string | null
   persona: string | null
+  /** Named Agent slug from .claude/agents (user or project scope); null = manual role/persona. */
+  agent: string | null
   terminalSessionId: string | null
   worktreePath: string | null
   branch: string | null

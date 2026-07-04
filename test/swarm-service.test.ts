@@ -15,6 +15,7 @@ interface Row {
   position: number
   role: string | null
   persona: string | null
+  agent: string | null
   terminal_session_id: string | null
   worktree_path: string | null
   branch: string | null
@@ -33,6 +34,7 @@ function makeStore(seed: Partial<Row>[] = []) {
     position: (i + 1) * POSITION_GAP,
     role: null,
     persona: null,
+    agent: null,
     terminal_session_id: null,
     worktree_path: null,
     branch: null,
@@ -68,6 +70,7 @@ function makeStore(seed: Partial<Row>[] = []) {
           position: Number(p.position),
           role: null,
           persona: null,
+          agent: null,
           terminal_session_id: null,
           worktree_path: null,
           branch: null,
@@ -85,6 +88,7 @@ function makeStore(seed: Partial<Row>[] = []) {
           r.body = String(p.body)
           r.role = p.role
           r.persona = p.persona
+          r.agent = p.agent
           r.updated_at = String(p.now)
         }
       } else if (sql.includes('SET terminal_session_id')) {
@@ -335,6 +339,26 @@ describe('SwarmService quota gate (6.6)', () => {
 
     const broken = new SwarmService(seed().db, deps.terminals, deps.memory, deps.audit, deps.events, deps.projects, deps.worktrees, { getReport: async () => { throw new Error('probe down') } } as never)
     await expect(broken.startCard({ projectId: 'p1', cardId: 'a' })).resolves.toBeTruthy()
+  })
+
+  it('an assigned Named Agent speaks with its authored voice (N3)', async () => {
+    const store = makeStore([{ id: 'a', status: 'todo', position: POSITION_GAP, agent: 'vulcan', title: 'API work' }])
+    const deps = makeDeps()
+    const named = {
+      find: (_pid: string, slug: string) =>
+        slug === 'vulcan'
+          ? {
+              slug: 'vulcan', description: '', model: 'sonnet', displayName: 'Vulcan',
+              tagline: null, color: 'copper', role: 'builder', persona: 'type-zealot',
+              body: 'You are Vulcan - the forge god.',
+            }
+          : null,
+    }
+    const svc = new SwarmService(store.db, deps.terminals, deps.memory, deps.audit, deps.events, deps.projects, deps.worktrees, undefined, named as never)
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    expect(deps.spawned[0].command).toContain('forge god')
+    expect(deps.spawned[0].command).toContain('BUILDER')
+    expect(deps.spawned[0].name).toBe('Swarm — Vulcan: API work')
   })
 
   it('folds the card role + persona into the worker prompt (6.5)', async () => {

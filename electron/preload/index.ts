@@ -102,6 +102,7 @@ const api: CockpitApi = {
     removeCard: (input) => invoke(IPC.swarmRemoveCard, input),
     startCard: (input) => invoke(IPC.swarmStartCard, input),
     parkCard: (input) => invoke(IPC.swarmParkCard, input),
+    agents: (projectId) => invoke(IPC.swarmAgents, { projectId }),
   },
   chat: {
     ask: (projectId, prompt, opts) => invoke(IPC.chatAsk, { projectId, prompt, opts }),

@@ -259,3 +259,12 @@ CREATE TABLE IF NOT EXISTS kanban_cards (
 );
 CREATE INDEX IF NOT EXISTS idx_kanban_cards_project ON kanban_cards(project_id);
 `
+
+/**
+ * V6 — Named Agents (docs/plans/named-agents-plan.md): a card can be assigned
+ * to an identity from `.claude/agents/` (user or project scope). Only the slug
+ * is stored — definition files are the truth.
+ */
+export const SCHEMA_V6 = /* sql */ `
+ALTER TABLE kanban_cards ADD COLUMN agent TEXT;
+`
