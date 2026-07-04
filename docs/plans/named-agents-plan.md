@@ -1,6 +1,8 @@
 # Plan — Named Agents ("ekip"): identity-first agents across cockpiT + Claude Code
 
-> Status: DESIGN DRAFT — roster and decisions await Baz's review · Created 2026-07-04
+> Status: N1 DELIVERED 2026-07-04 — roster finalized (Baz delegated naming: non-Turkish,
+> no Hermes), all six definitions written to `~/.claude/agents/` and live for terminal
+> Claudes immediately · next: N2 kernel · Created 2026-07-04
 > Origin: Baz's ask — "kendi agentlarımız olacak, onlara isim ve kimlik vereceğiz;
 > builder/planner gibi fonksiyon değil, KİMLİK." Supersedes the Phase-7-parked
 > "user-authorable personas" idea with something better.
@@ -83,21 +85,22 @@ Authoring checklist — this is where "ince düşünme" pays:
 6. **Definition of done** — role-appropriate (builder: checks green; reviewer:
    findings with file:line + severity; scout: brief with sources; planner: staged plan).
 
-## Draft roster (v0 — PLACEHOLDER NAMES, Baz renames/curates)
+## Roster — FINAL (world mythology; written to `~/.claude/agents/<slug>.md`)
 
-Sized for the revenue studio (landing pages, AI agents, çeşitli projeler):
+| Name | Myth | Tagline | Role | Persona | Model | Tools boundary |
+|---|---|---|---|---|---|---|
+| **Atlas** | Greek titan | Holds the big picture | planner | — | opus | read-only (Read/Grep/Glob) — cannot code, by design |
+| **Apollo** | Greek god of light/art | Light and form | builder (frontend) | pragmatic-shipper | sonnet | full build set |
+| **Vulcan** | Roman forge god | The forge never lies | builder (backend) | type-zealot | sonnet | full build set |
+| **Argos** | Hundred-eyed watchman | Nothing passes | reviewer (security) | security-paranoid | sonnet | read + Bash (runs tests, never edits) |
+| **Huginn** | Odin's raven, Thought | Flies far, returns with truth | scout | — | sonnet | read + WebSearch/WebFetch (never writes) |
+| **Calliope** | Muse of epic poetry | The client's voice, perfected | builder (copy) | — | sonnet | Read/Write/Edit only — words, no shell |
 
-| Name | Tagline | Role | Persona lens | Model | Edge |
-|---|---|---|---|---|---|
-| **Atlas** | Büyük resmi tutan | planner | — | opus (thinking) | Anlar → böler → riskleri yüksek sesle söyler; asla kod yazmaz |
-| **Vega** | Bitiren el | builder | pragmatic-shipper | sonnet | Frontend/UI; küçük temiz diff'ler, piksel gözü |
-| **Demir** | Sağlam temel | builder | type-zealot | sonnet | Backend/API; hata yönetimi ve sınır doğrulama takıntısı |
-| **Nazar** | Kem gözlere karşı | reviewer | security-paranoid | sonnet/opus | Her diff'e "bu nasıl kötüye kullanılır?" diye bakar |
-| **Pusula** | Yol gösteren | scout | — | sonnet | Araştırır, kıyaslar, TEK öneriyle döner; dosya değiştirmez |
-| **Kalem** | Müşterinin sesi | builder | — | sonnet | Copy/içerik; marka sesi notunu hub'dan okur, ona sadık yazar |
-
-Council upgrade: the reviewer council can run **Nazar + Vega + Demir** on the same
-diff — named perspectives instead of anonymous lenses.
+Every definition carries the six mandatory sections (identity & voice, craft
+rules, skill affinities, memory ritual, escalation, definition of done) and the
+standing rule: **reports to Baz in Turkish**, code/identifiers untouched.
+Council upgrade: **Argos + Apollo + Vulcan** on the same diff — named
+perspectives instead of anonymous lenses.
 
 ## Build phases (after design sign-off)
 
