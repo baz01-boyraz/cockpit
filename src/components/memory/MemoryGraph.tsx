@@ -300,6 +300,7 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
     let running = false
     let settled = false
     let lastNow = 0
+    let atmo: HTMLCanvasElement | null = null
 
     const applySize = () => {
       width = Math.max(wrap.clientWidth, 80)
@@ -309,6 +310,7 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
       canvas.height = Math.round(height * dpr)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       config = { ...config, cx: width / 2, cy: height / 2 }
+      atmo = buildAtmosphere()
     }
 
     // --- geometry helpers ---
@@ -352,62 +354,44 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
       }
     }
 
-    // --- atmosphere: slow ember/glacier nebula + vignette framing the centre ---
-    const drawAtmosphere = (t: number) => {
+    /**
+     * Pre-render the ember/glacier nebula + vignette once per size to an offscreen
+     * canvas. The atmosphere is static (its old slow drift was imperceptible and
+     * cost 5 radial-gradient allocations every frame); caching it is the single
+     * biggest per-frame win, so the field reads calm instead of laggy.
+     */
+    const buildAtmosphere = (): HTMLCanvasElement => {
+      const c = document.createElement('canvas')
+      c.width = Math.max(1, Math.round(width))
+      c.height = Math.max(1, Math.round(height))
+      const g = c.getContext('2d')!
+      const maxWH = Math.max(width, height)
       const blobs = [
-        {
-          x: width * (0.3 + 0.06 * Math.sin(t * 0.05)),
-          y: height * (0.34 + 0.05 * Math.cos(t * 0.043)),
-          r: Math.max(width, height) * 0.7,
-          color: withAlpha(palette.ember5, 0.045),
-        },
-        {
-          x: width * (0.72 + 0.06 * Math.cos(t * 0.037)),
-          y: height * (0.66 + 0.06 * Math.sin(t * 0.031)),
-          r: Math.max(width, height) * 0.62,
-          color: withAlpha(palette.glacier4, 0.05),
-        },
-        {
-          x: width * (0.78 + 0.05 * Math.sin(t * 0.028 + 1.7)),
-          y: height * (0.28 + 0.04 * Math.cos(t * 0.05 + 0.6)),
-          r: Math.max(width, height) * 0.5,
-          color: withAlpha(palette.ember4, 0.04),
-        },
+        { x: width * 0.3, y: height * 0.34, r: maxWH * 0.7, color: withAlpha(palette.ember5, 0.045) },
+        { x: width * 0.72, y: height * 0.66, r: maxWH * 0.62, color: withAlpha(palette.glacier4, 0.05) },
+        { x: width * 0.83, y: height * 0.31, r: maxWH * 0.5, color: withAlpha(palette.ember4, 0.04) },
       ]
       for (const b of blobs) {
-        const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r)
-        g.addColorStop(0, b.color)
-        g.addColorStop(1, withAlpha(palette.ember7, 0))
-        ctx.fillStyle = g
-        ctx.fillRect(0, 0, width, height)
+        const grad = g.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r)
+        grad.addColorStop(0, b.color)
+        grad.addColorStop(1, withAlpha(palette.ember7, 0))
+        g.fillStyle = grad
+        g.fillRect(0, 0, width, height)
       }
       // central pooled light — the instrument reads as lit from within
-      const core = ctx.createRadialGradient(
-        width / 2,
-        height * 0.46,
-        0,
-        width / 2,
-        height * 0.46,
-        Math.min(width, height) * 0.5,
-      )
+      const core = g.createRadialGradient(width / 2, height * 0.46, 0, width / 2, height * 0.46, Math.min(width, height) * 0.5)
       core.addColorStop(0, withAlpha(palette.ember4, 0.07))
       core.addColorStop(0.5, withAlpha(palette.ember5, 0.025))
       core.addColorStop(1, withAlpha(palette.ember7, 0))
-      ctx.fillStyle = core
-      ctx.fillRect(0, 0, width, height)
+      g.fillStyle = core
+      g.fillRect(0, 0, width, height)
       // vignette — corners recede so the centre reads as lit
-      const vg = ctx.createRadialGradient(
-        width / 2,
-        height * 0.46,
-        Math.min(width, height) * 0.28,
-        width / 2,
-        height * 0.5,
-        Math.max(width, height) * 0.72,
-      )
+      const vg = g.createRadialGradient(width / 2, height * 0.46, Math.min(width, height) * 0.28, width / 2, height * 0.5, Math.max(width, height) * 0.72)
       vg.addColorStop(0, 'rgba(6, 7, 11, 0)')
       vg.addColorStop(1, 'rgba(4, 5, 9, 0.55)')
-      ctx.fillStyle = vg
-      ctx.fillRect(0, 0, width, height)
+      g.fillStyle = vg
+      g.fillRect(0, 0, width, height)
+      return c
     }
 
     const spawnPulses = (dt: number, litEdges: number[] | null) => {
@@ -431,7 +415,7 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
 
     const draw = (t: number) => {
       ctx.clearRect(0, 0, width, height)
-      drawAtmosphere(t)
+      if (atmo) ctx.drawImage(atmo, 0, 0, width, height)
 
       renderPos = new Map(nodes.map((n) => [n.id, renderXY(n, t)]))
       const hoodOf = hovered ? neighbors.get(hovered) : undefined
@@ -604,13 +588,22 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
             return acc
           }, [])
         : null
-      spawnPulses(dt, litEdges)
+      // Only breed new signals while the field is alive (settling, hovered, or
+      // dragged). Once calm and untouched, existing pulses drain and the loop
+      // sleeps — a settled, idle graph must not burn a frame budget forever.
+      if (!settled || hovered !== null || dragged !== null) spawnPulses(dt, litEdges)
       pulses = pulses
         .map((pulse) => ({ ...pulse, t: pulse.t + pulse.speed * dt }))
         .filter((pulse) => pulse.t <= 1.05)
 
       draw(t)
-      raf = requestAnimationFrame(frame)
+
+      const alive = !settled || dragged !== null || hovered !== null || pulses.length > 0
+      if (alive) {
+        raf = requestAnimationFrame(frame)
+      } else {
+        running = false
+      }
     }
 
     const wake = () => {
@@ -667,7 +660,9 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
       if (hit !== hovered) {
         hovered = hit
         canvas.style.cursor = hit ? 'pointer' : 'default'
+        // hovering a calm, sleeping field brings it back to life
         if (reduceMotion) draw(0)
+        else wake()
       }
     }
 
@@ -706,7 +701,9 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
       if (hovered && !dragged) {
         hovered = null
         canvas.style.cursor = 'default'
+        // wake once to repaint the un-focused state, then it settles to sleep
         if (reduceMotion) draw(0)
+        else wake()
       }
     }
 

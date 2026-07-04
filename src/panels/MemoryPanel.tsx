@@ -254,6 +254,17 @@ export function MemoryPanel() {
         </div>
       ) : hubEmpty ? (
         <MemoryEmptyState onCreate={createNote} />
+      ) : layout === 'graph' && projectId && snapshot ? (
+        <div className="memory__graphstage">
+          <MemoryGraph
+            projectId={projectId}
+            snapshot={snapshot}
+            onOpen={(name) => {
+              setLayout('list')
+              void openNote(name)
+            }}
+          />
+        </div>
       ) : (
         <div className="memory__cols">
           <MemoryNoteList
@@ -263,16 +274,7 @@ export function MemoryPanel() {
             onCreate={createNote}
           />
 
-          {layout === 'graph' && projectId && snapshot ? (
-            <MemoryGraph
-              projectId={projectId}
-              snapshot={snapshot}
-              onOpen={(name) => {
-                setLayout('list')
-                void openNote(name)
-              }}
-            />
-          ) : note && !noteLoading ? (
+          {note && !noteLoading ? (
             <MemoryReader
               key={note.name}
               note={note}

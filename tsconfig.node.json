@@ -27,6 +27,7 @@
     "electron/**/*.ts",
     "shared/**/*.ts",
     "src/lib/council.ts",
+    "src/lib/memoryTrust.ts",
     "test/**/*.ts",
     "vitest.config.ts",
     "electron.vite.config.ts"
