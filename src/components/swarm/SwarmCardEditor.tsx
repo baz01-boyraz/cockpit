@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react'
-import { AGENT_ROLES, PERSONAS } from '@shared/agent-roles'
 import type { KanbanCard } from '@shared/kanban'
 import type { NamedAgentSummary } from '@shared/named-agents'
-
-/** Assignable agent roles — the shared catalog the worker prompt compiles from. */
-const ROLE_IDS = Object.keys(AGENT_ROLES) as (keyof typeof AGENT_ROLES)[]
 
 export interface SwarmCardPatch {
   title: string
@@ -16,7 +12,7 @@ export interface SwarmCardPatch {
 
 interface SwarmCardEditorProps {
   card: KanbanCard
-  /** Named Agents roster — the identities a card can carry instead of a manual role/persona. */
+  /** Named Agents roster — the identity a card carries. */
   agents: NamedAgentSummary[]
   /** Resolves when the update lands; the panel closes the editor on success. */
   onSave: (cardId: string, patch: SwarmCardPatch) => Promise<void>
@@ -25,24 +21,20 @@ interface SwarmCardEditorProps {
 }
 
 /**
- * The in-place card editor: title, body, agent + role + persona selects, and
- * a delete action with an inline arm/confirm step (never a dialog). Rendered
- * where the card was, so editing never leaves the column. A Named Agent is a
- * full identity — while one is picked, the manual role/persona rows give way
- * to a single hint line (the agent's definition supplies both; never three
- * identity controls at once). Role = what the worker DOES; persona = the
- * lens it judges through (6.5).
+ * The in-place card editor: title, body, one agent select, and a delete
+ * action with an inline arm/confirm step (never a dialog). Rendered where
+ * the card was, so editing never leaves the column. A Named Agent is a full
+ * identity — role and persona live in the agent's definition file, so the
+ * editor never offers them as separate controls. Saving always nulls the
+ * legacy manual role/persona columns; identity comes from the agent alone.
  */
 export function SwarmCardEditor({ card, agents, onSave, onDelete, onClose }: SwarmCardEditorProps) {
   const [title, setTitle] = useState(card.title)
   const [body, setBody] = useState(card.body)
   const [agent, setAgent] = useState(card.agent ?? '')
-  const [role, setRole] = useState(card.role ?? '')
-  const [persona, setPersona] = useState(card.persona ?? '')
   const [deleteArmed, setDeleteArmed] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  /** While an agent carries the identity, manual role/persona are moot. */
   const agentPicked = agent !== ''
   const selectedAgent = agentPicked ? (agents.find((a) => a.slug === agent) ?? null) : null
   /** The card may reference an agent whose file has since been removed. */
@@ -64,8 +56,8 @@ export function SwarmCardEditor({ card, agents, onSave, onDelete, onClose }: Swa
       await onSave(card.id, {
         title: title.trim(),
         body,
-        role: role || null,
-        persona: persona || null,
+        role: null,
+        persona: null,
         agent: agent || null,
       })
     } finally {
@@ -119,7 +111,7 @@ export function SwarmCardEditor({ card, agents, onSave, onDelete, onClose }: Swa
             onChange={(e) => setAgent(e.target.value)}
             aria-label="Card agent"
           >
-            <option value="">None (manual role/persona)</option>
+            <option value="">Unassigned</option>
             {agentMissing && <option value={agent}>{agent} (missing)</option>}
             {agents.map((a) => (
               <option key={a.slug} value={a.slug}>
@@ -129,45 +121,10 @@ export function SwarmCardEditor({ card, agents, onSave, onDelete, onClose }: Swa
             ))}
           </select>
         </label>
-        {agentPicked ? (
+        {agentPicked && (
           <div className="swarmEdit__hint">
             Role &amp; persona come from {selectedAgent?.displayName ?? agent}&rsquo;s definition
           </div>
-        ) : (
-          <>
-            <label className="swarmEdit__row">
-              <span className="swarmEdit__label">role</span>
-              <select
-                className="swarmEdit__select"
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                aria-label="Card role"
-              >
-                <option value="">none</option>
-                {ROLE_IDS.map((r) => (
-                  <option key={r} value={r}>
-                    {AGENT_ROLES[r].label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="swarmEdit__row">
-              <span className="swarmEdit__label">persona</span>
-              <select
-                className="swarmEdit__select"
-                value={persona}
-                onChange={(e) => setPersona(e.target.value)}
-                aria-label="Card persona"
-              >
-                <option value="">none</option>
-                {PERSONAS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </>
         )}
         <div className="swarmEdit__actions">
           <button className="btn btn--accent btn--sm" onClick={() => void save()} disabled={!canSave}>

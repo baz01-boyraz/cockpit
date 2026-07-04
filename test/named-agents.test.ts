@@ -40,6 +40,7 @@ describe('parseAgentFile', () => {
     expect(a!.body).toContain('forge god')
     expect(a!.body).toContain('Craft rules')
     expect(a!.body).not.toContain('---')
+    expect(a!.cockpitTagged).toBe(true)
   })
 
   it('falls back gracefully when cockpit keys are missing', () => {
@@ -48,6 +49,8 @@ describe('parseAgentFile', () => {
     expect(a!.role).toBeNull()
     expect(a!.persona).toBeNull()
     expect(a!.color).toBeNull()
+    // No cockpit: block → a plain Claude Code subagent, not a roster teammate.
+    expect(a!.cockpitTagged).toBe(false)
   })
 
   it('rejects files without frontmatter or name, and reserved/invalid slugs', () => {
@@ -62,6 +65,7 @@ describe('parseAgentFile', () => {
   it('treats a "cockpit-like" indented block under another key as opaque', () => {
     const a = parseAgentFile(`---\nname: x\nother:\n  displayName: NOT ME\n---\nb`)
     expect(a!.displayName).toBe('x')
+    expect(a!.cockpitTagged).toBe(false)
   })
 })
 

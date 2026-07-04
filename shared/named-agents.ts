@@ -16,6 +16,13 @@ export interface NamedAgent {
   role: string | null
   persona: string | null
   body: string
+  /**
+   * True when the file declares a `cockpit:` block — the explicit opt-in that
+   * makes an agent file a roster teammate. `~/.claude/agents/` also holds
+   * dozens of plain Claude Code subagents (reviewers, resolvers…); without
+   * this flag they would all flood the board's agent picker.
+   */
+  cockpitTagged: boolean
 }
 
 /** Renderer-facing summary — prompt bodies stay in main. */
@@ -54,6 +61,7 @@ export function parseAgentFile(content: string): NamedAgent | null {
   const top = new Map<string, string>()
   const cockpit = new Map<string, string>()
   let section: 'top' | 'cockpit' | 'other' = 'top'
+  let cockpitTagged = false
   for (const line of front.split('\n')) {
     if (!line.trim()) continue
     const indented = /^\s/.test(line)
@@ -63,6 +71,7 @@ export function parseAgentFile(content: string): NamedAgent | null {
       const [, key, value] = kv
       if (value === '') {
         section = key === 'cockpit' ? 'cockpit' : 'other'
+        if (key === 'cockpit') cockpitTagged = true
       } else {
         section = 'top'
         top.set(key, value.trim())
@@ -86,6 +95,7 @@ export function parseAgentFile(content: string): NamedAgent | null {
     role: cockpit.get('role') ?? null,
     persona: cockpit.get('persona') ?? null,
     body: rawBody.trim(),
+    cockpitTagged,
   }
 }
 

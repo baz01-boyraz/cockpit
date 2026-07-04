@@ -9,6 +9,10 @@ import { parseAgentFile, type NamedAgent } from '@shared/named-agents'
  * `<project>/.claude/agents/`. Project wins on slug collision. Files are the
  * truth — parsed on every read, no cache, no DB copy. Read-only by design;
  * authoring happens in the files (with Claude's help), not through IPC.
+ *
+ * Only files that declare a `cockpit:` block join the roster — those dirs also
+ * hold dozens of plain Claude Code subagents (reviewers, build resolvers…)
+ * that are tooling, not teammates, and must never appear in the board picker.
  */
 export class NamedAgentsService {
   constructor(private readonly projects: { get(projectId: string): { path: string } }) {}
@@ -38,7 +42,7 @@ function readScope(dir: string): NamedAgent[] {
     if (!entry.endsWith('.md')) continue
     try {
       const parsed = parseAgentFile(readFileSync(join(dir, entry), 'utf8'))
-      if (parsed) agents.push(parsed)
+      if (parsed?.cockpitTagged) agents.push(parsed)
     } catch {
       // An unreadable or malformed file never breaks the roster.
     }
