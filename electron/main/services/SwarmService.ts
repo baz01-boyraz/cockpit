@@ -154,7 +154,12 @@ export class SwarmService {
       name: `Swarm — ${named ? `${named.displayName}: ` : ''}${card.title.slice(0, 40)}`,
       role: 'claude',
       cwd: worktree?.path,
-      command: buildWorkerCommand({ title: card.title, body: card.body }, hubNames, identityText),
+      command: buildWorkerCommand(
+        { title: card.title, body: card.body },
+        hubNames,
+        identityText,
+        named?.model ?? null,
+      ),
     })
 
     const now = nowIso()

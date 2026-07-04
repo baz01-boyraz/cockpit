@@ -62,10 +62,16 @@ export function buildWorkerPrompt(
  * with no argument re-uses the last status, so the worker's exit code
  * survives to the card transition.
  */
+const MODEL_RE = /^[a-z0-9.-]{1,40}$/
+
 export function buildWorkerCommand(
   card: { title: string; body: string },
   hubNoteNames: readonly string[],
   roleText = '',
+  model: string | null = null,
 ): string {
-  return `claude ${shellQuote(buildWorkerPrompt(card, hubNoteNames, roleText))}; exit`
+  // The model id reaches a shell line, so it is allowlisted by shape — an
+  // agent definition file with a hostile model value gets ignored, not run.
+  const flag = model && MODEL_RE.test(model) ? `--model ${model} ` : ''
+  return `claude ${flag}${shellQuote(buildWorkerPrompt(card, hubNoteNames, roleText))}; exit`
 }

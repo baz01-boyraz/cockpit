@@ -357,6 +357,7 @@ describe('SwarmService quota gate (6.6)', () => {
     const svc = new SwarmService(store.db, deps.terminals, deps.memory, deps.audit, deps.events, deps.projects, deps.worktrees, undefined, named as never)
     await svc.startCard({ projectId: 'p1', cardId: 'a' })
     expect(deps.spawned[0].command).toContain('forge god')
+    expect(deps.spawned[0].command).toContain('--model sonnet')
     expect(deps.spawned[0].command).toContain('BUILDER')
     expect(deps.spawned[0].name).toBe('Swarm — Vulcan: API work')
   })

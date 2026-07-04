@@ -68,6 +68,12 @@ describe('buildWorkerCommand', () => {
     expect(cmd.endsWith(`'; exit`)).toBe(true)
   })
 
+  it('adds a validated --model flag and ignores hostile model strings', () => {
+    expect(buildWorkerCommand({ title: 'T', body: 'B' }, [], '', 'opus')).toContain('claude --model opus ')
+    expect(buildWorkerCommand({ title: 'T', body: 'B' }, [], '', 'x; rm -rf /')).not.toContain('rm -rf')
+    expect(buildWorkerCommand({ title: 'T', body: 'B' }, [], '', null).startsWith("claude '")).toBe(true)
+  })
+
   it('never contains a carriage return (a \\r would submit the pty line early)', () => {
     const cmd = buildWorkerCommand({ title: 'x\r rm -rf /', body: 'y\rz' }, ['n\rote'])
     expect(cmd).not.toContain('\r')
