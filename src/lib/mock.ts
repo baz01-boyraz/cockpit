@@ -26,6 +26,14 @@ import { resolveChatModel } from '@shared/chat-models'
 import { assembleDashboard, countActiveAgents } from '@shared/dashboard-assembly'
 import { aggregateInsights, insightFromMatch } from '@shared/insight-aggregation'
 import { assembleHubSnapshot, assembleNote, type MemoryDoc } from '@shared/memory-hub'
+import { assembleHealth } from '@shared/memory-health'
+import { analyzeConsolidation } from '@shared/memory-consolidate'
+import type { CaptureResult } from '@shared/memory-pipeline'
+import type { ReviewItem } from '@shared/memory-review'
+
+/** Browser-only review queue so the memory review UI has something to render. */
+const mockReviews = new Map<string, ReviewItem[]>()
+const reviewsFor = (projectId: string): ReviewItem[] => mockReviews.get(projectId) ?? []
 import {
   appendPosition,
   assembleBoard,
@@ -496,6 +504,70 @@ export function createMockApi(): CockpitApi {
         memoryHub.set(projectId, next)
         return assembleHubSnapshot(next)
       },
+      health: async (projectId) => assembleHealth(memoryDocsFor(projectId)),
+      captureSession: async (projectId, sessionId, dryRun): Promise<CaptureResult> => {
+        // The browser mock has no Claude CLI, so it synthesizes one demo proposal
+        // (a "review" so the UI can exercise the queue) instead of distilling.
+        const slug = `session-${sessionId.slice(0, 6)}-insight`
+        const proposedContent = `---\nschema: 1\nname: ${slug}\ntitle: Insight from ${sessionId.slice(0, 6)}\nclass: decision\ngate: asked\nupdatedAt: ${now()}\n---\nA demo fact the mock distiller proposed from this session.\n`
+        if (!dryRun) {
+          const item: ReviewItem = {
+            id: `rev-${Math.round(now().length + sessionId.length)}-${reviewsFor(projectId).length}`,
+            brain: `project:${projectId}`,
+            kind: 'new',
+            slug,
+            title: `Insight from ${sessionId.slice(0, 6)}`,
+            proposedContent,
+            reason: 'mock distiller was unsure — asking Baz',
+            existingContent: null,
+            sourceId: sessionId,
+            alsoTrash: null,
+            status: 'pending',
+            createdAt: now(),
+            resolvedAt: null,
+          }
+          mockReviews.set(projectId, [...reviewsFor(projectId), item])
+        }
+        return {
+          proposals: [
+            {
+              scope: 'project',
+              class: 'decision',
+              slug,
+              title: `Insight from ${sessionId.slice(0, 6)}`,
+              gate: 'review',
+              reconcile: 'new',
+              similarity: 0,
+              reason: 'mock distiller was unsure — asking Baz',
+              proposedContent,
+            },
+          ],
+          committed: 0,
+          queued: dryRun ? 0 : 1,
+          skipped: 0,
+          nextOffset: 0,
+          dryRun: !!dryRun,
+        }
+      },
+      reviewQueue: async (projectId) => reviewsFor(projectId),
+      resolveReview: async (projectId, reviewId, decision, editedContent) => {
+        const item = reviewsFor(projectId).find((r) => r.id === reviewId)
+        if (item && decision !== 'discard') {
+          const content = decision === 'edit' && editedContent != null ? editedContent : item.proposedContent
+          const docs = memoryDocsFor(projectId).filter((d) => d.name !== item.slug)
+          docs.push({ name: item.slug, content, updatedAt: now() })
+          memoryHub.set(projectId, docs)
+        }
+        mockReviews.set(projectId, reviewsFor(projectId).filter((r) => r.id !== reviewId))
+        return reviewsFor(projectId)
+      },
+      ledger: async () => [],
+      consolidate: async (projectId) => {
+        const report = analyzeConsolidation(memoryDocsFor(projectId))
+        return { report, queued: 0, snapshotId: `snap-${now().slice(0, 10)}` }
+      },
+      bazList: async () => assembleHubSnapshot(memoryDocsFor('baz-global')),
+      bazRead: async (name) => assembleNote(memoryDocsFor('baz-global'), name),
     },
     swarm: {
       // Same kernel as the real SwarmService (single-rule principle): the

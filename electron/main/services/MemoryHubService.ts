@@ -1,4 +1,14 @@
-import { mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { join, resolve, sep } from 'node:path'
 import { normalizeNoteName, renameLinkTargets } from '@shared/wikilink'
 import {
@@ -8,10 +18,12 @@ import {
   type MemoryHubSnapshot,
   type MemoryNote,
 } from '@shared/memory-hub'
+import { assembleHealth, type MemoryHealth } from '@shared/memory-health'
 import type { ProjectService } from './ProjectService'
 
 const HUB_DIR = '.cockpit-memory'
 const TRASH_DIR = '.trash'
+const SNAPSHOT_DIR = '.snapshots'
 const MAX_NOTE_CHARS = 500_000
 
 /**
@@ -22,10 +34,20 @@ const MAX_NOTE_CHARS = 500_000
  * depth. Deletion is a soft move into `.trash/` — never destructive.
  */
 export class MemoryHubService {
-  constructor(private readonly projects: ProjectService) {}
+  /**
+   * `fixedRoot`, when given, makes this a single-hub service rooted at that
+   * directory regardless of the `projectId` argument — how the global "Baz
+   * brain" (docs/memory-imp.md Phase 6) reuses the exact same machinery at
+   * `<userData>/baz-memory/`. Without it, the hub is per-project as before.
+   */
+  constructor(
+    private readonly projects: ProjectService,
+    private readonly fixedRoot?: string,
+  ) {}
 
   private hubDir(projectId: string): string {
-    return join(this.projects.get(projectId).path, HUB_DIR)
+    const base = this.fixedRoot ?? this.projects.get(projectId).path
+    return join(base, HUB_DIR)
   }
 
   /** Resolve a slug to its file path, refusing anything outside the hub. */
@@ -76,8 +98,18 @@ export class MemoryHubService {
     return assembleHubSnapshot(this.readDocs(projectId))
   }
 
+  /** Raw docs (name + content + mtime) — for the pipeline's reconciliation. */
+  listDocs(projectId: string): MemoryDoc[] {
+    return this.readDocs(projectId)
+  }
+
   read(projectId: string, name: string): MemoryNote | null {
     return assembleNote(this.readDocs(projectId), name)
+  }
+
+  /** Brain health snapshot (memory-imp G6) — derived from the same docs. */
+  health(projectId: string): MemoryHealth {
+    return assembleHealth(this.readDocs(projectId))
   }
 
   write(projectId: string, name: string, content: string): MemoryNote {
@@ -127,6 +159,87 @@ export class MemoryHubService {
     mkdirSync(trashDir, { recursive: true })
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
     renameSync(this.notePath(hub, slug), join(trashDir, `${slug}-${stamp}.md`))
+    return this.list(projectId)
+  }
+
+  /** Top-level note filenames (`<slug>.md`) in a hub directory. */
+  private noteFiles(hub: string): string[] {
+    let entries: string[]
+    try {
+      entries = readdirSync(hub)
+    } catch {
+      return []
+    }
+    return entries.filter((e) => {
+      if (!e.endsWith('.md')) return false
+      const slug = normalizeNoteName(e)
+      return !!slug && `${slug}.md` === e
+    })
+  }
+
+  /**
+   * Snapshot the whole hub before a bulk/maintenance pass (memory-imp G7). Copies
+   * every top-level note into `.snapshots/<stamp>/`; returns the snapshot id so a
+   * later `restoreSnapshot` can undo a bad consolidation. Reserved dirs (`.trash`,
+   * `.snapshots`) are never copied.
+   */
+  snapshot(projectId: string): { id: string; notes: number } {
+    const hub = this.hubDir(projectId)
+    const id = `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`
+    const dest = join(hub, SNAPSHOT_DIR, id)
+    mkdirSync(dest, { recursive: true })
+    const files = this.noteFiles(hub)
+    for (const file of files) {
+      copyFileSync(join(hub, file), join(dest, file))
+    }
+    return { id, notes: files.length }
+  }
+
+  listSnapshots(projectId: string): string[] {
+    const dir = join(this.hubDir(projectId), SNAPSHOT_DIR)
+    try {
+      return readdirSync(dir)
+        .filter((e) => existsSync(join(dir, e)))
+        .sort()
+        .reverse()
+    } catch {
+      return []
+    }
+  }
+
+  /**
+   * Restore the hub to a snapshot (memory-imp G7). Notes in the snapshot are
+   * written back verbatim; live notes that were NOT in the snapshot are soft-
+   * deleted to `.trash/` — never hard-removed. A bad merge is one call to undo.
+   */
+  restoreSnapshot(projectId: string, snapshotId: string): MemoryHubSnapshot {
+    // Snapshot ids are `<iso-with-dashes>-<8 hex>` by construction — anything
+    // path-shaped (separators, `..`) is rejected before it touches the fs.
+    if (!/^[0-9A-Za-z.-]+-[a-f0-9]{8}$/.test(snapshotId) || snapshotId.includes('..')) {
+      throw new Error('Invalid snapshot id.')
+    }
+    const hub = this.hubDir(projectId)
+    const src = join(hub, SNAPSHOT_DIR, snapshotId)
+    const snapResolved = resolve(src)
+    if (!snapResolved.startsWith(resolve(join(hub, SNAPSHOT_DIR)) + sep)) {
+      throw new Error('Snapshot path escapes the hub.')
+    }
+    const snapFiles = this.noteFiles(src)
+    const snapSlugs = new Set(snapFiles.map((f) => normalizeNoteName(f)!))
+
+    // Soft-delete live notes absent from the snapshot.
+    const trashDir = join(hub, TRASH_DIR)
+    for (const file of this.noteFiles(hub)) {
+      const slug = normalizeNoteName(file)!
+      if (snapSlugs.has(slug)) continue
+      mkdirSync(trashDir, { recursive: true })
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      renameSync(join(hub, file), join(trashDir, `${slug}-restore-${stamp}.md`))
+    }
+    // Write snapshot notes back over the hub.
+    for (const file of snapFiles) {
+      copyFileSync(join(src, file), join(hub, file))
+    }
     return this.list(projectId)
   }
 }

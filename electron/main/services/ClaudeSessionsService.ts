@@ -30,6 +30,11 @@ export class ClaudeSessionsService {
     this.root = root
   }
 
+  /** Absolute path to a session's `.jsonl` transcript (for the memory pipeline). */
+  transcriptPath(projectPath: string, sessionId: string): string {
+    return join(this.root, encodeProjectDir(projectPath), `${sessionId}.jsonl`)
+  }
+
   /** Most-recent-first session summaries for the given project path. */
   list(projectPath: string): ClaudeSessionSummary[] {
     const dir = join(this.root, encodeProjectDir(projectPath))

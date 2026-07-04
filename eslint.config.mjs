@@ -8,6 +8,9 @@ export default tseslint.config(
       'out/**',
       'dist/**',
       'release/**',
+      // Swarm worktrees are ephemeral, git-ignored checkouts that carry their
+      // own build output (`out/`) — never lint another worktree's artifacts.
+      '.cockpit-worktrees/**',
       'node_modules/**',
       '**/*.nosync/**',
       'temporary screenshots/**',

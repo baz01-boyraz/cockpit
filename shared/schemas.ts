@@ -196,6 +196,29 @@ export const memoryRenameSchema = z.object({
   to: z.string().min(1).max(120),
 })
 
+/** Session ids are Claude Code transcript UUIDs — no path characters allowed. */
+export const memoryCaptureSchema = z.object({
+  projectId: z.string().min(1),
+  sessionId: z.string().min(1).max(200).regex(/^[A-Za-z0-9._-]+$/, 'invalid session id'),
+  dryRun: z.boolean().optional(),
+})
+
+export const memoryResolveReviewSchema = z.object({
+  projectId: z.string().min(1),
+  reviewId: z.string().min(1).max(200),
+  decision: z.enum(['accept', 'edit', 'discard']),
+  editedContent: z.string().max(500_000).optional(),
+})
+
+export const memoryLedgerSchema = z.object({
+  projectId: z.string().min(1),
+  noteSlug: z.string().min(1).max(120).optional(),
+})
+
+export const memoryBazReadSchema = z.object({
+  name: z.string().min(1).max(120),
+})
+
 export const swarmProjectSchema = z.object({
   projectId: z.string().min(1),
 })

@@ -6,6 +6,7 @@ import { IPC, type IpcResultMap, type RequestChannelKey, type SystemInfo } from 
 import { formatIpcError } from '@shared/ipc-errors'
 import { requiresApproval } from '@shared/approval-rules'
 import { toSummary } from '@shared/named-agents'
+import { BAZ_GLOBAL_BRAIN, projectBrain } from '@shared/memory-ledger'
 import type { ApprovalActionType } from '@shared/domain'
 import {
   addProjectInputSchema,
@@ -19,8 +20,12 @@ import {
   chatAskSchema,
   dismissInsightSchema,
   ingestLogSchema,
+  memoryBazReadSchema,
+  memoryCaptureSchema,
+  memoryLedgerSchema,
   memoryNameSchema,
   memoryRenameSchema,
+  memoryResolveReviewSchema,
   memoryWriteSchema,
   projectIdSchema,
   requestApprovalSchema,
@@ -231,6 +236,37 @@ export function registerIpc(services: Services): void {
     const { projectId, from, to } = memoryRenameSchema.parse(p)
     return services.memory.rename(projectId, from, to)
   })
+  handle('memoryHealth', (p) => services.memory.health(projectIdSchema.parse(p).projectId))
+  handle('memoryCaptureSession', (p) => {
+    const { projectId, sessionId, dryRun } = memoryCaptureSchema.parse(p)
+    const projectPath = services.projects.get(projectId).path
+    const transcriptPath = services.claudeSessions.transcriptPath(projectPath, sessionId)
+    return services.memoryPipeline.capture({ projectId, transcriptPath, sessionId, dryRun })
+  })
+  handle('memoryReviewQueue', (p) => {
+    // The unified queue: project-brain proposals plus cross-project Baz-brain ones.
+    const { projectId } = projectIdSchema.parse(p)
+    return [
+      ...services.memoryReviews.listPending(projectBrain(projectId)),
+      ...services.memoryReviews.listPending(BAZ_GLOBAL_BRAIN),
+    ]
+  })
+  handle('memoryBazList', () => services.globalMemory.list(BAZ_GLOBAL_BRAIN))
+  handle('memoryBazRead', (p) =>
+    services.globalMemory.read(BAZ_GLOBAL_BRAIN, memoryBazReadSchema.parse(p).name),
+  )
+  handle('memoryResolveReview', (p) => {
+    const { projectId, reviewId, decision, editedContent } = memoryResolveReviewSchema.parse(p)
+    services.memoryPipeline.resolveReview(projectId, reviewId, decision, editedContent)
+    return services.memoryReviews.listPending(projectBrain(projectId))
+  })
+  handle('memoryLedger', (p) => {
+    const { projectId, noteSlug } = memoryLedgerSchema.parse(p)
+    return services.memoryLedger.list(projectBrain(projectId), noteSlug)
+  })
+  handle('memoryConsolidate', (p) =>
+    services.memoryConsolidator.consolidate(projectIdSchema.parse(p).projectId),
+  )
   handle('memoryTrash', (p) => {
     const { projectId, name } = memoryNameSchema.parse(p)
     return services.memory.trash(projectId, name)

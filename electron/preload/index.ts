@@ -93,6 +93,16 @@ const api: CockpitApi = {
     write: (projectId, name, content) => invoke(IPC.memoryWrite, { projectId, name, content }),
     rename: (projectId, from, to) => invoke(IPC.memoryRename, { projectId, from, to }),
     trash: (projectId, name) => invoke(IPC.memoryTrash, { projectId, name }),
+    health: (projectId) => invoke(IPC.memoryHealth, { projectId }),
+    captureSession: (projectId, sessionId, dryRun) =>
+      invoke(IPC.memoryCaptureSession, { projectId, sessionId, dryRun }),
+    reviewQueue: (projectId) => invoke(IPC.memoryReviewQueue, { projectId }),
+    resolveReview: (projectId, reviewId, decision, editedContent) =>
+      invoke(IPC.memoryResolveReview, { projectId, reviewId, decision, editedContent }),
+    ledger: (projectId, noteSlug) => invoke(IPC.memoryLedger, { projectId, noteSlug }),
+    consolidate: (projectId) => invoke(IPC.memoryConsolidate, { projectId }),
+    bazList: () => invoke(IPC.memoryBazList, {}),
+    bazRead: (name) => invoke(IPC.memoryBazRead, { name }),
   },
   swarm: {
     board: (projectId) => invoke(IPC.swarmBoard, { projectId }),

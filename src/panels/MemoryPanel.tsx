@@ -8,6 +8,7 @@ import { MemoryReader } from '../components/memory/MemoryReader'
 import { MemoryConnections } from '../components/memory/MemoryConnections'
 import { MemoryEmptyState } from '../components/memory/MemoryEmptyState'
 import { MemoryGraph } from '../components/memory/MemoryGraph'
+import { MemoryBrainBar } from '../components/memory/MemoryBrainBar'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong writing to the hub.'
@@ -240,6 +241,10 @@ export function MemoryPanel() {
             <IconX width={13} height={13} />
           </button>
         </div>
+      )}
+
+      {projectId && !loading && (
+        <MemoryBrainBar projectId={projectId} onChanged={() => void refreshSnapshot()} />
       )}
 
       {loading ? (

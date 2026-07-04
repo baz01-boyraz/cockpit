@@ -268,3 +268,71 @@ CREATE INDEX IF NOT EXISTS idx_kanban_cards_project ON kanban_cards(project_id);
 export const SCHEMA_V6 = /* sql */ `
 ALTER TABLE kanban_cards ADD COLUMN agent TEXT;
 `
+
+/**
+ * V7 — Memory brain provenance ledger (docs/memory-imp.md, G7). Append-only:
+ * every change the brain makes to a note is recorded with before/after content
+ * hashes, so any note is traceable to the session that produced it and is
+ * revertible. `brain` is 'project:<id>' or 'baz-global' (the global hub is not a
+ * project, so no FK). No FK on note_slug either — notes are files, not rows, and
+ * a soft-deleted note must keep its history.
+ */
+export const SCHEMA_V7 = /* sql */ `
+CREATE TABLE IF NOT EXISTS memory_ledger (
+  id           TEXT PRIMARY KEY,
+  brain        TEXT NOT NULL,
+  note_slug    TEXT NOT NULL,
+  action       TEXT NOT NULL,
+  gate         TEXT NOT NULL,
+  source_id    TEXT,
+  hash_before  TEXT,
+  hash_after   TEXT,
+  created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_memory_ledger_note ON memory_ledger(brain, note_slug, created_at);
+`
+
+/**
+ * V8 — Memory review queue (docs/memory-imp.md, G4). When the distiller is
+ * unsure a fact is worth keeping, or reconciliation finds a collision, the
+ * proposed change waits here for Baz's one-tap decision instead of being written
+ * silently. `payload` is the JSON proposal (title, proposed content, reason,
+ * existing content). No FK — brains include the non-project global hub.
+ */
+export const SCHEMA_V8 = /* sql */ `
+CREATE TABLE IF NOT EXISTS memory_review (
+  id           TEXT PRIMARY KEY,
+  brain        TEXT NOT NULL,
+  kind         TEXT NOT NULL,
+  slug         TEXT NOT NULL,
+  payload      TEXT NOT NULL,
+  status       TEXT NOT NULL,
+  created_at   TEXT NOT NULL,
+  resolved_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_memory_review_pending ON memory_review(brain, status, created_at);
+`
+
+/**
+ * V9 — Durable memory capture queue (docs/memory-imp.md, G2 "never miss"). One
+ * row per Claude session; `last_offset` is the byte cursor so only new turns are
+ * distilled. The row survives app quit/crash, so a pending capture is never
+ * dropped — on boot any 'processing' row is reset to 'queued' and resumed.
+ * `session_id` is unique: a session has exactly one queue row, re-armed when it
+ * grows. No FK (a project row could be removed while a capture is pending).
+ */
+export const SCHEMA_V9 = /* sql */ `
+CREATE TABLE IF NOT EXISTS memory_capture_queue (
+  id            TEXT PRIMARY KEY,
+  project_id    TEXT NOT NULL,
+  session_id    TEXT NOT NULL UNIQUE,
+  source_path   TEXT NOT NULL,
+  status        TEXT NOT NULL,
+  last_offset   INTEGER NOT NULL DEFAULT 0,
+  attempts      INTEGER NOT NULL DEFAULT 0,
+  error         TEXT,
+  enqueued_at   TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mcq_status ON memory_capture_queue(status, enqueued_at);
+`

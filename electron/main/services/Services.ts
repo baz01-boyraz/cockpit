@@ -18,6 +18,13 @@ import { ApprovalService } from './ApprovalService'
 import { AppUpdateService } from './AppUpdateService'
 import { ChatService } from './ChatService'
 import { MemoryHubService } from './MemoryHubService'
+import { MemoryLedgerService } from './MemoryLedgerService'
+import { MemoryReviewService } from './MemoryReviewService'
+import { MemoryDistiller } from './MemoryDistiller'
+import { MemoryPipeline } from './MemoryPipeline'
+import { MemoryCaptureQueue } from './MemoryCaptureQueue'
+import { MemoryAutoCapture } from './MemoryAutoCapture'
+import { MemoryConsolidator } from './MemoryConsolidator'
 import { SwarmService } from './SwarmService'
 import { NamedAgentsService } from './NamedAgentsService'
 import { SwarmWorktrees } from './SwarmWorktrees'
@@ -56,6 +63,15 @@ export class Services {
   readonly chat: ChatService
   readonly review: ReviewService
   readonly memory: MemoryHubService
+  /** Cross-project Baz brain (Phase 6) — the same hub machinery, global root. */
+  readonly globalMemory: MemoryHubService
+  readonly memoryLedger: MemoryLedgerService
+  readonly memoryReviews: MemoryReviewService
+  readonly memoryDistiller: MemoryDistiller
+  readonly memoryPipeline: MemoryPipeline
+  readonly memoryCaptureQueue: MemoryCaptureQueue
+  readonly memoryAutoCapture: MemoryAutoCapture
+  readonly memoryConsolidator: MemoryConsolidator
   readonly swarm: SwarmService
   readonly namedAgents: NamedAgentsService
   readonly appUpdate: AppUpdateService
@@ -80,6 +96,26 @@ export class Services {
     this.chat = new ChatService(this.projects)
     this.review = new ReviewService(this.projects, this.audit)
     this.memory = new MemoryHubService(this.projects)
+    this.globalMemory = new MemoryHubService(this.projects, join(opts.userDataDir, 'baz-memory'))
+    this.memoryLedger = new MemoryLedgerService(this.db)
+    this.memoryReviews = new MemoryReviewService(this.db)
+    this.memoryDistiller = new MemoryDistiller(this.projects)
+    this.memoryPipeline = new MemoryPipeline(
+      this.memory,
+      this.memoryLedger,
+      this.memoryReviews,
+      this.memoryDistiller,
+      undefined,
+      this.globalMemory,
+    )
+    this.memoryConsolidator = new MemoryConsolidator(this.memory, this.memoryReviews)
+    this.memoryCaptureQueue = new MemoryCaptureQueue(this.db)
+    this.memoryAutoCapture = new MemoryAutoCapture(
+      this.memoryCaptureQueue,
+      this.memoryPipeline,
+      this.projects,
+      this.claudeSessions,
+    )
     this.appUpdate = new AppUpdateService(opts.events)
 
     this.terminals = new TerminalManager(
@@ -113,6 +149,11 @@ export class Services {
     )
     // Forget a pane's TUI-mode state once it exits, so session ids never leak.
     opts.events.onTyped('terminal:exit', ({ sessionId }) => this.tuiState.delete(sessionId))
+
+    // The living brain: sweep idle Claude sessions into memory in the background
+    // (docs/memory-imp.md Phase 4). Conservative defaults; all state is durable
+    // in the capture queue, so a crash mid-drain resumes on the next boot.
+    this.memoryAutoCapture.start()
   }
 
   /**
@@ -187,6 +228,7 @@ export class Services {
   shutdown(): void {
     if (this.closing) return
     this.closing = true
+    this.memoryAutoCapture.stop()
     // Kill terminals first (flags TerminalManager so late pty events are ignored),
     // then close the DB. Order + flags prevent "database connection is not open".
     this.terminals.killAll()

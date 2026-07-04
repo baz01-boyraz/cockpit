@@ -12,6 +12,11 @@
 import type { ClaudeRunOptions } from './claude-run'
 import type { ReviewResult } from './review'
 import type { MemoryHubSnapshot, MemoryNote } from './memory-hub'
+import type { MemoryHealth } from './memory-health'
+import type { CaptureResult } from './memory-pipeline'
+import type { ReviewDecision, ReviewItem } from './memory-review'
+import type { LedgerEntry } from './memory-ledger'
+import type { ConsolidationResult } from './memory-consolidate'
 import type { BoardColumn, CardStatus } from './kanban'
 import type { NamedAgentSummary } from './named-agents'
 import type {
@@ -97,6 +102,14 @@ export const IPC = {
   memoryWrite: 'memory:write',
   memoryRename: 'memory:rename',
   memoryTrash: 'memory:trash',
+  memoryHealth: 'memory:health',
+  memoryCaptureSession: 'memory:captureSession',
+  memoryReviewQueue: 'memory:reviewQueue',
+  memoryResolveReview: 'memory:resolveReview',
+  memoryLedger: 'memory:ledger',
+  memoryConsolidate: 'memory:consolidate',
+  memoryBazList: 'memory:bazList',
+  memoryBazRead: 'memory:bazRead',
 
   swarmBoard: 'swarm:board',
   swarmCreateCard: 'swarm:createCard',
@@ -279,6 +292,33 @@ export interface CockpitApi {
     write(projectId: string, name: string, content: string): Promise<MemoryNote>
     rename(projectId: string, from: string, to: string): Promise<MemoryHubSnapshot>
     trash(projectId: string, name: string): Promise<MemoryHubSnapshot>
+    /** Brain health — note/orphan/unresolved/oversized counts (memory-imp G6). */
+    health(projectId: string): Promise<MemoryHealth>
+    /**
+     * Distill a Claude session into memory (memory-imp Phases 2–3). Confident
+     * facts are saved, unsure/conflicting ones are queued for review. `dryRun`
+     * previews the proposals without writing anything.
+     */
+    captureSession(projectId: string, sessionId: string, dryRun?: boolean): Promise<CaptureResult>
+    /** Pending review cards awaiting Baz's decision (memory-imp G4). */
+    reviewQueue(projectId: string): Promise<ReviewItem[]>
+    /** Resolve a review (accept/edit writes it, discard drops it); returns the fresh queue. */
+    resolveReview(
+      projectId: string,
+      reviewId: string,
+      decision: ReviewDecision,
+      editedContent?: string,
+    ): Promise<ReviewItem[]>
+    /** Provenance history for the project brain, optionally one note (memory-imp G7). */
+    ledger(projectId: string, noteSlug?: string): Promise<LedgerEntry[]>
+    /**
+     * Run the consolidation "sleep" pass (memory-imp G5): snapshot the hub, find
+     * duplicates/oversized/dangling, and queue merge proposals for review.
+     */
+    consolidate(projectId: string): Promise<ConsolidationResult>
+    /** The cross-project Baz brain — facts about you, portable across projects (Phase 6). */
+    bazList(): Promise<MemoryHubSnapshot>
+    bazRead(name: string): Promise<MemoryNote | null>
   }
   swarm: {
     /**
@@ -417,6 +457,14 @@ export interface IpcResultMap {
   memoryWrite: R<CockpitApi['memory']['write']>
   memoryRename: R<CockpitApi['memory']['rename']>
   memoryTrash: R<CockpitApi['memory']['trash']>
+  memoryHealth: R<CockpitApi['memory']['health']>
+  memoryCaptureSession: R<CockpitApi['memory']['captureSession']>
+  memoryReviewQueue: R<CockpitApi['memory']['reviewQueue']>
+  memoryResolveReview: R<CockpitApi['memory']['resolveReview']>
+  memoryLedger: R<CockpitApi['memory']['ledger']>
+  memoryConsolidate: R<CockpitApi['memory']['consolidate']>
+  memoryBazList: R<CockpitApi['memory']['bazList']>
+  memoryBazRead: R<CockpitApi['memory']['bazRead']>
   swarmBoard: R<CockpitApi['swarm']['board']>
   swarmCreateCard: R<CockpitApi['swarm']['createCard']>
   swarmUpdateCard: R<CockpitApi['swarm']['updateCard']>
