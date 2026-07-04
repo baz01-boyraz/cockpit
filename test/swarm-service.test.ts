@@ -16,6 +16,8 @@ interface Row {
   role: string | null
   persona: string | null
   agent: string | null
+  assignments: string
+  pipeline_step: number
   terminal_session_id: string | null
   worktree_path: string | null
   branch: string | null
@@ -35,6 +37,8 @@ function makeStore(seed: Partial<Row>[] = []) {
     role: null,
     persona: null,
     agent: null,
+    assignments: '[]',
+    pipeline_step: 0,
     terminal_session_id: null,
     worktree_path: null,
     branch: null,
@@ -71,6 +75,8 @@ function makeStore(seed: Partial<Row>[] = []) {
           role: null,
           persona: null,
           agent: null,
+          assignments: '[]',
+          pipeline_step: 0,
           terminal_session_id: null,
           worktree_path: null,
           branch: null,
@@ -81,23 +87,36 @@ function makeStore(seed: Partial<Row>[] = []) {
         const at = rows.findIndex((r) => r.id === args[0])
         if (at >= 0) rows.splice(at, 1)
       } else if (sql.includes('SET title')) {
-        const p = args[0] as Record<string, string | null>
+        const p = args[0] as Record<string, string | number | null>
         const r = rows.find((x) => x.id === p.id)
         if (r) {
           r.title = String(p.title)
           r.body = String(p.body)
-          r.role = p.role
-          r.persona = p.persona
-          r.agent = p.agent
+          r.role = p.role as string | null
+          r.persona = p.persona as string | null
+          r.agent = p.agent as string | null
+          r.assignments = String(p.assignments)
+          r.pipeline_step = Number(p.step)
           r.updated_at = String(p.now)
         }
-      } else if (sql.includes('SET terminal_session_id')) {
-        const r = rows.find((x) => x.id === args[4])
+      } else if (sql.includes('SET terminal_session_id') && sql.includes('worktree_path')) {
+        // startCard: session, worktree, branch, assignments, pipeline_step, now, id
+        const r = rows.find((x) => x.id === args[6])
         if (r) {
           r.terminal_session_id = String(args[0])
           r.worktree_path = args[1] === null ? null : String(args[1])
           r.branch = args[2] === null ? null : String(args[2])
-          r.updated_at = String(args[3])
+          r.assignments = String(args[3])
+          r.pipeline_step = Number(args[4])
+          r.updated_at = String(args[5])
+        }
+      } else if (sql.includes('SET terminal_session_id')) {
+        // pipeline advance: session, pipeline_step, now, id
+        const r = rows.find((x) => x.id === args[3])
+        if (r) {
+          r.terminal_session_id = String(args[0])
+          r.pipeline_step = Number(args[1])
+          r.updated_at = String(args[2])
         }
       } else if (sql.includes(`SET status = 'parked'`)) {
         const r = rows.find((x) => x.id === args[1])
@@ -248,8 +267,11 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
   it('spawns a claude worker in a fresh worktree and moves the card to Running', async () => {
     await svc.startCard({ projectId: 'p1', cardId: 'a' })
     expect(deps.spawned).toHaveLength(1)
-    expect(deps.spawned[0].name).toBe('Swarm — Fix the form')
+    // The unassigned card is auto-routed at Start: "Fix the form" → a Fixer,
+    // and the picked role rides the worker name and prompt.
+    expect(deps.spawned[0].name).toBe('Swarm — Fixer·Frontend: Fix the form')
     expect(deps.spawned[0].command).toContain(`claude '`)
+    expect(deps.spawned[0].command).toContain('Your role: FIXER')
     expect(deps.spawned[0].command).toContain('.cockpit-memory/swarm-design.md')
     expect(deps.spawned[0].cwd).toBe('/proj/.cockpit-worktrees/a')
     const row = store.rows.find((r) => r.id === 'a')!
@@ -257,6 +279,8 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
     expect(row.terminal_session_id).toBe('term_1')
     expect(row.worktree_path).toBe('/proj/.cockpit-worktrees/a')
     expect(row.branch).toMatch(/^swarm\/fix-the-form/)
+    // Auto-assignment is persisted so the board and any resume see the pipeline.
+    expect(JSON.parse(row.assignments)).toEqual([{ role: 'fixer', spec: 'frontend' }])
     expect(deps.audits).toContain('swarm.start_card')
   })
 
@@ -346,6 +370,35 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
     // The signal was spent — the next board read does not move anything.
     svc.board('p1')
     expect(store.rows.find((r) => r.id === 'a')!.status).toBe('in_review')
+  })
+
+  it('advances a multi-step pipeline in place on each turn signal; review only after the last', async () => {
+    store.rows.find((r) => r.id === 'a')!.assignments = JSON.stringify([
+      { role: 'builder', spec: 'backend' },
+      { role: 'reviewer', spec: 'security' },
+    ])
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    expect(deps.spawned[0].name).toBe('Swarm — Builder·Backend: Fix the form')
+    const wt = '/proj/.cockpit-worktrees/a'
+
+    // First turn-finished → advance to the Reviewer step in the SAME worktree,
+    // retire the builder, and keep the card Running (no human touch).
+    deps.signalled.add(wt)
+    svc.board('p1')
+    let row = store.rows.find((r) => r.id === 'a')!
+    expect(row.status).toBe('in_progress')
+    expect(row.pipeline_step).toBe(1)
+    expect(deps.killed).toEqual(['term_1'])
+    expect(deps.spawned).toHaveLength(2)
+    expect(deps.spawned[1].name).toBe('Swarm — Reviewer·Security: Fix the form')
+    expect(deps.audits).toContain('swarm.pipeline_advance')
+
+    // Second turn-finished → last step done → In review, no further spawn.
+    deps.signalled.add(wt)
+    svc.board('p1')
+    row = store.rows.find((r) => r.id === 'a')!
+    expect(row.status).toBe('in_review')
+    expect(deps.spawned).toHaveLength(2)
   })
 
   it('a late signal for a card no longer Running is consumed and ignored', async () => {

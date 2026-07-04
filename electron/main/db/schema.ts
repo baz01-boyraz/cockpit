@@ -336,3 +336,20 @@ CREATE TABLE IF NOT EXISTS memory_capture_queue (
 );
 CREATE INDEX IF NOT EXISTS idx_mcq_status ON memory_capture_queue(status, enqueued_at);
 `
+
+/**
+ * V10 — Systematic role pipeline (auto-assign). A card carries an ORDERED list
+ * of role/spec assignments (`shared/agent-taxonomy`) run sequentially in one
+ * worktree, and `pipeline_step` tracks how far the chain has advanced. The
+ * legacy single `role`/`persona`/`agent` columns stay for back-compat; when
+ * `assignments` is non-empty it is the source of truth. Append-only ALTERs
+ * (SQLite has no ADD COLUMN IF NOT EXISTS), each with a default so existing
+ * rows migrate cleanly.
+ *
+ * Renumbered from V7→V10 during the 2026-07-04 batch integration (the memory
+ * brain independently claimed V7–V9 on a parallel branch).
+ */
+export const SCHEMA_V10 = /* sql */ `
+ALTER TABLE kanban_cards ADD COLUMN assignments TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE kanban_cards ADD COLUMN pipeline_step INTEGER NOT NULL DEFAULT 0;
+`

@@ -43,6 +43,8 @@ import {
 } from '@shared/kanban'
 import { normalizeNoteName, renameLinkTargets } from '@shared/wikilink'
 import { classifyRoute } from '@shared/router'
+import { classifyRoles } from '@shared/role-router'
+import type { Assignment } from '@shared/agent-taxonomy'
 import { matchLogLine } from '@shared/log-patterns'
 import {
   BANNER,
@@ -587,6 +589,8 @@ export function createMockApi(): CockpitApi {
             role: null,
             persona: null,
             agent: null,
+            assignments: [],
+            pipelineStep: 0,
             terminalSessionId: null,
             worktreePath: null,
             branch: null,
@@ -597,7 +601,7 @@ export function createMockApi(): CockpitApi {
         kanbanSeed.set(projectId, next)
         return assembleBoard(next)
       },
-      updateCard: async ({ projectId, cardId, title, body, role, persona, agent }) => {
+      updateCard: async ({ projectId, cardId, title, body, role, persona, agent, assignments }) => {
         const cards = kanbanFor(projectId)
         if (!cards.some((c) => c.id === cardId)) {
           throw new Error(`Card ${cardId} not found in this project.`)
@@ -611,6 +615,9 @@ export function createMockApi(): CockpitApi {
                 role: role === undefined ? c.role : role,
                 persona: persona === undefined ? c.persona : persona,
                 agent: agent === undefined ? c.agent : agent,
+                assignments: assignments === undefined ? c.assignments : assignments,
+                // A changed pipeline restarts at step 0 (mock parity with main).
+                pipelineStep: assignments === undefined ? c.pipelineStep : 0,
                 updatedAt: now(),
               }
             : c,
@@ -647,6 +654,18 @@ export function createMockApi(): CockpitApi {
         // Same worktree rule as main: create on first start, reuse on resume.
         const branch = card.branch ?? cardBranch(card.title, card.id)
         const workerSessionId = id('term')
+        // Auto-assign at Start (mock parity with SwarmService.resolveAssignments):
+        // an unassigned, un-named card is routed to a role pipeline from its text.
+        const assignments: Assignment[] =
+          card.assignments.length > 0
+            ? card.assignments
+            : card.agent
+              ? []
+              : classifyRoles(card.title, card.body).pipeline.map((p) => ({
+                  role: p.role,
+                  spec: p.spec ?? null,
+                }))
+        const startStep = Math.min(card.pipelineStep, Math.max(0, assignments.length - 1))
         const linked = cards.map((c) =>
           c.id === cardId
             ? {
@@ -654,6 +673,8 @@ export function createMockApi(): CockpitApi {
                 terminalSessionId: workerSessionId,
                 branch,
                 worktreePath: c.worktreePath ?? `/mock/worktrees/${branch.slice(6)}`,
+                assignments,
+                pipelineStep: startStep,
               }
             : c,
         )
@@ -681,15 +702,30 @@ export function createMockApi(): CockpitApi {
           emit(workerSessionId, `\x1b[2m${workerLines[step % workerLines.length]}\x1b[0m\r\n`)
           step += 1
         }, 2_400)
-        setTimeout(() => {
+        // Pipeline simulation: every ~6s the active step "finishes its turn",
+        // advancing to the next role in place (same card, bumped step) — the
+        // mock mirror of SwarmService.advanceOrFinish — then lands In review
+        // after the last step, matching the real done-signal flow.
+        const totalSteps = Math.max(1, assignments.length)
+        let simStep = startStep
+        const advance = setInterval(() => {
           const current = kanbanFor(projectId)
           const still = current.find((c) => c.id === cardId && c.status === 'in_progress')
-          if (!still) return
-          kanbanSeed.set(
-            projectId,
-            moveCardInList(current, cardId, 'in_review', 0, 'service', now()),
-          )
-        }, 15_000)
+          if (!still) {
+            clearInterval(advance)
+            return
+          }
+          if (simStep + 1 < totalSteps) {
+            simStep += 1
+            kanbanSeed.set(
+              projectId,
+              current.map((c) => (c.id === cardId ? { ...c, pipelineStep: simStep, updatedAt: now() } : c)),
+            )
+          } else {
+            clearInterval(advance)
+            kanbanSeed.set(projectId, moveCardInList(current, cardId, 'in_review', 0, 'service', now()))
+          }
+        }, 6_000)
         return assembleBoard(next)
       },
       agents: async (_projectId) => namedAgentsMock,

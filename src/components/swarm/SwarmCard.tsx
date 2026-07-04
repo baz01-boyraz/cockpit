@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from 'react'
 import type { KanbanCard } from '@shared/kanban'
 import type { NamedAgentSummary } from '@shared/named-agents'
+import { assignmentLabel } from '@shared/agent-taxonomy'
 import { useSessionActivity } from '../../store/swarmActivityStore'
 import {
   IconBranch,
@@ -45,6 +46,8 @@ const ROLE_TONE: Record<string, IdentityTone> = {
   reviewer: 'glacier',
   planner: 'violet',
   scout: 'signal',
+  fixer: 'copper',
+  tester: 'signal',
   copywriter: 'copper',
 }
 
@@ -79,10 +82,11 @@ function resolveIdentity(card: KanbanCard, agent: NamedAgentSummary | null): Car
       monogram: (agent.displayName.trim().charAt(0) || '•').toUpperCase(),
     }
   }
-  if (card.role) {
+  const leadRole = card.assignments[0]?.role ?? card.role
+  if (leadRole) {
     return {
-      tone: ROLE_TONE[card.role] ?? 'neutral',
-      monogram: card.role.trim().charAt(0).toUpperCase() || '•',
+      tone: ROLE_TONE[leadRole] ?? 'neutral',
+      monogram: leadRole.trim().charAt(0).toUpperCase() || '•',
     }
   }
   return { tone: 'neutral', monogram: '•' }
@@ -236,7 +240,7 @@ export function SwarmCard({
   /** Parked with a kept worktree → Start resumes where the worker stopped. */
   const resumable = card.status === 'parked' && card.worktreePath !== null
   const identity = resolveIdentity(card, agent)
-  const hasMeta = Boolean(card.agent || card.role || card.branch)
+  const hasMeta = Boolean(card.agent || card.assignments.length > 0 || card.role || card.branch)
 
   const handleDragStart = (e: DragEvent<HTMLDivElement>) => {
     e.dataTransfer.setData('text/plain', card.id)
@@ -293,6 +297,20 @@ export function SwarmCard({
               title={agent ? (agent.tagline ?? agent.description) : `Unknown agent "${card.agent}"`}
             >
               {agent?.displayName ?? card.agent}
+            </span>
+          ) : card.assignments.length > 0 ? (
+            <span className="swarmPipeline" role="list" aria-label="Agent pipeline">
+              {card.assignments.map((a, i) => (
+                <span key={`${a.role}-${a.spec ?? ''}-${i}`} className="swarmPipeline__step">
+                  {i > 0 && <span className="swarmPipeline__arrow" aria-hidden>›</span>}
+                  <span
+                    role="listitem"
+                    className={`swarmTag swarmTag--step${running && i === card.pipelineStep ? ' swarmTag--active' : ''}${!running && i < card.pipelineStep ? ' swarmTag--spent' : ''}`}
+                  >
+                    {assignmentLabel(a)}
+                  </span>
+                </span>
+              ))}
             </span>
           ) : (
             card.role && <span className="swarmTag">{card.role}</span>

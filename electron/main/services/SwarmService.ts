@@ -8,6 +8,13 @@ import {
 } from '@shared/kanban'
 import { buildWorkerCommand } from '@shared/swarm-worker'
 import { rolePromptFor } from '@shared/agent-roles'
+import {
+  assignmentLabel,
+  parseAssignments,
+  pipelinePrompt,
+  type Assignment,
+} from '@shared/agent-taxonomy'
+import { classifyRoles } from '@shared/role-router'
 import { composeAgentText, type NamedAgent } from '@shared/named-agents'
 import type { AgentUsageReport, TerminalSession } from '@shared/domain'
 import type { Db } from '../db/Database'
@@ -53,6 +60,8 @@ interface CardRow {
   role: string | null
   persona: string | null
   agent: string | null
+  assignments: string
+  pipeline_step: number
   terminal_session_id: string | null
   worktree_path: string | null
   branch: string | null
@@ -136,17 +145,65 @@ export class SwarmService {
     )
     for (const card of signalled) {
       if (card.status !== 'in_progress') continue
-      const cards = this.cards(projectId)
-      const next = moveCardInList(cards, card.id, 'in_review', 0, 'service', nowIso())
-      this.persistChanges(cards, next)
+      this.advanceOrFinish(projectId, card)
+    }
+  }
+
+  /**
+   * A running worker just finished its turn. If the card's pipeline has more
+   * steps, advance to the next role IN THE SAME WORKTREE — retire the finished
+   * worker, spawn the next, keep the card Running so the chain flows without a
+   * human touch. Otherwise the card is done for review: it moves to In review
+   * with its terminal left open for follow-up conversation.
+   */
+  private advanceOrFinish(projectId: string, card: KanbanCard): void {
+    const assignments = card.assignments
+    const nextStep = card.pipelineStep + 1
+    const canAdvance =
+      assignments.length > 1 &&
+      nextStep < assignments.length &&
+      card.worktreePath !== null &&
+      card.branch !== null
+
+    if (canAdvance) {
+      const projectPath = this.projects.get(projectId).path
+      const worktree = { path: card.worktreePath as string, branch: card.branch as string }
+      // Re-arm the sentinel for the next step, then spawn it. The row's session
+      // id is repointed to the new worker BEFORE the old one is killed, so the
+      // retiring worker's exit can never match this card (onWorkerExit is a
+      // no-op for it) and the card stays Running across the handoff.
+      this.doneSignal?.arm(projectPath, worktree.path)
+      const session = this.spawnWorker(projectId, card, worktree, assignments, nextStep)
+      this.db
+        .prepare(`UPDATE kanban_cards SET terminal_session_id = ?, pipeline_step = ?, updated_at = ? WHERE id = ?`)
+        .run(session.id, nextStep, nowIso(), card.id)
+      if (card.terminalSessionId) {
+        try {
+          this.terminals.kill(card.terminalSessionId)
+        } catch {
+          // The finished worker's terminal may already be gone.
+        }
+      }
       this.audit.record({
         projectId,
         actor: 'system',
-        actionType: 'swarm.card_done_signal',
-        summary: `Swarm card "${card.title}" — worker finished its turn; moved to In review (terminal stays open)`,
-        payload: { cardId: card.id, sessionId: card.terminalSessionId },
+        actionType: 'swarm.pipeline_advance',
+        summary: `Swarm card "${card.title}" advanced to ${assignmentLabel(assignments[nextStep])} (step ${nextStep + 1}/${assignments.length})`,
+        payload: { cardId: card.id, sessionId: session.id, step: nextStep },
       })
+      return
     }
+
+    const cards = this.cards(projectId)
+    const next = moveCardInList(cards, card.id, 'in_review', 0, 'service', nowIso())
+    this.persistChanges(cards, next)
+    this.audit.record({
+      projectId,
+      actor: 'system',
+      actionType: 'swarm.card_done_signal',
+      summary: `Swarm card "${card.title}" — worker finished${assignments.length > 1 ? ' the pipeline' : ' its turn'}; moved to In review (terminal stays open)`,
+      payload: { cardId: card.id, sessionId: card.terminalSessionId },
+    })
   }
 
   /**
@@ -181,22 +238,90 @@ export class SwarmService {
       }
     }
 
+    // Auto-assign at Start: an unassigned card (no explicit pipeline, no named
+    // override) is routed to a role pipeline from its text — the "give a task,
+    // the swarm picks the agents" path. An explicit pipeline or a named agent
+    // is honoured as-is. Steps run sequentially in this one worktree.
+    const assignments = this.resolveAssignments(card)
+    const step = Math.min(card.pipelineStep, Math.max(0, assignments.length - 1))
+
     // Arm the turn-finished signal BEFORE the worker spawns: clears any stale
     // sentinel from a previous run and installs the Stop hook the new session
     // will fire. Without a worktree there is no safe place for the hook
     // (we never write into the user's real project), so the card falls back
-    // to the exit/manual lifecycle.
+    // to the exit/manual lifecycle — and to a single step (no done-signal to
+    // advance the pipeline on).
     if (worktree) this.doneSignal?.arm(projectPath, worktree.path)
 
-    const hubNames = this.hubNoteNames(input.projectId)
-    // Identity precedence: an assigned Named Agent speaks with its authored
-    // voice (body + its default role/persona); otherwise the card's manual
-    // role/persona catalog text applies.
-    const named = card.agent ? (this.namedAgents?.find(input.projectId, card.agent) ?? null) : null
-    const identityText = named ? composeAgentText(named) : rolePromptFor(card.role, card.persona)
-    const session = this.terminals.create({
+    const session = this.spawnWorker(input.projectId, card, worktree, assignments, step)
+
+    const now = nowIso()
+    this.db
+      .prepare(
+        `UPDATE kanban_cards SET terminal_session_id = ?, worktree_path = ?, branch = ?,
+         assignments = ?, pipeline_step = ?, updated_at = ? WHERE id = ?`,
+      )
+      .run(
+        session.id,
+        worktree?.path ?? null,
+        worktree?.branch ?? null,
+        JSON.stringify(assignments),
+        step,
+        now,
+        card.id,
+      )
+    const next = moveCardInList(this.cards(input.projectId), card.id, 'in_progress', 0, 'service', now)
+    this.persistChanges(cards, next)
+
+    this.audit.record({
       projectId: input.projectId,
-      name: `Swarm — ${named ? `${named.displayName}: ` : ''}${card.title.slice(0, 40)}`,
+      actor: 'user',
+      actionType: 'swarm.start_card',
+      summary: `Started swarm card "${card.title}"${this.pipelineSummary(assignments, step)}${worktree ? ` in ${worktree.branch}` : ' (project root — no worktree)'}`,
+      payload: { cardId: card.id, sessionId: session.id, worktree: worktree?.branch ?? null, assignments, step },
+    })
+    return assembleBoard(next)
+  }
+
+  /**
+   * The pipeline a card runs. An explicit list (set on the card) wins; a named
+   * override drives its own identity and needs no role pipeline; otherwise the
+   * router assigns roles from the card's text at Start.
+   */
+  private resolveAssignments(card: KanbanCard): Assignment[] {
+    if (card.assignments.length > 0) return card.assignments
+    // A named override or a legacy manual role/persona drives identity the old
+    // way (spawnWorker falls back to it); auto-assign only fires for a card
+    // with no assignment of any kind — the "gave a task, picked no agent" case.
+    if (card.agent || card.role || card.persona) return []
+    return classifyRoles(card.title, card.body).pipeline.map((p) => ({ role: p.role, spec: p.spec ?? null }))
+  }
+
+  /** Launch the worker for one pipeline step (or a named/legacy identity). */
+  private spawnWorker(
+    projectId: string,
+    card: KanbanCard,
+    worktree: { path: string; branch: string } | null,
+    assignments: Assignment[],
+    step: number,
+  ): TerminalSession {
+    const hubNames = this.hubNoteNames(projectId)
+    // Identity precedence: a Named Agent speaks with its authored voice; else
+    // the pipeline step's role/spec prompt; else the legacy manual role/persona.
+    const named = card.agent ? (this.namedAgents?.find(projectId, card.agent) ?? null) : null
+    const identityText = named
+      ? composeAgentText(named)
+      : assignments.length > 0
+        ? pipelinePrompt(assignments[step], step, assignments.length)
+        : rolePromptFor(card.role, card.persona)
+    const badge = named
+      ? `${named.displayName}: `
+      : assignments.length > 0
+        ? `${assignmentLabel(assignments[step])}: `
+        : ''
+    return this.terminals.create({
+      projectId,
+      name: `Swarm — ${badge}${card.title.slice(0, 40)}`,
       role: 'claude',
       cwd: worktree?.path,
       command: buildWorkerCommand(
@@ -206,25 +331,13 @@ export class SwarmService {
         named?.model ?? null,
       ),
     })
+  }
 
-    const now = nowIso()
-    this.db
-      .prepare(
-        `UPDATE kanban_cards SET terminal_session_id = ?, worktree_path = ?, branch = ?,
-         updated_at = ? WHERE id = ?`,
-      )
-      .run(session.id, worktree?.path ?? null, worktree?.branch ?? null, now, card.id)
-    const next = moveCardInList(this.cards(input.projectId), card.id, 'in_progress', 0, 'service', now)
-    this.persistChanges(cards, next)
-
-    this.audit.record({
-      projectId: input.projectId,
-      actor: 'user',
-      actionType: 'swarm.start_card',
-      summary: `Started swarm card "${card.title}"${worktree ? ` in ${worktree.branch}` : ' (project root — no worktree)'}`,
-      payload: { cardId: card.id, sessionId: session.id, worktree: worktree?.branch ?? null },
-    })
-    return assembleBoard(next)
+  /** Human summary of a card's pipeline for audit lines. */
+  private pipelineSummary(assignments: Assignment[], step: number): string {
+    if (assignments.length === 0) return ''
+    const chain = assignments.map(assignmentLabel).join(' → ')
+    return assignments.length > 1 ? ` · ${chain} (step ${step + 1}/${assignments.length})` : ` · ${chain}`
   }
 
   /**
@@ -332,12 +445,18 @@ export class SwarmService {
     role?: string | null
     persona?: string | null
     agent?: string | null
+    assignments?: Assignment[]
   }): BoardColumn[] {
     const card = this.cardOrThrow(input.projectId, input.cardId)
+    // A changed pipeline starts fresh at step 0; leaving it unset preserves
+    // how far a resumed card has already advanced.
+    const assignments = input.assignments === undefined ? card.assignments : input.assignments
+    const pipelineStep = input.assignments === undefined ? card.pipelineStep : 0
     this.db
       .prepare(
         `UPDATE kanban_cards SET title = @title, body = @body, role = @role,
-         persona = @persona, agent = @agent, updated_at = @now WHERE id = @id`,
+         persona = @persona, agent = @agent, assignments = @assignments,
+         pipeline_step = @step, updated_at = @now WHERE id = @id`,
       )
       .run({
         id: card.id,
@@ -346,6 +465,8 @@ export class SwarmService {
         role: input.role === undefined ? card.role : input.role,
         persona: input.persona === undefined ? card.persona : input.persona,
         agent: input.agent === undefined ? card.agent : input.agent,
+        assignments: JSON.stringify(assignments),
+        step: pipelineStep,
         now: nowIso(),
       })
     return this.board(input.projectId)
@@ -419,11 +540,23 @@ export class SwarmService {
       role: row.role,
       persona: row.persona,
       agent: row.agent,
+      assignments: parseAssignments(safeJsonParse(row.assignments)),
+      pipelineStep: row.pipeline_step ?? 0,
       terminalSessionId: row.terminal_session_id,
       worktreePath: row.worktree_path,
       branch: row.branch,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }
+  }
+}
+
+/** Tolerant JSON parse for the persisted assignments column; never throws. */
+function safeJsonParse(text: string | null): unknown {
+  if (!text) return []
+  try {
+    return JSON.parse(text)
+  } catch {
+    return []
   }
 }

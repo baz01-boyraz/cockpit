@@ -9,6 +9,7 @@ import {
   SCHEMA_V7,
   SCHEMA_V8,
   SCHEMA_V9,
+  SCHEMA_V10,
 } from './schema'
 
 export type Db = BetterSqlite3.Database
@@ -29,6 +30,7 @@ const MIGRATIONS: Migration[] = [
   { version: 7, name: 'memory_ledger', sql: SCHEMA_V7 },
   { version: 8, name: 'memory_review', sql: SCHEMA_V8 },
   { version: 9, name: 'memory_capture_queue', sql: SCHEMA_V9 },
+  { version: 10, name: 'kanban_card_assignments', sql: SCHEMA_V10 },
 ]
 
 /**

@@ -7,6 +7,7 @@
  * these schemas before touching the filesystem, git, or a child process.
  */
 import { z } from 'zod'
+import { ROLE_IDS, SPEC_IDS, type Role, type Spec } from './agent-taxonomy'
 
 export const approvalActionTypeSchema = z.enum([
   'git_push',
@@ -229,6 +230,12 @@ export const swarmCreateCardSchema = z.object({
   body: z.string().max(20_000).optional(),
 })
 
+/** One role/spec assignment — ids validated against the taxonomy catalog. */
+export const assignmentSchema = z.object({
+  role: z.enum(ROLE_IDS as [Role, ...Role[]]),
+  spec: z.enum(SPEC_IDS as [Spec, ...Spec[]]).nullable().optional(),
+})
+
 export const swarmUpdateCardSchema = z.object({
   projectId: z.string().min(1),
   cardId: z.string().min(1),
@@ -237,6 +244,8 @@ export const swarmUpdateCardSchema = z.object({
   role: z.string().min(1).max(60).nullable().optional(),
   persona: z.string().min(1).max(60).nullable().optional(),
   agent: z.string().min(1).max(60).nullable().optional(),
+  /** Ordered role pipeline; capped so a card can never fan out unboundedly. */
+  assignments: z.array(assignmentSchema).max(6).optional(),
 })
 
 // The renderer is always the "user" actor: schema-level status choices exclude

@@ -18,6 +18,7 @@ import type { ReviewDecision, ReviewItem } from './memory-review'
 import type { LedgerEntry } from './memory-ledger'
 import type { ConsolidationResult } from './memory-consolidate'
 import type { BoardColumn, CardStatus } from './kanban'
+import type { Assignment } from './agent-taxonomy'
 import type { NamedAgentSummary } from './named-agents'
 import type {
   AgentType,
@@ -335,6 +336,8 @@ export interface CockpitApi {
       role?: string | null
       persona?: string | null
       agent?: string | null
+      /** Ordered role pipeline; when set it supersedes role/persona/agent. */
+      assignments?: Assignment[]
     }): Promise<BoardColumn[]>
     /**
      * Human drag/drop. `index` is the insertion index in the destination

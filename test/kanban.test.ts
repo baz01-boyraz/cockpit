@@ -22,6 +22,8 @@ const card = (over: Partial<KanbanCard>): KanbanCard => ({
   role: null,
   persona: null,
   agent: null,
+  assignments: [],
+  pipelineStep: 0,
   terminalSessionId: null,
   worktreePath: null,
   branch: null,

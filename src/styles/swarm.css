@@ -594,6 +594,39 @@
   text-overflow: ellipsis;
   font-size: inherit;
 }
+/* Agent pipeline — the ordered role chain a card runs (auto-assigned or set).
+ * Chips read left→right; the running step lights ember, spent steps recede. */
+.swarmPipeline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.swarmPipeline__step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.swarmPipeline__arrow {
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  line-height: 1;
+}
+.swarmTag--step {
+  letter-spacing: 0.01em;
+}
+/* The step a live worker is on — the pipeline's hero. */
+.swarmTag--active {
+  color: var(--ember-200);
+  background: linear-gradient(180deg, rgba(238, 124, 66, 0.2), var(--accent-wash));
+  border-color: rgba(238, 124, 66, 0.36);
+  box-shadow: inset 0 1px 0 var(--edge-highlight-soft), 0 0 8px -2px var(--accent-glow);
+}
+/* Steps a resumed/finished pipeline has already passed through. */
+.swarmTag--spent {
+  opacity: 0.5;
+}
 /* Named Agent identity chip — same quiet pill, tinted by the agent's declared
  * color. Washes only, never solid fills: identity is information, not action. */
 .swarmTag--agent {
@@ -936,6 +969,79 @@
   border-color: rgba(237, 100, 80, 0.45);
   background: var(--danger-wash);
   color: var(--danger);
+}
+/* Role pipeline builder — the systematic identity control. */
+.swarmEdit__pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle, var(--border));
+}
+.swarmEdit__addStep {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.swarmEdit__addStep .swarmEdit__select {
+  flex: 1 1 5rem;
+  min-width: 0;
+}
+/* The add button drops to its own full-width row so it never clips in a
+ * narrow card column. */
+.swarmEdit__addStep .btn {
+  flex: 1 0 100%;
+}
+.swarmTag--removable {
+  padding-right: 3px;
+}
+.swarmTag__x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  margin-left: 1px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.swarmTag__x:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.swarmTag__x:focus-visible {
+  outline: 1px solid var(--border-accent);
+  outline-offset: 1px;
+}
+.swarmEdit__advanced {
+  border-top: 1px solid var(--border-subtle, var(--border));
+  padding-top: 4px;
+}
+.swarmEdit__summary {
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 2px 0;
+  list-style: none;
+}
+.swarmEdit__summary::-webkit-details-marker {
+  display: none;
+}
+.swarmEdit__summary:hover {
+  color: var(--text-muted);
+}
+.swarmEdit__advanced[open] .swarmEdit__summary {
+  margin-bottom: 4px;
 }
 
 /* ----- 6.4 board-header quota chips: machined engine gauges (awareness only,

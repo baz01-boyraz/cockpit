@@ -2,6 +2,8 @@
 // board assembly, and ordering math. Pure — consumed by BOTH SwarmService
 // and the browser mock, never implemented twice.
 
+import type { Assignment } from './agent-taxonomy'
+
 export type CardStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'parked'
 
 /** Who is asking for a transition. Spawn/exit/park are facts the service owns. */
@@ -16,8 +18,16 @@ export interface KanbanCard {
   position: number
   role: string | null
   persona: string | null
-  /** Named Agent slug from .claude/agents (user or project scope); null = manual role/persona. */
+  /** Named Agent slug from .claude/agents (user or project scope); optional advanced override. */
   agent: string | null
+  /**
+   * Ordered role pipeline run sequentially in one worktree (auto-assigned by
+   * the router or set on the card). When non-empty this is the identity source
+   * of truth, superseding the legacy role/persona/agent fields.
+   */
+  assignments: Assignment[]
+  /** How far the pipeline has advanced — index of the currently-running step. */
+  pipelineStep: number
   terminalSessionId: string | null
   worktreePath: string | null
   branch: string | null
