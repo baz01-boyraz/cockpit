@@ -157,11 +157,21 @@ function makeDeps() {
       wtCalls.push(`remove:${path}`)
     }),
   }
-  return { terminals, spawned, killed, audit, audits, memory: memory as never, events, projects, worktrees, wtCalls }
+  // Fake turn-finished channel: `signalled` stands in for the sentinel files.
+  const signalled = new Set<string>()
+  const armed: string[] = []
+  const doneSignal = {
+    arm: vi.fn((_p: string, worktreePath: string) => {
+      armed.push(worktreePath)
+      signalled.delete(worktreePath)
+    }),
+    consume: vi.fn((worktreePath: string) => signalled.delete(worktreePath)),
+  }
+  return { terminals, spawned, killed, audit, audits, memory: memory as never, events, projects, worktrees, wtCalls, doneSignal, signalled, armed }
 }
 
 const build = (store: ReturnType<typeof makeStore>, deps: ReturnType<typeof makeDeps>) =>
-  new SwarmService(store.db, deps.terminals, deps.memory, deps.audit, deps.events, deps.projects, deps.worktrees)
+  new SwarmService(store.db, deps.terminals, deps.memory, deps.audit, deps.events, deps.projects, deps.worktrees, undefined, undefined, deps.doneSignal)
 
 describe('SwarmService CRUD', () => {
   let store: ReturnType<typeof makeStore>
@@ -312,6 +322,46 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
   it('ignores exits of terminals that are not linked to a running card', () => {
     deps.events.emitTyped('terminal:exit', { sessionId: 'term_ghost', exitCode: 1, signal: null })
     expect(store.rows.find((r) => r.id === 'a')!.status).toBe('todo')
+  })
+
+  it('arms the done signal for the worktree before the worker spawns', async () => {
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    expect(deps.armed).toEqual(['/proj/.cockpit-worktrees/a'])
+    // No worktree (fallback run) → nothing to arm.
+    deps.worktrees.create.mockRejectedValueOnce(new Error('not a git repo'))
+    await svc.startCard({ projectId: 'p1', cardId: 'b' })
+    expect(deps.armed).toHaveLength(1)
+  })
+
+  it('a turn-finished signal moves the Running card to In review; the terminal stays alive', async () => {
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    deps.signalled.add('/proj/.cockpit-worktrees/a')
+
+    svc.board('p1')
+    const row = store.rows.find((r) => r.id === 'a')!
+    expect(row.status).toBe('in_review')
+    expect(deps.killed).toEqual([])
+    expect(deps.audits).toContain('swarm.card_done_signal')
+
+    // The signal was spent — the next board read does not move anything.
+    svc.board('p1')
+    expect(store.rows.find((r) => r.id === 'a')!.status).toBe('in_review')
+  })
+
+  it('a late signal for a card no longer Running is consumed and ignored', async () => {
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    svc.parkCard({ projectId: 'p1', cardId: 'a' })
+    deps.signalled.add('/proj/.cockpit-worktrees/a')
+
+    svc.board('p1')
+    expect(store.rows.find((r) => r.id === 'a')!.status).toBe('parked')
+    expect(deps.signalled.has('/proj/.cockpit-worktrees/a')).toBe(false)
+  })
+
+  it('without a signal the card stays Running across board reads', async () => {
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    svc.board('p1')
+    expect(store.rows.find((r) => r.id === 'a')!.status).toBe('in_progress')
   })
 })
 

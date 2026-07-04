@@ -1,6 +1,7 @@
-import type { CSSProperties, DragEvent, MouseEvent, ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from 'react'
 import type { KanbanCard } from '@shared/kanban'
 import type { NamedAgentSummary } from '@shared/named-agents'
+import { useSessionActivity } from '../../store/swarmActivityStore'
 import {
   IconBranch,
   IconCheck,
@@ -120,6 +121,52 @@ interface SwarmCardProps {
 
 const startable = (status: KanbanCard['status']): boolean =>
   status === 'todo' || status === 'parked'
+
+/** Output younger than this reads as "actively working". */
+const FRESH_OUTPUT_MS = 15_000
+/** Relative-age refresh cadence while a card is running. */
+const ACTIVITY_TICK_MS = 5_000
+
+/** A clock that only ticks while `active` — idle cards never re-render. */
+function useNow(active: boolean, intervalMs: number): number {
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  useEffect(() => {
+    if (!active) return
+    setNowMs(Date.now())
+    const timer = setInterval(() => setNowMs(Date.now()), intervalMs)
+    return () => clearInterval(timer)
+  }, [active, intervalMs])
+  return nowMs
+}
+
+/** "output 3s ago" / "quiet 4m" — the at-a-glance liveness readout. */
+function activityLabel(lastAt: number | null, nowMs: number): string {
+  if (lastAt === null) return 'awaiting output…'
+  const age = Math.max(0, nowMs - lastAt)
+  if (age < 8_000) return 'output just now'
+  if (age < 60_000) return `output ${Math.round(age / 1000)}s ago`
+  return `quiet ${Math.round(age / 60_000)}m`
+}
+
+/**
+ * The Running card's liveness row: a lit dot + relative last-output time fed
+ * by the app-level heartbeat, so "is the worker alive?" reads from the board
+ * without opening the terminal.
+ */
+function RunningActivity({ sessionId }: { sessionId: string | null }) {
+  const lastAt = useSessionActivity(sessionId)
+  const nowMs = useNow(true, ACTIVITY_TICK_MS)
+  const fresh = lastAt !== null && nowMs - lastAt < FRESH_OUTPUT_MS
+  return (
+    <div className="swarmActivity" role="status">
+      <span
+        className={`swarmActivity__dot ${fresh ? 'swarmActivity__dot--live' : ''}`}
+        aria-hidden
+      />
+      <span className="swarmActivity__label mono">{activityLabel(lastAt, nowMs)}</span>
+    </div>
+  )
+}
 
 /** The at-a-glance status glyph pinned to the header's right edge. Running keeps
  * its pinging ember live dot (the hero); every other lane gets a quiet tinted
@@ -292,6 +339,8 @@ export function SwarmCard({
           )}
         </div>
       )}
+
+      {running && <RunningActivity sessionId={card.terminalSessionId} />}
 
       {running && (
         <div className="swarmCard__foot">

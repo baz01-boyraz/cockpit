@@ -27,3 +27,26 @@ Load-bearing choices:
 Resume rests on Phase 3.3 substrate: `terminal_sessions.command` +
 `reconciled_at` + the UUID-checked `claude --resume` path ([[ipc-contract]]
 keeps all four bridge legs honest as the `swarm.*` namespace lands).
+
+## Done-signal — closing the lifecycle loop
+
+Workers are INTERACTIVE `claude` sessions (deliberate: the human can keep
+talking to a worker mid-card), so the pty rarely exits on its own and
+`terminal:exit` alone left cards Running until someone killed the terminal.
+The missing half:
+
+- `SwarmDoneSignal.arm()` (called by `startCard` for worktree runs) installs a
+  Claude Code **Stop hook** in `<worktree>/.claude/settings.local.json` that
+  touches `.cockpit-done` whenever the worker ends a turn. Both files are
+  hidden via `.git/info/exclude` so they never dirty the worktree or the diff
+  review. A foreign settings.local.json is never clobbered (graceful degrade
+  to the manual lifecycle).
+- `SwarmService.board()` consumes the sentinel on every read (the panel polls
+  while cards run): Running card + spent signal → **In review**, terminal kept
+  alive for follow-ups. Late signals for non-Running cards are consumed and
+  ignored. This stays inside the "status from facts, never model prose" rule —
+  a hook firing is a runtime fact.
+- Running cards also show a liveness row ("output 3s ago" / "quiet 2m") fed by
+  `swarmActivityStore` — timestamps only, one app-level onData listener,
+  2s-coarsened stamps. The board answers "alive or stalled?" without opening
+  the terminal.

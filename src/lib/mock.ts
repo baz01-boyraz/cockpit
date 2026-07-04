@@ -646,11 +646,12 @@ export function createMockApi(): CockpitApi {
         }
         // Same worktree rule as main: create on first start, reuse on resume.
         const branch = card.branch ?? cardBranch(card.title, card.id)
+        const workerSessionId = id('term')
         const linked = cards.map((c) =>
           c.id === cardId
             ? {
                 ...c,
-                terminalSessionId: id('term'),
+                terminalSessionId: workerSessionId,
                 branch,
                 worktreePath: c.worktreePath ?? `/mock/worktrees/${branch.slice(6)}`,
               }
@@ -658,8 +659,28 @@ export function createMockApi(): CockpitApi {
         )
         const next = moveCardInList(linked, cardId, 'in_progress', 0, 'service', now())
         kanbanSeed.set(projectId, next)
-        // Simulated worker: finishes after a short run so the board polling
-        // shows the same Running → In review transition the real exit drives.
+        // Simulated worker: streams a heartbeat while Running (feeds the
+        // card's liveness row), then finishes after a short run so the board
+        // polling shows the same Running → In review transition the real
+        // done-signal drives.
+        const workerLines = [
+          'Reading the card and project hub…',
+          'Scanning src/ for the relevant modules…',
+          'Editing components…',
+          'Running the test suite…',
+        ]
+        let step = 0
+        const heartbeat = setInterval(() => {
+          const stillRunning = kanbanFor(projectId).some(
+            (c) => c.id === cardId && c.status === 'in_progress',
+          )
+          if (!stillRunning) {
+            clearInterval(heartbeat)
+            return
+          }
+          emit(workerSessionId, `\x1b[2m${workerLines[step % workerLines.length]}\x1b[0m\r\n`)
+          step += 1
+        }, 2_400)
         setTimeout(() => {
           const current = kanbanFor(projectId)
           const still = current.find((c) => c.id === cardId && c.status === 'in_progress')

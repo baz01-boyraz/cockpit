@@ -34,6 +34,12 @@ export interface WorktreeOps {
   removeIfClean(projectPath: string, worktreePath: string): Promise<void>
 }
 
+/** Turn-finished signalling (SwarmDoneSignal) — injectable for tests. */
+export interface DoneSignalOps {
+  arm(projectPath: string, worktreePath: string): void
+  consume(worktreePath: string): boolean
+}
+
 /** Parallel cards ceiling (plan D6). Raise only after Gate 6 passes at 4. */
 export const RUNNING_CAP = 3
 
@@ -74,6 +80,7 @@ export class SwarmService {
     private readonly worktrees: WorktreeOps,
     private readonly agentUsage?: { getReport(): Promise<AgentUsageReport> },
     private readonly namedAgents?: { find(projectId: string, slug: string): NamedAgent | null },
+    private readonly doneSignal?: DoneSignalOps,
   ) {
     // 6.4: any card still in_progress at construction is an orphan — its
     // worker died with the previous app instance (TerminalManager already
@@ -108,7 +115,38 @@ export class SwarmService {
   }
 
   board(projectId: string): BoardColumn[] {
+    this.reconcileDoneSignals(projectId)
     return assembleBoard(this.cards(projectId))
+  }
+
+  /**
+   * The other half of the worker lifecycle. Workers are INTERACTIVE `claude`
+   * sessions (so the human can keep talking to them), which means the pty
+   * rarely exits on its own — `terminal:exit` alone left cards Running until
+   * someone killed the terminal. The Stop hook armed at start touches a
+   * sentinel in the worktree whenever the worker ends a turn; consuming it
+   * here (the board read path — the panel polls while cards run) moves the
+   * card to In review while the terminal stays open for follow-ups. Later
+   * turn-end signals for an already-moved card are consumed and ignored.
+   */
+  private reconcileDoneSignals(projectId: string): void {
+    if (!this.doneSignal) return
+    const signalled = this.cards(projectId).filter(
+      (c) => c.worktreePath !== null && this.doneSignal!.consume(c.worktreePath!),
+    )
+    for (const card of signalled) {
+      if (card.status !== 'in_progress') continue
+      const cards = this.cards(projectId)
+      const next = moveCardInList(cards, card.id, 'in_review', 0, 'service', nowIso())
+      this.persistChanges(cards, next)
+      this.audit.record({
+        projectId,
+        actor: 'system',
+        actionType: 'swarm.card_done_signal',
+        summary: `Swarm card "${card.title}" — worker finished its turn; moved to In review (terminal stays open)`,
+        payload: { cardId: card.id, sessionId: card.terminalSessionId },
+      })
+    }
   }
 
   /**
@@ -142,6 +180,13 @@ export class SwarmService {
         worktree = null
       }
     }
+
+    // Arm the turn-finished signal BEFORE the worker spawns: clears any stale
+    // sentinel from a previous run and installs the Stop hook the new session
+    // will fire. Without a worktree there is no safe place for the hook
+    // (we never write into the user's real project), so the card falls back
+    // to the exit/manual lifecycle.
+    if (worktree) this.doneSignal?.arm(projectPath, worktree.path)
 
     const hubNames = this.hubNoteNames(input.projectId)
     // Identity precedence: an assigned Named Agent speaks with its authored

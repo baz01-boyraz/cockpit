@@ -28,6 +28,7 @@ import { MemoryConsolidator } from './MemoryConsolidator'
 import { SwarmService } from './SwarmService'
 import { NamedAgentsService } from './NamedAgentsService'
 import { SwarmWorktrees } from './SwarmWorktrees'
+import { SwarmDoneSignal } from './SwarmDoneSignal'
 import { ReviewService } from './ReviewService'
 import { ClaudeSessionsService } from './ClaudeSessionsService'
 import { GitService } from './GitService'
@@ -146,6 +147,7 @@ export class Services {
       new SwarmWorktrees(),
       this.agentUsage,
       this.namedAgents,
+      new SwarmDoneSignal(),
     )
     // Forget a pane's TUI-mode state once it exits, so session ids never leak.
     opts.events.onTyped('terminal:exit', ({ sessionId }) => this.tuiState.delete(sessionId))
@@ -172,7 +174,10 @@ export class Services {
     this.tuiState.set(sessionId, scan.state)
     if (scan.suppress) return
     const interesting = sanitizeChunkToLines(data)
-      .filter((line) => inferLogLevel(line) === 'error' || inferLogLevel(line) === 'warn')
+      .filter((line) => {
+        const level = inferLogLevel(line)
+        return level === 'error' || level === 'warn'
+      })
       .join('\n')
     if (interesting.trim().length === 0) return
     this.logs.ingest({ projectId, sourceType: 'terminal', sourceId: sessionId, message: interesting })

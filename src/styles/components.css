@@ -476,8 +476,20 @@
   border-color: rgba(227, 169, 63, 0.4);
   background: var(--warning-wash);
   color: var(--warning);
-  box-shadow: 0 0 0 1px rgba(227, 169, 63, 0.12), 0 0 16px rgba(227, 169, 63, 0.18);
-  animation: approvals-breathe 2.6s var(--ease-out) infinite;
+  box-shadow: 0 0 0 1px rgba(227, 169, 63, 0.1), 0 0 14px rgba(227, 169, 63, 0.14);
+}
+/* Breathing glow as an opacity-animated overlay: animating box-shadow itself
+ * repaints every frame forever; cross-fading a static shadow layer composites
+ * on the GPU instead. The overlay's shadow is the delta to the peak state. */
+.topbar__approvals--active::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 1px rgba(227, 169, 63, 0.14), 0 0 22px rgba(227, 169, 63, 0.2);
+  opacity: 0;
+  pointer-events: none;
+  animation: glow-breathe 2.6s var(--ease-out) infinite;
 }
 .topbar__approvals--active svg {
   color: var(--warning);
@@ -485,13 +497,13 @@
 .topbar__approvalsCount {
   font-weight: 700;
 }
-@keyframes approvals-breathe {
+@keyframes glow-breathe {
   0%,
   100% {
-    box-shadow: 0 0 0 1px rgba(227, 169, 63, 0.1), 0 0 14px rgba(227, 169, 63, 0.14);
+    opacity: 0;
   }
   50% {
-    box-shadow: 0 0 0 1px rgba(227, 169, 63, 0.22), 0 0 22px rgba(227, 169, 63, 0.3);
+    opacity: 1;
   }
 }
 
@@ -821,20 +833,8 @@
 .engineCore--off .logoMeter__ring {
   opacity: 0.3;
 }
-@keyframes usage-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 6px color-mix(in srgb, var(--tone) 45%, transparent);
-  }
-  50% {
-    box-shadow:
-      0 0 11px color-mix(in srgb, var(--tone) 80%, transparent),
-      0 0 0 3px color-mix(in srgb, var(--tone) 16%, transparent);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .topbar__approvals--active {
+  .topbar__approvals--active::after {
     animation: none;
   }
   .logoMeter__ring {
@@ -932,12 +932,24 @@
   letter-spacing: 0;
 }
 .quotaBody__liveDot {
+  position: relative;
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--signal);
-  box-shadow: 0 0 7px color-mix(in srgb, var(--signal) 70%, transparent);
-  animation: usage-pulse 2.4s var(--ease-out) infinite;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--tone) 45%, transparent);
+}
+/* Pulse via an opacity-animated glow overlay — never animate box-shadow. */
+.quotaBody__liveDot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    0 0 11px color-mix(in srgb, var(--tone) 80%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--tone) 16%, transparent);
+  opacity: 0;
+  animation: glow-breathe 2.4s var(--ease-out) infinite;
 }
 .quotaBody__windows {
   display: flex;

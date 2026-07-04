@@ -544,11 +544,21 @@
   width: 4px;
   border-radius: var(--r-pill);
   background: linear-gradient(180deg, #f2c877, var(--warning));
-  box-shadow: 0 0 16px rgba(227, 169, 63, 0.55);
-  animation: approvals-breathe 2.6s var(--ease-out) infinite;
+  box-shadow: 0 0 0 1px rgba(227, 169, 63, 0.1), 0 0 14px rgba(227, 169, 63, 0.14);
+}
+/* Breathe via the shared opacity overlay (glow-breathe, components.css) —
+ * animating box-shadow directly forces a repaint on every frame. */
+.dash__approvalBannerEdge::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 1px rgba(227, 169, 63, 0.14), 0 0 22px rgba(227, 169, 63, 0.2);
+  opacity: 0;
+  animation: glow-breathe 2.6s var(--ease-out) infinite;
 }
 @media (prefers-reduced-motion: reduce) {
-  .dash__approvalBannerEdge {
+  .dash__approvalBannerEdge::after {
     animation: none;
   }
 }

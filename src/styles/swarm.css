@@ -762,6 +762,31 @@
   cursor: progress;
 }
 
+/* ----- running-card liveness row (heartbeat from swarmActivityStore) ----- */
+.swarmActivity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.swarmActivity__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex: none;
+}
+.swarmActivity__dot--live {
+  background: var(--signal);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--signal) 55%, transparent);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+.swarmActivity__label {
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.02em;
+}
+
 /* ----- drop-position indicator ----- */
 .swarmDropline {
   flex-shrink: 0;
