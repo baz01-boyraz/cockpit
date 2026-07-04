@@ -216,13 +216,7 @@ export function DashboardPanel() {
       <section className="dashHero u-rise">
         <span className="dashHero__glow" aria-hidden />
         <div className="dashHero__id">
-          <div className="dashHero__eyebrow">
-            <span className="eyebrow">command center</span>
-            <span className="dashHero__sep dashHero__sep--eyebrow" aria-hidden />
-            <span className="dashHero__proj mono">
-              {dashboard.project?.name ?? 'no project'}
-            </span>
-          </div>
+          <div className="eyebrow">command center</div>
           <h2 className="dashHero__title">
             <span className="dashHero__wordmark">cockpit</span>
           </h2>

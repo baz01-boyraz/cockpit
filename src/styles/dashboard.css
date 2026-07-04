@@ -68,25 +68,6 @@
   flex-direction: column;
   gap: 7px;
 }
-/* eyebrow row: the "command center" tag alongside the active project name */
-.dashHero__eyebrow {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  min-width: 0;
-}
-.dashHero__sep--eyebrow {
-  opacity: 0.45;
-}
-.dashHero__proj {
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-  letter-spacing: 0.01em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
 .dashHero__title {
   margin: 1px 0 0;
   line-height: 0.92;

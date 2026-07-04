@@ -52,12 +52,9 @@ export function LeftRail() {
   return (
     <aside className="rail">
       <div className="rail__brand">
-        <div className="rail__logo" aria-hidden>
-          <span>c</span>
-        </div>
-        <div className="rail__brandText">
-          <div className="rail__brandName">cockpit</div>
-          <div className="rail__brandTag">developer</div>
+        {/* app logo slot — real mark lands here after this release */}
+        <div className="rail__logo" aria-label="cockpiT">
+          <span aria-hidden>c</span>
         </div>
       </div>
 
