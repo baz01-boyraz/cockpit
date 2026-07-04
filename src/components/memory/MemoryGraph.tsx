@@ -9,6 +9,7 @@ import {
   type ForceNode,
 } from '@shared/forceGraph'
 import { cockpit } from '../../lib/cockpit'
+import { IconFocus } from '../icons'
 
 interface GraphNodeMeta {
   id: string
@@ -193,9 +194,17 @@ async function loadGraph(projectId: string, snapshot: MemoryHubSnapshot): Promis
  * targets are dim pulsing dashed rings. Under prefers-reduced-motion the settled
  * layout is drawn once, static.
  */
+/** Camera controls the running effect exposes to the overlay buttons. */
+interface GraphControls {
+  zoomIn: () => void
+  zoomOut: () => void
+  reset: () => void
+}
+
 export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const controls = useRef<GraphControls | null>(null)
   const [data, setData] = useState<GraphData | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -302,6 +311,19 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
     let lastNow = 0
     let atmo: HTMLCanvasElement | null = null
 
+    // --- camera: world→screen is `screen = world * camScale + cam{X,Y}` ---
+    let camScale = 1
+    let camX = 0
+    let camY = 0
+    let didFit = false
+    let userAdjusted = false // once true, resize keeps the user's framing
+    // panning the empty field (distinct from dragging a node)
+    let panning = false
+    let panStart = { x: 0, y: 0 }
+    let camStart = { x: 0, y: 0 }
+    const MIN_SCALE = 0.35
+    const MAX_SCALE = 4
+
     const applySize = () => {
       width = Math.max(wrap.clientWidth, 80)
       height = Math.max(wrap.clientHeight, 80)
@@ -311,6 +333,47 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       config = { ...config, cx: width / 2, cy: height / 2 }
       atmo = buildAtmosphere()
+    }
+
+    // --- camera helpers ---
+    /** Frame the whole network with breathing room — the composed "resting" shot. */
+    const fitView = () => {
+      if (nodes.length === 0) return
+      let minX = Infinity
+      let minY = Infinity
+      let maxX = -Infinity
+      let maxY = -Infinity
+      for (const n of nodes) {
+        const r = (metaById.get(n.id)?.radius ?? 6) + 24 // headroom for labels
+        minX = Math.min(minX, n.x - r)
+        maxX = Math.max(maxX, n.x + r)
+        minY = Math.min(minY, n.y - r)
+        maxY = Math.max(maxY, n.y + r)
+      }
+      const bw = Math.max(maxX - minX, 1)
+      const bh = Math.max(maxY - minY, 1)
+      const s = Math.min(width / bw, height / bh) * 0.92
+      camScale = Math.max(MIN_SCALE, Math.min(s, 1.5))
+      camX = width / 2 - ((minX + maxX) / 2) * camScale
+      camY = height / 2 - ((minY + maxY) / 2) * camScale
+    }
+
+    /** Zoom toward a screen anchor (cursor or centre), keeping that point fixed. */
+    const zoomAt = (sx: number, sy: number, factor: number) => {
+      const next = Math.max(MIN_SCALE, Math.min(camScale * factor, MAX_SCALE))
+      if (next === camScale) return
+      const wx = (sx - camX) / camScale
+      const wy = (sy - camY) / camScale
+      camScale = next
+      camX = sx - wx * camScale
+      camY = sy - wy * camScale
+      userAdjusted = true
+    }
+
+    /** Repaint now: wake the animated loop, or draw a single frame under reduced motion. */
+    const repaint = () => {
+      if (reduceMotion) draw(lastNow / 1000)
+      else wake()
     }
 
     // --- geometry helpers ---
@@ -416,6 +479,11 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
     const draw = (t: number) => {
       ctx.clearRect(0, 0, width, height)
       if (atmo) ctx.drawImage(atmo, 0, 0, width, height)
+
+      // Everything below is drawn in world space; the camera maps it to screen.
+      ctx.save()
+      ctx.translate(camX, camY)
+      ctx.scale(camScale, camScale)
 
       renderPos = new Map(nodes.map((n) => [n.id, renderXY(n, t)]))
       const hoodOf = hovered ? neighbors.get(hovered) : undefined
@@ -565,6 +633,7 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
         }
       }
       ctx.letterSpacing = '0px'
+      ctx.restore()
     }
 
     const frame = (now: number) => {
@@ -579,7 +648,13 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
           nodes = result.nodes
           speed = result.speed
         }
-        if (speed < config.settleSpeed && dragged === null) settled = true
+        if (speed < config.settleSpeed && dragged === null) {
+          settled = true
+          if (!didFit) {
+            didFit = true
+            if (!userAdjusted) fitView() // frame the settled network once
+          }
+        }
       }
 
       const litEdges = hovered
@@ -614,6 +689,10 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
 
     const settleNow = () => {
       nodes = simulate(nodes, data.edges, config, MAX_SYNC_TICKS).nodes
+      if (!didFit) {
+        didFit = true
+        if (!userAdjusted) fitView()
+      }
       renderPos = new Map(nodes.map((n) => [n.id, { x: n.x, y: n.y }]))
       draw(0)
     }
@@ -631,18 +710,27 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
     }
 
     const hitTest = (x: number, y: number): string | null => {
+      // pointer is in screen space; nodes live in world space.
+      const wx = (x - camX) / camScale
+      const wy = (y - camY) / camScale
       for (let i = nodes.length - 1; i >= 0; i--) {
         const meta = metaById.get(nodes[i].id)
         const p = renderPos.get(nodes[i].id) ?? nodes[i]
-        const r = (meta?.radius ?? 6) + 5
-        const dx = p.x - x
-        const dy = p.y - y
+        const r = (meta?.radius ?? 6) + 6 / camScale
+        const dx = p.x - wx
+        const dy = p.y - wy
         if (dx * dx + dy * dy <= r * r) return nodes[i].id
       }
       return null
     }
 
-    const toLocal = (e: PointerEvent): { x: number; y: number } => {
+    /** Screen point → world coords (for dragging a node under the cursor). */
+    const toWorld = (x: number, y: number): { x: number; y: number } => ({
+      x: (x - camX) / camScale,
+      y: (y - camY) / camScale,
+    })
+
+    const toLocal = (e: { clientX: number; clientY: number }): { x: number; y: number } => {
       const rect = canvas.getBoundingClientRect()
       return { x: e.clientX - rect.left, y: e.clientY - rect.top }
     }
@@ -650,16 +738,24 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
     const onPointerMove = (e: PointerEvent) => {
       const p = toLocal(e)
       if (dragged) {
-        nodes = nodes.map((n) => (n.id === dragged ? { ...n, x: p.x, y: p.y } : n))
+        const w = toWorld(p.x, p.y)
+        nodes = nodes.map((n) => (n.id === dragged ? { ...n, x: w.x, y: w.y } : n))
         settled = false
         if (reduceMotion) draw(0)
         else wake()
         return
       }
+      if (panning) {
+        camX = camStart.x + (p.x - panStart.x)
+        camY = camStart.y + (p.y - panStart.y)
+        userAdjusted = true
+        repaint()
+        return
+      }
       const hit = hitTest(p.x, p.y)
       if (hit !== hovered) {
         hovered = hit
-        canvas.style.cursor = hit ? 'pointer' : 'default'
+        canvas.style.cursor = hit ? 'pointer' : 'grab'
         // hovering a calm, sleeping field brings it back to life
         if (reduceMotion) draw(0)
         else wake()
@@ -669,17 +765,32 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
     const onPointerDown = (e: PointerEvent) => {
       const p = toLocal(e)
       const hit = hitTest(p.x, p.y)
-      if (!hit) return
+      if (!hit) {
+        // empty space → pan the field
+        panning = true
+        panStart = p
+        camStart = { x: camX, y: camY }
+        canvas.setPointerCapture(e.pointerId)
+        canvas.style.cursor = 'grabbing'
+        return
+      }
       dragged = hit
       downAt = p
       settled = false
-      nodes = nodes.map((n) => (n.id === hit ? { ...n, pinned: true, x: p.x, y: p.y } : n))
+      const w = toWorld(p.x, p.y)
+      nodes = nodes.map((n) => (n.id === hit ? { ...n, pinned: true, x: w.x, y: w.y } : n))
       canvas.setPointerCapture(e.pointerId)
       if (reduceMotion) draw(0)
       else wake()
     }
 
     const onPointerUp = (e: PointerEvent) => {
+      if (panning) {
+        panning = false
+        canvas.releasePointerCapture(e.pointerId)
+        canvas.style.cursor = 'grab'
+        return
+      }
       if (!dragged) return
       const p = toLocal(e)
       const id = dragged
@@ -707,17 +818,46 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
       }
     }
 
+    // Wheel/trackpad → zoom toward the cursor. preventDefault stops the panel
+    // scrolling under the graph while you focus an area.
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const p = toLocal(e)
+      const factor = Math.exp(-e.deltaY * 0.0015)
+      zoomAt(p.x, p.y, factor)
+      repaint()
+    }
+
     const resizer = new ResizeObserver(() => {
       applySize()
+      if (!userAdjusted) didFit = false // re-frame to the new size
       settled = false
       if (reduceMotion) settleNow()
       else wake()
     })
 
+    // Overlay buttons drive the same camera the pointer does.
+    controls.current = {
+      zoomIn: () => {
+        zoomAt(width / 2, height / 2, 1.3)
+        repaint()
+      },
+      zoomOut: () => {
+        zoomAt(width / 2, height / 2, 1 / 1.3)
+        repaint()
+      },
+      reset: () => {
+        userAdjusted = false
+        fitView()
+        repaint()
+      },
+    }
+
     canvas.addEventListener('pointermove', onPointerMove)
     canvas.addEventListener('pointerdown', onPointerDown)
     canvas.addEventListener('pointerup', onPointerUp)
     canvas.addEventListener('pointerleave', onLeave)
+    canvas.addEventListener('wheel', onWheel, { passive: false })
     start()
     resizer.observe(wrap)
 
@@ -729,6 +869,8 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
       canvas.removeEventListener('pointerdown', onPointerDown)
       canvas.removeEventListener('pointerup', onPointerUp)
       canvas.removeEventListener('pointerleave', onLeave)
+      canvas.removeEventListener('wheel', onWheel)
+      controls.current = null
     }
   }, [data, onOpen])
 
@@ -743,12 +885,44 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
             Mapping connections…
           </div>
         ) : (
-          <canvas ref={canvasRef} className="memgraph__canvas" />
+          <>
+            <canvas ref={canvasRef} className="memgraph__canvas" />
+            <div className="memgraph__zoom" role="group" aria-label="Zoom the memory graph">
+              <button
+                type="button"
+                className="memgraph__zoombtn"
+                onClick={() => controls.current?.zoomIn()}
+                aria-label="Zoom in"
+                title="Zoom in"
+              >
+                <span aria-hidden>+</span>
+              </button>
+              <button
+                type="button"
+                className="memgraph__zoombtn"
+                onClick={() => controls.current?.zoomOut()}
+                aria-label="Zoom out"
+                title="Zoom out"
+              >
+                <span aria-hidden>−</span>
+              </button>
+              <button
+                type="button"
+                className="memgraph__zoombtn memgraph__zoombtn--fit"
+                onClick={() => controls.current?.reset()}
+                aria-label="Fit to view"
+                title="Fit the whole map"
+              >
+                <IconFocus width={14} height={14} />
+              </button>
+            </div>
+          </>
         )}
       </div>
       {data && !failed && (
         <div className="memgraph__hint mono">
-          {data.metas.length} neurons · drag to pin · click a note to open · dashed = unresolved
+          {data.metas.length} neurons · scroll to zoom · drag empty space to pan · click a note to
+          open · dashed = unresolved
         </div>
       )}
     </section>

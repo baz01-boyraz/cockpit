@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { cockpit } from '../../lib/cockpit'
 import type { MemoryHealth } from '@shared/memory-health'
 import type { MemoryHubSnapshot, MemoryNote } from '@shared/memory-hub'
@@ -51,6 +51,7 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
   const [bazNote, setBazNote] = useState<MemoryNote | null>(null)
   const [showBaz, setShowBaz] = useState(false)
   const [mode, setMode] = useState<TrustMode>(() => readTrustMode(projectId))
+  const draining = useRef(false)
 
   const refresh = useCallback(async () => {
     try {
@@ -83,6 +84,46 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
     },
     [projectId],
   )
+
+  /**
+   * Honour the trust dial across the WHOLE queue, not just items a manual
+   * capture just added. Background auto-capture can leave a backlog sitting in
+   * review; without this, "Autopilot — only conflicts ask" is a lie and Baz has
+   * to babysit a wall of cards he can't parse. So whenever the queue (or mode)
+   * changes, drain every item this mode auto-accepts. Conflicts never drain —
+   * overwriting an existing note always needs a human. Self-stabilizing: once
+   * drained, no auto-acceptable items remain and the effect no-ops.
+   */
+  useEffect(() => {
+    const accept = autoAcceptKinds(mode)
+    if (accept.size === 0 || draining.current) return
+    const drainable = reviews.filter((r) => accept.has(r.kind))
+    if (drainable.length === 0) return
+    draining.current = true
+    void (async () => {
+      try {
+        let queue = reviews
+        for (const item of drainable) {
+          queue = await cockpit().memory.resolveReview(projectId, item.id, 'accept')
+        }
+        setReviews(queue)
+        const n = drainable.length
+        const left = queue.length
+        setFlash(
+          `Autopilot saved ${n} ${n === 1 ? 'note' : 'notes'} for you` +
+            (left > 0
+              ? ` — ${left} ${left === 1 ? 'conflict needs' : 'conflicts need'} your call.`
+              : ' — nothing left to review.'),
+        )
+        onChanged()
+        await refresh()
+      } catch (err) {
+        setError(msg(err))
+      } finally {
+        draining.current = false
+      }
+    })()
+  }, [reviews, mode, projectId, onChanged, refresh])
 
   const toggleBaz = useCallback(async () => {
     const next = !showBaz
