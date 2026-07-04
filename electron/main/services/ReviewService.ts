@@ -13,6 +13,7 @@ import {
 import {
   buildReviewPrompt,
   parseFindings,
+  type DiffStat,
   type ReviewFinding,
   type ReviewResult,
   type ReviewStats,
@@ -139,6 +140,64 @@ export class ReviewService {
     }
     const inputs = await collectDiffInputs(base)
     return this.review(projectId, project, inputs, opts, started)
+  }
+
+  /**
+   * Cheap, LLM-free `+N −M · K files` summary of a worktree, for the board's
+   * at-a-glance In review / Parked readout. Same path confinement as `run`
+   * (the renderer is untrusted); a non-repo or clean tree returns a plain zero
+   * rather than throwing, so the badge simply renders nothing.
+   */
+  async diffStat(projectId: string, opts: { dir?: string } = {}): Promise<DiffStat> {
+    const project = this.projects.get(projectId)
+    let base = project.path
+    if (opts.dir) {
+      const target = resolve(opts.dir)
+      if (!target.startsWith(resolve(project.path) + sep)) {
+        throw new Error('Diff-stat dir must be inside the project.')
+      }
+      base = target
+    }
+
+    const git = simpleGit({ baseDir: base })
+    const isRepo = await git.checkIsRepo().catch(() => false)
+    if (!isRepo) return { files: 0, insertions: 0, deletions: 0 }
+
+    const [staged, unstaged, status] = await Promise.all([
+      git.diffSummary(['--staged']).catch(() => null),
+      git.diffSummary().catch(() => null),
+      git.status().catch(() => null),
+    ])
+
+    // Staged + unstaged edits overlap on a file (a partially-staged file shows
+    // in both), so count files by unique path and sum the line deltas.
+    const paths = new Set<string>()
+    let insertions = 0
+    let deletions = 0
+    for (const summary of [staged, unstaged]) {
+      if (!summary) continue
+      insertions += summary.insertions
+      deletions += summary.deletions
+      for (const f of summary.files) paths.add(f.file)
+    }
+
+    // Untracked files never appear in a diff summary — count each as an added
+    // file with its line count as insertions (best-effort; unreadable → skip).
+    for (const file of status?.files ?? []) {
+      if (!(file.index === '?' && file.working_dir === '?')) continue
+      const abs = resolve(base, file.path)
+      const root = resolve(base)
+      if (abs !== root && !abs.startsWith(root + sep)) continue
+      paths.add(file.path)
+      try {
+        const buf = readFileSync(abs)
+        if (!buf.includes(0)) insertions += buf.toString('utf8').split('\n').length
+      } catch {
+        // Unreadable/removed between status and read — count the file, skip lines.
+      }
+    }
+
+    return { files: paths.size, insertions, deletions }
   }
 
   /**

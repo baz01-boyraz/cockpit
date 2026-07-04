@@ -39,6 +39,18 @@ export interface ReviewResult {
   stats: ReviewStats
 }
 
+/**
+ * Cheap, LLM-free change summary for a worktree — the board's at-a-glance
+ * "what happened" readout on an In review / Parked card. Counts staged +
+ * unstaged edits plus untracked files (all lines as additions). A non-repo or
+ * empty change set is a clean zero, never an error.
+ */
+export interface DiffStat {
+  files: number
+  insertions: number
+  deletions: number
+}
+
 const findingSchema = z.object({
   // Loose models shout ("HIGH") — normalize before validating.
   severity: z.preprocess(

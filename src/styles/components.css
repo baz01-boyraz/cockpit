@@ -5166,6 +5166,93 @@
   .review__pulse { animation: none; }
 }
 
+/* --- LLM council (five advisors → peer review → chairman verdict) --- */
+.council {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+/* Verdict leads — it is the answer. Accent-lipped, quietly elevated. */
+.council__verdict {
+  padding: var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+}
+.council__verdict .eyebrow { margin-bottom: 6px; }
+/* Model prose, rendered markdown-lite (headings + paragraphs, no runtime). */
+.council__body {
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  color: var(--text);
+}
+.council__h {
+  margin: var(--sp-3) 0 4px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.council__h:first-child { margin-top: 0; }
+.council__p {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+.council__p:last-child { margin-bottom: 0; }
+.council__advisors {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-2);
+}
+.councilAdvisor {
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  border: 1px solid var(--border-faint);
+  border-top: 2px solid var(--advisor, var(--border));
+}
+.councilAdvisor__label {
+  margin-bottom: 5px;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--advisor, var(--text-muted));
+}
+.councilAdvisor__text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.councilAdvisor--failed { opacity: 0.55; }
+.councilAdvisor--failed .councilAdvisor__text { font-style: italic; }
+/* Advisor hues — distinct lenses read as distinct voices. */
+.councilAdvisor--contrarian { --advisor: var(--ember-400, #e08a5b); }
+.councilAdvisor--firstPrinciples { --advisor: var(--glacier-400, #6cb6d6); }
+.councilAdvisor--expansionist { --advisor: var(--signal, #b6e34d); }
+.councilAdvisor--outsider { --advisor: var(--violet-400, #a78bda); }
+.councilAdvisor--executor { --advisor: var(--copper-400, #d68a5a); }
+.council__peer {
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  border: 1px solid var(--border-faint);
+}
+.council__peerSummary {
+  padding: var(--sp-2) var(--sp-3);
+  cursor: pointer;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  user-select: none;
+}
+.council__peer[open] .council__peerSummary { border-bottom: 1px solid var(--border-faint); }
+.council__peer .council__body { padding: var(--sp-3); font-size: var(--fs-xs); }
+
 /* --- memory --- */
 /* Per-project markdown knowledge hub (VISION 5.4): three zones — note list ·
    reader/editor · connections. Files are the truth; the UI renders content as

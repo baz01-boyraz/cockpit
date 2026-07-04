@@ -180,6 +180,21 @@ export const reviewRunTextSchema = z.object({
   model: z.string().min(1).max(120).optional(),
 })
 
+export const reviewDiffStatSchema = z.object({
+  projectId: z.string().min(1),
+  // Absolute path of a swarm worktree; main re-validates it sits inside the project.
+  dir: z.string().min(1).max(1024).optional(),
+})
+
+export const councilRunSchema = z.object({
+  projectId: z.string().min(1),
+  model: z.string().min(1).max(120).optional(),
+  // Absolute path of a swarm worktree; main re-validates it sits inside the project.
+  dir: z.string().min(1).max(1024).optional(),
+  // The card's own title/body — the author's stated intent, grounds the advisors.
+  question: z.string().max(4000).optional(),
+})
+
 export const memoryNameSchema = z.object({
   projectId: z.string().min(1),
   name: z.string().min(1).max(120),

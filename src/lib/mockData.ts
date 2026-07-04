@@ -419,7 +419,7 @@ export const kanbanSeed = new Map<string, KanbanCard[]>([
         assignments: [{ role: 'builder', spec: 'frontend' }],
         pipelineStep: 0,
         terminalSessionId: null,
-        worktreePath: null,
+        worktreePath: '/Users/baz/dev/serbest-law/.swarm/attorney-jsonld-eo03',
         branch: 'swarm/attorney-jsonld-eo03',
         createdAt: ago(300),
         updatedAt: ago(15),

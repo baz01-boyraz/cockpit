@@ -10,7 +10,8 @@
  * `handle` registrations in lockstep.
  */
 import type { ClaudeRunOptions } from './claude-run'
-import type { ReviewResult } from './review'
+import type { DiffStat, ReviewResult } from './review'
+import type { CouncilResult } from './council'
 import type { MemoryHubSnapshot, MemoryNote } from './memory-hub'
 import type { MemoryHealth } from './memory-health'
 import type { CaptureResult } from './memory-pipeline'
@@ -97,6 +98,8 @@ export const IPC = {
   chatAsk: 'chat:ask',
   reviewRun: 'review:run',
   reviewRunText: 'review:runText',
+  reviewDiffStat: 'review:diffStat',
+  councilRun: 'council:run',
 
   memoryList: 'memory:list',
   memoryRead: 'memory:read',
@@ -282,6 +285,22 @@ export interface CockpitApi {
       input: { label: string; content: string },
       opts?: { model?: string },
     ): Promise<ReviewResult>
+    /**
+     * Cheap, LLM-free `+N −M · K files` summary of a worktree (staged +
+     * unstaged + untracked). Read-only; a non-repo or clean tree is a zero.
+     */
+    diffStat(projectId: string, opts?: { dir?: string }): Promise<DiffStat>
+  }
+  council: {
+    /**
+     * LLM-Council over a card's change set (Karpathy's method): five
+     * independent advisors → anonymous peer review → chairman verdict. Read-only
+     * — same sanitized diff as the reviewer, prompts authored in shared/council.
+     */
+    run(
+      projectId: string,
+      opts?: { model?: string; dir?: string; question?: string },
+    ): Promise<CouncilResult>
   }
   memory: {
     /**
@@ -455,6 +474,8 @@ export interface IpcResultMap {
   chatAsk: R<CockpitApi['chat']['ask']>
   reviewRun: R<CockpitApi['review']['run']>
   reviewRunText: R<CockpitApi['review']['runText']>
+  reviewDiffStat: R<CockpitApi['review']['diffStat']>
+  councilRun: R<CockpitApi['council']['run']>
   memoryList: R<CockpitApi['memory']['list']>
   memoryRead: R<CockpitApi['memory']['read']>
   memoryWrite: R<CockpitApi['memory']['write']>

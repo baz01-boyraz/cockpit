@@ -820,6 +820,45 @@
   letter-spacing: 0.02em;
 }
 
+/* ----- in-review guidance caption (what this column means) ----- */
+.swarmCard__hint {
+  margin: 8px 0 0;
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+}
+.swarmCard__hint strong {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* ----- worktree change summary badge (In review / Parked, LLM-free) ----- */
+.swarmStat {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  border: 1px solid var(--border-faint);
+  font-size: var(--fs-micro);
+  line-height: 1;
+}
+.swarmStat__add {
+  color: var(--signal);
+  font-weight: 600;
+}
+.swarmStat__del {
+  color: color-mix(in srgb, var(--danger, #e5484d) 88%, var(--text-muted));
+  font-weight: 600;
+}
+.swarmStat__files {
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+}
+
 /* ----- drop-position indicator ----- */
 .swarmDropline {
   flex-shrink: 0;
@@ -955,6 +994,22 @@
 }
 .swarmEdit__select:focus {
   border-color: var(--border-accent);
+}
+/* An unset (optional) domain reads quieter than a committed pick. */
+.swarmEdit__select--empty {
+  color: var(--text-faint);
+}
+/* Role/Domain legend under the add-step row — teaches the two axes once. */
+.swarmEdit__legend {
+  margin: 7px 0 1px;
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}
+.swarmEdit__legend strong {
+  color: var(--text-muted);
+  font-weight: 600;
 }
 .swarmEdit__actions {
   display: flex;

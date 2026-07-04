@@ -1,7 +1,9 @@
 import { useEffect, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from 'react'
 import type { KanbanCard } from '@shared/kanban'
 import type { NamedAgentSummary } from '@shared/named-agents'
+import type { DiffStat } from '@shared/review'
 import { assignmentLabel } from '@shared/agent-taxonomy'
+import { cockpit } from '../../lib/cockpit'
 import { useSessionActivity } from '../../store/swarmActivityStore'
 import {
   IconBranch,
@@ -172,6 +174,40 @@ function RunningActivity({ sessionId }: { sessionId: string | null }) {
   )
 }
 
+/**
+ * The worktree's change summary — a cheap `+N −M · K files` badge so an In
+ * review / Parked card says WHAT the worker actually did without opening the
+ * terminal. LLM-free (a git shortstat), fetched once per worktree; a clean or
+ * missing worktree renders nothing rather than a noisy zero.
+ */
+function ReviewStat({ projectId, dir }: { projectId: string; dir: string }) {
+  const [stat, setStat] = useState<DiffStat | null>(null)
+  useEffect(() => {
+    let alive = true
+    cockpit()
+      .review.diffStat(projectId, { dir })
+      .then((s) => alive && setStat(s))
+      .catch(() => alive && setStat(null))
+    return () => {
+      alive = false
+    }
+  }, [projectId, dir])
+  if (!stat || stat.files === 0) return null
+  return (
+    <div
+      className="swarmStat"
+      role="status"
+      aria-label={`${stat.files} file${stat.files === 1 ? '' : 's'} changed, ${stat.insertions} added, ${stat.deletions} removed`}
+    >
+      <span className="swarmStat__add mono">+{stat.insertions}</span>
+      <span className="swarmStat__del mono">−{stat.deletions}</span>
+      <span className="swarmStat__files">
+        {stat.files} file{stat.files === 1 ? '' : 's'}
+      </span>
+    </div>
+  )
+}
+
 /** The at-a-glance status glyph pinned to the header's right edge. Running keeps
  * its pinging ember live dot (the hero); every other lane gets a quiet tinted
  * pip so an idle card still reads its stage without a hover. */
@@ -324,6 +360,10 @@ export function SwarmCard({
         </div>
       )}
 
+      {card.worktreePath && (card.status === 'in_review' || card.status === 'parked') && (
+        <ReviewStat projectId={card.projectId} dir={card.worktreePath} />
+      )}
+
       {startable(card.status) && (
         <div className="swarmCard__foot">
           <button
@@ -381,6 +421,12 @@ export function SwarmCard({
       )}
 
       {card.status === 'in_review' && (
+        <p className="swarmCard__hint">
+          Agent paused — review the diff below, or drag to <strong>Done</strong>.
+        </p>
+      )}
+
+      {card.status === 'in_review' && (
         <div className="swarmCard__foot">
           <button
             className="swarmCardLink"
@@ -395,7 +441,7 @@ export function SwarmCard({
             className="swarmCardLink"
             onClick={act(() => onCouncil(card))}
             disabled={reviewing || counciling}
-            title="Reviewer council — the same diff through every persona lens"
+            title="LLM Council — five advisors debate the diff, then a chairman verdict"
           >
             <IconCouncil width={11} height={11} />
             {counciling ? 'Council…' : 'Council'}

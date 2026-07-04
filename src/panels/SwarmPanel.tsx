@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
-import { COUNCIL_PERSONA_IDS, personaById } from '@shared/agent-roles'
 import type { CardStatus, KanbanCard } from '@shared/kanban'
 import type { ReviewResult } from '@shared/review'
-import { mergeCouncil, type CouncilLensOutcome } from '../lib/council'
+import type { CouncilResult } from '@shared/council'
+import { COUNCIL_ADVISORS } from '@shared/council'
 import { IconShieldSearch, IconWarning, IconX } from '../components/icons'
 import { ReviewFindings, reviewFailure } from '../components/ReviewFindings'
+import { CouncilVerdict } from '../components/CouncilVerdict'
 import { SwarmBoard } from '../components/swarm/SwarmBoard'
 import { SwarmEmptyState } from '../components/swarm/SwarmEmptyState'
 import { SwarmUsageChips } from '../components/swarm/SwarmUsageChips'
@@ -20,16 +21,27 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong on the board.'
 }
 
-interface CardReviewState {
-  cardTitle: string
-  /** 'diff' = one advisory pass; 'council' = every persona lens, merged. */
-  kind: 'diff' | 'council'
-  /** null while review calls are still in flight. */
-  result: ReviewResult | null
-  /** Council progress line while running ("Lens 2/3 — Pragmatic senior…"). */
-  progress: string | null
-  /** One line per failed council lens — the other lenses' findings still render. */
-  lensErrors: string[]
+/**
+ * The active review surface under the header. `diff` is one advisory pass over
+ * the worktree; `council` is the full LLM-Council (five advisors → peer review
+ * → verdict). Each carries its own result shape; `result: null` = in flight.
+ */
+type CardReviewState =
+  | { kind: 'diff'; cardTitle: string; result: ReviewResult | null }
+  | { kind: 'council'; cardTitle: string; result: CouncilResult | null }
+
+/** A thrown council IPC call → a renderable failure result. */
+function councilFailure(error: unknown): CouncilResult {
+  const message = error instanceof Error ? error.message : 'The council run failed.'
+  return {
+    ok: false,
+    advisors: [],
+    peerReview: null,
+    verdict: null,
+    model: '',
+    error: message,
+    stats: { advisorsRun: 0, advisorsFailed: 0, filesReviewed: 0, durationMs: 0 },
+  }
 }
 
 /**
@@ -209,18 +221,12 @@ export function SwarmPanel() {
     async (card: KanbanCard) => {
       if (!projectId || reviewBusy) return
       setReviewingId(card.id)
-      setCardReview({ cardTitle: card.title, kind: 'diff', result: null, progress: null, lensErrors: [] })
+      setCardReview({ kind: 'diff', cardTitle: card.title, result: null })
       try {
         const result = await cockpit().review.run(projectId, { dir: card.worktreePath ?? undefined })
-        setCardReview({ cardTitle: card.title, kind: 'diff', result, progress: null, lensErrors: [] })
+        setCardReview({ kind: 'diff', cardTitle: card.title, result })
       } catch (err: unknown) {
-        setCardReview({
-          cardTitle: card.title,
-          kind: 'diff',
-          result: reviewFailure(err),
-          progress: null,
-          lensErrors: [],
-        })
+        setCardReview({ kind: 'diff', cardTitle: card.title, result: reviewFailure(err) })
       } finally {
         setReviewingId(null)
       }
@@ -228,43 +234,26 @@ export function SwarmPanel() {
     [projectId, reviewBusy],
   )
 
-  // 6.5 — the reviewer council: run the SAME worktree diff through every
-  // persona lens, sequentially, then merge into one tagged findings list.
-  // One lens failing becomes an error line; the others' findings survive.
+  // The LLM-Council (Karpathy's method): five independent advisors judge the
+  // card's worktree diff, an anonymous peer reviewer critiques them, and a
+  // chairman synthesizes one verdict. One long main-process call — the card's
+  // title/body rides along as the author's stated intent to ground the panel.
   const handleCouncil = useCallback(
     async (card: KanbanCard) => {
       if (!projectId || reviewBusy) return
       setCouncilingId(card.id)
-      const totalLenses = COUNCIL_PERSONA_IDS.length
-      setCardReview({ cardTitle: card.title, kind: 'council', result: null, progress: null, lensErrors: [] })
-      const outcomes: CouncilLensOutcome[] = []
+      setCardReview({ kind: 'council', cardTitle: card.title, result: null })
+      const question = [card.title, card.body].filter(Boolean).join('\n\n')
       try {
-        for (let i = 0; i < totalLenses; i += 1) {
-          const lensId = COUNCIL_PERSONA_IDS[i]
-          const label = personaById(lensId)?.label ?? lensId
-          setCardReview((prev) =>
-            prev ? { ...prev, progress: `Lens ${i + 1}/${totalLenses} — ${label}…` } : prev,
-          )
-          try {
-            const result = await cockpit().review.run(projectId, {
-              dir: card.worktreePath ?? undefined,
-              lens: lensId,
-            })
-            outcomes.push({ label, result, error: null })
-          } catch (err: unknown) {
-            outcomes.push({ label, result: null, error: errorMessage(err) })
-          }
-        }
+        const result = await cockpit().council.run(projectId, {
+          dir: card.worktreePath ?? undefined,
+          question: question || undefined,
+        })
         // A council can outlive a project switch — never paint a stale result.
         if (useStore.getState().activeProjectId !== projectId) return
-        const merged = mergeCouncil(outcomes)
-        setCardReview({
-          cardTitle: card.title,
-          kind: 'council',
-          result: merged.result,
-          progress: null,
-          lensErrors: merged.lensErrors,
-        })
+        setCardReview({ kind: 'council', cardTitle: card.title, result })
+      } catch (err: unknown) {
+        setCardReview({ kind: 'council', cardTitle: card.title, result: councilFailure(err) })
       } finally {
         setCouncilingId(null)
       }
@@ -345,7 +334,7 @@ export function SwarmPanel() {
             <div className="swarmReview__headText">
               <div className="eyebrow">
                 {cardReview.kind === 'council'
-                  ? `council · ${COUNCIL_PERSONA_IDS.length} lenses`
+                  ? `llm council · ${COUNCIL_ADVISORS.length} advisors`
                   : 'diff review'}
               </div>
               <div className="swarmReview__title">{cardReview.cardTitle}</div>
@@ -362,17 +351,14 @@ export function SwarmPanel() {
           {cardReview.result === null ? (
             <div className="review__busy review__busy--compact">
               <span className="review__pulse" aria-hidden />
-              {cardReview.progress ?? 'Reviewing the working-tree diff…'}
+              {cardReview.kind === 'council'
+                ? 'Convening the council — five advisors, peer review, then a verdict…'
+                : 'Reviewing the working-tree diff…'}
             </div>
+          ) : cardReview.kind === 'council' ? (
+            <CouncilVerdict result={cardReview.result} />
           ) : (
-            <>
-              {cardReview.lensErrors.map((line) => (
-                <div key={line} className="review__notice" role="alert">
-                  <IconWarning width={14} height={14} /> {line}
-                </div>
-              ))}
-              <ReviewFindings result={cardReview.result} />
-            </>
+            <ReviewFindings result={cardReview.result} />
           )}
         </section>
       )}

@@ -30,6 +30,7 @@ import { NamedAgentsService } from './NamedAgentsService'
 import { SwarmWorktrees } from './SwarmWorktrees'
 import { SwarmDoneSignal } from './SwarmDoneSignal'
 import { ReviewService } from './ReviewService'
+import { CouncilService } from './CouncilService'
 import { ClaudeSessionsService } from './ClaudeSessionsService'
 import { GitService } from './GitService'
 import { GitHubService } from './GitHubService'
@@ -63,6 +64,7 @@ export class Services {
   readonly claudeSessions: ClaudeSessionsService
   readonly chat: ChatService
   readonly review: ReviewService
+  readonly council: CouncilService
   readonly memory: MemoryHubService
   /** Cross-project Baz brain (Phase 6) — the same hub machinery, global root. */
   readonly globalMemory: MemoryHubService
@@ -96,6 +98,7 @@ export class Services {
     this.claudeSessions = new ClaudeSessionsService()
     this.chat = new ChatService(this.projects)
     this.review = new ReviewService(this.projects, this.audit)
+    this.council = new CouncilService(this.projects, this.audit)
     this.memory = new MemoryHubService(this.projects)
     this.globalMemory = new MemoryHubService(this.projects, join(opts.userDataDir, 'baz-memory'))
     this.memoryLedger = new MemoryLedgerService(this.db)

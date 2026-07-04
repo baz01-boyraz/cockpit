@@ -31,6 +31,8 @@ import {
   requestApprovalSchema,
   reviewRunSchema,
   reviewRunTextSchema,
+  reviewDiffStatSchema,
+  councilRunSchema,
   resumeClaudeSchema,
   routeQuerySchema,
   swarmCreateCardSchema,
@@ -220,6 +222,16 @@ export function registerIpc(services: Services): void {
   handle('reviewRunText', (p) => {
     const { projectId, label, content, model } = reviewRunTextSchema.parse(p)
     return services.review.runText(projectId, { label, content }, { model })
+  })
+  handle('reviewDiffStat', (p) => {
+    const { projectId, dir } = reviewDiffStatSchema.parse(p)
+    return services.review.diffStat(projectId, { dir })
+  })
+
+  // --- council (read-only LLM-Council: advisors → peer review → verdict) ---
+  handle('councilRun', (p) => {
+    const { projectId, model, dir, question } = councilRunSchema.parse(p)
+    return services.council.run(projectId, { model, dir, question })
   })
 
   // --- memory hub (per-project markdown knowledge, files are the truth) ---

@@ -811,6 +811,56 @@ export function createMockApi(): CockpitApi {
           },
         }
       },
+      diffStat: async (_projectId, _opts) => {
+        await new Promise((r) => setTimeout(r, 250))
+        return { files: 3, insertions: 42, deletions: 7 }
+      },
+    },
+    council: {
+      run: async (_projectId, opts) => {
+        await new Promise((r) => setTimeout(r, 1600))
+        return {
+          ok: true,
+          advisors: [
+            {
+              id: 'contrarian' as const,
+              label: 'Contrarian',
+              ok: true,
+              text: 'The intake handler in Hero.tsx:42 posts formData with no schema guard — a crafted payload reaches the API unchecked. Under a project switch the useEffect fetch also races and can apply stale results. These are the two ways this ships broken.',
+            },
+            {
+              id: 'first-principles' as const,
+              label: 'First Principles',
+              ok: true,
+              text: 'The real problem is trust at the boundary, not the form UI. The change treats validation as a view concern when it belongs in the shared schema layer both sides already import — solve it once there and the component gets simpler.',
+            },
+            {
+              id: 'expansionist' as const,
+              label: 'Expansionist',
+              ok: true,
+              text: 'If the submit path validated through the shared zod schema, every other form in the app inherits it for free. The bigger play is a single validated-submit hook, not a one-off fix on this screen.',
+            },
+            {
+              id: 'outsider' as const,
+              label: 'Outsider',
+              ok: true,
+              text: 'A newcomer would not guess that `--accent-2` is defined twice in tokens.css and the second silently wins. That kind of invisible override is exactly what trips people up later — name or remove it.',
+            },
+            {
+              id: 'executor' as const,
+              label: 'Executor',
+              ok: true,
+              text: 'Mergeable after one thing: add the schema validation before the post and a mounted/abort guard on the fetch. ~30 minutes. Everything else here is follow-up, not a blocker.',
+            },
+          ],
+          peerReview:
+            'STRONGEST: the First Principles response — it moves the fix to the layer that removes the whole class of bug. BIGGEST BLIND SPOT: the Outsider stayed on a cosmetic token issue and missed the security exposure. COLLECTIVE GAP: none of the five asked whether there is a test that would catch the unvalidated payload regressing later.',
+          verdict: `### ⚖️ Consensus & Disagreement\nAll five agree the unvalidated submit is the real risk; they split on scope — fix-it-here (Executor) vs. fix-it-in-the-schema-layer (First Principles, Expansionist).\n\n### 🎯 Verdict\nShip it, but not as written. Move validation into the shared schema at the submit boundary and add the mounted/abort guard — this closes the security hole and the race in one pass without over-building.\n\n### ➡️ Next step\nAdd a failing test that posts an invalid payload, then make it pass by validating through the shared zod schema before the API call.`,
+          model: `Claude · ${resolveChatModel(opts?.model).label}`,
+          error: null,
+          stats: { advisorsRun: 5, advisorsFailed: 0, filesReviewed: 4, durationMs: 1600 },
+        }
+      },
     },
     chat: {
       ask: async (_projectId, prompt, opts) => ({

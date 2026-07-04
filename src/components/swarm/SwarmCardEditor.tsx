@@ -186,12 +186,12 @@ export function SwarmCardEditor({ card, agents, onSave, onDelete, onClose }: Swa
                 ))}
               </select>
               <select
-                className="swarmEdit__select"
+                className={`swarmEdit__select${pendSpec ? '' : ' swarmEdit__select--empty'}`}
                 value={pendSpec}
                 onChange={(e) => setPendSpec(e.target.value as Spec | '')}
-                aria-label="Step specialisation"
+                aria-label="Step domain (optional)"
               >
-                <option value="">— domain —</option>
+                <option value="">— domain (optional) —</option>
                 {SPEC_IDS.map((s) => (
                   <option key={s} value={s}>
                     {SPECS[s].label}
@@ -207,6 +207,10 @@ export function SwarmCardEditor({ card, agents, onSave, onDelete, onClose }: Swa
                 + Add step
               </button>
             </div>
+            <p className="swarmEdit__legend">
+              <strong>Role</strong> = what the agent does · <strong>Domain</strong> = which area
+              it focuses on (optional)
+            </p>
           </div>
         )}
 
@@ -215,7 +219,9 @@ export function SwarmCardEditor({ card, agents, onSave, onDelete, onClose }: Swa
           open={advancedOpen}
           onToggle={(e) => setAdvancedOpen((e.target as HTMLDetailsElement).open)}
         >
-          <summary className="swarmEdit__summary">Advanced · named agent override</summary>
+          <summary className="swarmEdit__summary">
+            Advanced · assign a specific named agent instead
+          </summary>
           <label className="swarmEdit__row">
             <span className="swarmEdit__label">agent</span>
             <select

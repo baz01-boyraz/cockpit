@@ -86,6 +86,16 @@ const api: CockpitApi = {
       invoke(IPC.reviewRun, { projectId, model: opts?.model, dir: opts?.dir, lens: opts?.lens }),
     runText: (projectId, input, opts) =>
       invoke(IPC.reviewRunText, { projectId, ...input, model: opts?.model }),
+    diffStat: (projectId, opts) => invoke(IPC.reviewDiffStat, { projectId, dir: opts?.dir }),
+  },
+  council: {
+    run: (projectId, opts) =>
+      invoke(IPC.councilRun, {
+        projectId,
+        model: opts?.model,
+        dir: opts?.dir,
+        question: opts?.question,
+      }),
   },
   memory: {
     list: (projectId) => invoke(IPC.memoryList, { projectId }),
