@@ -1,4 +1,4 @@
-import type { DragEvent, MouseEvent } from 'react'
+import type { CSSProperties, DragEvent, MouseEvent } from 'react'
 import type { KanbanCard } from '@shared/kanban'
 import type { NamedAgentSummary } from '@shared/named-agents'
 import {
@@ -35,12 +35,23 @@ const AGENT_TINTS: Record<string, string> = {
   signal: 'swarmTag--agentSignal',
 }
 
+/** Status → the surface's state-energy modifier (running is the hero). */
+const STATUS_CLASS: Record<KanbanCard['status'], string> = {
+  todo: 'swarmCard--todo',
+  in_progress: 'swarmCard--running',
+  in_review: 'swarmCard--review',
+  done: 'swarmCard--done',
+  parked: 'swarmCard--parked',
+}
+
 interface SwarmCardProps {
   card: KanbanCard
   /** The card's Named Agent from the roster, or null (manual role / unknown slug). */
   agent: NamedAgentSummary | null
   /** True while this card is the one being dragged (dimmed in place). */
   dragging: boolean
+  /** Position in its column — drives the staggered mount entrance. */
+  index: number
   /** True while startCard is in flight for THIS card. */
   starting: boolean
   /** True while parkCard is in flight for THIS card. */
@@ -84,6 +95,7 @@ export function SwarmCard({
   card,
   agent,
   dragging,
+  index,
   starting,
   parking,
   reviewing,
@@ -115,7 +127,8 @@ export function SwarmCard({
 
   return (
     <div
-      className={`swarmCard ${dragging ? 'swarmCard--dragging' : ''}`}
+      className={`swarmCard ${STATUS_CLASS[card.status]} ${dragging ? 'swarmCard--dragging' : ''}`}
+      style={{ '--i': index } as CSSProperties}
       data-swarm-card
       role="button"
       tabIndex={0}

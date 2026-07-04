@@ -1,29 +1,41 @@
 /*
- * cockpiT — design tokens.
+ * cockpiT — design tokens. "Molten Obsidian v2".
  *
- * "Obsidian Ember" — a premium dark cockpit system. Deep, cool obsidian
- * surfaces with crisp near-white type, a luminous copper/ember signal accent
- * (never default blue/indigo), and a restrained chartreuse for "safe/go".
- * Surfaces are layered (base -> raised -> floating) and beveled with a thin top
- * highlight so the UI reads with real glassy depth, not a single flat plane.
+ * A premium dark cockpit system. The base is deep obsidian with a cool
+ * undertone; the surface ladder climbs in four stacked planes (bg → panel →
+ * card → raised) where every step is a touch lighter AND a touch warmer, so the
+ * UI reads as machined layers, not one flat sheet. The signal accent is a
+ * molten ember GRADIENT — copper rising to amber — with a top inner highlight
+ * so brand surfaces look like lit metal, never flat orange. A refined glacier
+ * cyan carries AI / info, and signal-lime is reserved strictly for "go".
  */
 :root {
-  /* --- obsidian surface ladder (cool, crisp, layered) --- */
-  --bg: #0a0b11;
-  --bg-deep: #07080b;
-  --surface-1: #131521;
-  --surface-2: #1a1d2b;
-  --surface-3: #242838;
-  --surface-inset: #0c0d13;
+  /* --- obsidian surface ladder: cool base, warming as each plane lifts --- */
+  --bg: #0a0b10; /* plane 0 — deep obsidian canvas (cool undertone) */
+  --bg-deep: #06070b; /* below the canvas — recessed wells, seams */
+  --surface-1: #15151d; /* plane 1 — panels */
+  --surface-2: #1e1d27; /* plane 2 — cards (warmer than the panel) */
+  --surface-3: #2a2733; /* plane 3 — raised / hover (warmest, lightest) */
+  --surface-inset: #0b0c11; /* pressed-in wells (inputs, tracks) */
   /* chrome: the machined bezel (left rail / frame) — a half-step cooler and
    * lifted from the canvas so the frame reads as a distinct material. */
-  --chrome: #0e1016;
-  --chrome-deep: #08090d;
+  --chrome: #0e0f15;
+  --chrome-deep: #08080d;
+
+  /* --- semantic surface aliases (the 4-step stacked-plane scale) --- */
+  --plane-bg: var(--bg);
+  --plane-panel: var(--surface-1);
+  --plane-card: var(--surface-2);
+  --plane-raised: var(--surface-3);
 
   /* --- hairlines & borders (cool light, crisp) --- */
   --border: rgba(255, 255, 255, 0.065);
   --border-strong: rgba(255, 255, 255, 0.12);
-  --border-accent: rgba(238, 124, 66, 0.45);
+  --border-accent: rgba(224, 112, 58, 0.46);
+  /* light-from-above: a hairline top edge, brighter than side/bottom borders,
+   * so every layered surface catches light on its upper lip. */
+  --edge-highlight: rgba(255, 255, 255, 0.09);
+  --edge-highlight-soft: rgba(255, 255, 255, 0.05);
 
   /* --- text (crisp cool white -> quiet greys) --- */
   --text: #f2f4f8;
@@ -31,33 +43,41 @@
   --text-faint: #61656f;
   --text-on-accent: #1a1206;
 
-  /* --- ember ramp: the brand warm, from pale highlight to deepest rust.
+  /* --- ember ramp: the brand warm, amber highlight down to deepest rust.
+   * The molten identity is copper (#e0703a) rising into amber (#ffb254).
    * --accent/--accent-hi stay aliased to ramp steps so nothing regresses. --- */
-  --ember-100: #ffd9c2;
-  --ember-200: #ffb185;
-  --ember-300: #ff9d63;
-  --ember-400: #ee7c42;
-  --ember-500: #d3642f;
-  --ember-600: #a84d24;
-  --ember-700: #6e3316;
+  --ember-100: #ffe2cb;
+  --ember-200: #ffc793;
+  --ember-300: #ffb254; /* amber — the top of the molten gradient */
+  --ember-400: #e0703a; /* copper — the base accent */
+  --ember-500: #c25a2c;
+  --ember-600: #9c4620;
+  --ember-700: #6b2f14;
 
   /* --- ember/copper signal accent (luminous, premium) --- */
   --accent: var(--ember-400);
   --accent-hi: var(--ember-300);
   --accent-dim: #b8623492;
-  --accent-glow: rgba(238, 124, 66, 0.24);
-  --accent-wash: rgba(238, 124, 66, 0.09);
+  --accent-glow: rgba(224, 112, 58, 0.26);
+  --accent-wash: rgba(224, 112, 58, 0.1);
 
-  /* The signature "molten" gradient — reserved for brand moments only:
-   * primary CTA, logo, at most one hero element per view. Never two. */
-  --molten: linear-gradient(135deg, var(--ember-300), var(--ember-400) 55%, var(--ember-500));
+  /* The signature "molten" gradient — copper rising to amber, reserved for
+   * brand moments: primary CTA, logo, active nav indicator, at most one hero
+   * element per view. Never two. Pair with --accent-bevel so it reads as lit
+   * metal, not flat paint. */
+  --molten: linear-gradient(158deg, var(--ember-300), var(--ember-400) 58%, var(--ember-500));
+  --molten-hover: linear-gradient(158deg, var(--ember-200), var(--ember-300) 55%, var(--ember-400));
+  --ember-gradient: var(--molten); /* explicit alias for the accent identity */
+  /* top inner highlight that machines a gradient surface into lit metal */
+  --accent-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.22);
 
-  /* --- glacier: the brand cool. Data, metrics, Codex, informational.
+  /* --- glacier: the refined brand cool. Data, metrics, AI / Codex, info.
    * Never an interactive color — ember owns interaction. --- */
-  --glacier-300: #9ed2ea;
-  --glacier-400: #6cb6d6;
-  --glacier-500: #4b7f9e;
-  --glacier-wash: rgba(108, 182, 214, 0.1);
+  --glacier-300: #a9dcf1;
+  --glacier-400: #62bedd;
+  --glacier-500: #47869f;
+  --glacier-wash: rgba(98, 190, 221, 0.11);
+  --glacier-glow: rgba(98, 190, 221, 0.22);
 
   /* --- secondary "signal lime" for safe / go --- */
   --signal: #cde85f;
@@ -107,11 +127,21 @@
   --r-xl: 22px;
   --r-pill: 999px;
 
-  /* --- layered, deep shadows (never flat shadow-md) --- */
+  /* --- layered, deep shadows (never flat shadow-md): a tight ambient contact
+   * shadow stacked under a soft, wide drop — surfaces sit ON the plane below,
+   * not floating on a single blur. --- */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.42), 0 4px 14px rgba(0, 0, 0, 0.3);
   --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.5), 0 18px 44px rgba(0, 0, 0, 0.42);
   --shadow-float: 0 10px 30px rgba(0, 0, 0, 0.55), 0 30px 80px rgba(0, 0, 0, 0.5);
   --shadow-accent: 0 6px 26px var(--accent-glow);
+  /* card resting elevation: tight ambient + soft layered drop */
+  --shadow-card: 0 1px 1px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.34),
+    0 10px 28px rgba(0, 0, 0, 0.3);
+  /* raised elevation: hover / popover / lifted cards */
+  --shadow-raised: 0 2px 4px rgba(0, 0, 0, 0.5), 0 8px 20px rgba(0, 0, 0, 0.44),
+    0 24px 56px rgba(0, 0, 0, 0.4);
+  /* soft ember bloom pooled under a progress fill (used at low opacity) */
+  --glow-under: 0 0 12px color-mix(in srgb, var(--accent) 55%, transparent);
 
   /* --- glow-core: layered interactive light — hot tight rim, mid bloom,
    * wide cooler falloff. Never a flat single box-shadow. --- */

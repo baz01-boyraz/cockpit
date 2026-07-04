@@ -129,6 +129,7 @@ export function SwarmColumn({
                 card={card}
                 agent={card.agent ? (agents.find((a) => a.slug === card.agent) ?? null) : null}
                 dragging={drag?.cardId === card.id}
+                index={i}
                 starting={cardActions.startingId === card.id}
                 parking={cardActions.parkingId === card.id}
                 reviewing={cardActions.reviewingId === card.id}

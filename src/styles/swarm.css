@@ -10,6 +10,47 @@
 /* the board wants width — lift the 1100px panel cap for this view only */
 .swarmPanel {
   max-width: 1520px;
+  /* view-scoped machined vars — never touch the global token values, but give
+   * the board its own vocabulary of surfaces, edges and glows. */
+  --swarm-card-top: #22212c; /* card surface, lit lip */
+  --swarm-card-bot: #17161f; /* card surface, shaded foot */
+  --swarm-edge-top: rgba(255, 255, 255, 0.17); /* gradient-border bright lip */
+  --swarm-edge-bot: rgba(255, 255, 255, 0.03); /* gradient-border shaded foot */
+  --swarm-ember-edge-top: rgba(255, 190, 128, 0.74);
+  --swarm-ember-edge-bot: rgba(194, 90, 44, 0.32);
+  --swarm-glacier-edge: rgba(98, 190, 221, 0.46);
+  --swarm-signal-edge: rgba(205, 232, 95, 0.34);
+}
+
+/* ----- board-header meta strip: pills gain depth + a live running badge ----- */
+.swarm__meta .chip {
+  background: linear-gradient(180deg, var(--surface-3), var(--surface-1));
+  border-color: var(--border-strong);
+  box-shadow:
+    inset 0 1px 0 var(--edge-highlight),
+    0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.swarm__meta .chip--accent {
+  border-color: var(--border-accent);
+  background: linear-gradient(180deg, rgba(238, 124, 66, 0.18), var(--accent-wash));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 200, 150, 0.24),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 2px 12px -4px var(--accent-glow);
+}
+/* running badge dot — a hot core over a soft expanding ping ring */
+.swarm__meta .chip--accent .chip__dot {
+  position: relative;
+  background: var(--accent-hi);
+  box-shadow: 0 0 6px var(--accent);
+}
+.swarm__meta .chip--accent .chip__dot::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--accent);
+  opacity: 0;
 }
 
 .swarm__board {
@@ -22,20 +63,38 @@
 
 /* ----- column: an inset lane, half a step below the canvas ----- */
 .swarmCol {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 320px;
   border-radius: var(--r-lg);
-  background: var(--surface-inset);
+  background: linear-gradient(180deg, var(--surface-inset), var(--bg-deep));
   border: 1px solid var(--border);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.28);
+  box-shadow:
+    inset 0 1px 0 var(--edge-highlight-soft),
+    inset 0 2px 6px rgba(0, 0, 0, 0.34);
   transition:
     opacity var(--dur) var(--ease-out),
     border-color var(--dur) var(--ease-out);
 }
+/* drop-zone: an ember dashed inner glow that fades in on opacity only */
+.swarmCol::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: var(--r-md);
+  border: 1px dashed var(--border-accent);
+  box-shadow: inset 0 0 22px -4px var(--accent-glow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur) var(--ease-out);
+}
 .swarmCol--target {
   border-color: var(--border-accent);
+}
+.swarmCol--target::after {
+  opacity: 1;
 }
 /* Running refuses drops (D7): dim while a drag is live, cursor says no. */
 .swarmCol--refuse {
@@ -48,25 +107,29 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3) var(--sp-3) var(--sp-2);
   border-bottom: 1px solid var(--border);
 }
 .swarmCol__label {
   font-size: var(--fs-micro);
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-weight: 600;
-  color: var(--text-faint);
+  letter-spacing: var(--tracking-caps);
+  font-weight: 650;
+  color: var(--text-muted);
 }
 .swarmCol__count {
+  min-width: 20px;
+  text-align: center;
   font-size: var(--fs-micro);
-  line-height: 15px;
+  line-height: 16px;
   padding: 0 6px;
   border-radius: var(--r-pill);
-  background: var(--surface-1);
-  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-inset));
+  border: 1px solid var(--border-strong);
+  box-shadow: inset 0 1px 0 var(--edge-highlight-soft);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 .swarmCol__body {
@@ -87,31 +150,59 @@
   user-select: none;
 }
 
-/* ----- card: a small raised surface, grabbable ----- */
+/* ----- card: a machined, multi-layer surface that floats above the lane -----
+ *
+ * Depth is built from four stacked ideas, none of which animate box-shadow on
+ * the element itself: (1) a vertical surface gradient in the padding-box,
+ * (2) a 1px gradient border via the border-box layer — bright lit lip up top,
+ * shaded foot — (3) a top inner highlight + layered resting drop shadow, and
+ * (4) a ::after that carries the *lifted* shadow/glow and only fades its
+ * opacity in on hover. Ember is spent solely on the Running hero. */
 .swarmCard {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 10px 12px;
   border-radius: var(--r-md);
-  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
-  border: 1px solid var(--border);
-  box-shadow: var(--bevel), 0 1px 3px rgba(0, 0, 0, 0.3);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(180deg, var(--swarm-card-top), var(--swarm-card-bot)) padding-box,
+    linear-gradient(180deg, var(--swarm-edge-top), var(--border) 45%, var(--swarm-edge-bot))
+      border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    var(--shadow-card);
   cursor: grab;
+  animation: swarm-card-in var(--dur-arrive) var(--ease-spring) both;
+  animation-delay: calc(var(--i, 0) * 42ms);
   transition:
-    transform var(--dur-fast) var(--ease-spring),
+    transform var(--dur) var(--ease-spring),
     border-color var(--dur) var(--ease-out),
-    box-shadow var(--dur) var(--ease-out),
     opacity var(--dur) var(--ease-out);
 }
+/* the lifted-elevation glow — resting invisible, fades in on hover (opacity) */
+.swarmCard::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  box-shadow: var(--shadow-raised);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur) var(--ease-out);
+}
 .swarmCard:hover {
-  border-color: var(--border-strong);
-  transform: translateY(-1px);
-  box-shadow: var(--bevel), var(--shadow-1);
+  transform: translateY(-2px) scale(1.01);
+}
+.swarmCard:hover::after {
+  opacity: 1;
 }
 .swarmCard:active {
   cursor: grabbing;
-  transform: scale(0.99);
+  transform: translateY(0) scale(0.995);
 }
 .swarmCard:focus-visible {
   outline: 2px solid var(--accent);
@@ -121,16 +212,85 @@
 .swarmCard--dragging {
   opacity: 0.35;
 }
+.swarmCard--dragging:hover {
+  transform: none;
+}
+.swarmCard--dragging:hover::after {
+  opacity: 0;
+}
 .swarmCard--editing {
   cursor: default;
-  border-color: var(--border-accent);
+  background:
+    linear-gradient(180deg, var(--swarm-card-top), var(--swarm-card-bot)) padding-box,
+    linear-gradient(180deg, var(--swarm-ember-edge-top), var(--swarm-ember-edge-bot)) border-box;
 }
 .swarmCard--editing:hover {
   transform: none;
-  box-shadow: var(--bevel), 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.swarmCard--editing:hover::after {
+  opacity: 0;
+}
+
+/* ---- entrance: fade + rise + settle from a hair under full scale ---- */
+@keyframes swarm-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ===== state energy ===== */
+
+/* RUNNING — the hero: ember gradient border, a breathing bloom ring, a header
+ * shimmer sweep and a pinging live dot. All continuous motion is opacity/
+ * transform and gated behind prefers-reduced-motion below. */
+.swarmCard--running {
+  background:
+    linear-gradient(180deg, #2a2118, var(--swarm-card-bot)) padding-box,
+    linear-gradient(180deg, var(--swarm-ember-edge-top), var(--swarm-ember-edge-bot)) border-box;
+}
+/* breathing ember bloom — a soft blurred ring that lives behind the card */
+.swarmCard--running::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  z-index: -2;
+  border-radius: var(--r-lg);
+  background: radial-gradient(120% 90% at 50% 0%, var(--accent-glow), transparent 70%);
+  box-shadow: 0 0 20px -2px var(--accent-glow);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* IN REVIEW — calm glacier-tinted edge, no motion */
+.swarmCard--review {
+  background:
+    linear-gradient(180deg, var(--swarm-card-top), var(--swarm-card-bot)) padding-box,
+    linear-gradient(180deg, var(--swarm-glacier-edge), var(--swarm-edge-bot)) border-box;
+}
+
+/* DONE — settled, a touch desaturated, quiet signal-lime lip */
+.swarmCard--done {
+  background:
+    linear-gradient(180deg, #1c1b23, #141319) padding-box,
+    linear-gradient(180deg, var(--swarm-signal-edge), var(--swarm-edge-bot)) border-box;
+  filter: saturate(0.82);
+}
+.swarmCard--done .swarmCard__title {
+  color: var(--text-muted);
+}
+
+/* PARKED — resting, slightly recessed */
+.swarmCard--parked {
+  opacity: 0.9;
 }
 
 .swarmCard__top {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: var(--sp-2);
@@ -145,15 +305,27 @@
   line-height: 1.4;
   word-break: break-word;
 }
-/* live signal — ember, opacity pulse only (pulse-dot via .live-dot) */
+/* live signal — ember dot, opacity pulse (pulse-dot via .live-dot) + a ping */
 .swarmCard__live {
+  position: relative;
   flex-shrink: 0;
   width: 7px;
   height: 7px;
   margin-top: 5px;
   border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-wash);
+  background: var(--accent-hi);
+  box-shadow:
+    0 0 0 3px var(--accent-wash),
+    0 0 8px var(--accent);
+}
+/* expanding ping ring — scale + fade, opacity/transform only */
+.swarmCard__live::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--accent);
+  opacity: 0;
 }
 
 .swarmCard__tags {
@@ -167,23 +339,27 @@
   align-items: center;
   gap: 4px;
   max-width: 100%;
-  padding: 1px 7px;
+  padding: 1.5px 8px;
   font-size: var(--fs-micro);
   font-weight: 550;
   border-radius: var(--r-pill);
-  background: var(--surface-inset);
-  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-inset));
+  border: 1px solid var(--border-strong);
+  box-shadow: inset 0 1px 0 var(--edge-highlight-soft);
   color: var(--text-muted);
   white-space: nowrap;
 }
 .swarmTag svg {
   flex-shrink: 0;
 }
-/* branch = data → glacier, never interactive */
+/* branch = data → glacier, never interactive; crisp mono, tiny icon glow */
 .swarmTag--branch {
   color: var(--glacier-400);
-  background: var(--glacier-wash);
-  border-color: rgba(108, 182, 214, 0.24);
+  background: linear-gradient(180deg, var(--glacier-wash), rgba(98, 190, 221, 0.04));
+  border-color: rgba(108, 182, 214, 0.28);
+}
+.swarmTag--branch svg {
+  filter: drop-shadow(0 0 3px var(--glacier-glow));
 }
 .swarmTag__text {
   min-width: 0;
@@ -196,26 +372,27 @@
 .swarmTag--agent {
   font-weight: 600;
   cursor: help;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
 }
 .swarmTag--agentEmber {
-  color: var(--ember-300);
-  background: var(--accent-wash);
-  border-color: rgba(238, 124, 66, 0.3);
+  color: var(--ember-200);
+  background: linear-gradient(180deg, rgba(238, 124, 66, 0.2), var(--accent-wash));
+  border-color: rgba(238, 124, 66, 0.36);
 }
 .swarmTag--agentCopper {
-  color: var(--ember-500);
-  background: rgba(211, 100, 47, 0.1);
-  border-color: rgba(211, 100, 47, 0.34);
+  color: var(--ember-300);
+  background: linear-gradient(180deg, rgba(211, 100, 47, 0.18), rgba(211, 100, 47, 0.07));
+  border-color: rgba(211, 100, 47, 0.4);
 }
 .swarmTag--agentGlacier {
-  color: var(--glacier-400);
-  background: var(--glacier-wash);
-  border-color: rgba(108, 182, 214, 0.24);
+  color: var(--glacier-300);
+  background: linear-gradient(180deg, rgba(98, 190, 221, 0.18), var(--glacier-wash));
+  border-color: rgba(108, 182, 214, 0.32);
 }
 .swarmTag--agentSignal {
   color: var(--signal);
-  background: var(--signal-dim);
-  border-color: rgba(205, 232, 95, 0.28);
+  background: linear-gradient(180deg, rgba(205, 232, 95, 0.22), var(--signal-dim));
+  border-color: rgba(205, 232, 95, 0.34);
 }
 
 .swarmCard__preview {
@@ -338,17 +515,19 @@
 
 /* ----- "+ New card" affordance + inline composer (To do only) ----- */
 .swarmNew {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px;
+  padding: 9px;
   border-radius: var(--r-md);
   border: 1px dashed var(--border-strong);
-  background: transparent;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent);
   color: var(--text-faint);
   font-size: var(--fs-xs);
-  font-weight: 550;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   transition:
     transform var(--dur-fast) var(--ease-spring),
     background-color var(--dur) var(--ease-out),
@@ -356,12 +535,16 @@
     color var(--dur) var(--ease-out);
 }
 .swarmNew:hover {
-  color: var(--text);
-  background: var(--surface-1);
+  color: var(--accent-hi);
+  background: var(--accent-wash);
   border-color: var(--border-accent);
 }
 .swarmNew:active {
   transform: scale(0.98);
+}
+.swarmNew:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .swarmCompose {
@@ -370,9 +553,13 @@
   gap: 6px;
   padding: 10px;
   border-radius: var(--r-md);
-  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
-  border: 1px solid var(--border-accent);
-  box-shadow: var(--bevel), 0 1px 3px rgba(0, 0, 0, 0.3);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(180deg, var(--swarm-card-top), var(--swarm-card-bot)) padding-box,
+    linear-gradient(180deg, var(--swarm-ember-edge-top), var(--swarm-ember-edge-bot)) border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    var(--shadow-card);
   animation: fade-rise var(--dur) var(--ease-out) both;
 }
 .swarmCompose__input,
@@ -658,10 +845,80 @@
   border-color: var(--border-accent);
 }
 
+/* ===== continuous "alive" motion — opacity/transform only, and only when the
+ * pilot hasn't asked for calm. Running is the one lane that breathes. ===== */
+@media (prefers-reduced-motion: no-preference) {
+  /* Running card: the ember bloom breathes */
+  .swarmCard--running::before {
+    animation: swarm-breathe 3.4s var(--ease-out) infinite;
+  }
+  /* Running card: a faint light band sweeps the header, left to right */
+  .swarmCard--running .swarmCard__top::after {
+    content: '';
+    position: absolute;
+    inset: -2px -10px;
+    z-index: 0;
+    border-radius: 8px;
+    background: linear-gradient(
+      100deg,
+      transparent 34%,
+      rgba(255, 205, 158, 0.16) 50%,
+      transparent 66%
+    );
+    pointer-events: none;
+    animation: swarm-sweep 4.2s var(--ease-out) infinite;
+  }
+  /* keep the title + dot above the sweep band */
+  .swarmCard--running .swarmCard__title,
+  .swarmCard--running .swarmCard__live {
+    position: relative;
+    z-index: 1;
+  }
+  /* Running live dot: an expanding ping ring */
+  .swarmCard--running .swarmCard__live::after {
+    animation: swarm-ping 1.9s var(--ease-out) infinite;
+  }
+  /* Running badge in the header strip: matching ping */
+  .swarm__meta .chip--accent .chip__dot::after {
+    animation: swarm-ping 1.9s var(--ease-out) infinite;
+  }
+}
+
+@keyframes swarm-breathe {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+@keyframes swarm-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  70%,
+  100% {
+    transform: scale(2.8);
+    opacity: 0;
+  }
+}
+@keyframes swarm-sweep {
+  0% {
+    transform: translateX(-115%);
+  }
+  55%,
+  100% {
+    transform: translateX(115%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .swarm__pulse,
   .swarmDropline,
   .swarmCompose,
+  .swarmCard,
   .swarmEdit__hint,
   .swarmNotice {
     animation: none;

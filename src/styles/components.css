@@ -239,11 +239,21 @@
 }
 .rail__itemBadge {
   font-size: var(--fs-micro);
-  font-weight: 600;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
   padding: 1px 7px;
   border-radius: var(--r-pill);
-  background: var(--surface-3);
+  /* a seated count coin: top-lit gradient + hairline + inner bevel for depth */
+  background: linear-gradient(180deg, var(--surface-3), var(--surface-2));
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 1px rgba(0, 0, 0, 0.3);
   color: var(--text-muted);
+}
+/* on the active shelf the coin catches the ember wash */
+.rail__item--active .rail__itemBadge {
+  border-color: var(--border-accent);
+  color: var(--accent-hi);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 18%, var(--surface-3)), var(--accent-wash));
 }
 .rail__footer {
   margin-top: auto;
@@ -1175,8 +1185,14 @@
   position: absolute;
   inset: 0;
   border-radius: var(--r-pill);
-  background: var(--tone);
-  opacity: 0.9;
+  /* gradient fill with a lit leading edge + a soft glow bloom beneath it */
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--tone) 82%, #000 8%),
+    color-mix(in srgb, var(--tone) 72%, #fff 16%)
+  );
+  box-shadow: 0 0 10px color-mix(in srgb, var(--tone) 42%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
   transform: scaleX(var(--scale, 0));
   transform-origin: left center;
   transition: transform 900ms var(--ease-spring);
@@ -2292,23 +2308,36 @@
   min-width: 0;
 }
 .stat__icon {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
-  background: var(--surface-inset);
+  /* a small machined tile: top-lit gradient over a seated base + inner bevel */
+  background: linear-gradient(180deg, var(--surface-3), var(--surface-inset));
   border: 1px solid var(--border);
+  border-top-color: var(--edge-highlight-soft);
   color: var(--text-muted);
-  transition: color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);
+  box-shadow: var(--bevel), inset 0 -1px 1px rgba(0, 0, 0, 0.3);
+  transition:
+    color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
 }
 .stat--accent .stat__icon,
 .stat--live .stat__icon {
-  color: var(--accent);
+  color: var(--accent-hi);
   border-color: var(--border-accent);
-  background: var(--accent-wash);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 24%, var(--surface-3)), var(--accent-wash));
+  box-shadow: var(--bevel), 0 0 12px -2px var(--accent-glow);
 }
-.stat--ok .stat__icon { color: var(--success); border-color: rgba(147, 196, 106, 0.3); }
+.stat--ok .stat__icon {
+  color: var(--success);
+  border-color: rgba(147, 196, 106, 0.3);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--success) 16%, var(--surface-3)), var(--success-wash));
+  box-shadow: var(--bevel), 0 0 12px -3px rgba(147, 196, 106, 0.35);
+}
 .stat__label {
   font-size: var(--fs-sm);
   color: var(--text-muted);
@@ -2342,11 +2371,27 @@
   font-weight: 650;
   letter-spacing: -0.03em;
   line-height: 1;
+  /* machined numerals: a crisp white lip melting into a quieter warm-grey — the
+   * figure reads as lit metal, not a flat print. */
+  background: linear-gradient(178deg, #ffffff 4%, color-mix(in srgb, var(--text) 56%, transparent) 130%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
+/* live / accent numerals take the ember identity — the view's true signal */
 .stat--accent .stat__value,
-.stat--live .stat__value { color: var(--accent-hi); }
-.stat--on .stat__value { color: var(--text); }
-.stat--off .stat__value { color: var(--text-muted); }
+.stat--live .stat__value {
+  background: linear-gradient(176deg, var(--ember-100) 2%, var(--ember-300) 80%, var(--ember-400));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.stat--off .stat__value {
+  background: linear-gradient(180deg, var(--text-muted), color-mix(in srgb, var(--text-muted) 52%, transparent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
 .stat__sub {
   position: relative;
   font-size: var(--fs-xs);
@@ -3928,15 +3973,19 @@
 .railway__svc { padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); }
 .railway__svcHead { display: flex; align-items: center; gap: var(--sp-3); }
 .railway__svcGlyph {
+  position: relative;
   width: 36px;
   height: 36px;
   border-radius: var(--r-md);
   display: grid;
   place-items: center;
   font-size: 18px;
-  background: var(--surface-inset);
-  border: 1px solid var(--border);
-  color: var(--accent);
+  /* machined tile: top-lit gradient, hairline lip, faint ember pool */
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 18%, var(--surface-3)), var(--accent-wash));
+  border: 1px solid var(--border-accent);
+  border-top-color: var(--edge-highlight-soft);
+  color: var(--accent-hi);
+  box-shadow: var(--bevel), 0 0 14px -3px var(--accent-glow);
 }
 .railway__svcName { font-weight: 600; }
 .railway__svcType { font-size: var(--fs-xs); color: var(--text-faint); }
@@ -5740,8 +5789,17 @@
   position: relative;
   flex: 1;
   min-height: 0;
-  /* faint pooled light behind the constellation — composed, not dead air */
-  background: radial-gradient(70% 60% at 50% 42%, var(--accent-wash), transparent 72%);
+  /* recessed instrument well: a deep obsidian floor the neural field glows over */
+  background:
+    radial-gradient(80% 66% at 50% 44%, rgba(224, 112, 58, 0.05), transparent 74%),
+    radial-gradient(120% 100% at 50% 120%, rgba(98, 190, 221, 0.03), transparent 70%),
+    var(--bg-deep);
+  /* pressed-in depth + a light-from-above hairline lip along the top edge */
+  box-shadow:
+    inset 0 1px 0 var(--edge-highlight),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.4),
+    inset 0 18px 48px rgba(0, 0, 0, 0.55),
+    inset 0 -12px 40px rgba(0, 0, 0, 0.5);
 }
 .memgraph__canvas {
   display: block;

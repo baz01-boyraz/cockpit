@@ -1,5 +1,11 @@
 import { useStore } from '../store/useStore'
-import { IconUsage, IconWarning } from '../components/icons'
+import {
+  IconBolt,
+  IconSwarm,
+  IconTerminal,
+  IconUsage,
+  IconWarning,
+} from '../components/icons'
 import { useAgentUsage } from '../lib/useAgentUsage'
 import { AgentUsageBody } from '../components/AgentUsageBody'
 import { CountUp } from '../components/CountUp'
@@ -51,13 +57,16 @@ export function UsagePanel() {
 
       <div className="statgrid">
         {[
-          { label: 'Sessions', value: totals.sessions, sub: 'tracked locally', live: totals.sessions > 0 },
-          { label: 'Commands', value: totals.commands, sub: 'shell runs', live: totals.commands > 0 },
-          { label: 'Agent tasks', value: totals.tasks, sub: 'Claude · Codex', live: totals.tasks > 0 },
-          { label: 'Est. tokens', value: fmtTokens(totals.tokens || null), sub: 'estimated', live: totals.tokens > 0 },
+          { label: 'Sessions', value: totals.sessions, sub: 'tracked locally', Icon: IconTerminal, live: totals.sessions > 0 },
+          { label: 'Commands', value: totals.commands, sub: 'shell runs', Icon: IconBolt, live: totals.commands > 0 },
+          { label: 'Agent tasks', value: totals.tasks, sub: 'Claude · Codex', Icon: IconSwarm, live: totals.tasks > 0 },
+          { label: 'Est. tokens', value: fmtTokens(totals.tokens || null), sub: 'estimated', Icon: IconUsage, live: totals.tokens > 0 },
         ].map((s) => (
-          <div key={s.label} className="card stat">
+          <div key={s.label} className={`card stat stat--${s.live ? 'on' : 'idle'}`}>
             <div className="stat__top">
+              <span className="stat__icon">
+                <s.Icon width={15} height={15} />
+              </span>
               <span className="stat__label">{s.label}</span>
               <span className={`stat__dot stat__dot--${s.live ? 'on' : 'idle'}`} aria-hidden />
             </div>
