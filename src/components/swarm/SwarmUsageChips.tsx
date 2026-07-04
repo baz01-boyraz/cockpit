@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import type { AgentUsageSnapshot } from '@shared/domain'
 import { useAgentUsage } from '../../lib/useAgentUsage'
 
@@ -40,10 +41,19 @@ export function SwarmUsageChips() {
       {chips.map((chip) => (
         <span
           key={chip.provider}
-          className={`chip swarmUsageChip ${chipTone(chip.used)}`}
+          className={`chip swarmUsageChip swarmUsageChip--${chip.provider} ${chipTone(chip.used)}`}
           title={`${chip.label} — busiest quota window ${chip.used}% used`}
         >
-          {chip.label} <span className="mono">{chip.used}%</span>
+          <span className="swarmUsageChip__dot" aria-hidden />
+          {chip.label}
+          <span
+            className="swarmUsageChip__gauge"
+            aria-hidden
+            style={{ '--gauge': `${Math.min(chip.used, 100)}%` } as CSSProperties}
+          >
+            <span className="swarmUsageChip__fill" />
+          </span>
+          <span className="mono swarmUsageChip__pct">{chip.used}%</span>
         </span>
       ))}
     </>

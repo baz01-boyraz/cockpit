@@ -211,28 +211,37 @@
   color: var(--text);
   background: var(--surface-1);
 }
-.rail__item--active {
-  color: var(--text);
-  /* Active tab reads as a softly lit ember shelf: a faint copper wash over the
-   * raised surface, beveled, with a glowing accent rail on its leading edge. */
-  background: linear-gradient(90deg, var(--accent-wash), var(--surface-2) 62%);
-  border-color: var(--border-strong);
+/* Doubled class (0,2,0) so the molten identity survives :hover (0,2,0, earlier)
+ * — hovering the active tab must never strip its lit-metal fill. */
+.rail__item.rail__item--active {
+  color: var(--text-on-accent);
+  font-weight: 650;
+  /* Active tab is unmistakable: a molten copper→amber pill, top-lit into lit
+   * metal, with a hot glowing leading edge and a resting ember bloom. */
+  background: var(--molten);
+  border-color: transparent;
   position: relative;
-  box-shadow: var(--bevel);
+  box-shadow: var(--accent-bevel), 0 4px 16px -4px var(--accent-glow), var(--glow-under);
+}
+.rail__item.rail__item--active:hover {
+  background: var(--molten-hover);
+  color: var(--text-on-accent);
+  transform: translateX(1px);
 }
 .rail__item--active::before {
   content: '';
   position: absolute;
-  left: -1px;
-  top: 8px;
-  bottom: 8px;
+  left: -2px;
+  top: 6px;
+  bottom: 6px;
   width: 3px;
   border-radius: var(--r-pill);
-  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
-  box-shadow: 0 0 10px var(--accent-glow);
+  background: linear-gradient(180deg, #fff, var(--ember-200));
+  box-shadow: 0 0 12px rgba(255, 214, 178, 0.7);
 }
-.rail__item--active svg {
-  color: var(--accent-hi);
+.rail__item.rail__item--active svg {
+  color: var(--text-on-accent);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
 }
 .rail__itemLabel {
   flex: 1;
@@ -249,11 +258,12 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 1px rgba(0, 0, 0, 0.3);
   color: var(--text-muted);
 }
-/* on the active shelf the coin catches the ember wash */
+/* on the molten shelf the coin reads as a dark chip pressed into lit metal */
 .rail__item--active .rail__itemBadge {
-  border-color: var(--border-accent);
-  color: var(--accent-hi);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 18%, var(--surface-3)), var(--accent-wash));
+  border-color: rgba(0, 0, 0, 0.28);
+  color: var(--text-on-accent);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.24), rgba(0, 0, 0, 0.12));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 .rail__footer {
   margin-top: auto;
@@ -773,25 +783,28 @@
  * arc sweeps from 12 o'clock to `--fill`%; the remainder is a faint track. */
 .logoMeter__ring {
   position: absolute;
-  inset: -6px;
+  inset: -7px;
   border-radius: var(--r-pill);
+  /* a lit gradient arc: bright provider-hi lip melting into the base tone across
+   * the filled sweep, over a faint spent track. */
   background: conic-gradient(
-    from 0deg,
-    color-mix(in srgb, var(--tone-hi) 58%, var(--tone) 42%) calc(var(--fill, 0) * 1%),
-    color-mix(in srgb, var(--tone) 11%, transparent) 0
+    from -90deg,
+    color-mix(in srgb, var(--tone-hi) 92%, #fff 8%) 0%,
+    var(--tone) calc(var(--fill, 0) * 1%),
+    color-mix(in srgb, var(--tone) 12%, transparent) 0
   );
   -webkit-mask: radial-gradient(
     farthest-side,
-    transparent calc(100% - 3.5px),
-    #000 calc(100% - 2.5px)
+    transparent calc(100% - 4px),
+    #000 calc(100% - 3px)
   );
   mask: radial-gradient(
     farthest-side,
-    transparent calc(100% - 3.5px),
-    #000 calc(100% - 2.5px)
+    transparent calc(100% - 4px),
+    #000 calc(100% - 3px)
   );
-  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--tone) 30%, transparent));
-  opacity: 0.85;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--tone) 42%, transparent));
+  opacity: 0.9;
   pointer-events: none;
   transition: opacity var(--dur) var(--ease-out);
   /* instrument arc: the quota ring draws in on mount (registered --fill) */

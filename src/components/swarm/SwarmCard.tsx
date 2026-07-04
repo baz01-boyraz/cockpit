@@ -1,8 +1,9 @@
-import type { CSSProperties, DragEvent, MouseEvent } from 'react'
+import type { CSSProperties, DragEvent, MouseEvent, ReactNode } from 'react'
 import type { KanbanCard } from '@shared/kanban'
 import type { NamedAgentSummary } from '@shared/named-agents'
 import {
   IconBranch,
+  IconCheck,
   IconCouncil,
   IconPause,
   IconPlay,
@@ -27,6 +28,25 @@ export interface SwarmCardActions {
   onCouncil: (card: KanbanCard) => void
 }
 
+/** Deterministic identity hue. An agent's own declared color wins; otherwise
+ * the card's manual role decides; an unassigned card stays neutral graphite. */
+type IdentityTone = 'ember' | 'copper' | 'glacier' | 'signal' | 'violet' | 'neutral'
+
+const AGENT_COLOR_TONE: Record<string, IdentityTone> = {
+  ember: 'ember',
+  copper: 'copper',
+  glacier: 'glacier',
+  signal: 'signal',
+}
+
+const ROLE_TONE: Record<string, IdentityTone> = {
+  builder: 'ember',
+  reviewer: 'glacier',
+  planner: 'violet',
+  scout: 'signal',
+  copywriter: 'copper',
+}
+
 /** Agent color declaration → the matching accent-tint chip class. */
 const AGENT_TINTS: Record<string, string> = {
   ember: 'swarmTag--agentEmber',
@@ -42,6 +62,29 @@ const STATUS_CLASS: Record<KanbanCard['status'], string> = {
   in_review: 'swarmCard--review',
   done: 'swarmCard--done',
   parked: 'swarmCard--parked',
+}
+
+interface CardIdentity {
+  tone: IdentityTone
+  /** Single-glyph monogram for the header plate. */
+  monogram: string
+}
+
+/** The header plate's hue + monogram, resolved from agent → role → unassigned. */
+function resolveIdentity(card: KanbanCard, agent: NamedAgentSummary | null): CardIdentity {
+  if (agent) {
+    return {
+      tone: (agent.color ? AGENT_COLOR_TONE[agent.color] : undefined) ?? 'ember',
+      monogram: (agent.displayName.trim().charAt(0) || '•').toUpperCase(),
+    }
+  }
+  if (card.role) {
+    return {
+      tone: ROLE_TONE[card.role] ?? 'neutral',
+      monogram: card.role.trim().charAt(0).toUpperCase() || '•',
+    }
+  }
+  return { tone: 'neutral', monogram: '•' }
 }
 
 interface SwarmCardProps {
@@ -78,18 +121,51 @@ interface SwarmCardProps {
 const startable = (status: KanbanCard['status']): boolean =>
   status === 'todo' || status === 'parked'
 
+/** The at-a-glance status glyph pinned to the header's right edge. Running keeps
+ * its pinging ember live dot (the hero); every other lane gets a quiet tinted
+ * pip so an idle card still reads its stage without a hover. */
+function statusGlyph(status: KanbanCard['status']): ReactNode {
+  switch (status) {
+    case 'in_progress':
+      return <span className="swarmCard__live live-dot" title="Agent running" aria-hidden />
+    case 'in_review':
+      return (
+        <span className="swarmCard__stat swarmCard__stat--review" aria-hidden>
+          <IconShieldSearch width={11} height={11} />
+        </span>
+      )
+    case 'done':
+      return (
+        <span className="swarmCard__stat swarmCard__stat--done" aria-hidden>
+          <IconCheck width={11} height={11} />
+        </span>
+      )
+    case 'parked':
+      return (
+        <span className="swarmCard__stat swarmCard__stat--parked" aria-hidden>
+          <IconPause width={10} height={10} />
+        </span>
+      )
+    default:
+      return <span className="swarmCard__stat swarmCard__stat--todo" aria-hidden />
+  }
+}
+
 /**
- * One board card: title, identity/branch tags, a 1–2 line body preview, and —
- * in the Running column — a pulsing ember live dot (opacity animation only).
- * A card carrying a Named Agent shows that agent's chip (displayName, tinted
- * by its declared color) in place of the plain role tag; an agent slug the
- * roster no longer knows falls back to a plain chip so the card stays honest.
- * Click (or Enter/Space) opens the inline editor; the whole card is draggable.
- * Per-status action rows: Start/Resume (ember — THE action), Park + View
+ * One board card, redesigned as a mission-control tile that reads as premium
+ * even at rest. Anatomy is fixed on EVERY card: a header strip (a hue-tinted
+ * identity plate keyed to the agent/role, a stronger title, a status glyph at
+ * the right), a muted body preview, a meta row (identity name chip + a crisp
+ * mono branch pill), and a hairline-separated footer of actions. The card
+ * itself always carries a lit-lip gradient border, a layered resting shadow
+ * and a surface gradient, so it floats above the lane without needing hover.
+ * Running is the one hero: an ember gradient border, a breathing bloom, a
+ * header shimmer and a pinging live dot (all opacity/transform, reduced-motion
+ * gated). Per-status footers: Start/Resume (molten — THE action), Park + View
  * terminal while Running, Review diff + Council once In review. A parked card
- * that kept its worktree says "Resume" — the crash-recovery affordance —
- * and a hint chip marks the kept worktree. Action clicks never bubble into
- * the editor.
+ * that kept its worktree says "Resume" and flags the kept worktree. Click (or
+ * Enter/Space) opens the inline editor; the whole card is draggable; action
+ * clicks never bubble into the editor.
  */
 export function SwarmCard({
   card,
@@ -112,6 +188,8 @@ export function SwarmCard({
   const running = card.status === 'in_progress'
   /** Parked with a kept worktree → Start resumes where the worker stopped. */
   const resumable = card.status === 'parked' && card.worktreePath !== null
+  const identity = resolveIdentity(card, agent)
+  const hasMeta = Boolean(card.agent || card.role || card.branch)
 
   const handleDragStart = (e: DragEvent<HTMLDivElement>) => {
     e.dataTransfer.setData('text/plain', card.id)
@@ -147,12 +225,20 @@ export function SwarmCard({
       }}
       aria-label={`Edit card: ${card.title}`}
     >
-      <div className="swarmCard__top">
+      <div className="swarmCard__head">
+        <span
+          className={`swarmCard__glyph swarmCard__glyph--${identity.tone}`}
+          aria-hidden
+        >
+          {identity.monogram}
+        </span>
         <span className="swarmCard__title">{card.title}</span>
-        {running && <span className="swarmCard__live live-dot" title="Agent running" aria-hidden />}
+        {statusGlyph(card.status)}
       </div>
 
-      {(card.agent || card.role || card.branch) && (
+      {card.body && <p className="swarmCard__preview">{card.body}</p>}
+
+      {hasMeta && (
         <div className="swarmCard__tags">
           {card.agent ? (
             <span
@@ -173,10 +259,8 @@ export function SwarmCard({
         </div>
       )}
 
-      {card.body && <p className="swarmCard__preview">{card.body}</p>}
-
       {startable(card.status) && (
-        <div className="swarmCard__actions">
+        <div className="swarmCard__foot">
           <button
             className="swarmStart"
             onClick={act(() => onStart(card.id))}
@@ -210,7 +294,7 @@ export function SwarmCard({
       )}
 
       {running && (
-        <div className="swarmCard__actions">
+        <div className="swarmCard__foot">
           <button
             className="swarmCardLink"
             onClick={act(onViewTerminal)}
@@ -230,7 +314,7 @@ export function SwarmCard({
       )}
 
       {card.status === 'in_review' && (
-        <div className="swarmCard__actions">
+        <div className="swarmCard__foot">
           <button
             className="swarmCardLink"
             onClick={act(() => onReview(card))}

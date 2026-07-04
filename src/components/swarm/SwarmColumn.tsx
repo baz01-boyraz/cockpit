@@ -1,7 +1,7 @@
 import { Fragment, useRef, useState, type DragEvent } from 'react'
 import type { BoardColumn, CardStatus, KanbanCard } from '@shared/kanban'
 import type { NamedAgentSummary } from '@shared/named-agents'
-import { IconPlus } from '../icons'
+import { IconPlus, IconSwarm } from '../icons'
 import { SwarmCard, type SwarmCardActions } from './SwarmCard'
 import { SwarmCardEditor, type SwarmCardPatch } from './SwarmCardEditor'
 import { SwarmComposer } from './SwarmComposer'
@@ -99,7 +99,7 @@ export function SwarmColumn({
 
   return (
     <section
-      className={`swarmCol ${refusing ? 'swarmCol--refuse' : ''} ${
+      className={`swarmCol swarmCol--${status} ${refusing ? 'swarmCol--refuse' : ''} ${
         dropIndex !== null ? 'swarmCol--target' : ''
       }`}
       onDragOver={handleDragOver}
@@ -107,8 +107,12 @@ export function SwarmColumn({
       onDrop={handleDrop}
       aria-label={`${label} column`}
     >
+      <span className="swarmCol__rule" aria-hidden />
       <header className="swarmCol__head">
-        <span className="swarmCol__label">{label}</span>
+        <span className="swarmCol__kicker">
+          <span className="swarmCol__dot" aria-hidden />
+          <span className="swarmCol__label">{label}</span>
+        </span>
         <span className="swarmCol__count mono">{cards.length}</span>
       </header>
 
@@ -149,7 +153,12 @@ export function SwarmColumn({
         {dropIndex === cards.length && <div className="swarmDropline" aria-hidden />}
 
         {cards.length === 0 && dropIndex === null && !onCreate && (
-          <div className="swarmCol__empty">{drag && !refusing ? 'Drop here' : 'Empty'}</div>
+          <div className="swarmCol__empty">
+            <IconSwarm className="swarmCol__watermark" width={26} height={26} aria-hidden />
+            <span className="swarmCol__emptyText">
+              {drag && !refusing ? 'Drop here' : 'No cards yet'}
+            </span>
+          </div>
         )}
 
         {onCreate &&

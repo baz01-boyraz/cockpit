@@ -4,10 +4,13 @@ import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import { relativeTime } from '@shared/time'
 import { groupErrors, prettyAuditSummary } from '@shared/dashboard-insights'
+import { summarizeAgentUsage } from '@shared/agent-usage'
+import { useAgentUsage } from '../lib/useAgentUsage'
 import { ApprovalCard } from '../components/ApprovalCard'
 import { CountUp } from '../components/CountUp'
 import {
   IconBolt,
+  IconBranch,
   IconGit,
   IconRailway,
   IconShield,
@@ -25,6 +28,7 @@ const SEVERITY_CLASS: Record<ErrorSeverity, string> = {
 const ACTIVITY_PREVIEW = 6
 
 type StatTone = 'accent' | 'live' | 'ok' | 'on' | 'idle' | 'off'
+type StatViz = 'spark' | 'seg' | 'pulse' | 'arc'
 
 interface StatCard {
   label: string
@@ -33,6 +37,121 @@ interface StatCard {
   Icon: typeof IconGit
   view: 'git' | 'terminals' | 'railway'
   tone: StatTone
+  viz: StatViz
+  meta: { changed: number; running: number; total: number; agents: number; services: number; connected: boolean }
+}
+
+/* ---- inline mini-visualizations (pure CSS/SVG, no libs) ---- */
+
+const SPARK_PATTERN = [0.35, 0.62, 0.44, 0.86, 0.55, 0.97, 0.7]
+
+function SparkBars({ value }: { value: number }) {
+  const active = value > 0
+  return (
+    <span className={`spark ${active ? 'spark--on' : ''}`} aria-hidden>
+      {SPARK_PATTERN.map((h, i) => (
+        <span key={i} className="spark__bar" style={{ height: `${Math.round(h * 100)}%` }} />
+      ))}
+    </span>
+  )
+}
+
+function SegMeter({ running, total }: { running: number; total: number }) {
+  const cells = Math.max(total, 4)
+  return (
+    <span className="seg" aria-hidden>
+      {Array.from({ length: Math.min(cells, 8) }, (_, i) => (
+        <span key={i} className={`seg__cell ${i < running ? 'seg__cell--on' : ''}`} />
+      ))}
+    </span>
+  )
+}
+
+function PulseTrail({ count }: { count: number }) {
+  return (
+    <span className="pulse" aria-hidden>
+      {Array.from({ length: 5 }, (_, i) => (
+        <span
+          key={i}
+          className={`pulse__dot ${i < count ? 'pulse__dot--on' : ''}`}
+          style={{ animationDelay: `${i * 140}ms` }}
+        />
+      ))}
+    </span>
+  )
+}
+
+function StatusArc({ connected, services }: { connected: boolean; services: number }) {
+  const frac = connected ? Math.max(0.16, Math.min(1, services / 4)) : 0
+  const r = 15
+  const circ = Math.PI * r
+  const offset = circ * (1 - frac)
+  return (
+    <span className={`arc ${connected ? 'arc--on' : ''}`} aria-hidden>
+      <svg width="42" height="24" viewBox="0 0 42 24">
+        <path className="arc__track" d="M 5 21 A 15 15 0 0 1 37 21" fill="none" strokeWidth="4" />
+        <path
+          className="arc__fill"
+          d="M 5 21 A 15 15 0 0 1 37 21"
+          fill="none"
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeDasharray={circ}
+          strokeDashoffset={offset}
+        />
+      </svg>
+    </span>
+  )
+}
+
+function StatViz({ viz, tile }: { viz: StatViz; tile: StatCard['meta'] }) {
+  switch (viz) {
+    case 'spark':
+      return <SparkBars value={tile.changed} />
+    case 'seg':
+      return <SegMeter running={tile.running} total={tile.total} />
+    case 'pulse':
+      return <PulseTrail count={tile.agents} />
+    case 'arc':
+      return <StatusArc connected={tile.connected} services={tile.services} />
+  }
+}
+
+/* ---- hero engines health readout ---- */
+
+function HeroEngines() {
+  const snapshots = useAgentUsage()
+  if (!snapshots) return null
+  const pills = snapshots
+    .map((snapshot) => ({ snapshot, pill: summarizeAgentUsage(snapshot) }))
+    .filter(({ pill }) => pill.available)
+  if (pills.length === 0) return null
+
+  return (
+    <div className="dashHero__engines" aria-label="Engine health">
+      <span className="dashHero__enginesLabel">Engines</span>
+      <div className="dashHero__enginesRow">
+        {pills.map(({ snapshot, pill }) => {
+          const pct = pill.minRemainingPercent ?? 0
+          const tone = pct <= 10 ? 'critical' : pct <= 25 ? 'warning' : 'ok'
+          return (
+            <div
+              key={snapshot.provider}
+              className={`heroEngine heroEngine--${snapshot.provider} heroEngine--${tone}`}
+            >
+              <span className="heroEngine__top">
+                <span className="heroEngine__name">{snapshot.label}</span>
+                <span className="heroEngine__pct mono">{pct}%</span>
+              </span>
+              <span className="heroEngine__track" aria-hidden>
+                <span className="heroEngine__fill" style={{ width: `${pct}%` }} />
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 export function DashboardPanel() {
@@ -76,6 +195,15 @@ export function DashboardPanel() {
     setView('terminals')
   }
 
+  const meta = {
+    changed: dashboard.changedFiles,
+    running: runningTerminals,
+    total: terminalCount,
+    agents: agentCount,
+    services: dashboard.railwayServices,
+    connected: dashboard.railwayConnected,
+  }
+
   const stats: StatCard[] = [
     {
       label: 'Changed files',
@@ -84,6 +212,8 @@ export function DashboardPanel() {
       Icon: IconGit,
       view: 'git',
       tone: dashboard.changedFiles ? 'on' : 'idle',
+      viz: 'spark',
+      meta,
     },
     {
       label: 'Terminals',
@@ -92,6 +222,8 @@ export function DashboardPanel() {
       Icon: IconTerminal,
       view: 'terminals',
       tone: runningTerminals ? 'live' : 'idle',
+      viz: 'seg',
+      meta,
     },
     {
       label: 'Agents',
@@ -100,6 +232,8 @@ export function DashboardPanel() {
       Icon: IconBolt,
       view: 'terminals',
       tone: agentCount ? 'on' : 'idle',
+      viz: 'pulse',
+      meta,
     },
     {
       label: 'Railway',
@@ -108,6 +242,8 @@ export function DashboardPanel() {
       Icon: IconRailway,
       view: 'railway',
       tone: dashboard.railwayConnected ? 'ok' : 'off',
+      viz: 'arc',
+      meta,
     },
   ]
 
@@ -115,23 +251,43 @@ export function DashboardPanel() {
 
   return (
     <div className="panel dash">
-      <div className="panel__header dash__head">
-        <div>
-          <div className="eyebrow">overview</div>
-          <h2 className="panel__title">Project dashboard</h2>
+      {/* hero status band — project identity, engine health, primary CTAs */}
+      <section className="dashHero u-rise">
+        <span className="dashHero__glow" aria-hidden />
+        <div className="dashHero__id">
+          <div className="eyebrow">command center</div>
+          <h2 className="dashHero__title">
+            <span className="dashHero__project">{dashboard.project?.name ?? 'Select project'}</span>
+          </h2>
+          <div className="dashHero__meta">
+            <span className="dashHero__branch mono">
+              <IconBranch width={12} height={12} />
+              {dashboard.branch ?? 'no branch'}
+            </span>
+            <span className="dashHero__sep" aria-hidden />
+            <span className="dashHero__stat">
+              <b>{dashboard.changedFiles}</b> changed
+            </span>
+            <span className="dashHero__sep" aria-hidden />
+            <span className={`dashHero__stat ${errorTotal ? 'dashHero__stat--warn' : ''}`}>
+              <b>{errorTotal}</b> {errorTotal === 1 ? 'error' : 'errors'}
+            </span>
+          </div>
         </div>
-        <div className="panel__actions">
+        <HeroEngines />
+        <div className="dashHero__cta">
           <button className="btn" onClick={() => launch('codex')}>
             <IconBolt width={14} height={14} /> Launch Codex
           </button>
-          <button className="btn btn--accent" onClick={() => launch('claude')}>
-            <IconBolt width={14} height={14} /> Launch Claude Code
+          <button className="btn btn--accent btn--hero" onClick={() => launch('claude')}>
+            <IconBolt width={15} height={15} /> Launch Claude Code
           </button>
         </div>
-      </div>
+      </section>
 
       {pending.length > 0 && (
-        <section className="dash__approvalBanner u-rise" style={{ animationDelay: '20ms' }}>
+        <section className="dash__approvalBanner u-rise" style={{ animationDelay: '40ms' }}>
+          <span className="dash__approvalBannerEdge" aria-hidden />
           <div className="dash__approvalBannerHead">
             <span className="dash__approvalBannerTitle">
               <IconShield width={14} height={14} />
@@ -149,31 +305,37 @@ export function DashboardPanel() {
         </section>
       )}
 
-      <div className="statgrid">
+      <div className="statbento">
         {stats.map((s, i) => (
           <button
             key={s.label}
-            className={`card card--hover stat stat--${s.tone} u-rise`}
-            style={{ animationDelay: `${60 + i * 55}ms` }}
+            className={`card card--hover statTile statTile--${s.tone} u-rise`}
+            style={{ animationDelay: `${80 + i * 55}ms` }}
             onClick={() => setView(s.view)}
           >
-            <div className="stat__top">
-              <span className="stat__icon">
-                <s.Icon width={15} height={15} />
+            <div className="statTile__head">
+              <span className="statTile__plate">
+                <s.Icon width={16} height={16} />
               </span>
-              <span className="stat__label">{s.label}</span>
-              <span className={`stat__dot stat__dot--${s.tone}`} aria-hidden />
+              <span className="statTile__label">{s.label}</span>
+              <span className={`statTile__dot statTile__dot--${s.tone}`} aria-hidden />
             </div>
-            <div className="stat__value">
+            <div className="statTile__value">
               {typeof s.value === 'number' ? <CountUp value={s.value} /> : s.value}
             </div>
-            <div className="stat__sub mono">{s.sub}</div>
+            <div className="statTile__foot">
+              <span className="statTile__sub mono">{s.sub}</span>
+              <StatViz viz={s.viz} tile={s.meta} />
+            </div>
           </button>
         ))}
       </div>
 
       <div className="dash__grid">
-        <section className="card dash__errors u-rise" style={{ animationDelay: '300ms' }}>
+        <section
+          className="card dash__errors dash__panel--errors u-rise"
+          style={{ animationDelay: '300ms' }}
+        >
           <div className="card__head">
             <div className="card__title">
               <IconWarning width={15} height={15} /> Recent errors
@@ -193,13 +355,17 @@ export function DashboardPanel() {
               {errorGroups.map((g, i) => (
                 <li
                   key={g.key}
-                  className="errrow u-rise"
+                  className={`errrow errrow--${g.severity} u-rise`}
                   style={{ animationDelay: `${340 + i * 50}ms` }}
                 >
-                  <span className={`sev ${SEVERITY_CLASS[g.severity]}`}>{g.severity}</span>
+                  <span className={`errrow__rule sev-rule--${g.severity}`} aria-hidden />
+                  <span className={`errrow__glyph sev-glyph--${g.severity}`} aria-hidden>
+                    <IconWarning width={13} height={13} />
+                  </span>
                   <span className="errrow__main">
                     <span className="errrow__title">
                       {g.title}
+                      <span className={`sev ${SEVERITY_CLASS[g.severity]}`}>{g.severity}</span>
                       {g.count > 1 && <span className="errrow__count">×{g.count}</span>}
                     </span>
                     <span className="errrow__cause">{g.likelyCause}</span>
@@ -211,7 +377,10 @@ export function DashboardPanel() {
           )}
         </section>
 
-        <section className="card dash__activity u-rise" style={{ animationDelay: '360ms' }}>
+        <section
+          className="card dash__activity dash__panel--activity u-rise"
+          style={{ animationDelay: '360ms' }}
+        >
           <div className="card__head">
             <div className="card__title">Activity</div>
             <span className="chip">audit · redacted</span>

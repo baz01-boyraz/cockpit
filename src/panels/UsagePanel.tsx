@@ -1,3 +1,4 @@
+import { type CSSProperties } from 'react'
 import { useStore } from '../store/useStore'
 import {
   IconBolt,
@@ -7,7 +8,7 @@ import {
   IconWarning,
 } from '../components/icons'
 import { useAgentUsage } from '../lib/useAgentUsage'
-import { AgentUsageBody } from '../components/AgentUsageBody'
+import { UsageQuotaRings } from '../components/UsageQuotaRings'
 import { CountUp } from '../components/CountUp'
 
 /* Claude reads ember, Codex reads glacier; every other provider stays a
@@ -84,9 +85,9 @@ export function UsagePanel() {
             <div className="card__title">Account quota</div>
             <span className="chip">live · CLI plan</span>
           </div>
-          <div className="quotaGrid">
+          <div className="usageRings">
             {agentUsage.map((snapshot) => (
-              <AgentUsageBody key={snapshot.provider} snapshot={snapshot} />
+              <UsageQuotaRings key={snapshot.provider} snapshot={snapshot} />
             ))}
           </div>
         </div>
@@ -102,27 +103,42 @@ export function UsagePanel() {
         ) : (
           <ul className="usagerows">
             {usage.map((u) => (
-              <li key={u.provider} className="usagerow">
-                <div className="usagerow__head">
-                  <span className="usagerow__name">{u.provider}</span>
-                  {u.warning && (
-                    <span className="chip chip--warning">
-                      <IconWarning width={11} height={11} /> {u.warning}
+              <li key={u.provider} className={`usagerow usagerow--${u.provider}`}>
+                <span className="usagerow__glyph" aria-hidden>
+                  {u.provider.charAt(0)}
+                </span>
+                <div className="usagerow__body">
+                  <div className="usagerow__head">
+                    <span className="usagerow__name">{u.provider}</span>
+                    {u.warning && (
+                      <span className="chip chip--warning">
+                        <IconWarning width={11} height={11} /> {u.warning}
+                      </span>
+                    )}
+                  </div>
+                  <div className="usagerow__bar">
+                    <span
+                      className={`usagerow__fill ${PROVIDER_FILL[u.provider] ?? ''}`}
+                      style={{ '--w': `${(u.sessions / maxSessions) * 100}%` } as CSSProperties}
+                    />
+                  </div>
+                  <div className="usagerow__chips">
+                    <span className="usagechip">
+                      <b>{u.sessions}</b> sessions
                     </span>
-                  )}
-                </div>
-                <div className="usagerow__bar">
-                  <span
-                    className={`usagerow__fill ${PROVIDER_FILL[u.provider] ?? ''}`}
-                    style={{ width: `${(u.sessions / maxSessions) * 100}%` }}
-                  />
-                </div>
-                <div className="usagerow__meta mono">
-                  <span>{u.sessions} sessions</span>
-                  <span>{u.tasks} tasks</span>
-                  <span>{u.commands} cmds</span>
-                  <span>{fmtDuration(u.totalDurationMs)}</span>
-                  <span>{fmtTokens(u.estimatedTokens)} tok</span>
+                    <span className="usagechip">
+                      <b>{u.tasks}</b> tasks
+                    </span>
+                    <span className="usagechip">
+                      <b>{u.commands}</b> cmds
+                    </span>
+                    <span className="usagechip">
+                      <b>{fmtDuration(u.totalDurationMs)}</b> active
+                    </span>
+                    <span className="usagechip">
+                      <b>{fmtTokens(u.estimatedTokens)}</b> tok
+                    </span>
+                  </div>
                 </div>
               </li>
             ))}
