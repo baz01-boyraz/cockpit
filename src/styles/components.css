@@ -97,55 +97,82 @@
 .rail__brand {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: 11px;
   padding: 0 var(--sp-2);
   -webkit-app-region: drag;
   padding-top: 18px;
 }
+/* the monogram tile: a machined slab of lit copper with a beveled lip */
 .rail__logo {
   position: relative;
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
   display: grid;
   place-items: center;
-  font-weight: 700;
-  color: var(--text-on-accent);
+  flex-shrink: 0;
   background: var(--molten);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), var(--shadow-accent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -1px 2px rgba(107, 47, 20, 0.5),
+    var(--shadow-accent);
+}
+/* the mark itself — a lowercase Space Grotesk "c" so tile and wordmark rhyme */
+.rail__logo > span {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1;
+  color: #2a0f04;
+  letter-spacing: -0.03em;
+  transform: translateY(-0.5px);
+  text-shadow: 0 1px 0 rgba(255, 210, 170, 0.35);
 }
 /* pedestal: a whisper of ember light pooled under the mark */
 .rail__logo::after {
   content: '';
   position: absolute;
   left: 50%;
-  bottom: -7px;
-  width: 130%;
-  height: 10px;
+  bottom: -8px;
+  width: 128%;
+  height: 11px;
   transform: translateX(-50%);
   border-radius: var(--r-pill);
   background: radial-gradient(55% 100% at 50% 0%, var(--accent-glow), transparent 75%);
-  opacity: 0.8;
+  opacity: 0.85;
   pointer-events: none;
 }
-.rail__brandName {
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
+.rail__brandText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
-/* the wordmark moment: cockpiT's trailing T carries the molten brand warm */
-.rail__brandT {
-  background: linear-gradient(160deg, var(--ember-200), var(--ember-400));
+/* the rail wordmark — Space Grotesk in molten, sibling to the hero mark */
+.rail__brandName {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  background: linear-gradient(150deg, var(--ember-100) 6%, var(--ember-300) 52%, var(--ember-400) 94%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  font-weight: 700;
+  -webkit-text-fill-color: transparent;
 }
-.rail__brandSub {
-  font-size: var(--fs-micro);
-  color: var(--text-faint);
+/* "developer" — a quiet capsule tag, not shouty uppercase text */
+.rail__brandTag {
+  align-self: flex-start;
+  font-size: 9px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.18em;
+  color: var(--text-muted);
+  padding: 2px 6px 1px;
+  border-radius: var(--r-sm);
+  background: var(--surface-inset);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 .rail__project {
   display: flex;

@@ -9,6 +9,19 @@
  * so brand surfaces look like lit metal, never flat orange. A refined glacier
  * cyan carries AI / info, and signal-lime is reserved strictly for "go".
  */
+
+/* Space Grotesk — the display face reserved for the cockpiT wordmark only.
+ * Self-hosted (OFL) variable latin subset so it satisfies `font-src 'self'`.
+ * Everything else stays on SF Pro; this face is the brand's premium accent. */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/space-grotesk-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+2122;
+}
+
 :root {
   /* --- obsidian surface ladder: cool base, warming as each plane lifts --- */
   --bg: #0a0b10; /* plane 0 — deep obsidian canvas (cool undertone) */
@@ -96,6 +109,8 @@
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Inter, system-ui,
     sans-serif;
   --font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, 'Cascadia Code', Menlo, monospace;
+  /* the brand display face — copper wordmark only (hero title + rail mark) */
+  --font-display: 'Space Grotesk', var(--font-sans);
 
   --fs-display: 28px;
   --fs-h1: 19px;

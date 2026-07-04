@@ -33,7 +33,7 @@
 .dashHero {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--sp-6);
   padding: var(--sp-5) var(--sp-6);
@@ -66,27 +66,48 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
 }
-.dashHero__title {
-  margin: 2px 0 0;
-  font-size: 32px;
-  font-weight: 660;
-  letter-spacing: var(--tracking-tight);
-  line-height: 1.02;
+/* eyebrow row: the "command center" tag alongside the active project name */
+.dashHero__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
   min-width: 0;
 }
-.dashHero__project {
-  /* the hero noun in full molten treatment — copper rising into amber */
-  background: linear-gradient(150deg, var(--ember-100) 0%, var(--ember-300) 46%, var(--ember-400) 88%);
+.dashHero__sep--eyebrow {
+  opacity: 0.45;
+}
+.dashHero__proj {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.dashHero__title {
+  margin: 1px 0 0;
+  line-height: 0.92;
+  min-width: 0;
+}
+/* the cockpiT product wordmark — Space Grotesk in full molten treatment */
+.dashHero__wordmark {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 46px;
+  font-weight: 600;
+  letter-spacing: -0.028em;
+  line-height: 1;
+  background: linear-gradient(148deg, var(--ember-100) 4%, var(--ember-300) 50%, var(--ember-400) 92%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* a soft copper bloom so the mark reads as lit metal, not flat text */
+  filter: drop-shadow(0 1px 10px rgba(224, 112, 58, 0.28));
   white-space: nowrap;
-  display: block;
 }
 .dashHero__meta {
   display: flex;
@@ -126,87 +147,6 @@
   color: var(--warning);
 }
 
-/* hero engines health — compact per-engine reactor readout */
-.dashHero__engines {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 10px var(--sp-4) 11px;
-  border-radius: var(--r-md);
-  background: linear-gradient(180deg, rgba(7, 8, 11, 0.5), rgba(7, 8, 11, 0.2));
-  border: 1px solid var(--border);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
-  min-width: 190px;
-}
-.dashHero__enginesLabel {
-  font-size: var(--fs-micro);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-caps);
-  color: var(--text-faint);
-  font-weight: 700;
-}
-.dashHero__enginesRow {
-  display: flex;
-  gap: var(--sp-3);
-}
-.heroEngine {
-  --etone: var(--accent);
-  --etone-hi: var(--accent-hi);
-  flex: 1 1 0;
-  min-width: 78px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.heroEngine--claude {
-  --etone: #ec7f48;
-  --etone-hi: #ffac79;
-}
-.heroEngine--codex {
-  --etone: var(--glacier-400);
-  --etone-hi: var(--glacier-300);
-}
-.heroEngine--warning {
-  --etone: var(--warning);
-  --etone-hi: #f2c877;
-}
-.heroEngine--critical {
-  --etone: var(--danger);
-  --etone-hi: #f4836b;
-}
-.heroEngine__top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px;
-}
-.heroEngine__name {
-  font-size: var(--fs-xs);
-  font-weight: 550;
-  color: var(--text-muted);
-}
-.heroEngine__pct {
-  font-size: var(--fs-sm);
-  font-weight: 700;
-  color: color-mix(in srgb, var(--etone-hi) 88%, #fff 12%);
-  font-variant-numeric: tabular-nums;
-}
-.heroEngine__track {
-  position: relative;
-  height: 5px;
-  border-radius: var(--r-pill);
-  background: rgba(236, 230, 218, 0.08);
-  overflow: hidden;
-}
-.heroEngine__fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: var(--r-pill);
-  background: linear-gradient(90deg, var(--etone), var(--etone-hi));
-  box-shadow: 0 0 8px color-mix(in srgb, var(--etone) 55%, transparent);
-}
-
 .dashHero__cta {
   display: flex;
   align-items: center;
@@ -228,9 +168,6 @@
   .dashHero {
     grid-template-columns: 1fr;
     gap: var(--sp-4);
-  }
-  .dashHero__engines {
-    min-width: 0;
   }
   .dashHero__cta {
     justify-content: flex-start;

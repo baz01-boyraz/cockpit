@@ -4,8 +4,6 @@ import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import { relativeTime } from '@shared/time'
 import { groupErrors, prettyAuditSummary } from '@shared/dashboard-insights'
-import { summarizeAgentUsage } from '@shared/agent-usage'
-import { useAgentUsage } from '../lib/useAgentUsage'
 import { ApprovalCard } from '../components/ApprovalCard'
 import { CountUp } from '../components/CountUp'
 import {
@@ -117,43 +115,6 @@ function StatViz({ viz, tile }: { viz: StatViz; tile: StatCard['meta'] }) {
   }
 }
 
-/* ---- hero engines health readout ---- */
-
-function HeroEngines() {
-  const snapshots = useAgentUsage()
-  if (!snapshots) return null
-  const pills = snapshots
-    .map((snapshot) => ({ snapshot, pill: summarizeAgentUsage(snapshot) }))
-    .filter(({ pill }) => pill.available)
-  if (pills.length === 0) return null
-
-  return (
-    <div className="dashHero__engines" aria-label="Engine health">
-      <span className="dashHero__enginesLabel">Engines</span>
-      <div className="dashHero__enginesRow">
-        {pills.map(({ snapshot, pill }) => {
-          const pct = pill.minRemainingPercent ?? 0
-          const tone = pct <= 10 ? 'critical' : pct <= 25 ? 'warning' : 'ok'
-          return (
-            <div
-              key={snapshot.provider}
-              className={`heroEngine heroEngine--${snapshot.provider} heroEngine--${tone}`}
-            >
-              <span className="heroEngine__top">
-                <span className="heroEngine__name">{snapshot.label}</span>
-                <span className="heroEngine__pct mono">{pct}%</span>
-              </span>
-              <span className="heroEngine__track" aria-hidden>
-                <span className="heroEngine__fill" style={{ width: `${pct}%` }} />
-              </span>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 export function DashboardPanel() {
   const dashboard = useStore((s) => s.dashboard)
   const terminals = useStore((s) => s.terminals)
@@ -255,9 +216,15 @@ export function DashboardPanel() {
       <section className="dashHero u-rise">
         <span className="dashHero__glow" aria-hidden />
         <div className="dashHero__id">
-          <div className="eyebrow">command center</div>
+          <div className="dashHero__eyebrow">
+            <span className="eyebrow">command center</span>
+            <span className="dashHero__sep dashHero__sep--eyebrow" aria-hidden />
+            <span className="dashHero__proj mono">
+              {dashboard.project?.name ?? 'no project'}
+            </span>
+          </div>
           <h2 className="dashHero__title">
-            <span className="dashHero__project">{dashboard.project?.name ?? 'Select project'}</span>
+            <span className="dashHero__wordmark">cockpit</span>
           </h2>
           <div className="dashHero__meta">
             <span className="dashHero__branch mono">
@@ -274,7 +241,6 @@ export function DashboardPanel() {
             </span>
           </div>
         </div>
-        <HeroEngines />
         <div className="dashHero__cta">
           <button className="btn" onClick={() => launch('codex')}>
             <IconBolt width={14} height={14} /> Launch Codex
