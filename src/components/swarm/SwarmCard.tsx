@@ -1,5 +1,6 @@
 import type { DragEvent, MouseEvent } from 'react'
 import type { KanbanCard } from '@shared/kanban'
+import type { NamedAgentSummary } from '@shared/named-agents'
 import {
   IconBranch,
   IconCouncil,
@@ -26,8 +27,18 @@ export interface SwarmCardActions {
   onCouncil: (card: KanbanCard) => void
 }
 
+/** Agent color declaration → the matching accent-tint chip class. */
+const AGENT_TINTS: Record<string, string> = {
+  ember: 'swarmTag--agentEmber',
+  copper: 'swarmTag--agentCopper',
+  glacier: 'swarmTag--agentGlacier',
+  signal: 'swarmTag--agentSignal',
+}
+
 interface SwarmCardProps {
   card: KanbanCard
+  /** The card's Named Agent from the roster, or null (manual role / unknown slug). */
+  agent: NamedAgentSummary | null
   /** True while this card is the one being dragged (dimmed in place). */
   dragging: boolean
   /** True while startCard is in flight for THIS card. */
@@ -57,8 +68,11 @@ const startable = (status: KanbanCard['status']): boolean =>
   status === 'todo' || status === 'parked'
 
 /**
- * One board card: title, role/branch tags, a 1–2 line body preview, and — in
- * the Running column — a pulsing ember live dot (opacity animation only).
+ * One board card: title, identity/branch tags, a 1–2 line body preview, and —
+ * in the Running column — a pulsing ember live dot (opacity animation only).
+ * A card carrying a Named Agent shows that agent's chip (displayName, tinted
+ * by its declared color) in place of the plain role tag; an agent slug the
+ * roster no longer knows falls back to a plain chip so the card stays honest.
  * Click (or Enter/Space) opens the inline editor; the whole card is draggable.
  * Per-status action rows: Start/Resume (ember — THE action), Park + View
  * terminal while Running, Review diff + Council once In review. A parked card
@@ -68,6 +82,7 @@ const startable = (status: KanbanCard['status']): boolean =>
  */
 export function SwarmCard({
   card,
+  agent,
   dragging,
   starting,
   parking,
@@ -124,9 +139,18 @@ export function SwarmCard({
         {running && <span className="swarmCard__live live-dot" title="Agent running" aria-hidden />}
       </div>
 
-      {(card.role || card.branch) && (
+      {(card.agent || card.role || card.branch) && (
         <div className="swarmCard__tags">
-          {card.role && <span className="swarmTag">{card.role}</span>}
+          {card.agent ? (
+            <span
+              className={`swarmTag swarmTag--agent ${AGENT_TINTS[agent?.color ?? ''] ?? ''}`}
+              title={agent ? (agent.tagline ?? agent.description) : `Unknown agent "${card.agent}"`}
+            >
+              {agent?.displayName ?? card.agent}
+            </span>
+          ) : (
+            card.role && <span className="swarmTag">{card.role}</span>
+          )}
           {card.branch && (
             <span className="swarmTag swarmTag--branch" title={card.branch}>
               <IconBranch width={10} height={10} />

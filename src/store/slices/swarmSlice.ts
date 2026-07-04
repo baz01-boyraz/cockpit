@@ -7,10 +7,12 @@ import type { SliceCreator, SwarmSlice } from './types'
  * there is no optimistic state to reconcile. Errors are NOT caught here:
  * the panel surfaces them inline (memnotice pattern) and refreshes.
  */
-export const createSwarmSlice: SliceCreator<SwarmSlice> = (set) => ({
+export const createSwarmSlice: SliceCreator<SwarmSlice> = (set, get) => ({
   board: null,
   boardProjectId: null,
   boardLoading: false,
+  agents: [],
+  agentsProjectId: null,
 
   refreshBoard: async (projectId) => {
     set({ boardLoading: true })
@@ -21,6 +23,14 @@ export const createSwarmSlice: SliceCreator<SwarmSlice> = (set) => ({
       set({ boardLoading: false })
       throw err
     }
+  },
+
+  // Named Agents roster (.claude/agents) — fetched once per project; the
+  // definitions only change on disk, so a project switch is the refresh point.
+  refreshAgents: async (projectId) => {
+    if (get().agentsProjectId === projectId) return
+    const agents = await cockpit().swarm.agents(projectId)
+    set({ agents, agentsProjectId: projectId })
   },
 
   createCard: async (input) => {

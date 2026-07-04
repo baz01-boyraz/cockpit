@@ -191,6 +191,32 @@
   text-overflow: ellipsis;
   font-size: inherit;
 }
+/* Named Agent identity chip — same quiet pill, tinted by the agent's declared
+ * color. Washes only, never solid fills: identity is information, not action. */
+.swarmTag--agent {
+  font-weight: 600;
+  cursor: help;
+}
+.swarmTag--agentEmber {
+  color: var(--ember-300);
+  background: var(--accent-wash);
+  border-color: rgba(238, 124, 66, 0.3);
+}
+.swarmTag--agentCopper {
+  color: var(--ember-500);
+  background: rgba(211, 100, 47, 0.1);
+  border-color: rgba(211, 100, 47, 0.34);
+}
+.swarmTag--agentGlacier {
+  color: var(--glacier-400);
+  background: var(--glacier-wash);
+  border-color: rgba(108, 182, 214, 0.24);
+}
+.swarmTag--agentSignal {
+  color: var(--signal);
+  background: var(--signal-dim);
+  border-color: rgba(205, 232, 95, 0.28);
+}
 
 .swarmCard__preview {
   margin: 0;
@@ -392,6 +418,15 @@
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+}
+/* A picked Named Agent supplies role + persona — one quiet hint line stands
+ * in for both manual rows (never three identity controls at once). */
+.swarmEdit__hint {
+  padding: 3px 0 1px;
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+  animation: fade-rise var(--dur) var(--ease-out) both;
 }
 .swarmEdit__label {
   font-size: var(--fs-micro);
@@ -627,6 +662,7 @@
   .swarm__pulse,
   .swarmDropline,
   .swarmCompose,
+  .swarmEdit__hint,
   .swarmNotice {
     animation: none;
   }

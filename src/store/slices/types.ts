@@ -24,6 +24,7 @@ import type {
 } from '@shared/domain'
 import type { SystemInfo } from '@shared/ipc'
 import type { BoardColumn, CardStatus } from '@shared/kanban'
+import type { NamedAgentSummary } from '@shared/named-agents'
 
 export type View =
   | 'dashboard'
@@ -102,7 +103,12 @@ export interface SwarmSlice {
   /** Which project `board` belongs to — guards against stale cross-project flashes. */
   boardProjectId: string | null
   boardLoading: boolean
+  /** Named Agents roster for `agentsProjectId` — the identities cards can carry. */
+  agents: NamedAgentSummary[]
+  /** Which project `agents` belongs to — the roster is fetched once per project. */
+  agentsProjectId: string | null
   refreshBoard: (projectId: string) => Promise<void>
+  refreshAgents: (projectId: string) => Promise<void>
   /** Mutations store the fresh board the API returns. Errors propagate to the caller. */
   createCard: (input: { projectId: string; title: string; body?: string }) => Promise<void>
   updateCard: (input: {
@@ -112,6 +118,7 @@ export interface SwarmSlice {
     body?: string
     role?: string | null
     persona?: string | null
+    agent?: string | null
   }) => Promise<void>
   moveCard: (input: { projectId: string; cardId: string; to: CardStatus; index: number }) => Promise<void>
   removeCard: (input: { projectId: string; cardId: string }) => Promise<void>

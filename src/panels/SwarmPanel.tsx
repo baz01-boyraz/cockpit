@@ -46,7 +46,9 @@ export function SwarmPanel() {
   const projectId = useStore((s) => s.activeProjectId)
   const board = useStore((s) => s.board)
   const boardProjectId = useStore((s) => s.boardProjectId)
+  const agents = useStore((s) => s.agents)
   const refreshBoard = useStore((s) => s.refreshBoard)
+  const refreshAgents = useStore((s) => s.refreshAgents)
   const createCard = useStore((s) => s.createCard)
   const updateCard = useStore((s) => s.updateCard)
   const moveCard = useStore((s) => s.moveCard)
@@ -74,7 +76,10 @@ export function SwarmPanel() {
     setCouncilingId(null)
     if (!projectId) return
     refreshBoard(projectId).catch((err: unknown) => setNotice(errorMessage(err)))
-  }, [projectId, refreshBoard])
+    // The Named Agents roster rides along (once per project — the slice skips
+    // a project it already holds). A roster failure never blocks the board.
+    refreshAgents(projectId).catch((err: unknown) => setNotice(errorMessage(err)))
+  }, [projectId, refreshBoard, refreshAgents])
 
   // Only trust a board that belongs to the active project (no stale flash).
   const current = projectId && boardProjectId === projectId ? board : null
@@ -382,6 +387,7 @@ export function SwarmPanel() {
       ) : (
         <SwarmBoard
           board={current}
+          agents={agents}
           editingId={editing}
           onOpen={setEditing}
           onCloseEditor={() => setEditing(null)}

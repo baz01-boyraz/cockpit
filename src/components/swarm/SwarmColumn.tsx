@@ -1,5 +1,6 @@
 import { Fragment, useRef, useState, type DragEvent } from 'react'
 import type { BoardColumn, CardStatus, KanbanCard } from '@shared/kanban'
+import type { NamedAgentSummary } from '@shared/named-agents'
 import { IconPlus } from '../icons'
 import { SwarmCard, type SwarmCardActions } from './SwarmCard'
 import { SwarmCardEditor, type SwarmCardPatch } from './SwarmCardEditor'
@@ -13,6 +14,8 @@ export interface DragInfo {
 interface SwarmColumnProps {
   column: BoardColumn
   label: string
+  /** Named Agents roster — resolved per card for its identity chip + editor. */
+  agents: NamedAgentSummary[]
   drag: DragInfo | null
   /** Insertion index to indicate in THIS column, or null when it isn't the target. */
   dropIndex: number | null
@@ -41,6 +44,7 @@ interface SwarmColumnProps {
 export function SwarmColumn({
   column,
   label,
+  agents,
   drag,
   dropIndex,
   editingId,
@@ -113,10 +117,17 @@ export function SwarmColumn({
           <Fragment key={card.id}>
             {dropIndex === i && <div className="swarmDropline" aria-hidden />}
             {editingId === card.id ? (
-              <SwarmCardEditor card={card} onSave={onSave} onDelete={onDelete} onClose={onCloseEditor} />
+              <SwarmCardEditor
+                card={card}
+                agents={agents}
+                onSave={onSave}
+                onDelete={onDelete}
+                onClose={onCloseEditor}
+              />
             ) : (
               <SwarmCard
                 card={card}
+                agent={card.agent ? (agents.find((a) => a.slug === card.agent) ?? null) : null}
                 dragging={drag?.cardId === card.id}
                 starting={cardActions.startingId === card.id}
                 parking={cardActions.parkingId === card.id}

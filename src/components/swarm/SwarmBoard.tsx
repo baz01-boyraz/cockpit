@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { BoardColumn, CardStatus, KanbanCard } from '@shared/kanban'
+import type { NamedAgentSummary } from '@shared/named-agents'
 import { SwarmColumn, type DragInfo } from './SwarmColumn'
 import type { SwarmCardActions } from './SwarmCard'
 import type { SwarmCardPatch } from './SwarmCardEditor'
@@ -14,6 +15,8 @@ const COLUMN_LABELS: Record<CardStatus, string> = {
 
 interface SwarmBoardProps {
   board: BoardColumn[]
+  /** Named Agents roster — card chips and the editor's agent select read it. */
+  agents: NamedAgentSummary[]
   editingId: string | null
   onOpen: (cardId: string) => void
   onCloseEditor: () => void
@@ -34,6 +37,7 @@ interface SwarmBoardProps {
  */
 export function SwarmBoard({
   board,
+  agents,
   editingId,
   onOpen,
   onCloseEditor,
@@ -86,6 +90,7 @@ export function SwarmBoard({
           key={column.status}
           column={column}
           label={COLUMN_LABELS[column.status]}
+          agents={agents}
           drag={drag}
           dropIndex={drop?.status === column.status ? drop.index : null}
           editingId={editingId}
