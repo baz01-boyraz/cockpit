@@ -44,6 +44,7 @@ const api: CockpitApi = {
   },
   git: {
     status: (projectId) => invoke(IPC.gitStatus, { projectId }),
+    initRepo: (projectId) => invoke(IPC.gitInitRepo, { projectId }),
     diff: (input) => invoke(IPC.gitDiff, input),
     stage: (input) => invoke(IPC.gitStage, input),
     commit: (input) => invoke(IPC.gitCommit, input),
@@ -51,6 +52,7 @@ const api: CockpitApi = {
   },
   github: {
     status: (projectId) => invoke(IPC.githubStatus, { projectId }),
+    createRepo: (input) => invoke(IPC.githubCreateRepo, input),
   },
   railway: {
     status: (projectId) => invoke(IPC.railwayStatus, { projectId }),

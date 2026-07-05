@@ -17,6 +17,7 @@ import {
   gitDiffInputSchema,
   gitPushInputSchema,
   gitStageInputSchema,
+  githubCreateRepoInputSchema,
   chatAskSchema,
   dismissInsightSchema,
   ingestLogSchema,
@@ -150,6 +151,17 @@ export function registerIpc(services: Services): void {
 
   // --- git ---
   handle('gitStatus', (p) => services.git.status(projectIdSchema.parse(p).projectId))
+  handle('gitInitRepo', async (p) => {
+    const { projectId } = projectIdSchema.parse(p)
+    const result = await services.git.initRepo(projectId)
+    services.audit.record({
+      projectId,
+      actor: 'user',
+      actionType: 'git_init',
+      summary: `Initialized git repo on branch ${result.branch}`,
+    })
+    return result
+  })
   handle('gitDiff', (p) => services.git.diff(gitDiffInputSchema.parse(p)))
   handle('gitStage', (p) => services.git.stage(gitStageInputSchema.parse(p)))
   handle('gitCommit', (p) => services.git.commit(gitCommitInputSchema.parse(p)))
@@ -173,6 +185,21 @@ export function registerIpc(services: Services): void {
 
   // --- github ---
   handle('githubStatus', (p) => services.github.status(projectIdSchema.parse(p).projectId))
+  handle('githubCreateRepo', async (p) => {
+    const input = githubCreateRepoInputSchema.parse(p)
+    // Bootstrap the local repo first (no-op if it already exists) so `gh repo
+    // create --source=.` always has a well-defined git repo to attach to.
+    await services.git.initRepo(input.projectId)
+    const result = await services.github.createRepo(input)
+    services.audit.record({
+      projectId: input.projectId,
+      actor: 'user',
+      actionType: 'github_create_repo',
+      summary: `Created GitHub repo ${input.name} (${input.visibility})`,
+      payload: { name: input.name, visibility: input.visibility },
+    })
+    return result
+  })
 
   // --- railway ---
   handle('railwayStatus', (p) => services.railway.status(projectIdSchema.parse(p).projectId))

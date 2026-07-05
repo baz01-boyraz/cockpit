@@ -53,6 +53,22 @@ export class GitService {
     return simpleGit({ baseDir: project.path })
   }
 
+  /**
+   * Bootstrap a brand-new project folder into a git repo. Idempotent — a
+   * no-op when the folder is already a repo. Forces HEAD to `refs/heads/main`
+   * before the first commit exists, since `git init`'s default branch name
+   * depends on the user's global `init.defaultBranch` config otherwise.
+   */
+  async initRepo(projectId: string): Promise<GitSnapshot> {
+    const git = this.gitFor(projectId)
+    const isRepo = await git.checkIsRepo().catch(() => false)
+    if (!isRepo) {
+      await git.init()
+      await git.raw(['symbolic-ref', 'HEAD', 'refs/heads/main']).catch(() => {})
+    }
+    return this.status(projectId)
+  }
+
   async status(projectId: string): Promise<GitSnapshot> {
     const git = this.gitFor(projectId)
     const isRepo = await git.checkIsRepo().catch(() => false)

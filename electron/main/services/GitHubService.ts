@@ -167,6 +167,48 @@ export class GitHubService {
     }
   }
 
+  /**
+   * Create a new GitHub repository from this project's local folder and wire
+   * it up as `origin`. Assumes the folder is already a git repo — callers
+   * bootstrap that first (see `GitService.initRepo`), since `gh repo create
+   * --source` behaves inconsistently on non-repo folders across CLI versions.
+   * Never pushes: an empty repo with zero commits has nothing to push, and
+   * pushing existing history stays the developer's explicit next step via the
+   * regular Push button.
+   */
+  async createRepo(input: {
+    projectId: string
+    name: string
+    visibility: 'private' | 'public'
+    description?: string
+  }): Promise<GitHubRepositoryStatus> {
+    const project = this.projects.get(input.projectId)
+    const args = [
+      'repo',
+      'create',
+      input.name,
+      input.visibility === 'private' ? '--private' : '--public',
+      '--source=.',
+      '--remote=origin',
+    ]
+    if (input.description) args.push('--description', input.description)
+
+    try {
+      await execFileAsync(resolveBin('gh'), args, {
+        cwd: project.path,
+        timeout: 30_000,
+        maxBuffer: 1024 * 1024,
+        env: { ...process.env },
+      })
+    } catch (err) {
+      const e = err as { stderr?: string; stdout?: string; message?: string }
+      const detail = (e.stderr || e.stdout || e.message || String(err)).trim()
+      throw new Error(`gh repo create failed: ${detail}`)
+    }
+
+    return this.status(input.projectId)
+  }
+
   private async resolveRemote(git: ReturnType<typeof simpleGit>): Promise<GitRemoteInfo | null> {
     const remotes = await git.getRemotes(true).catch(() => [])
     const origin = remotes.find((r) => r.name === 'origin') ?? remotes[0]

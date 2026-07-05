@@ -49,6 +49,11 @@ interface FakeGitConfig {
 function makeFakeGit(config: FakeGitConfig = {}) {
   return {
     checkIsRepo: vi.fn(() => Promise.resolve(config.isRepo ?? true)),
+    // Mirrors real git: once initialized, the folder really is a repo.
+    init: vi.fn(() => {
+      config.isRepo = true
+      return Promise.resolve(undefined)
+    }),
     status: vi.fn(() => Promise.resolve(config.status ?? makeStatus())),
     diff: vi.fn((_args: string[]) => Promise.resolve(config.diffOutput ?? '')),
     raw: vi.fn((args: string[]) => (config.rawImpl ? config.rawImpl(args) : Promise.resolve(''))),
@@ -134,6 +139,28 @@ describe('GitService.status', () => {
     const { service } = makeService({ status: makeStatus({ current: null }) })
     const snapshot = await service.status('prj_1')
     expect(snapshot.branch).toBe('detached')
+  })
+})
+
+describe('GitService.initRepo', () => {
+  it('initializes a fresh folder on main and returns the resulting status', async () => {
+    const { service, git } = makeService({
+      isRepo: false,
+      status: makeStatus({ current: 'main', tracking: null }),
+    })
+
+    const snapshot = await service.initRepo('prj_1')
+
+    expect(git.init).toHaveBeenCalledTimes(1)
+    expect(git.raw).toHaveBeenCalledWith(['symbolic-ref', 'HEAD', 'refs/heads/main'])
+    expect(snapshot.branch).toBe('main')
+  })
+
+  it('is a no-op when the folder is already a repo', async () => {
+    const { service, git } = makeService({ isRepo: true })
+    const snapshot = await service.initRepo('prj_1')
+    expect(git.init).not.toHaveBeenCalled()
+    expect(snapshot.branch).toBe('main')
   })
 })
 

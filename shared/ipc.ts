@@ -70,12 +70,14 @@ export const IPC = {
   terminalsAttachImage: 'terminals:attachImage',
 
   gitStatus: 'git:status',
+  gitInitRepo: 'git:initRepo',
   gitDiff: 'git:diff',
   gitStage: 'git:stage',
   gitCommit: 'git:commit',
   gitPush: 'git:push',
 
   githubStatus: 'github:status',
+  githubCreateRepo: 'github:createRepo',
 
   railwayStatus: 'railway:status',
   railwayServices: 'railway:services',
@@ -211,6 +213,12 @@ export interface CockpitApi {
   }
   git: {
     status(projectId: string): Promise<GitSnapshot>
+    /**
+     * Bootstrap a brand-new project folder into a git repo (`git init` on a
+     * `main` branch). A no-op — returns the current snapshot — if the folder
+     * is already a repo.
+     */
+    initRepo(projectId: string): Promise<GitSnapshot>
     diff(input: { projectId: string; path: string; staged?: boolean }): Promise<GitDiff>
     stage(input: { projectId: string; paths?: string[]; all?: boolean }): Promise<GitSnapshot>
     commit(input: { projectId: string; message: string }): Promise<GitCommitResult>
@@ -222,6 +230,17 @@ export interface CockpitApi {
   }
   github: {
     status(projectId: string): Promise<GitHubRepositoryStatus>
+    /**
+     * Create a new GitHub repo from this project and attach it as `origin`.
+     * Initializes the local git repo first if needed. Never pushes — that
+     * stays the explicit next step via the regular Push button.
+     */
+    createRepo(input: {
+      projectId: string
+      name: string
+      visibility: 'private' | 'public'
+      description?: string
+    }): Promise<GitHubRepositoryStatus>
   }
   railway: {
     status(projectId: string): Promise<RailwayConnection>
@@ -445,12 +464,14 @@ export interface IpcResultMap {
   terminalsAttachImage: R<CockpitApi['terminals']['attachImage']>
 
   gitStatus: R<CockpitApi['git']['status']>
+  gitInitRepo: R<CockpitApi['git']['initRepo']>
   gitDiff: R<CockpitApi['git']['diff']>
   gitStage: R<CockpitApi['git']['stage']>
   gitCommit: R<CockpitApi['git']['commit']>
   gitPush: R<CockpitApi['git']['push']>
 
   githubStatus: R<CockpitApi['github']['status']>
+  githubCreateRepo: R<CockpitApi['github']['createRepo']>
 
   railwayStatus: R<CockpitApi['railway']['status']>
   railwayServices: R<CockpitApi['railway']['services']>

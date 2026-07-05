@@ -135,6 +135,68 @@ function DiffView({ diff }: { diff: string }) {
   )
 }
 
+/** Keeps the default repo name inside GitHub's own character set. */
+function sanitizeRepoName(input: string): string {
+  const cleaned = input.trim().replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '')
+  return cleaned || 'new-project'
+}
+
+interface CreateRepoFormProps {
+  defaultName: string
+  busy: boolean
+  onCreate: (input: { name: string; visibility: 'private' | 'public' }) => void
+}
+
+/**
+ * Shown whenever a project has no GitHub remote at all — brand-new folder
+ * (branch `no-git`) or an existing repo that was never attached. One click
+ * runs `git init` (if needed) + `gh repo create --source=. --remote=origin`;
+ * pushing existing commits stays a separate, explicit step via Push.
+ */
+function CreateRepoForm({ defaultName, busy, onCreate }: CreateRepoFormProps) {
+  const [name, setName] = useState(() => sanitizeRepoName(defaultName))
+  const [visibility, setVisibility] = useState<'private' | 'public'>('private')
+
+  return (
+    <div className="git__bootstrap">
+      <p className="git__bootstrapHint">No GitHub repo attached yet — create one from this project.</p>
+      <div className="git__bootstrapRow">
+        <input
+          className="git__bootstrapInput mono"
+          value={name}
+          onChange={(e) => setName(sanitizeRepoName(e.target.value))}
+          placeholder="repo-name"
+          maxLength={100}
+          aria-label="New repository name"
+        />
+        <div className="git__bootstrapToggle" role="group" aria-label="Repository visibility">
+          <button
+            type="button"
+            className={`btn btn--sm ${visibility === 'private' ? 'btn--accent' : ''}`}
+            onClick={() => setVisibility('private')}
+          >
+            Private
+          </button>
+          <button
+            type="button"
+            className={`btn btn--sm ${visibility === 'public' ? 'btn--accent' : ''}`}
+            onClick={() => setVisibility('public')}
+          >
+            Public
+          </button>
+        </div>
+      </div>
+      <button
+        className="btn btn--accent git__wideAction"
+        onClick={() => onCreate({ name, visibility })}
+        disabled={busy || name.length === 0}
+      >
+        <IconCloud width={14} height={14} /> {busy ? 'Creating…' : 'Create GitHub repo & attach'}
+      </button>
+    </div>
+  )
+}
+
 function AuthChip({ github }: { github: GitHubRepositoryStatus | null }) {
   if (!github?.connected) return <span className="chip chip--warning">not connected</span>
   if (github.authState === 'authenticated') {
@@ -168,6 +230,7 @@ export function GitPanel() {
   const github = useStore((s) => s.github)
   const appUpdate = useStore((s) => s.appUpdate)
   const terminals = useStore((s) => s.terminals)
+  const projects = useStore((s) => s.projects)
   const activeProjectId = useStore((s) => s.activeProjectId)
   const refreshActive = useStore((s) => s.refreshActive)
   const refreshApprovals = useStore((s) => s.refreshApprovals)
@@ -375,6 +438,24 @@ export function GitPanel() {
     setView('terminals')
   }
 
+  // Brand-new folder or a repo that was never attached to GitHub: init (if
+  // needed) + create + attach as origin in one action. Nothing is pushed here
+  // — the regular Push button stays the explicit next step.
+  const createGitHubRepo = async (input: { name: string; visibility: 'private' | 'public' }) => {
+    if (!activeProjectId) return
+    setBusy('createRepo')
+    setNotice(null)
+    try {
+      await cockpit().github.createRepo({ projectId: activeProjectId, ...input })
+      await refreshActive()
+      setNotice(`Created ${input.name} on GitHub and attached it as origin.`)
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const runUpdateAction = async () => {
     const api = cockpit().appUpdate
     const phase = appUpdate?.phase
@@ -395,6 +476,14 @@ export function GitPanel() {
   if (!git) return null
 
   const repoName = github?.repository?.fullName ?? github?.remote?.webUrl ?? 'No GitHub remote'
+  const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
+  // No remote at all — covers both a brand-new (no-git) folder and an
+  // existing repo that was never attached to GitHub. Distinct from a real
+  // auth problem, which only applies once a GitHub remote already exists.
+  const needsBootstrap = !github?.remote
+  const needsGithubAuth = Boolean(
+    github?.remote && github.remote.provider === 'github' && github.authState !== 'authenticated',
+  )
   const updateDisabled =
     busy === 'update' ||
     appUpdate?.phase === 'unsupported' ||
@@ -519,12 +608,18 @@ export function GitPanel() {
             <div><span>pull request</span><strong>{github?.openPullRequest ? `#${github.openPullRequest.number}` : 'none'}</strong></div>
             <div><span>checks</span><strong>{workflowLabel(github)}</strong></div>
           </div>
-          {github?.error ? (
+          {github?.error && !needsBootstrap ? (
             <div className="git__notice git__notice--warning">
               <IconWarning width={14} height={14} /> {github.error}
             </div>
           ) : null}
-          {github?.authState !== 'authenticated' ? (
+          {needsBootstrap ? (
+            <CreateRepoForm
+              defaultName={activeProject?.name ?? 'new-project'}
+              busy={busy === 'createRepo'}
+              onCreate={createGitHubRepo}
+            />
+          ) : needsGithubAuth ? (
             <button className="btn git__wideAction" onClick={connectGitHub}>
               <IconCloud width={14} height={14} /> Connect GitHub
             </button>

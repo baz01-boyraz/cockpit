@@ -316,6 +316,18 @@ export const gitPushInputSchema = z
     message: 'Force-push requires an approved request — request approval first.',
   })
 
+/** Matches GitHub's own repository name character set. */
+export const githubCreateRepoInputSchema = z.object({
+  projectId: z.string().min(1),
+  name: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[A-Za-z0-9._-]+$/, 'Use only letters, numbers, dots, hyphens, and underscores.'),
+  visibility: z.enum(['private', 'public']),
+  description: z.string().max(350).optional(),
+})
+
 export const approvalDecisionSchema = z.object({
   approvalId: z.string().min(1),
   approve: z.boolean(),

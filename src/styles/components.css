@@ -3759,6 +3759,38 @@
   justify-content: center;
   margin-top: var(--sp-3);
 }
+.git__bootstrap {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+}
+.git__bootstrapHint {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.git__bootstrapRow {
+  display: flex;
+  gap: var(--sp-2);
+}
+.git__bootstrapInput {
+  flex: 1;
+  min-width: 0;
+  padding: 7px var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  outline: none;
+}
+.git__bootstrapInput:focus {
+  border-color: var(--border-accent);
+}
+.git__bootstrapToggle {
+  display: flex;
+  gap: 4px;
+}
 .git__updateCopy {
   color: var(--text-muted);
   font-size: var(--fs-sm);

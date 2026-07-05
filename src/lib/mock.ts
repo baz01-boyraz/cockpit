@@ -13,6 +13,7 @@ import type {
   ErrorInsight,
   AppUpdateState,
   GitCommitResult,
+  GitHubRepositoryStatus,
   GitSnapshot,
   Project,
   ProjectConfig,
@@ -68,6 +69,7 @@ import {
 } from './mockData'
 
 const gitState = new Map<string, GitSnapshot>()
+const githubState = new Map<string, GitHubRepositoryStatus>()
 
 function gitSnapshotFor(projectId: string): GitSnapshot {
   const current = gitState.get(projectId)
@@ -76,6 +78,10 @@ function gitSnapshotFor(projectId: string): GitSnapshot {
   const fresh: GitSnapshot = { ...seed, files: seed.files.map((f) => ({ ...f })) }
   gitState.set(projectId, fresh)
   return fresh
+}
+
+function githubStatusFor(projectId: string): GitHubRepositoryStatus {
+  return githubState.get(projectId) ?? githubByProject[projectId] ?? githubByProject.prj_cockpit
 }
 
 let appUpdateState: AppUpdateState = {
@@ -333,6 +339,13 @@ export function createMockApi(): CockpitApi {
     },
     git: {
       status: async (projectId) => gitSnapshotFor(projectId),
+      initRepo: async (projectId) => {
+        const prev = gitSnapshotFor(projectId)
+        if (prev.branch !== 'no-git') return prev
+        const next: GitSnapshot = { ...prev, branch: 'main' }
+        gitState.set(projectId, next)
+        return next
+      },
       diff: async ({ path }) => ({
         path,
         binary: false,
@@ -382,7 +395,43 @@ export function createMockApi(): CockpitApi {
       },
     },
     github: {
-      status: async (projectId) => githubByProject[projectId] ?? githubByProject.prj_cockpit,
+      status: async (projectId) => githubStatusFor(projectId),
+      createRepo: async (input) => {
+        const prev = gitSnapshotFor(input.projectId)
+        if (prev.branch === 'no-git') {
+          gitState.set(input.projectId, { ...prev, branch: 'main' })
+        }
+        const login = 'baz01-boyraz'
+        const next: GitHubRepositoryStatus = {
+          connected: true,
+          authState: 'authenticated',
+          account: { login, name: 'Baz', avatarUrl: null, htmlUrl: `https://github.com/${login}` },
+          remote: {
+            name: 'origin',
+            url: `git@github.com:${login}/${input.name}.git`,
+            provider: 'github',
+            owner: login,
+            repo: input.name,
+            webUrl: `https://github.com/${login}/${input.name}`,
+          },
+          repository: {
+            owner: login,
+            name: input.name,
+            fullName: `${login}/${input.name}`,
+            private: input.visibility === 'private',
+            defaultBranch: 'main',
+            htmlUrl: `https://github.com/${login}/${input.name}`,
+            description: input.description ?? null,
+          },
+          openPullRequest: null,
+          latestWorkflowRun: null,
+          latestRelease: null,
+          error: null,
+          fetchedAt: now(),
+        }
+        githubState.set(input.projectId, next)
+        return next
+      },
     },
     railway: {
       status: async (projectId): Promise<RailwayConnection> => ({
