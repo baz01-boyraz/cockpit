@@ -218,8 +218,10 @@
   overflow-x: hidden;
 }
 .rail__item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
+  width: 100%;
   gap: var(--sp-3);
   padding: 9px var(--sp-3);
   border-radius: var(--r-md);
@@ -228,11 +230,26 @@
   color: var(--text-muted);
   font-size: var(--fs-body);
   font-weight: 500;
+  text-align: left;
   transition: color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+}
+.rail__item svg {
+  width: 19px;
+  height: 19px;
+  justify-self: center;
+  opacity: 0.86;
+  filter: drop-shadow(0 0 7px rgba(242, 244, 248, 0.12));
+  transform: translateZ(0);
+  transition: opacity var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 .rail__item:hover {
   color: var(--text);
   background: var(--surface-1);
+}
+.rail__item:hover svg {
+  opacity: 1;
+  transform: translateY(-0.5px);
+  filter: drop-shadow(0 0 9px rgba(242, 244, 248, 0.2));
 }
 /* Doubled class (0,2,0) so the molten identity survives :hover (0,2,0, earlier)
  * — hovering the active tab must never strip its lit-metal fill. */
@@ -264,12 +281,19 @@
 }
 .rail__item.rail__item--active svg {
   color: var(--text-on-accent);
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+  opacity: 1;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25))
+    drop-shadow(0 0 7px rgba(255, 244, 232, 0.2));
 }
 .rail__itemLabel {
-  flex: 1;
+  min-width: 0;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .rail__itemBadge {
+  justify-self: end;
   font-size: var(--fs-micro);
   font-weight: 650;
   font-variant-numeric: tabular-nums;

@@ -26,7 +26,8 @@
   );
 }
 .railNote__btn {
-  display: flex;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--sp-3);
   width: 100%;
@@ -37,6 +38,7 @@
   color: var(--text-muted);
   font-size: var(--fs-body);
   font-weight: 500;
+  text-align: left;
   transition: color var(--dur) var(--ease-out), background var(--dur) var(--ease-out),
     border-color var(--dur) var(--ease-out);
 }
@@ -62,18 +64,35 @@
 .railNote__glyph {
   display: inline-grid;
   place-items: center;
+  width: 24px;
+  justify-self: center;
   color: var(--text-muted);
-  transition: color var(--dur) var(--ease-out);
+  opacity: 0.86;
+  filter: drop-shadow(0 0 7px rgba(242, 244, 248, 0.12));
+  transform: translateZ(0);
+  transition: color var(--dur) var(--ease-out), opacity var(--dur) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
 }
-.railNote__btn:hover .railNote__glyph,
+.railNote__btn:hover .railNote__glyph {
+  color: var(--text);
+  opacity: 1;
+  transform: translateY(-0.5px);
+  filter: drop-shadow(0 0 9px rgba(242, 244, 248, 0.2));
+}
 .railNote__btn--active .railNote__glyph {
   color: var(--accent-hi);
+  opacity: 1;
+  filter: drop-shadow(0 0 7px rgba(255, 244, 232, 0.2));
 }
 .railNote__label {
-  flex: 1;
+  min-width: 0;
   text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .railNote__count {
+  justify-self: end;
   font-size: var(--fs-micro);
   font-weight: 600;
   padding: 1px 7px;

@@ -24,9 +24,9 @@ const base = (props: IconProps): IconProps => ({
 /** Notebook / scratchpad — the launcher mark. */
 export const IconNotebook = (p: IconProps) => (
   <svg {...base(p)}>
-    <path d="M6 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" />
-    <path d="M5 8H3M5 12H3M5 16H3" />
-    <path d="M9.5 8.5h6M9.5 12h6M9.5 15.5h3.5" />
+    <path d="M7 4h10.5A2.5 2.5 0 0 1 20 6.5v11A2.5 2.5 0 0 1 17.5 20H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" />
+    <path d="M5 8H3.5M5 12H3.5M5 16H3.5" />
+    <path d="M10 9h5.5M10 13h5.5M10 17h3.5" />
   </svg>
 )
 
