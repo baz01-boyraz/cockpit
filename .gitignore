@@ -32,6 +32,10 @@ temporary screenshots/*.png
 # browser-automation (Playwright MCP) scratch captures
 .playwright-mcp/
 
+# memory hub internal churn (auto-snapshots on every note edit, soft-delete trash)
+.cockpit-memory/.snapshots/
+.cockpit-memory/.trash/
+
 # os
 .DS_Store
 Thumbs.db
