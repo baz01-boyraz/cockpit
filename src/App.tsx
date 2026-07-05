@@ -4,6 +4,7 @@ import { cockpit } from './lib/cockpit'
 import { initBlockCapture } from './store/blockStore'
 import { initSwarmActivity } from './store/swarmActivityStore'
 import { AppShell } from './components/AppShell'
+import { CockpitMark, CockpitWordmark } from './components/CockpitBrand'
 import { ProjectSwitcher } from './components/ProjectSwitcher'
 import { NotepadDrawer } from './components/NotepadDrawer'
 
@@ -57,9 +58,11 @@ export function App() {
     return (
       <div className="splash">
         <div className="splash__mark">
-          <span className="splash__glyph">⌘</span>
+          <CockpitMark title="Cockpit" />
         </div>
-        <div className="splash__title">cockpiT</div>
+        <div className="splash__title">
+          <CockpitWordmark />
+        </div>
         <div className="splash__sub mono">initializing workspace…</div>
       </div>
     )

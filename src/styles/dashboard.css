@@ -73,22 +73,30 @@
   line-height: 0.92;
   min-width: 0;
 }
-/* the cockpiT product wordmark — Space Grotesk in full molten treatment */
-.dashHero__wordmark {
-  display: inline-block;
-  font-family: var(--font-display);
-  font-size: 46px;
-  font-weight: 600;
-  letter-spacing: -0.028em;
-  line-height: 1;
-  background: linear-gradient(148deg, var(--ember-100) 4%, var(--ember-300) 50%, var(--ember-400) 92%);
+.dashHero__brandLockup {
+  gap: 12px;
+  filter: drop-shadow(0 12px 30px rgba(0, 0, 0, 0.32));
+}
+.dashHero__brandLockup .cockpitMark {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+}
+.dashHero__brandLockup .cockpitWordmark {
+  font-size: 45px;
+  background: linear-gradient(180deg, #fff 8%, var(--text) 46%, #b5bbc8 112%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
-  /* a soft copper bloom so the mark reads as lit metal, not flat text */
-  filter: drop-shadow(0 1px 10px rgba(224, 112, 58, 0.28));
-  white-space: nowrap;
+}
+.dashHero__brandLockup .cockpitWordmark__accent {
+  background: linear-gradient(160deg, var(--ember-100), var(--accent-hi) 44%, var(--accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 10px rgba(224, 112, 58, 0.28));
 }
 .dashHero__meta {
   display: flex;

@@ -13,25 +13,80 @@
   gap: var(--sp-3);
 }
 .splash__mark {
-  width: 64px;
-  height: 64px;
-  border-radius: var(--r-lg);
+  position: relative;
+  width: 76px;
+  height: 76px;
+  border-radius: 22px;
   display: grid;
   place-items: center;
-  background: linear-gradient(150deg, var(--accent-hi), var(--accent));
-  box-shadow: var(--shadow-accent);
-  color: var(--text-on-accent);
-  font-size: 30px;
+  background:
+    radial-gradient(90% 92% at 68% 20%, rgba(224, 112, 58, 0.14), transparent 54%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 72%, #fff 3%), var(--surface-inset));
+  border: 1px solid var(--border-strong);
+  box-shadow:
+    inset 0 1px 0 var(--edge-highlight),
+    0 0 0 1px rgba(224, 112, 58, 0.08),
+    var(--shadow-raised);
   animation: fade-rise 400ms var(--ease-out) both;
 }
+.splash__mark::after {
+  content: '';
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  bottom: -12px;
+  height: 16px;
+  border-radius: var(--r-pill);
+  background: radial-gradient(60% 100% at 50% 0%, var(--accent-glow), transparent 75%);
+  opacity: 0.82;
+  pointer-events: none;
+}
+.splash__mark .cockpitMark {
+  width: 58px;
+  height: 58px;
+}
 .splash__title {
-  font-size: var(--fs-display);
-  font-weight: 600;
-  letter-spacing: -0.03em;
+  margin-top: 4px;
+  animation: fade-rise 420ms var(--ease-out) 80ms both;
+}
+.splash__title .cockpitWordmark {
+  font-size: 31px;
 }
 .splash__sub {
   color: var(--text-faint);
   font-size: var(--fs-sm);
+}
+
+/* ---------- Cockpit brand ---------- */
+.cockpitMark {
+  display: block;
+  width: 1em;
+  height: 1em;
+  overflow: visible;
+}
+.cockpitLockup {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+.cockpitWordmark {
+  display: inline-flex;
+  align-items: baseline;
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 0.92;
+  letter-spacing: -0.018em;
+  color: var(--text);
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12),
+    0 10px 26px rgba(0, 0, 0, 0.36);
+  white-space: nowrap;
+}
+.cockpitWordmark__accent {
+  color: var(--accent-hi);
+  text-shadow:
+    0 0 10px rgba(224, 112, 58, 0.32),
+    0 1px 0 rgba(255, 226, 203, 0.24);
 }
 
 /* ---------- shell grid ---------- */
@@ -94,9 +149,7 @@
   background: linear-gradient(180deg, var(--chrome), var(--chrome-deep));
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03);
 }
-/* the app-logo slot: a lone lit mark given room to breathe. The real logo
- * lands here after this release; until then a machined copper monogram holds
- * the space with a soft ambient halo so the rail head feels intentional. */
+/* the app-logo slot: a lone lit mark given room to breathe. */
 .rail__brand {
   position: relative;
   display: flex;
@@ -110,51 +163,50 @@
 .rail__brand::before {
   content: '';
   position: absolute;
-  left: 2px;
-  top: 8px;
-  width: 92px;
-  height: 76px;
+  left: -1px;
+  top: 5px;
+  width: 94px;
+  height: 78px;
   border-radius: 50%;
-  background: radial-gradient(closest-side, var(--accent-glow), transparent 78%);
-  opacity: 0.55;
+  background:
+    radial-gradient(closest-side, var(--accent-glow), transparent 72%),
+    radial-gradient(closest-side at 40% 58%, var(--glacier-glow), transparent 76%);
+  opacity: 0.42;
   filter: blur(2px);
   pointer-events: none;
 }
-/* the monogram tile: a machined slab of lit copper with a beveled lip */
+/* the production mark sits in a dark machined well; ember lives inside the glyph. */
 .rail__logo {
   position: relative;
-  width: 40px;
-  height: 40px;
-  border-radius: 13px;
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  background: var(--molten);
+  background:
+    radial-gradient(86% 92% at 68% 18%, rgba(224, 112, 58, 0.13), transparent 54%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 76%, #fff 4%), var(--surface-inset));
+  border: 1px solid var(--border-strong);
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.42),
-    inset 0 -1.5px 3px rgba(107, 47, 20, 0.5),
-    0 0 0 1px rgba(255, 176, 122, 0.14),
-    var(--shadow-accent);
+    inset 0 1px 0 var(--edge-highlight),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(224, 112, 58, 0.07),
+    var(--shadow-card);
   transition: transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
 }
 .rail__logo:hover {
   transform: translateY(-1px);
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.5),
-    inset 0 -1.5px 3px rgba(107, 47, 20, 0.5),
-    0 0 0 1px rgba(255, 176, 122, 0.22),
-    0 8px 24px var(--accent-glow);
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(224, 112, 58, 0.16),
+    var(--shadow-raised),
+    0 0 18px -4px var(--accent-glow);
 }
-/* the mark itself — a lowercase Space Grotesk "c" in the copper tile */
-.rail__logo > span {
-  font-family: var(--font-display);
-  font-size: 25px;
-  font-weight: 600;
-  line-height: 1;
-  color: #2a0f04;
-  letter-spacing: -0.03em;
-  transform: translateY(-0.5px);
-  text-shadow: 0 1px 0 rgba(255, 210, 170, 0.38);
+.rail__logo .cockpitMark {
+  width: 35px;
+  height: 35px;
 }
 /* pedestal: a whisper of ember light pooled under the mark */
 .rail__logo::after {

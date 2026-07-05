@@ -15,6 +15,7 @@ import {
 import type { ComponentType, SVGProps } from 'react'
 import { UsageStrip } from './UsageStrip'
 import { NotepadLauncher } from './NotepadLauncher'
+import { CockpitMark } from './CockpitBrand'
 
 interface NavItem {
   view: View
@@ -52,9 +53,8 @@ export function LeftRail() {
   return (
     <aside className="rail">
       <div className="rail__brand">
-        {/* app logo slot — real mark lands here after this release */}
-        <div className="rail__logo" aria-label="cockpiT">
-          <span aria-hidden>c</span>
+        <div className="rail__logo" aria-label="Cockpit">
+          <CockpitMark title="Cockpit" />
         </div>
       </div>
 

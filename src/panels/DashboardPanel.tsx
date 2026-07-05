@@ -5,6 +5,7 @@ import { cockpit } from '../lib/cockpit'
 import { relativeTime } from '@shared/time'
 import { groupErrors, prettyAuditSummary } from '@shared/dashboard-insights'
 import { ApprovalCard } from '../components/ApprovalCard'
+import { CockpitLockup } from '../components/CockpitBrand'
 import { CountUp } from '../components/CountUp'
 import {
   IconBolt,
@@ -218,7 +219,7 @@ export function DashboardPanel() {
         <div className="dashHero__id">
           <div className="eyebrow">command center</div>
           <h2 className="dashHero__title">
-            <span className="dashHero__wordmark">cockpit</span>
+            <CockpitLockup className="dashHero__brandLockup" markTitle="Cockpit" />
           </h2>
           <div className="dashHero__meta">
             <span className="dashHero__branch mono">
