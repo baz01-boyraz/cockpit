@@ -1,8 +1,8 @@
 {
   "name": "cockpit",
-  "version": "0.1.36",
+  "version": "0.1.37",
   "private": true,
-  "description": "cockpiT — a project-aware AI coding cockpit. Terminals are the execution layer; the product is the cockpit.",
+  "description": "Cockpit — a project-aware AI coding cockpit. Terminals are the execution layer; the product is the cockpit.",
   "author": "Baz",
   "license": "UNLICENSED",
   "main": "out/main/index.js",

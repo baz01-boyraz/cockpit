@@ -61,13 +61,13 @@
     <path d="M276 765a325 325 0 0 1 446-413"
       fill="none" stroke="url(#glass)" stroke-width="22" stroke-linecap="round" stroke-dasharray="148 112" opacity="0.88"/>
 
-    <path d="M505 184 756 323 548 494 302 410Z" fill="url(#hot)"/>
-    <path d="M793 380 712 730 525 580 548 494Z" fill="url(#ember)"/>
-    <path d="M465 872 262 691 302 410 525 580Z" fill="#c25a2c" opacity="0.94"/>
-    <path d="M302 410 548 494 525 580 262 691Z" fill="#ffe2cb" opacity="0.18"/>
-    <path d="M548 494 756 323 793 380 525 580Z" fill="#ffffff" opacity="0.14"/>
-    <path d="M525 580 712 730 465 872Z" fill="#08080d" opacity="0.36"/>
-    <circle cx="513" cy="532" r="138" fill="url(#core)" opacity="0.5"/>
-    <circle cx="513" cy="532" r="44" fill="#ffe2cb" opacity="0.94"/>
+    <path d="M897 164 574 594 241 804 452 470Z" fill="#08080d" opacity="0.42"/>
+    <path d="M897 164 452 470 513 532 574 594Z" fill="url(#hot)"/>
+    <path d="M897 164 574 594 513 532Z" fill="url(#ember)"/>
+    <path d="M513 532 574 594 241 804Z" fill="#6b2f14" opacity="0.9"/>
+    <path d="M513 532 241 804 452 470Z" fill="#08080d" opacity="0.34"/>
+    <circle cx="513" cy="532" r="118" fill="url(#core)" opacity="0.42"/>
+    <circle cx="513" cy="532" r="50" fill="#15151d"/>
+    <circle cx="513" cy="532" r="24" fill="#ffe2cb" opacity="0.94"/>
   </g>
 </svg>

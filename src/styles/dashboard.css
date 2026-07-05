@@ -91,14 +91,6 @@
   color: transparent;
   -webkit-text-fill-color: transparent;
 }
-.dashHero__brandLockup .cockpitWordmark__accent {
-  background: linear-gradient(155deg, var(--ember-100), var(--accent-hi) 42%, var(--accent));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 12px rgba(224, 112, 58, 0.32));
-}
 .dashHero__meta {
   display: flex;
   align-items: center;

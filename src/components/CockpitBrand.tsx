@@ -81,15 +81,16 @@ export function CockpitMark({ className = '', title, ...props }: MarkProps) {
         opacity="0.86"
       />
 
+      {/* gauge needle: long hot blade toward the reading, short dark tail past the pivot */}
       <g filter={`url(#${shadowId})`}>
-        <path d="M31.6 10.4 47.3 19.1 34.3 29.8 18.9 24.6Z" fill={`url(#${emberHotId})`} />
-        <path d="M49.6 22.7 44.5 44.6 32.8 35.2 34.3 29.8Z" fill={`url(#${emberId})`} />
-        <path d="M29.1 53.4 16.4 42.1 18.9 24.6 32.8 35.2Z" fill="var(--ember-500)" opacity="0.92" />
-        <path d="M18.9 24.6 34.3 29.8 32.8 35.2 16.4 42.1Z" fill="rgba(255,226,203,0.2)" />
-        <path d="M34.3 29.8 47.3 19.1 49.6 22.7 32.8 35.2Z" fill="rgba(255,255,255,0.14)" />
-        <path d="M32.8 35.2 44.5 44.6 29.1 53.4Z" fill="rgba(8,8,13,0.34)" />
-        <circle cx="32.1" cy="32.2" r="8.5" fill={`url(#${coreId})`} opacity="0.42" />
-        <circle cx="32.1" cy="32.2" r="2.8" fill="var(--ember-100)" opacity="0.92" />
+        <path d="M55 9 34.8 35.9 14 49 27.2 28.1Z" fill="rgba(8,8,13,0.4)" />
+        <path d="M55 9 27.2 28.1 31 32 34.8 35.9Z" fill={`url(#${emberHotId})`} />
+        <path d="M55 9 34.8 35.9 31 32Z" fill={`url(#${emberId})`} />
+        <path d="M31 32 34.8 35.9 14 49Z" fill="var(--ember-700)" opacity="0.9" />
+        <path d="M31 32 14 49 27.2 28.1Z" fill="rgba(8,8,13,0.32)" />
+        <circle cx="31.4" cy="32.4" r="7.5" fill={`url(#${coreId})`} opacity="0.4" />
+        <circle cx="31.4" cy="32.4" r="3.1" fill="var(--surface-inset)" />
+        <circle cx="31.4" cy="32.4" r="1.5" fill="var(--ember-100)" opacity="0.94" />
       </g>
     </svg>
   )
@@ -103,9 +104,8 @@ type LockupProps = {
 
 export function CockpitWordmark({ className = '' }: { className?: string }) {
   return (
-    <span className={`cockpitWordmark ${className}`.trim()} aria-label="cockpiT">
-      <span>cockpi</span>
-      <span className="cockpitWordmark__accent">T</span>
+    <span className={`cockpitWordmark ${className}`.trim()} aria-label="Cockpit">
+      Cockpit
     </span>
   )
 }

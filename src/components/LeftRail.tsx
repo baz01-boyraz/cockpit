@@ -53,8 +53,8 @@ export function LeftRail() {
   return (
     <aside className="rail">
       <div className="rail__brand">
-        <div className="rail__logo" aria-label="cockpiT">
-          <CockpitMark title="cockpiT" />
+        <div className="rail__logo" aria-label="Cockpit">
+          <CockpitMark title="Cockpit" />
         </div>
       </div>
 
