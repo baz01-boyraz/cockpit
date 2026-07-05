@@ -1,9 +1,32 @@
+import { appendFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, BrowserWindow, nativeImage, screen, shell } from 'electron'
 import { IPC } from '@shared/ipc'
 import { CockpitEvents, TerminalDataCoalescer } from './events'
 import { registerIpc } from './ipc/registerIpc'
 import { Services } from './services/Services'
+
+/**
+ * Without this, Node's default behavior on any uncaught exception or
+ * unhandled rejection ANYWHERE in the main process — a background service
+ * tick, an IPC handler, a timer — is to silently kill the whole app: no
+ * dialog, no crash reporter (it's a clean process exit, not a native fault),
+ * just gone. A single background hiccup (e.g. MemoryAutoCapture's 90s sweep
+ * hitting a bad session file) took the entire app down this way. Log and keep
+ * running instead — a broken background sweep must never cost the whole app.
+ */
+function logFatal(kind: string, err: unknown): void {
+  const line = `[${new Date().toISOString()}] ${kind}: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`
+  try {
+    appendFileSync(join(app.getPath('userData'), 'main-crash.log'), line)
+  } catch {
+    // last resort: at least surface it on stderr
+    console.error(line)
+  }
+}
+
+process.on('uncaughtException', (err) => logFatal('uncaughtException', err))
+process.on('unhandledRejection', (err) => logFatal('unhandledRejection', err))
 
 const events = new CockpitEvents()
 let services: Services | null = null
