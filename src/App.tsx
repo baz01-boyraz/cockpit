@@ -58,7 +58,7 @@ export function App() {
     return (
       <div className="splash">
         <div className="splash__mark">
-          <CockpitMark title="Cockpit" />
+          <CockpitMark title="cockpiT" />
         </div>
         <div className="splash__title">
           <CockpitWordmark />

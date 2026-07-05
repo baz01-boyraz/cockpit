@@ -2,7 +2,7 @@
   "name": "cockpit",
   "version": "0.1.35",
   "private": true,
-  "description": "Cockpit — a project-aware AI coding cockpit. Terminals are the execution layer; the product is the cockpit.",
+  "description": "cockpiT — a project-aware AI coding cockpit. Terminals are the execution layer; the product is the cockpit.",
   "author": "Baz",
   "license": "UNLICENSED",
   "main": "out/main/index.js",
@@ -32,7 +32,7 @@
   },
   "build": {
     "appId": "com.boyraz.cockpit",
-    "productName": "Cockpit",
+    "productName": "cockpiT",
     "directories": {
       "output": "release",
       "buildResources": "resources"
@@ -40,6 +40,12 @@
     "files": [
       "out/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/app-icon.png",
+        "to": "app-icon.png"
+      }
     ],
     "asarUnpack": [
       "**/*.node",
@@ -58,6 +64,7 @@
       "gatekeeperAssess": false,
       "entitlements": "resources/entitlements.mac.plist",
       "entitlementsInherit": "resources/entitlements.mac.plist",
+      "icon": "resources/icon.icns",
       "darkModeSupport": true
     },
     "publish": [

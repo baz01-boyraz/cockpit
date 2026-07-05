@@ -43,8 +43,8 @@
   /* a lit obsidian slab: a molten pool in the upper-left corner over the
    * warm-card gradient, so the band reads as the cockpit's masthead. */
   background:
-    radial-gradient(120% 150% at 2% -40%, rgba(224, 112, 58, 0.16), transparent 52%),
-    radial-gradient(90% 120% at 100% 130%, var(--glacier-wash), transparent 60%),
+    radial-gradient(112% 142% at 3% -38%, rgba(224, 112, 58, 0.18), transparent 50%),
+    radial-gradient(84% 116% at 96% 120%, var(--glacier-wash), transparent 62%),
     linear-gradient(180deg, var(--surface-2), var(--surface-1));
   box-shadow: var(--bevel), var(--shadow-raised);
   overflow: hidden;
@@ -52,13 +52,13 @@
 /* a soft molten arc that bleeds off the top-left lip */
 .dashHero__glow {
   position: absolute;
-  left: -60px;
-  top: -90px;
-  width: 340px;
-  height: 220px;
+  left: -52px;
+  top: -88px;
+  width: 320px;
+  height: 210px;
   border-radius: var(--r-pill);
   background: radial-gradient(circle at 50% 50%, var(--accent-glow), transparent 66%);
-  opacity: 0.75;
+  opacity: 0.7;
   pointer-events: none;
 }
 .dashHero__id {
@@ -74,29 +74,30 @@
   min-width: 0;
 }
 .dashHero__brandLockup {
-  gap: 12px;
+  gap: 14px;
   filter: drop-shadow(0 12px 30px rgba(0, 0, 0, 0.32));
 }
 .dashHero__brandLockup .cockpitMark {
-  width: 52px;
-  height: 52px;
+  width: 58px;
+  height: 58px;
   flex: 0 0 auto;
 }
 .dashHero__brandLockup .cockpitWordmark {
-  font-size: 45px;
-  background: linear-gradient(180deg, #fff 8%, var(--text) 46%, #b5bbc8 112%);
+  font-size: 44px;
+  font-weight: 650;
+  background: linear-gradient(180deg, #fff 7%, var(--text) 48%, #aeb5c3 112%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
 }
 .dashHero__brandLockup .cockpitWordmark__accent {
-  background: linear-gradient(160deg, var(--ember-100), var(--accent-hi) 44%, var(--accent));
+  background: linear-gradient(155deg, var(--ember-100), var(--accent-hi) 42%, var(--accent));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 10px rgba(224, 112, 58, 0.28));
+  filter: drop-shadow(0 0 12px rgba(224, 112, 58, 0.32));
 }
 .dashHero__meta {
   display: flex;

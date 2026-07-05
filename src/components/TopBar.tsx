@@ -1,5 +1,6 @@
 import { useStore } from '../store/useStore'
 import { isMockBackend } from '../lib/cockpit'
+import { CockpitWordmark } from './CockpitBrand'
 import { IconBranch, IconSearch, IconShield, IconWarning } from './icons'
 
 export function TopBar() {
@@ -11,7 +12,9 @@ export function TopBar() {
   return (
     <header className="topbar">
       <div className="topbar__id">
-        <h1 className="topbar__title">{dashboard?.project.name ?? '—'}</h1>
+        <h1 className="topbar__title">
+          <CockpitWordmark className="topbar__brandWordmark" />
+        </h1>
         <div className="topbar__chips">
           <span className="chip topbar__branchChip">
             <IconBranch width={11} height={11} />

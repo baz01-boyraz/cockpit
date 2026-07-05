@@ -219,7 +219,7 @@ export function DashboardPanel() {
         <div className="dashHero__id">
           <div className="eyebrow">command center</div>
           <h2 className="dashHero__title">
-            <CockpitLockup className="dashHero__brandLockup" markTitle="Cockpit" />
+            <CockpitLockup className="dashHero__brandLockup" markTitle="cockpiT" />
           </h2>
           <div className="dashHero__meta">
             <span className="dashHero__branch mono">

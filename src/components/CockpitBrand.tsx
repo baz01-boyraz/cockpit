@@ -7,10 +7,11 @@ type MarkProps = SVGProps<SVGSVGElement> & {
 export function CockpitMark({ className = '', title, ...props }: MarkProps) {
   const uid = useId().replace(/:/g, '')
   const titleId = title ? `${uid}-title` : undefined
-  const metalId = `${uid}-metal`
+  const rimId = `${uid}-rim`
   const emberId = `${uid}-ember`
   const emberHotId = `${uid}-emberHot`
-  const cyanId = `${uid}-cyan`
+  const glassId = `${uid}-glass`
+  const coreId = `${uid}-core`
   const shadowId = `${uid}-shadow`
 
   return (
@@ -26,87 +27,69 @@ export function CockpitMark({ className = '', title, ...props }: MarkProps) {
     >
       {title ? <title id={titleId}>{title}</title> : null}
       <defs>
-        <linearGradient id={metalId} x1="14" y1="8" x2="42" y2="56" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="var(--surface-3)" />
-          <stop offset="0.42" stopColor="var(--surface-2)" />
-          <stop offset="1" stopColor="var(--surface-1)" />
+        <linearGradient id={rimId} x1="13" y1="9" x2="46" y2="58" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="rgba(255,255,255,0.34)" />
+          <stop offset="0.5" stopColor="var(--surface-3)" />
+          <stop offset="1" stopColor="var(--surface-inset)" />
         </linearGradient>
-        <linearGradient id={emberId} x1="19" y1="58" x2="58" y2="16" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="var(--ember-600)" />
-          <stop offset="0.45" stopColor="var(--accent)" />
-          <stop offset="1" stopColor="var(--accent-hi)" />
+        <linearGradient id={emberId} x1="17" y1="52" x2="51" y2="15" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="var(--ember-700)" />
+          <stop offset="0.48" stopColor="var(--accent)" />
+          <stop offset="1" stopColor="var(--ember-200)" />
         </linearGradient>
-        <linearGradient id={emberHotId} x1="21" y1="33" x2="56" y2="18" gradientUnits="userSpaceOnUse">
+        <linearGradient id={emberHotId} x1="23" y1="21" x2="49" y2="46" gradientUnits="userSpaceOnUse">
           <stop offset="0" stopColor="var(--ember-100)" />
-          <stop offset="0.32" stopColor="var(--accent-hi)" />
-          <stop offset="1" stopColor="var(--accent)" />
+          <stop offset="0.38" stopColor="var(--accent-hi)" />
+          <stop offset="1" stopColor="var(--ember-500)" />
         </linearGradient>
-        <linearGradient id={cyanId} x1="14" y1="48" x2="47" y2="17" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="var(--glacier-400)" stopOpacity="0.95" />
-          <stop offset="1" stopColor="var(--glacier-300)" stopOpacity="0.22" />
+        <linearGradient id={glassId} x1="12" y1="48" x2="50" y2="14" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="var(--glacier-400)" stopOpacity="0.8" />
+          <stop offset="1" stopColor="var(--glacier-300)" stopOpacity="0.16" />
         </linearGradient>
-        <filter id={shadowId} x="-18%" y="-18%" width="136%" height="140%" colorInterpolationFilters="sRGB">
-          <feDropShadow dx="0" dy="2" stdDeviation="2.2" floodColor="#000" floodOpacity="0.5" />
-          <feDropShadow dx="0" dy="0" stdDeviation="2.8" floodColor="var(--accent)" floodOpacity="0.22" />
+        <radialGradient id={coreId} cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(32 32) rotate(90) scale(12)">
+          <stop offset="0" stopColor="var(--ember-100)" />
+          <stop offset="0.38" stopColor="var(--accent-hi)" />
+          <stop offset="1" stopColor="var(--accent)" stopOpacity="0.1" />
+        </radialGradient>
+        <filter id={shadowId} x="-24%" y="-24%" width="148%" height="150%" colorInterpolationFilters="sRGB">
+          <feDropShadow dx="0" dy="2" stdDeviation="2.3" floodColor="#000" floodOpacity="0.5" />
+          <feDropShadow dx="0" dy="0" stdDeviation="3.4" floodColor="var(--accent)" floodOpacity="0.24" />
         </filter>
       </defs>
 
       <path
-        d="M17.4 52.4A29 29 0 0 1 12.5 23.2 29 29 0 0 1 36.8 6.6"
-        stroke={`url(#${metalId})`}
-        strokeWidth="7.5"
-        strokeLinecap="butt"
-        strokeDasharray="11 3.4 9 3.4 12 3.4 8 3.4"
+        d="M45.5 11.7A25.8 25.8 0 0 0 15.8 48.2"
+        stroke={`url(#${rimId})`}
+        strokeWidth="5.5"
+        strokeLinecap="round"
+        strokeDasharray="22 6 11 8"
       />
       <path
-        d="M17.4 52.4A29 29 0 0 1 12.5 23.2 29 29 0 0 1 36.8 6.6"
-        stroke="rgba(255,255,255,0.22)"
-        strokeWidth="1"
-        strokeLinecap="butt"
-        strokeDasharray="11 10.2 12 14.2"
-        opacity="0.7"
-      />
-      <path
-        d="M15 45.4A29 29 0 0 0 27 57.1"
+        d="M15.8 48.2A25.8 25.8 0 0 0 44.3 53.1"
         stroke={`url(#${emberId})`}
-        strokeWidth="7.5"
-        strokeLinecap="butt"
-        strokeDasharray="7.2 2.8 7.2"
+        strokeWidth="5.5"
+        strokeLinecap="round"
+        strokeDasharray="13 4 8"
         filter={`url(#${shadowId})`}
       />
       <path
-        d="M18.4 47.1A22.5 22.5 0 0 1 47.8 16.9"
-        stroke={`url(#${cyanId})`}
-        strokeWidth="1.25"
+        d="M18.2 43.7A20.3 20.3 0 0 1 46.1 17.9"
+        stroke={`url(#${glassId})`}
+        strokeWidth="1.35"
         strokeLinecap="round"
-        opacity="0.7"
-      />
-      <path
-        d="M18.5 47.1A22.5 22.5 0 0 1 24.2 20.2"
-        stroke="rgba(255,255,255,0.16)"
-        strokeWidth="1"
-        strokeLinecap="round"
-        strokeDasharray="4 8"
+        strokeDasharray="9 7"
+        opacity="0.86"
       />
 
       <g filter={`url(#${shadowId})`}>
-        <path
-          d="M20.6 33.4 56.3 16.7 36.1 38.7 31.1 58.2 27.4 40.2Z"
-          fill={`url(#${emberId})`}
-          stroke="rgba(255,178,84,0.62)"
-          strokeWidth="0.7"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M20.6 33.4 56.3 16.7 35.8 31.7Z"
-          fill={`url(#${emberHotId})`}
-          opacity="0.98"
-        />
-        <path
-          d="M35.8 31.7 56.3 16.7 36.1 38.7 31.1 58.2 33.1 39.4Z"
-          fill="rgba(8,8,13,0.42)"
-        />
-        <path d="M27.4 40.2 36.1 38.7 31.1 58.2Z" fill="var(--ember-500)" opacity="0.9" />
+        <path d="M31.6 10.4 47.3 19.1 34.3 29.8 18.9 24.6Z" fill={`url(#${emberHotId})`} />
+        <path d="M49.6 22.7 44.5 44.6 32.8 35.2 34.3 29.8Z" fill={`url(#${emberId})`} />
+        <path d="M29.1 53.4 16.4 42.1 18.9 24.6 32.8 35.2Z" fill="var(--ember-500)" opacity="0.92" />
+        <path d="M18.9 24.6 34.3 29.8 32.8 35.2 16.4 42.1Z" fill="rgba(255,226,203,0.2)" />
+        <path d="M34.3 29.8 47.3 19.1 49.6 22.7 32.8 35.2Z" fill="rgba(255,255,255,0.14)" />
+        <path d="M32.8 35.2 44.5 44.6 29.1 53.4Z" fill="rgba(8,8,13,0.34)" />
+        <circle cx="32.1" cy="32.2" r="8.5" fill={`url(#${coreId})`} opacity="0.42" />
+        <circle cx="32.1" cy="32.2" r="2.8" fill="var(--ember-100)" opacity="0.92" />
       </g>
     </svg>
   )
@@ -120,9 +103,9 @@ type LockupProps = {
 
 export function CockpitWordmark({ className = '' }: { className?: string }) {
   return (
-    <span className={`cockpitWordmark ${className}`.trim()} aria-label="Cockpit">
-      <span>Cockpi</span>
-      <span className="cockpitWordmark__accent">t</span>
+    <span className={`cockpitWordmark ${className}`.trim()} aria-label="cockpiT">
+      <span>cockpi</span>
+      <span className="cockpitWordmark__accent">T</span>
     </span>
   )
 }

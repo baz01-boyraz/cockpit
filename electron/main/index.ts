@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, screen, shell } from 'electron'
+import { app, BrowserWindow, nativeImage, screen, shell } from 'electron'
 import { IPC } from '@shared/ipc'
 import { CockpitEvents, TerminalDataCoalescer } from './events'
 import { registerIpc } from './ipc/registerIpc'
@@ -9,6 +9,12 @@ const events = new CockpitEvents()
 let services: Services | null = null
 let mainWindow: BrowserWindow | null = null
 let terminalCoalescer: TerminalDataCoalescer | null = null
+
+function appIconPath(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'app-icon.png')
+    : join(process.cwd(), 'resources/app-icon.png')
+}
 
 /**
  * Owner-registry seam: resolves which windows receive a given renderer event.
@@ -108,6 +114,12 @@ function forwardEvents(): void {
 }
 
 app.whenReady().then(() => {
+  app.setName('cockpiT')
+  if (process.platform === 'darwin') {
+    const dockIcon = nativeImage.createFromPath(appIconPath())
+    if (!dockIcon.isEmpty()) app.dock.setIcon(dockIcon)
+  }
+
   const userDataDir = app.getPath('userData')
   services = new Services({
     dbPath: join(userDataDir, 'cockpit.sqlite'),
