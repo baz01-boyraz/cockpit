@@ -534,3 +534,26 @@ export interface AgentUsageSnapshot {
 export interface AgentUsageReport {
   providers: AgentUsageSnapshot[]
 }
+
+// ---------------------------------------------------------------------------
+// OpenRouter credit (powers the Hermes engine core's live quota ring)
+// ---------------------------------------------------------------------------
+
+/**
+ * Remaining balance on the OpenRouter key stored in Settings, which Hermes
+ * runs its DeepSeek/OpenRouter model calls through. Built in the main process
+ * from the decrypted key (SecretStore.get, main-process only) — the renderer
+ * only ever receives these derived figures, never the key itself.
+ */
+export interface OpenRouterUsageSnapshot {
+  /** True when a key is saved and OpenRouter reported a balance. */
+  available: boolean
+  /** Remaining share of purchased credit, 0–100. Null on a pure pay-as-you-go
+   *  account (total_credits is 0, so a percent isn't meaningful). */
+  remainingPercent: number | null
+  remainingUsd: number | null
+  totalUsd: number | null
+  /** Why usage is unavailable — drives a polished empty/error state. */
+  reason: string | null
+  fetchedAt: ISODate
+}

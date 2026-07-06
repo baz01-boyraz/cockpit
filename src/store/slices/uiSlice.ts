@@ -30,6 +30,7 @@ export const createUiSlice: SliceCreator<UiSlice> = (set) => ({
   view: 'dashboard',
   projectSwitcherOpen: false,
   chatOpen: loadChatOpen(),
+  hermesOpen: false,
   aiDraft: null,
 
   setView: (view) => set({ view }),
@@ -40,5 +41,6 @@ export const createUiSlice: SliceCreator<UiSlice> = (set) => ({
       persistChatOpen(next)
       return { chatOpen: next }
     }),
+  toggleHermes: (open) => set((s) => ({ hermesOpen: open ?? !s.hermesOpen })),
   setAiDraft: (text) => set({ aiDraft: text }),
 })

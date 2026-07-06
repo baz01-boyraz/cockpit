@@ -29,18 +29,34 @@ export interface HermesRunOptions {
    * this to `false` so the orchestrator persona and MCP tools stay loaded.
    */
   ignoreRules?: boolean
+  /**
+   * Absolute path of a local image to attach. `-z/--oneshot` has no image
+   * flag, so supplying this switches the argv to `chat -q <prompt> -Q`
+   * (`--image` is only recognized by the `chat` subcommand); `-Q` keeps stdout
+   * limited to the final response, same as oneshot's clean output.
+   */
+  imagePath?: string
 }
 
 /**
  * Returns the oneshot argv, prepending `--ignore-rules` when requested and
  * inserting `-m <model>` before `--oneshot` when a model override is supplied.
  * The prompt always sits immediately after `--oneshot` so argparse reads it as
- * that flag's value.
+ * that flag's value. When `imagePath` is set, builds `chat -q` argv instead
+ * (the only Hermes CLI mode that accepts an image attachment).
  */
 export function buildHermesArgs(prompt: string, opts: HermesRunOptions = {}): string[] {
   const ignoreRules = opts.ignoreRules ?? true
-  const args = ignoreRules ? ['--ignore-rules'] : []
   const model = opts.model?.trim()
+
+  if (opts.imagePath) {
+    const args = ['chat', '-q', prompt, '-Q', '--image', opts.imagePath]
+    if (ignoreRules) args.push('--ignore-rules')
+    if (model) args.push('-m', model)
+    return args
+  }
+
+  const args = ignoreRules ? ['--ignore-rules'] : []
   if (model) args.push('-m', model)
   args.push('--oneshot', prompt)
   return args

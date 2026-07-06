@@ -41,10 +41,13 @@ export interface UiSlice {
   view: View
   projectSwitcherOpen: boolean
   chatOpen: boolean
+  /** Hermes chat panel — triggered from the rail's Engines row, not a floating launcher. */
+  hermesOpen: boolean
   aiDraft: string | null
   setView: (view: View) => void
   toggleSwitcher: (open?: boolean) => void
   toggleChat: (open?: boolean) => void
+  toggleHermes: (open?: boolean) => void
   setAiDraft: (text: string | null) => void
 }
 

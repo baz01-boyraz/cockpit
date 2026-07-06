@@ -173,6 +173,8 @@ export const chatAskSchema = z.object({
 export const hermesChatAskSchema = z.object({
   projectId: z.string().min(1),
   message: z.string().min(1).max(8000),
+  /** Absolute path of an image already saved via `terminals.attachImage`. */
+  imagePath: z.string().min(1).max(4096).optional(),
 })
 
 /** Reset a project's in-memory Hermes conversation ("new conversation"). */

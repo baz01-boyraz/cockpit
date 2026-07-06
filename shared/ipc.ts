@@ -38,6 +38,7 @@ import type {
   GitSnapshot,
   LogEvent,
   MaskedEnvVar,
+  OpenRouterUsageSnapshot,
   Project,
   ProjectConfig,
   RailwayConnection,
@@ -92,6 +93,7 @@ export const IPC = {
 
   usageSummary: 'usage:summary',
   agentUsageGet: 'agentUsage:get',
+  openRouterUsageStatus: 'openRouterUsage:status',
 
   approvalsList: 'approvals:list',
   approvalsRequest: 'approvals:request',
@@ -293,6 +295,14 @@ export interface CockpitApi {
      */
     get(): Promise<AgentUsageReport>
   }
+  openRouterUsage: {
+    /**
+     * Live remaining-credit snapshot for the OpenRouter key saved in Settings
+     * (Hermes's DeepSeek/OpenRouter model calls run on it). Probed in the main
+     * process; returns only the derived percent/dollar figures — never the key.
+     */
+    status(): Promise<OpenRouterUsageSnapshot>
+  }
   approvals: {
     list(projectId: string): Promise<ApprovalRequest[]>
     request(input: {
@@ -428,11 +438,13 @@ export interface CockpitApi {
   }
   hermesChat: {
     /**
-     * Send one turn to the Hermes orchestrator (`hermes --oneshot`) for this
-     * project. The backend keeps the conversation history itself — Hermes
-     * oneshot is stateless — and re-sends the transcript each turn.
+     * Send one turn to the Hermes orchestrator (`hermes --oneshot`, or
+     * `hermes chat -q --image` when `imagePath` is set) for this project. The
+     * backend keeps the conversation history itself — Hermes oneshot is
+     * stateless — and re-sends the transcript each turn. `imagePath` must be
+     * an absolute path already saved via `terminals.attachImage`.
      */
-    ask(projectId: string, message: string): Promise<HermesChatReply>
+    ask(projectId: string, message: string, imagePath?: string): Promise<HermesChatReply>
     /** Reset this project's conversation history ("new conversation"). */
     clear(projectId: string): Promise<void>
   }
@@ -527,6 +539,7 @@ export interface IpcResultMap {
 
   usageSummary: R<CockpitApi['usage']['summary']>
   agentUsageGet: R<CockpitApi['agentUsage']['get']>
+  openRouterUsageStatus: R<CockpitApi['openRouterUsage']['status']>
 
   approvalsList: R<CockpitApi['approvals']['list']>
   approvalsRequest: R<CockpitApi['approvals']['request']>

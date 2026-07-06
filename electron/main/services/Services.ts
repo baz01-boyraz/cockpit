@@ -14,6 +14,7 @@ import type { CockpitEvents } from '../events'
 import { AuditLogService } from './AuditLogService'
 import { AttachmentService } from './AttachmentService'
 import { AgentUsageService } from './AgentUsageService'
+import { OpenRouterUsageService } from './OpenRouterUsageService'
 import { ApprovalService } from './ApprovalService'
 import { AppUpdateService } from './AppUpdateService'
 import { ChatService } from './ChatService'
@@ -61,6 +62,8 @@ export class Services {
   readonly approvals: ApprovalService
   readonly usage: UsageService
   readonly agentUsage: AgentUsageService
+  /** Live OpenRouter credit remaining — powers the Hermes engine core's ring. */
+  readonly openRouterUsage: OpenRouterUsageService
   readonly logs: LogIntelligenceService
   readonly projects: ProjectService
   readonly git: GitService
@@ -107,6 +110,7 @@ export class Services {
     this.audit = new AuditLogService(this.db)
     this.usage = new UsageService(this.db)
     this.agentUsage = new AgentUsageService()
+    this.openRouterUsage = new OpenRouterUsageService(this.secrets)
     this.logs = new LogIntelligenceService(this.db, opts.events)
     this.projects = new ProjectService(this.db)
     this.attachments = new AttachmentService(this.projects)

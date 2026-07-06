@@ -1,10 +1,12 @@
 import { type CSSProperties } from 'react'
 import { summarizeAgentUsage, toneFor, type AgentUsagePill } from '@shared/agent-usage'
-import type { AgentUsageSnapshot } from '@shared/domain'
+import type { AgentUsageSnapshot, OpenRouterUsageSnapshot } from '@shared/domain'
 import { useStore } from '../store/useStore'
 import { useAgentUsage } from '../lib/useAgentUsage'
+import { useOpenRouterUsage } from '../lib/useOpenRouterUsage'
 import claudeLogo from '../assets/usage/claude.png'
 import codexLogo from '../assets/usage/codex.png'
+import hermesAvatar from '../assets/hermes/avatar.png'
 
 /** Each provider's 3D logo stays pristine and full-color; a thin quota ring
  *  hugging it reads the remaining level, so the mark itself never dims. */
@@ -33,14 +35,37 @@ function clampPercent(percent: number | null): number {
  * engine's tone over a faint spent-track; the logo itself never desaturates.
  * Decorative — the percent beneath carries the exact value.
  */
-function LogoMeter({ src, percent }: { src: string; percent: number | null }) {
+function LogoMeter({
+  src,
+  percent,
+  avatar,
+}: {
+  src: string
+  percent: number | null
+  /** Hermes's mark is a face portrait, not a centered logo — crop it round. */
+  avatar?: boolean
+}) {
   const fill = clampPercent(percent)
   return (
     <span className="logoMeter" aria-hidden>
       <span className="logoMeter__ring" style={{ '--fill': fill } as CSSProperties} />
-      <img className="logoMeter__logo" src={src} alt="" draggable={false} />
+      <img
+        className={`logoMeter__logo ${avatar ? 'logoMeter__logo--avatar' : ''}`}
+        src={src}
+        alt=""
+        draggable={false}
+      />
     </span>
   )
+}
+
+/** '62%' when OpenRouter reports a purchased-credit share, else the raw '$12.40'
+ *  balance (a pure pay-as-you-go account has no total to take a percent of). */
+function hermesDisplay(snapshot: OpenRouterUsageSnapshot | null): string {
+  if (!snapshot?.available) return '—'
+  if (snapshot.remainingPercent !== null) return `${snapshot.remainingPercent}%`
+  if (snapshot.remainingUsd !== null) return `$${snapshot.remainingUsd.toFixed(2)}`
+  return '—'
 }
 
 /**
@@ -92,6 +117,55 @@ function EngineCore({
 }
 
 /**
+ * Hermes's own engine core: the OpenRouter key it runs DeepSeek calls through,
+ * ringed the same way Claude/Codex are — but in a premium white/platinum tone
+ * (set purely via --provider/--provider-hi; the halo, ring, and glow math is
+ * identical to the other engines) instead of ember/glacier. Opens the Hermes
+ * chat panel instead of the Usage tab.
+ */
+function HermesEngineCore({
+  snapshot,
+  onOpen,
+}: {
+  snapshot: OpenRouterUsageSnapshot | null
+  onOpen: () => void
+}) {
+  const available = snapshot?.available ?? false
+  // No total-credit percent on a pure pay-as-you-go account: ring reads "full"
+  // rather than falsely empty when we simply can't express a fraction.
+  const ringPercent = available ? snapshot?.remainingPercent ?? 100 : null
+  const display = hermesDisplay(snapshot)
+  const tone = available ? toneFor(snapshot?.remainingPercent ?? null) : 'off'
+  const ariaLabel = available
+    ? `Hermes engine. ${display} OpenRouter credit left. Open Hermes.`
+    : `Hermes engine offline. ${snapshot?.reason ?? 'Open Hermes.'}`
+
+  return (
+    <button
+      type="button"
+      className={`engineCore engineCore--hermes engineCore--${tone}`}
+      aria-label={ariaLabel}
+      onClick={onOpen}
+    >
+      <span className="engineCore__stage">
+        <LogoMeter src={hermesAvatar} percent={ringPercent} avatar />
+      </span>
+      <span className="engineCore__meta">
+        <span className="engineCore__name">
+          <span className="engineCore__dot" aria-hidden />
+          Hermes
+        </span>
+        {available ? (
+          <span className="engineCore__pct mono">{display}</span>
+        ) : (
+          <span className="engineCore__offline mono">offline</span>
+        )}
+      </span>
+    </button>
+  )
+}
+
+/**
  * The Engine Bay — the cockpit's lower-left power section. Drops the old panel
  * box entirely: an "Engines" eyebrow with a live telemetry readout heads a row
  * of engine cores, each provider's 3D logo doubling as its quota battery,
@@ -99,7 +173,9 @@ function EngineCore({
  */
 export function UsageStrip() {
   const setView = useStore((s) => s.setView)
+  const toggleHermes = useStore((s) => s.toggleHermes)
   const snapshots = useAgentUsage()
+  const openRouter = useOpenRouterUsage()
 
   if (!snapshots) return null
 
@@ -107,11 +183,19 @@ export function UsageStrip() {
   // Hide the bay entirely only when nothing is connected and nothing to say.
   if (pills.every(({ pill }) => !pill.available && !pill.reason)) return null
 
-  const onlineCount = pills.filter(({ pill }) => pill.available).length
-  const worstRemaining = pills.reduce<number | null>((acc, { pill }) => {
+  const hermesOnline = openRouter?.available ?? false
+  const onlineCount = pills.filter(({ pill }) => pill.available).length + (hermesOnline ? 1 : 0)
+  const totalCount = pills.length + 1
+  let worstRemaining = pills.reduce<number | null>((acc, { pill }) => {
     if (!pill.available || pill.minRemainingPercent === null) return acc
     return acc === null ? pill.minRemainingPercent : Math.min(acc, pill.minRemainingPercent)
   }, null)
+  if (hermesOnline && openRouter?.remainingPercent !== null && openRouter?.remainingPercent !== undefined) {
+    worstRemaining =
+      worstRemaining === null
+        ? openRouter.remainingPercent
+        : Math.min(worstRemaining, openRouter.remainingPercent)
+  }
   const bayTone = onlineCount === 0 ? 'off' : toneFor(worstRemaining)
 
   return (
@@ -121,10 +205,10 @@ export function UsageStrip() {
         <span className="engineBay__rule" aria-hidden />
         <span
           className="engineBay__live mono"
-          aria-label={`${onlineCount} of ${pills.length} engines online`}
+          aria-label={`${onlineCount} of ${totalCount} engines online`}
         >
           <span className="engineBay__liveDot" aria-hidden />
-          {onlineCount}/{pills.length}
+          {onlineCount}/{totalCount}
         </span>
       </header>
       <div className="engineBay__cores">
@@ -136,6 +220,7 @@ export function UsageStrip() {
             onOpen={() => setView('usage')}
           />
         ))}
+        <HermesEngineCore snapshot={openRouter} onOpen={() => toggleHermes()} />
       </div>
     </section>
   )

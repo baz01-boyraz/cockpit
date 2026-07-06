@@ -64,6 +64,7 @@ import {
   memoryHub,
   namedAgentsMock,
   now,
+  openRouterUsageSnapshot,
   projects,
   usage,
 } from './mockData'
@@ -492,6 +493,7 @@ export function createMockApi(): CockpitApi {
     },
     usage: { summary: async (projectId) => (projectId === 'prj_serbest' ? usage : []) },
     agentUsage: { get: async () => agentUsageReport() },
+    openRouterUsage: { status: async () => openRouterUsageSnapshot() },
     approvals: {
       list: async (projectId) => approvals.filter((a) => a.projectId === projectId),
       request: async (input) => {
@@ -926,15 +928,16 @@ export function createMockApi(): CockpitApi {
       // Canned per-project conversation so browser preview keeps working
       // without a real `hermes` binary. Mirrors the real backend's shape:
       // history is remembered until cleared.
-      ask: async (projectId, message) => {
+      ask: async (projectId, message, imagePath) => {
         // A real turn is a full agentic loop that takes seconds-to-minutes; a
         // short preview delay keeps the "thinking" state honest in the browser.
         await new Promise((r) => setTimeout(r, 1200))
         const turns = mockHermesChats.get(projectId) ?? 0
         mockHermesChats.set(projectId, turns + 1)
+        const imageNote = imagePath ? '\n\n(Bir görsel aldım — gerçek uygulamada inceleyebilirim.)' : ''
         return {
           ok: true,
-          text: `(browser preview) Hermes burada — gerçek uygulamada orkestratör cevaplar.\n\nBu sohbetteki ${turns + 1}. mesajın: "${message.slice(0, 120)}"`,
+          text: `(browser preview) Hermes burada — gerçek uygulamada orkestratör cevaplar.\n\nBu sohbetteki ${turns + 1}. mesajın: "${message.slice(0, 120)}"${imageNote}`,
         }
       },
       clear: async (projectId) => {

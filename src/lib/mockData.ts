@@ -13,6 +13,7 @@ import type {
   GitHubRepositoryStatus,
   GitSnapshot,
   LogEvent,
+  OpenRouterUsageSnapshot,
   Project,
   UsageSummary,
 } from '@shared/domain'
@@ -246,6 +247,16 @@ export const agentUsageReport = (): AgentUsageReport => ({
       fetchedAt: now(),
     },
   ],
+})
+
+// Live OpenRouter credit for the Hermes engine core, browser-preview edition.
+export const openRouterUsageSnapshot = (): OpenRouterUsageSnapshot => ({
+  available: true,
+  remainingPercent: 62,
+  remainingUsd: 12.4,
+  totalUsd: 20,
+  reason: null,
+  fetchedAt: now(),
 })
 
 export const logs: LogEvent[] = [

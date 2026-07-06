@@ -4,6 +4,7 @@ import { LeftRail } from './LeftRail'
 import { TopBar } from './TopBar'
 import { RightPanel } from './RightPanel'
 import { UpdateToast } from './UpdateToast'
+import { HermesWidget } from './HermesWidget'
 import { IconBolt } from './icons'
 import { DashboardPanel } from '../panels/DashboardPanel'
 import { TerminalsPanel } from '../panels/TerminalsPanel'
@@ -19,11 +20,15 @@ export function AppShell() {
   const view = useStore((s) => s.view)
   const chatOpen = useStore((s) => s.chatOpen)
   const toggleChat = useStore((s) => s.toggleChat)
+  const hermesOpen = useStore((s) => s.hermesOpen)
 
   // Chat is shelved behind a flag (see lib/features). When off, the AI Cockpit
-  // panel and its launcher are not rendered and the shell runs full-width.
+  // panel and its launcher are not rendered and the shell runs full-width —
+  // that's also the only state Hermes docks into today (`shell--hermes-open`
+  // widens a 3rd grid column); if CHAT_ENABLED ever comes back, the two
+  // docked panels sharing the grid needs a real decision, not a guess here.
   const shellClass = !CHAT_ENABLED
-    ? 'shell shell--no-chat'
+    ? `shell shell--no-chat ${hermesOpen ? 'shell--hermes-open' : ''}`.trim()
     : chatOpen
       ? 'shell'
       : 'shell shell--chat-collapsed'
@@ -52,7 +57,10 @@ export function AppShell() {
           {view === 'settings' && <SettingsPanel />}
         </main>
       </div>
-      <UpdateToast />
+      {!CHAT_ENABLED && <HermesWidget />}
+      <div className="floatingCorner">
+        <UpdateToast />
+      </div>
       {CHAT_ENABLED && <RightPanel />}
       {CHAT_ENABLED && (
         <button

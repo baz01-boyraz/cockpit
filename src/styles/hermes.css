@@ -1,98 +1,52 @@
 /* ====================================================================
-   Hermes — floating chat widget. A bottom-right launcher bubble that
-   expands into a compact "coming soon" chat shell. Self-contained so the
-   feature touches no shared stylesheet. Built on the Obsidian-Ember
-   tokens; animates only transform / opacity.
+   Hermes — a docked chat panel. Renders as a real `.shell` grid column
+   (`.shell--hermes-open` in components.css widens it from 0), the same
+   technique RightPanel.tsx uses for the AI Cockpit chat — so opening Hermes
+   shrinks the terminal grid instead of floating over it and hiding whatever
+   pane is underneath. Self-contained so the feature touches no shared UI
+   file beyond that one grid hook. Built on the Obsidian-Ember tokens;
+   animates only transform / opacity.
    ==================================================================== */
 
-/* ---------- root: fixed anchor in the bottom-right corner ---------- */
-.hermes {
-  position: fixed;
-  right: var(--sp-5);
-  bottom: var(--sp-5);
-  z-index: 85; /* above content + rail (55) + topbar (50), below notepad (90) / modals (100) */
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--sp-3);
-  pointer-events: none; /* the corner is click-through; only children catch clicks */
-}
-
-/* ---------- launcher bubble (the resting footprint) ---------- */
-.hermes__launcher {
-  pointer-events: auto;
-  display: inline-grid;
-  place-items: center;
-  width: 54px;
-  height: 54px;
-  flex-shrink: 0;
-  align-self: flex-end;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--accent);
-  color: var(--text-on-accent);
-  /* the one ember "brand moment" of this widget — lit copper metal */
-  background: var(--molten);
-  box-shadow: var(--accent-bevel), var(--shadow-raised), 0 6px 20px -6px var(--accent-glow);
-  transition: transform var(--dur) var(--ease-spring), box-shadow var(--dur) var(--ease-out),
-    background var(--dur) var(--ease-out);
-}
-.hermes__launcher:hover {
-  background: var(--molten-hover);
-  transform: translateY(-2px);
-  box-shadow: var(--accent-bevel), var(--shadow-raised), 0 12px 36px var(--accent-glow);
-}
-.hermes__launcher:focus-visible {
-  outline: none;
-  box-shadow: var(--accent-bevel), var(--shadow-raised), 0 0 0 3px var(--accent-glow);
-}
-.hermes__launcher:active {
-  transform: translateY(-2px) scale(0.97);
-}
-.hermes__launcherGlyph {
-  display: inline-grid;
-  place-items: center;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.28));
-  transition: transform var(--dur) var(--ease-spring);
-}
-.hermes--open .hermes__launcherGlyph {
-  transform: rotate(0deg); /* chevron swaps in; keep the transition hook live */
-}
-
-/* ---------- expanded panel ---------- */
+/* ---------- panel: fills its `.shell` grid column ---------- */
 .hermes__panel {
-  transform-origin: bottom right;
-  width: min(340px, calc(100vw - 2 * var(--sp-5)));
+  position: relative;
   display: flex;
   flex-direction: column;
-  max-height: min(460px, calc(100vh - 120px));
+  width: 100%;
+  height: 100%;
+  min-width: 0;
   background: linear-gradient(180deg, var(--surface-1), var(--bg-deep));
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-lg);
-  box-shadow: var(--bevel), var(--shadow-float);
+  box-shadow: inset 1px 0 0 var(--border-strong), -22px 0 54px rgba(0, 0, 0, 0.26);
   overflow: hidden;
-  /* closed state: tucked toward the bubble, faded, and out of the tab order */
+  /* closed state: faded, slid toward the edge, out of the tab order — the
+   * grid column itself collapses to 0 width at the same time. */
   opacity: 0;
-  transform: translateY(8px) scale(0.96);
+  filter: blur(6px);
+  transform: translateX(20px) scale(0.99);
   pointer-events: none;
   visibility: hidden;
-  transition: transform var(--dur) var(--ease-spring), opacity var(--dur) var(--ease-out),
-    visibility 0s linear var(--dur);
+  transition: opacity 180ms var(--ease-out), transform 340ms var(--ease-spring),
+    filter 180ms var(--ease-out), visibility 0s linear 320ms;
 }
-.hermes--open .hermes__panel {
+.hermes__panel--open {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  filter: blur(0);
+  transform: translateX(0) scale(1);
   pointer-events: auto;
   visibility: visible;
-  transition: transform var(--dur) var(--ease-spring), opacity var(--dur) var(--ease-out),
-    visibility 0s;
+  transition: opacity 220ms var(--ease-out), transform 420ms var(--ease-spring),
+    filter 220ms var(--ease-out), visibility 0s;
 }
 
 /* ---------- panel header ---------- */
 .hermes__head {
+  height: var(--topbar-h); /* lines up with TopBar/RightPanel's header band */
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4);
+  padding: 0 var(--sp-3) 0 var(--sp-4);
   border-bottom: 1px solid var(--border);
   background: linear-gradient(180deg, var(--accent-wash), transparent);
 }
@@ -102,11 +56,23 @@
   width: 32px;
   height: 32px;
   flex-shrink: 0;
-  border-radius: var(--r-md);
+  overflow: hidden;
+  border-radius: var(--r-pill);
   color: var(--accent-hi);
   background: var(--accent-wash);
-  border: 1px solid var(--border-accent);
-  box-shadow: var(--bevel);
+  border: 1.5px solid var(--border-accent);
+  box-shadow:
+    inset 0 -5px 8px -3px rgba(0, 0, 0, 0.45),
+    var(--bevel),
+    0 3px 8px -3px rgba(0, 0, 0, 0.4);
+}
+.hermes__avatarImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 38% 32%;
+  display: block;
+  transform: scale(1.18);
 }
 .hermes__titles {
   display: flex;
@@ -196,14 +162,26 @@
 .hermes__emptyGlyph {
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 52px;
-  margin-bottom: var(--sp-1);
-  border-radius: var(--r-lg);
+  width: 64px;
+  height: 64px;
+  margin-bottom: var(--sp-2);
+  overflow: hidden;
+  border-radius: var(--r-pill);
   color: var(--accent-hi);
   background: var(--accent-wash);
-  border: 1px solid var(--border-accent);
-  box-shadow: var(--bevel);
+  border: 2px solid var(--border-accent);
+  box-shadow:
+    inset 0 -10px 14px -6px rgba(0, 0, 0, 0.5),
+    var(--bevel),
+    0 8px 20px -8px rgba(0, 0, 0, 0.5);
+}
+.hermes__emptyGlyphImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 38% 32%;
+  display: block;
+  transform: scale(1.18);
 }
 .hermes__emptyTitle {
   margin: 0;
@@ -225,8 +203,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
-  padding: var(--sp-4);
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-4) var(--sp-5);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -243,12 +221,11 @@
 }
 
 .hermes__msg {
-  max-width: 84%;
-  padding: 8px var(--sp-3);
+  max-width: 88%;
+  padding: 10px var(--sp-4);
   border-radius: var(--r-md);
-  font-size: var(--fs-sm);
-  line-height: 1.5;
-  white-space: pre-wrap;
+  font-size: var(--fs-body);
+  line-height: 1.6;
   word-break: break-word;
   border: 1px solid transparent;
 }
@@ -260,13 +237,17 @@
   border-color: var(--accent);
   border-bottom-right-radius: var(--r-xs);
   box-shadow: 0 2px 10px -4px var(--accent-glow);
+  white-space: pre-wrap;
 }
-/* Hermes turn — layered surface, left-aligned */
+/* Hermes turn — layered surface, left-aligned, a hairline glacier edge marks
+   it apart from the user's ember turn (the "colorful, easier to tell apart"
+   ask) without touching the ember/lime brand palette. */
 .hermes__msg--hermes {
   align-self: flex-start;
   color: var(--text);
   background: var(--surface-2);
   border-color: var(--border);
+  border-left: 2px solid color-mix(in srgb, var(--info) 55%, transparent);
   border-bottom-left-radius: var(--r-xs);
 }
 /* error turn — muted danger tone, still a normal message in the thread */
@@ -276,6 +257,73 @@
   background: var(--danger-wash);
   border-color: color-mix(in srgb, var(--danger) 34%, transparent);
   border-bottom-left-radius: var(--r-xs);
+  white-space: pre-wrap;
+}
+
+.hermes__msgImage {
+  display: block;
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: var(--r-sm);
+  margin-bottom: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+.hermes__msgText {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hermes__msgText > p {
+  margin: 0;
+}
+
+/* ---------- Hermes reply markup: bold, inline code, code blocks, lists ---------- */
+.hermes__msg--hermes strong {
+  color: var(--info);
+  font-weight: 650;
+}
+.hermes__code {
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+  background: var(--glacier-wash);
+  border: 1px solid color-mix(in srgb, var(--info) 30%, transparent);
+  color: var(--glacier-300);
+  font-family: var(--font-mono);
+  font-size: 0.93em;
+}
+.hermes__codeBlock {
+  position: relative;
+  margin: 2px 0;
+  padding: var(--sp-3) var(--sp-3) var(--sp-2);
+  border-radius: var(--r-sm);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  border-left: 2px solid color-mix(in srgb, var(--info) 55%, transparent);
+  overflow-x: auto;
+  white-space: pre;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+  color: var(--text);
+}
+.hermes__codeLang {
+  display: block;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  font-size: var(--fs-micro);
+  font-family: var(--font-sans);
+  color: var(--text-faint);
+}
+.hermes__list {
+  margin: 0;
+  padding-left: 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.hermes__list li::marker {
+  color: var(--info);
 }
 
 /* thinking indicator — three pulsing dots (opacity only) */
@@ -311,25 +359,61 @@
   }
 }
 
-/* ---------- composer: present but disabled (reads as not-yet-live) ---------- */
+/* ---------- composer: roomy textarea that grows with the typed text ---------- */
 .hermes__composer {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--sp-2);
-  padding: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
   border-top: 1px solid var(--border);
   background: var(--surface-1);
+}
+.hermes__file {
+  display: none;
+}
+.hermes__attachBtn {
+  align-self: flex-end;
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  transition: color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out);
+}
+.hermes__attachBtn:hover:not(:disabled) {
+  color: var(--accent-hi);
+  border-color: var(--border-accent);
+  background: var(--accent-wash);
+}
+.hermes__attachBtn:focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.hermes__attachBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .hermes__input {
   flex: 1;
   min-width: 0;
+  min-height: 38px;
+  max-height: 180px;
+  resize: none;
+  overflow-y: auto;
   background: var(--surface-inset);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   padding: 9px var(--sp-3);
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-body);
+  line-height: 1.5;
   transition: border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
 }
 .hermes__input::placeholder {
@@ -347,8 +431,8 @@
 .hermes__send {
   display: inline-grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
   border-radius: var(--r-md);
   border: 1px solid var(--accent);
@@ -379,25 +463,121 @@
   cursor: not-allowed;
 }
 
+/* ---------- image drop overlay + pending attachment chip ---------- */
+.hermes__drop {
+  position: absolute;
+  inset: var(--sp-3);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  border: 1px dashed var(--border-accent);
+  border-radius: var(--r-md);
+  background: linear-gradient(135deg, rgba(224, 123, 69, 0.13), rgba(98, 190, 221, 0.08)), rgba(8, 9, 11, 0.82);
+  color: var(--text);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+  animation: termDropIn 180ms var(--ease-out);
+}
+.hermes__dropIcon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-md);
+  color: var(--accent-hi);
+  background: var(--accent-wash);
+  border: 1px solid var(--border-accent);
+}
+.hermes__dropTitle {
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+.hermes__dropSub {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.hermes__attach {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 var(--sp-4) var(--sp-1);
+  padding: 8px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-inset);
+  animation: termAttachIn 200ms var(--ease-spring);
+}
+.hermes__attachThumb {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 36px;
+  border-radius: var(--r-sm);
+  object-fit: cover;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+}
+.hermes__attachBody {
+  min-width: 0;
+  flex: 1;
+}
+.hermes__attachName {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hermes__attachMeta {
+  margin-top: 1px;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+}
+.hermes__attachMeta.is-error {
+  color: var(--danger);
+}
+.hermes__attachLoader {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(236, 230, 218, 0.12);
+  border-top-color: var(--accent-hi);
+  animation: termAttachSpin 760ms linear infinite;
+}
+.hermes__attachRemove {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-faint);
+  transition: color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+}
+.hermes__attachRemove:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+.hermes__attachRemove:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent-glow);
+}
+
 /* ---------- reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   .hermes__panel {
     transition: opacity var(--dur) linear, visibility 0s linear var(--dur);
     transform: none;
   }
-  .hermes--open .hermes__panel {
+  .hermes__panel--open {
     transform: none;
     transition: opacity var(--dur) linear, visibility 0s;
-  }
-  .hermes__launcher,
-  .hermes__launcherGlyph {
-    transition: none;
-  }
-  .hermes__launcher:hover {
-    transform: none;
-  }
-  .hermes__launcher:active {
-    transform: scale(0.97);
   }
   .hermes__dot {
     animation: none;
@@ -406,5 +586,10 @@
   .hermes__send:hover:not(:disabled),
   .hermes__send:active:not(:disabled) {
     transform: none;
+  }
+  .hermes__drop,
+  .hermes__attach,
+  .hermes__attachLoader {
+    animation: none;
   }
 }

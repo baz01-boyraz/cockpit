@@ -96,9 +96,16 @@
 .shell--chat-collapsed {
   grid-template-columns: minmax(210px, var(--rail-w)) minmax(0, 1fr) 0px;
 }
-/* Chat shelved (lib/features CHAT_ENABLED=false): no right column at all. */
+/* Chat shelved (lib/features CHAT_ENABLED=false): no right chat column, but a
+ * 3rd track still exists collapsed to 0px for the Hermes dock (HermesWidget.tsx)
+ * — widened by `.shell--hermes-open` below. Always declaring the 3rd track
+ * (rather than adding/removing it) keeps this a single grid-template-columns
+ * transition instead of a layout jump. */
 .shell--no-chat {
-  grid-template-columns: minmax(210px, var(--rail-w)) minmax(0, 1fr);
+  grid-template-columns: minmax(210px, var(--rail-w)) minmax(0, 1fr) 0px;
+}
+.shell--no-chat.shell--hermes-open {
+  grid-template-columns: minmax(210px, var(--rail-w)) minmax(0, 1fr) minmax(360px, 440px);
 }
 .shell__center {
   display: flex;
@@ -732,6 +739,14 @@
   --provider-hi: var(--glacier-300);
   --logo-scale: 1.45;
 }
+.engineCore--hermes {
+  /* A premium platinum/white glow — deliberately outside the ember/glacier
+   * pair, since Hermes isn't a coding engine but the orchestrator + its own
+   * OpenRouter credit line. */
+  --provider: #dde1e8;
+  --provider-hi: #ffffff;
+  --logo-scale: 1;
+}
 /* health escalation lives on the status dot — identity color stays put */
 .engineCore--warning {
   --health: var(--warning);
@@ -885,6 +900,15 @@
   pointer-events: none;
   -webkit-user-select: none;
   user-select: none;
+}
+/* Hermes's mark is a face portrait, not a centered logo on transparent — crop
+ * it round and zoom past its white margin instead of the contain/scale pair
+ * the logo marks use. */
+.logoMeter__logo--avatar {
+  object-fit: cover;
+  object-position: 38% 32%;
+  border-radius: var(--r-pill);
+  transform: scale(1.08);
 }
 /* the quota gauge: a 3px conic ring seated just outside the mark. The filled
  * arc sweeps from 12 o'clock to `--fill`%; the remainder is a faint track. */
@@ -1394,7 +1418,10 @@
     grid-template-columns: 198px minmax(0, 1fr) 0px;
   }
   .shell--no-chat {
-    grid-template-columns: 198px minmax(0, 1fr);
+    grid-template-columns: 198px minmax(0, 1fr) 0px;
+  }
+  .shell--no-chat.shell--hermes-open {
+    grid-template-columns: 198px minmax(0, 1fr) 320px;
   }
   .topbar__search {
     min-width: 120px;
@@ -4733,14 +4760,43 @@
 }
 
 /* ----------------------------------------------------------------------------
+   .floatingCorner — fixed bottom-right anchor for the update toast
+   (AppShell.tsx). Hermes used to float here too, but that meant its open
+   panel sat on top of (and hid) whatever terminal pane was underneath —
+   HermesWidget now docks as a real `.shell` grid column instead
+   (`.shell--hermes-open` in this file), so this wrapper is toast-only.
+   ---------------------------------------------------------------------------- */
+.floatingCorner {
+  position: fixed;
+  right: var(--sp-5);
+  bottom: var(--sp-5);
+  z-index: 85; /* above content + rail (55) + topbar (50), below notepad (90) / modals (100) */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  pointer-events: none; /* the corner is click-through; only children catch clicks */
+  transition: right 420ms var(--ease-spring);
+}
+/* `position: fixed` ignores the grid entirely, so without this the toast sits
+ * at the true viewport corner — on top of the Hermes dock's bottom edge once
+ * it widens that 3rd column. Shift left by the same width, in step with the
+ * same `.shell--hermes-open` class that drives the column. */
+.shell--hermes-open .floatingCorner {
+  right: calc(440px + var(--sp-5));
+}
+@media (max-width: 900px) {
+  .shell--hermes-open .floatingCorner {
+    right: calc(320px + var(--sp-5));
+  }
+}
+
+/* ----------------------------------------------------------------------------
    Update toast — premium bottom-right card announcing a published release.
    Driven by AppUpdateService → store.appUpdate. Animate transform/opacity only.
    ---------------------------------------------------------------------------- */
 .updateToast {
-  position: fixed;
-  right: var(--sp-5);
-  bottom: var(--sp-5);
-  z-index: 80;
+  pointer-events: auto;
   width: 320px;
   padding: var(--sp-4);
   display: flex;

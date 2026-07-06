@@ -7,7 +7,6 @@ import { AppShell } from './components/AppShell'
 import { CockpitMark, CockpitWordmark } from './components/CockpitBrand'
 import { ProjectSwitcher } from './components/ProjectSwitcher'
 import { NotepadDrawer } from './components/NotepadDrawer'
-import { HermesWidget } from './components/HermesWidget'
 
 /** How long consecutive logs:changed events are batched into one refetch. */
 const LOGS_REFRESH_COALESCE_MS = 250
@@ -73,7 +72,6 @@ export function App() {
     <>
       <AppShell />
       <NotepadDrawer />
-      <HermesWidget />
       {switcherOpen && <ProjectSwitcher />}
     </>
   )

@@ -231,6 +231,7 @@ export function registerIpc(services: Services): void {
     agentUsageRequestSchema.parse(p)
     return services.agentUsage.getReport()
   })
+  handle('openRouterUsageStatus', () => services.openRouterUsage.status())
 
   // --- approvals ---
   handle('approvalsList', (p) => services.approvals.list(projectIdSchema.parse(p).projectId))
@@ -337,8 +338,8 @@ export function registerIpc(services: Services): void {
   // --- Hermes chat widget (orchestrator persona + cockpit MCP tools; the
   // service keeps conversation history itself since oneshot is stateless) ---
   handle('hermesChatAsk', (p) => {
-    const { projectId, message } = hermesChatAskSchema.parse(p)
-    return services.hermesChat.ask(projectId, message)
+    const { projectId, message, imagePath } = hermesChatAskSchema.parse(p)
+    return services.hermesChat.ask(projectId, message, imagePath)
   })
   handle('hermesChatClear', (p) => {
     const { projectId } = hermesChatClearSchema.parse(p)

@@ -74,6 +74,9 @@ const api: CockpitApi = {
   agentUsage: {
     get: () => invoke(IPC.agentUsageGet),
   },
+  openRouterUsage: {
+    status: () => invoke(IPC.openRouterUsageStatus),
+  },
   approvals: {
     list: (projectId) => invoke(IPC.approvalsList, { projectId }),
     request: (input) => invoke(IPC.approvalsRequest, input),
@@ -130,7 +133,8 @@ const api: CockpitApi = {
     ask: (projectId, prompt, opts) => invoke(IPC.chatAsk, { projectId, prompt, opts }),
   },
   hermesChat: {
-    ask: (projectId, message) => invoke(IPC.hermesChatAsk, { projectId, message }),
+    ask: (projectId, message, imagePath) =>
+      invoke(IPC.hermesChatAsk, { projectId, message, imagePath }),
     clear: (projectId) => invoke(IPC.hermesChatClear, { projectId }),
   },
   secrets: {
