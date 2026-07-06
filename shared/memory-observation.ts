@@ -61,6 +61,15 @@ reason, a non-obvious gotcha, a stable preference of Baz's, a hard constraint.
 BAD: transient status, routine edits, anything obvious from the code, anything
 that will be stale next week. If nothing is worth keeping, return an empty list.
 
+Also surface a failure-mode observation when the session shows a clear
+mistake-then-correction pattern — an approach was tried, did NOT work, and a
+different approach was then used to fix it. Capture what failed, why it failed,
+and what worked instead, as a "gotcha". This is an ADDITION to what counts as
+worth keeping, not a lowering of the bar: still precision over recall, still an
+empty list when nothing durable is present. A one-off typo that was immediately
+fixed is not a durable failure; a wrong assumption or a dead-end approach that
+would trip someone up again is.
+
 For each fact decide two things yourself:
   scope    — "project" if it is about THIS project; "user" if it is about Baz
              (a preference, a working style, a standing decision that travels

@@ -143,6 +143,30 @@ export class ApprovalService {
     this.events.emitTyped('approvals:changed', { projectId: input.projectId })
   }
 
+  /** Read a single request (with its stored payload) by id, or null if unknown. */
+  get(approvalId: string): ApprovalRequest | null {
+    const row = this.db
+      .prepare('SELECT * FROM approval_requests WHERE id = ?')
+      .get(approvalId) as ApprovalRow | undefined
+    return row ? this.toRequest(row) : null
+  }
+
+  /**
+   * Every currently-approved (not yet consumed) request of one action type for a
+   * project, oldest first. The approval-execution watcher uses this to find work
+   * to run; the ORDER makes execution deterministic when several are queued.
+   */
+  listApproved(projectId: string, actionType: ApprovalActionType): ApprovalRequest[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM approval_requests
+         WHERE project_id = ? AND action_type = ? AND status = 'approved'
+         ORDER BY created_at ASC`,
+      )
+      .all(projectId, actionType) as ApprovalRow[]
+    return rows.map((r) => this.toRequest(r))
+  }
+
   list(projectId: string, limit = 50): ApprovalRequest[] {
     const rows = this.db
       .prepare(

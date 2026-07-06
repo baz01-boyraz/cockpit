@@ -1,0 +1,54 @@
+import type { z } from 'zod'
+import type { SwarmService } from '../SwarmService'
+import type { AgentUsageService } from '../AgentUsageService'
+import type { GitService } from '../GitService'
+import type { ReviewService } from '../ReviewService'
+import type { MemoryHubService } from '../MemoryHubService'
+import type { MemoryReviewService } from '../MemoryReviewService'
+import type { MemoryPipeline } from '../MemoryPipeline'
+import type { ApprovalService } from '../ApprovalService'
+import type { LogIntelligenceService } from '../LogIntelligenceService'
+import type { CardOutputTracker } from './CardOutputTracker'
+import type { HermesChecksService } from './HermesChecksService'
+import type { AppScreenshotService } from './AppScreenshotService'
+
+/**
+ * The narrow slice of the app the Hermes MCP tools may touch. Each field is a
+ * `Pick` of a real service so the concrete `Services` instance satisfies it
+ * structurally — the tools call the SAME in-process methods the renderer's IPC
+ * handlers call, never a shell or the filesystem. Widening this is the ONLY way
+ * Hermes gains a new capability, which is exactly why it is spelled out here.
+ */
+export interface HermesToolContext {
+  // Faz 3a — swarm + usage
+  swarm: Pick<SwarmService, 'createCard' | 'updateCard' | 'startCard' | 'board'>
+  agentUsage: Pick<AgentUsageService, 'getReport'>
+  cardOutput: Pick<CardOutputTracker, 'track' | 'drain' | 'untrack'>
+  // Faz 3b — git (read-only), checks (allowlist-only), screenshot, memory
+  git: Pick<GitService, 'status'>
+  review: Pick<ReviewService, 'diffStat'>
+  checks: Pick<HermesChecksService, 'run'>
+  screenshot: Pick<AppScreenshotService, 'capture'>
+  memory: Pick<MemoryHubService, 'list' | 'write'>
+  memoryReviews: Pick<MemoryReviewService, 'listPending'>
+  memoryPipeline: Pick<MemoryPipeline, 'resolveReview'>
+  // Faz 6 — git/log stewardship
+  logs: Pick<LogIntelligenceService, 'listLogs' | 'listInsights'>
+  // `propose_swarm_card` only ever REQUESTS an approval — it can never open a
+  // card itself (that path is the HermesApprovalExecutor, post human-approval).
+  approvals: Pick<ApprovalService, 'request'>
+}
+
+/**
+ * A transport-independent tool definition. `inputShape` is the Zod raw shape the
+ * MCP layer advertises and validates against; `run` re-parses the raw input with
+ * the canonical schema (defence in depth — MCP input is untrusted) and calls the
+ * underlying service. Keeping this free of any MCP/HTTP types is what lets the
+ * tests exercise every tool by calling `run` directly.
+ */
+export interface HermesTool {
+  readonly name: string
+  readonly description: string
+  readonly inputShape: z.ZodRawShape
+  run(rawInput: unknown): Promise<unknown>
+}

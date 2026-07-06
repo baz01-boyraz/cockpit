@@ -214,7 +214,13 @@ describe('TerminalManager lifecycle', () => {
     const live = mgr.list('prj_1')[0]
     expect(live.status).toBe('exited')
     expect(live.exitCode).toBe(0)
-    expect(exitSpy).toHaveBeenCalledWith({ sessionId: session.id, exitCode: 0, signal: null })
+    expect(exitSpy).toHaveBeenCalledWith({
+      sessionId: session.id,
+      projectId: 'prj_1',
+      role: null,
+      exitCode: 0,
+      signal: null,
+    })
 
     const updates = rec.callsFor('run', 'SET name=')
     expect(updates[0].args[0]).toMatchObject({ status: 'exited', exitCode: 0 })

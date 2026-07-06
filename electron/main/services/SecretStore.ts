@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { safeStorage } from 'electron'
 
@@ -41,6 +41,12 @@ export class SecretStore {
 
   has(ref: string): boolean {
     return existsSync(this.fileFor(ref))
+  }
+
+  /** Remove a stored secret. No-op if it was never set. */
+  delete(ref: string): void {
+    const file = this.fileFor(ref)
+    if (existsSync(file)) rmSync(file)
   }
 
   /** Main-process only. Never wire this to an IPC response. */

@@ -168,6 +168,8 @@ export class TerminalManager {
       }
       this.events.emitTyped('terminal:exit', {
         sessionId: session.id,
+        projectId: session.projectId,
+        role: session.role,
         exitCode,
         signal: signal ?? null,
       })

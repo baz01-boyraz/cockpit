@@ -21,6 +21,7 @@ import type { ConsolidationResult } from './memory-consolidate'
 import type { BoardColumn, CardStatus } from './kanban'
 import type { Assignment } from './agent-taxonomy'
 import type { NamedAgentSummary } from './named-agents'
+import type { SecretKind } from './schemas'
 import type {
   AgentType,
   AgentUsageReport,
@@ -98,6 +99,8 @@ export const IPC = {
 
   routerRoute: 'router:route',
   chatAsk: 'chat:ask',
+  hermesChatAsk: 'hermesChat:ask',
+  hermesChatClear: 'hermesChat:clear',
   reviewRun: 'review:run',
   reviewRunText: 'review:runText',
   reviewDiffStat: 'review:diffStat',
@@ -125,6 +128,10 @@ export const IPC = {
   swarmStartCard: 'swarm:startCard',
   swarmParkCard: 'swarm:parkCard',
   swarmAgents: 'swarm:agents',
+
+  secretSet: 'secret:set',
+  secretHas: 'secret:has',
+  secretDelete: 'secret:delete',
 
   auditList: 'audit:list',
 
@@ -161,6 +168,18 @@ export interface ChatReply {
   ok: boolean
   text: string
   model: string
+}
+
+/**
+ * Reply from the Hermes chat widget backend. Unlike `ChatReply` there is no
+ * model label (the model is fixed by the host's Hermes config, not picked per
+ * call); a failed turn carries a human-readable `error` instead of throwing
+ * across IPC.
+ */
+export interface HermesChatReply {
+  ok: boolean
+  text: string
+  error?: string
 }
 
 /** Result of kicking off a local rebuild + relaunch of the cockpit itself. */
@@ -407,6 +426,28 @@ export interface CockpitApi {
      */
     ask(projectId: string, prompt: string, opts?: ClaudeRunOptions): Promise<ChatReply>
   }
+  hermesChat: {
+    /**
+     * Send one turn to the Hermes orchestrator (`hermes --oneshot`) for this
+     * project. The backend keeps the conversation history itself — Hermes
+     * oneshot is stateless — and re-sends the transcript each turn.
+     */
+    ask(projectId: string, message: string): Promise<HermesChatReply>
+    /** Reset this project's conversation history ("new conversation"). */
+    clear(projectId: string): Promise<void>
+  }
+  secrets: {
+    /**
+     * Store an encrypted secret (OS keychain via safeStorage). The value never
+     * comes back out over IPC — there is no `get`. Used by the upcoming Hermes
+     * integration to hold the OpenRouter API key.
+     */
+    set(kind: SecretKind, value: string): Promise<void>
+    /** Whether a secret of this kind is currently stored (no value revealed). */
+    has(kind: SecretKind): Promise<boolean>
+    /** Remove a stored secret. No-op if none was set. */
+    delete(kind: SecretKind): Promise<void>
+  }
   audit: {
     list(projectId: string): Promise<AuditEntry[]>
   }
@@ -493,6 +534,8 @@ export interface IpcResultMap {
 
   routerRoute: R<CockpitApi['router']['route']>
   chatAsk: R<CockpitApi['chat']['ask']>
+  hermesChatAsk: R<CockpitApi['hermesChat']['ask']>
+  hermesChatClear: R<CockpitApi['hermesChat']['clear']>
   reviewRun: R<CockpitApi['review']['run']>
   reviewRunText: R<CockpitApi['review']['runText']>
   reviewDiffStat: R<CockpitApi['review']['diffStat']>
@@ -518,6 +561,9 @@ export interface IpcResultMap {
   swarmStartCard: R<CockpitApi['swarm']['startCard']>
   swarmParkCard: R<CockpitApi['swarm']['parkCard']>
   swarmAgents: R<CockpitApi['swarm']['agents']>
+  secretSet: R<CockpitApi['secrets']['set']>
+  secretHas: R<CockpitApi['secrets']['has']>
+  secretDelete: R<CockpitApi['secrets']['delete']>
   auditList: R<CockpitApi['audit']['list']>
 
   systemInfo: R<CockpitApi['system']['info']>

@@ -4361,6 +4361,37 @@
 .chip--policy { font-family: var(--font-mono); }
 .chip--policy svg { color: var(--warning); }
 
+/* ---------- secret field (masked API key input, Settings) ---------- */
+.secretfield { display: flex; flex-direction: column; gap: var(--sp-3); }
+.secretfield__row { display: flex; gap: var(--sp-2); align-items: center; }
+.secretfield__input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text);
+  outline: none;
+  font-size: var(--fs-sm);
+  font-family: var(--font-mono);
+  transition: border-color var(--dur) var(--ease-out), background var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
+}
+.secretfield__input::placeholder { color: var(--text-faint); font-family: var(--font-sans); }
+.secretfield__input:hover { border-color: var(--border-strong); }
+.secretfield__input:focus-visible,
+.secretfield__input:focus {
+  border-color: var(--border-accent);
+  background: var(--surface-1);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+.secretfield__status { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); }
+.secretfield__status--stored { color: var(--success); }
+.secretfield__status--empty { color: var(--text-faint); }
+.secretfield__msg { font-size: var(--fs-xs); color: var(--text-muted); margin: 0; }
+.secretfield__msg--error { color: var(--danger); }
+
 /* ---------- modal / project switcher ---------- */
 .modal {
   position: fixed;

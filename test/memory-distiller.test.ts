@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MemoryDistiller, type ClaudeRunner } from '../electron/main/services/MemoryDistiller'
+import { MemoryDistiller, type DistillRunner } from '../electron/main/services/MemoryDistiller'
 import { TranscriptReader } from '../electron/main/services/TranscriptReader'
 import type { ProjectService } from '../electron/main/services/ProjectService'
 
@@ -43,7 +43,7 @@ describe('MemoryDistiller', () => {
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
   it('distills a transcript into validated observations', async () => {
-    const runner: ClaudeRunner = vi.fn(async () => goodReply)
+    const runner: DistillRunner = vi.fn(async () => goodReply)
     const d = new MemoryDistiller(stubProjects(dir), new TranscriptReader(), runner)
     const out = await d.distill({ projectId: 'p1', transcriptPath: path, projectSlugs: [], userSlugs: [] })
     expect(out.error).toBeUndefined()
@@ -63,7 +63,7 @@ describe('MemoryDistiller', () => {
 
   it('retries once on a non-JSON reply, then succeeds', async () => {
     const runner = vi
-      .fn<ClaudeRunner>()
+      .fn<DistillRunner>()
       .mockResolvedValueOnce('sorry, here is prose with no json')
       .mockResolvedValueOnce(goodReply)
     const d = new MemoryDistiller(stubProjects(dir), new TranscriptReader(), runner)
@@ -82,10 +82,57 @@ describe('MemoryDistiller', () => {
 
   it('surfaces a CLI failure as an error, not a throw', async () => {
     const runner = vi.fn(async () => {
-      throw new Error('claude not found')
+      throw new Error('hermes not found')
     })
     const d = new MemoryDistiller(stubProjects(dir), new TranscriptReader(), runner)
     const out = await d.distill({ projectId: 'p1', transcriptPath: path, projectSlugs: [], userSlugs: [] })
-    expect(out.error).toContain('claude not found')
+    expect(out.error).toContain('hermes not found')
+  })
+
+  it('feeds a failure→correction session through a prompt that asks about it', async () => {
+    // A synthetic transcript with an obvious mistake-then-correction pattern.
+    writeFileSync(
+      path,
+      line({ type: 'user', message: { content: 'the build is broken after my import change' } }) +
+        line({
+          type: 'assistant',
+          message: {
+            content:
+              'I first tried a relative import path, but it failed to resolve at build time; ' +
+              'switching to the @shared/ alias fixed it.',
+          },
+        }),
+    )
+    const gotchaReply = JSON.stringify({
+      observations: [
+        {
+          scope: 'project',
+          class: 'gotcha',
+          targetSlug: 'shared-import-alias',
+          isNew: true,
+          title: 'Use @shared/ alias, not relative paths',
+          body: 'Relative imports into shared/ fail at build time; the @shared/ alias resolves.',
+          links: [],
+          decision: 'save',
+          reason: 'failure then correction',
+        },
+      ],
+    })
+    let capturedPrompt = ''
+    const runner: DistillRunner = vi.fn(async (_cwd, prompt) => {
+      capturedPrompt = prompt
+      return gotchaReply
+    })
+    const d = new MemoryDistiller(stubProjects(dir), new TranscriptReader(), runner)
+    const out = await d.distill({ projectId: 'p1', transcriptPath: path, projectSlugs: [], userSlugs: [] })
+
+    // The prompt the distiller sent must explicitly ask for the failure pattern,
+    // and must carry the transcript's failure content.
+    expect(capturedPrompt).toContain('mistake-then-correction')
+    expect(capturedPrompt).toContain('failed to resolve at build time')
+    // And the (mocked) reply surfaces it as a durable gotcha.
+    expect(out.error).toBeUndefined()
+    expect(out.observations).toHaveLength(1)
+    expect(out.observations[0].class).toBe('gotcha')
   })
 })

@@ -4,6 +4,129 @@ import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import { IconCheck, IconShield, IconX } from '../components/icons'
 
+interface StatusMessage {
+  text: string
+  error: boolean
+}
+
+/**
+ * Stores the OpenRouter API key for the upcoming Hermes integration. The value
+ * is written straight to the OS keychain via the main process and is never read
+ * back to the renderer — this section only ever knows whether a key EXISTS, and
+ * shows a masked input for setting a new one. Same secure pattern the app uses
+ * for Railway/GitHub tokens.
+ */
+function HermesKeySection() {
+  const [stored, setStored] = useState<boolean | null>(null)
+  const [value, setValue] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<StatusMessage | null>(null)
+
+  useEffect(() => {
+    let active = true
+    void cockpit()
+      .secrets.has('openrouter')
+      .then((has) => {
+        if (active) setStored(has)
+      })
+      .catch(() => {
+        if (active) setStored(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const errorText = (err: unknown, fallback: string) =>
+    err instanceof Error ? err.message : fallback
+
+  const save = async () => {
+    const trimmed = value.trim()
+    if (!trimmed) {
+      setMessage({ text: 'Enter a key before saving.', error: true })
+      return
+    }
+    setBusy(true)
+    setMessage(null)
+    try {
+      await cockpit().secrets.set('openrouter', trimmed)
+      setStored(true)
+      setValue('')
+      setMessage({ text: 'Saved to the OS keychain.', error: false })
+    } catch (err) {
+      setMessage({ text: errorText(err, 'Could not save the key.'), error: true })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async () => {
+    setBusy(true)
+    setMessage(null)
+    try {
+      await cockpit().secrets.delete('openrouter')
+      setStored(false)
+      setValue('')
+      setMessage({ text: 'Removed the stored key.', error: false })
+    } catch (err) {
+      setMessage({ text: errorText(err, 'Could not remove the key.'), error: true })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="card settings__card settings__card--wide">
+      <div className="card__title">
+        <IconShield width={15} height={15} /> Hermes · OpenRouter
+      </div>
+      <p className="settings__note">
+        Stored encrypted in the OS keychain and only ever read inside the app — the key is never
+        shown here again and never sent to the renderer. Powers the upcoming Hermes agent&apos;s
+        OpenRouter access.
+      </p>
+      <div className="secretfield">
+        {stored === null ? (
+          <span className="secretfield__status secretfield__status--empty">Checking…</span>
+        ) : stored ? (
+          <span className="secretfield__status secretfield__status--stored">
+            <IconCheck width={13} height={13} /> A key is stored
+          </span>
+        ) : (
+          <span className="secretfield__status secretfield__status--empty">
+            <IconX width={13} height={13} /> No key stored yet
+          </span>
+        )}
+        <div className="secretfield__row">
+          <input
+            type="password"
+            className="secretfield__input"
+            placeholder={stored ? 'Enter a new key to replace it' : 'sk-or-v1-…'}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            disabled={busy}
+          />
+          <button className="btn btn--accent" onClick={() => void save()} disabled={busy}>
+            Save
+          </button>
+          {stored && (
+            <button className="btn btn--danger" onClick={() => void remove()} disabled={busy}>
+              Remove
+            </button>
+          )}
+        </div>
+        {message && (
+          <p className={`secretfield__msg ${message.error ? 'secretfield__msg--error' : ''}`}>
+            {message.text}
+          </p>
+        )}
+      </div>
+    </section>
+  )
+}
+
 export function SettingsPanel() {
   const systemInfo = useStore((s) => s.systemInfo)
   const dashboard = useStore((s) => s.dashboard)
@@ -74,6 +197,8 @@ export function SettingsPanel() {
             ))}
           </div>
         </section>
+
+        <HermesKeySection />
 
         <section className="card settings__card settings__card--wide">
           <div className="card__title">Project</div>

@@ -20,7 +20,8 @@ const BARE_KEY_SEGMENT = /(^|[_-])key($|[_-])/i
 
 /** Value shapes that look like credentials even when the key is innocuous. */
 const SECRET_VALUE_PATTERNS: RegExp[] = [
-  /sk-[A-Za-z0-9-_]{16,}/, // OpenAI / Anthropic style
+  /sk-or-[A-Za-z0-9-]{16,}/, // OpenRouter (sk-or-v1-…) — explicit for defense-in-depth
+  /sk-[A-Za-z0-9-_]{16,}/, // OpenAI / Anthropic style (also covers bare sk-or-)
   /\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{10,}/, // Stripe (underscore, not hyphen)
   /gh[po]_[A-Za-z0-9]{20,}/, // GitHub PAT / OAuth
   /gh[usr]_[A-Za-z0-9]{20,}/, // GitHub app / server / refresh tokens

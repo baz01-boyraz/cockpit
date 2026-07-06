@@ -38,6 +38,15 @@ describe('buildDistillPrompt', () => {
     const p = buildDistillPrompt({ turns, projectSlugs: [], userSlugs: [] })
     expect(p).toContain('(none yet)')
   })
+
+  it('asks the model to surface a failure→correction pattern as a gotcha', () => {
+    const p = buildDistillPrompt({ turns, projectSlugs: [], userSlugs: [] })
+    expect(p).toContain('mistake-then-correction')
+    expect(p).toContain('gotcha')
+    // The addition must not lower the existing precision-over-recall bar.
+    expect(p).toContain('precision over recall')
+    expect(p).toContain('empty list')
+  })
 })
 
 describe('parseObservations', () => {

@@ -1,3 +1,12 @@
+---
+schema: 1
+name: memory-hub
+title: Living memory brain built on the markdown hub
+class: architecture
+gate: save
+updatedAt: 2026-07-06T00:54:55.633Z
+---
+
 # Memory Hub
 
 This knowledge layer (Phase 5). Files in `.cockpit-memory/` are the ONLY
@@ -18,3 +27,8 @@ Polish backlog: `write`/`rename` could return `{note, snapshot}` to save the
 UI a round-trip (asymmetry noted by the 5.4 build); graph view is time-boxed
 extra credit — backlinks carry 80% of the value. Agent read access is deferred
 to [[swarm-design]], where its first real consumer lives.
+- (2026-07-04) cockpiT memory is markdown files (`.cockpit-memory/*.md`), not SQLite. In v0.1.33 it grew a full auto-brain pipeline: Capture → Distill → Reconcile → Gate → Commit/Review. It reads the Claude Code session `.jsonl` transcripts (via ClaudeSessionsService), redacts every fact through `redactText`, an LLM distills observations, reconcile detects duplicate/conflict against existing notes, a gate decides save-vs-ask, then atomic write with a provenance ledger + snapshot/restore. Two brains: project brain (`.cockpit-memory/`) and a global Baz brain (`<userData>/baz-memory/`) for cross-project user facts. Auto-capture runs on both idle-timeout and session-end via a durable SQLite queue. Roadmap: docs/memory-imp.md.
+- (2026-07-04) cockpiT has two separate memory stores: the project 'Living brain' (flat .md files in .cockpit-memory/) and the global 'Baz brain' (MEMORY.md + files). The graph only resolves links between notes that exist in the SAME store. When a project note links to a Baz-brain note (e.g. [[model-routing-preference]], [[app-refresh-consent-rule]], [[swarm-auto-assign]], [[swarm-agent-boundaries]]), the target isn't in the project folder, so the graph reports it as 'unresolved', and a note whose only links point out of the store shows as 'orphan' (e.g. named-agents-team). This is by design (two brains are intentionally separate), not a bug — it's a cosmetic graph warning. Consolidate reports these same links as 'dangling'.
+- (2026-07-05) cockpiT memory is markdown files (`.cockpit-memory/*.md`), not SQLite. In v0.1.33 it grew a full auto-brain pipeline: Capture → Distill → Reconcile → Gate → Commit/Review. It reads the Claude Code session `.jsonl` transcripts (via ClaudeSessionsService), redacts every fact through `redactText`, an LLM distills observations, reconcile detects duplicate/conflict against existing notes, a gate decides save-vs-ask, then atomic write with a provenance ledger + snapshot/restore. Two brains: project brain (`.cockpit-memory/`) and a global Baz brain (`<userData>/baz-memory/`) for cross-project user facts. Auto-capture runs on both idle-timeout and session-end via a durable SQLite queue. Roadmap: docs/memory-imp.md.
+- (2026-07-05) cockpiT memory is markdown files (`.cockpit-memory/*.md`), not SQLite. In v0.1.33 it grew a full auto-brain pipeline: Capture → Distill → Reconcile → Gate → Commit/Review. It reads the Claude Code session `.jsonl` transcripts (via ClaudeSessionsService), redacts every fact through `redactText`, an LLM distills observations, reconcile detects duplicate/conflict against existing notes, a gate decides save-vs-ask, then atomic write with a provenance ledger + snapshot/restore. Two brains: project brain (`.cockpit-memory/`) and a global Baz brain (`<userData>/baz-memory/`) for cross-project user facts. Auto-capture runs on both idle-timeout and session-end via a durable SQLite queue. Roadmap: docs/memory-imp.md.
+- (2026-07-06) cockpiT has two separate memory stores: the project 'Living brain' (flat .md files in .cockpit-memory/) and the global 'Baz brain' (MEMORY.md + files). The graph only resolves links between notes that exist in the SAME store. When a project note links to a Baz-brain note (e.g. [[model-routing-preference]], [[app-refresh-consent-rule]], [[swarm-auto-assign]], [[swarm-agent-boundaries]]), the target isn't in the project folder, so the graph reports it as 'unresolved', and a note whose only links point out of the store shows as 'orphan' (e.g. named-agents-team). This is by design (two brains are intentionally separate), not a bug — it's a cosmetic graph warning. Consolidate reports these same links as 'dangling'.

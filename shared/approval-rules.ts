@@ -17,6 +17,9 @@ const RISK: Record<ApprovalActionType, RiskLevel> = {
   database_reset: 'critical',
   env_write: 'high',
   shell_command: 'medium',
+  // Hermes-initiated proposal to open+start a Swarm card. Not destructive, but
+  // it spends worker/quota, so it needs an explicit human approval — medium.
+  propose_open_swarm_card: 'medium',
 }
 
 /** Actions that must never auto-execute, even if not in the project allowlist. */

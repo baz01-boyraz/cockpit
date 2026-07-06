@@ -108,6 +108,10 @@ export interface TerminalAttachment {
 
 export interface TerminalExitEvent {
   sessionId: string
+  /** The exiting session's project, so listeners filter without a second lookup. */
+  projectId: string
+  /** The exiting session's role (e.g. 'claude'), for role-scoped listeners. */
+  role: TerminalRole | null
   exitCode: number
   signal: number | null
 }
@@ -440,6 +444,9 @@ export type ApprovalActionType =
   | 'database_reset'
   | 'env_write'
   | 'shell_command'
+  // Hermes proposes opening a Swarm card for something it noticed on its own
+  // (Faz 6). Approving it lets the main process open+start the card directly.
+  | 'propose_open_swarm_card'
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
 

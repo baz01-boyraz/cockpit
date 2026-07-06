@@ -79,6 +79,16 @@ describe('expanded secret coverage', () => {
     expect(looksLikeSecret('curl -H "Authorization: Bearer abc123def456ghi789jkl012"')).toBe(true)
   })
 
+  it('redacts an OpenRouter-shaped API key (sk-or-v1-…)', () => {
+    const key = 'sk-or-v1-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd'
+    expect(looksLikeSecret(key)).toBe(true)
+    expect(redactPayload(key)).toBe('[REDACTED]')
+    // In a dumped env line it must never survive to an audit/PTY log.
+    const line = redactText(`OPENROUTER_API_KEY=${key}`)
+    expect(line).not.toContain(key)
+    expect(line).toContain('[REDACTED]')
+  })
+
   it('high-entropy fallback masks unknown-vendor env secrets but not hashes or paths', () => {
     // AWS-secret-shaped: 40 chars, mixed case + digits, no vendor signature
     expect(maskEnvEntry('AWS_SK', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE12').masked).toBe(true)

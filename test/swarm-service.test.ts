@@ -310,7 +310,13 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
 
   it('moves the card to In review when its worker exits', async () => {
     await svc.startCard({ projectId: 'p1', cardId: 'a' })
-    deps.events.emitTyped('terminal:exit', { sessionId: 'term_1', exitCode: 0, signal: null })
+    deps.events.emitTyped('terminal:exit', {
+      sessionId: 'term_1',
+      projectId: 'p1',
+      role: 'claude',
+      exitCode: 0,
+      signal: null,
+    })
     expect(store.rows.find((r) => r.id === 'a')!.status).toBe('in_review')
     expect(deps.audits).toContain('swarm.card_exited')
   })
@@ -320,7 +326,13 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
     svc.parkCard({ projectId: 'p1', cardId: 'a' })
     expect(deps.killed).toEqual(['term_1'])
     expect(store.rows.find((r) => r.id === 'a')!.status).toBe('parked')
-    deps.events.emitTyped('terminal:exit', { sessionId: 'term_1', exitCode: 143, signal: null })
+    deps.events.emitTyped('terminal:exit', {
+      sessionId: 'term_1',
+      projectId: 'p1',
+      role: 'claude',
+      exitCode: 143,
+      signal: null,
+    })
     expect(store.rows.find((r) => r.id === 'a')!.status).toBe('parked')
   })
 
@@ -334,7 +346,13 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
 
   it('removeCard cleans the worktree first and aborts when it is dirty', async () => {
     await svc.startCard({ projectId: 'p1', cardId: 'a' })
-    deps.events.emitTyped('terminal:exit', { sessionId: 'term_1', exitCode: 0, signal: null })
+    deps.events.emitTyped('terminal:exit', {
+      sessionId: 'term_1',
+      projectId: 'p1',
+      role: 'claude',
+      exitCode: 0,
+      signal: null,
+    })
     deps.worktrees.removeIfClean.mockRejectedValueOnce(new Error('uncommitted changes'))
     await expect(svc.removeCard({ projectId: 'p1', cardId: 'a' })).rejects.toThrow(/uncommitted/)
     expect(store.rows.some((r) => r.id === 'a')).toBe(true)
@@ -344,7 +362,13 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
   })
 
   it('ignores exits of terminals that are not linked to a running card', () => {
-    deps.events.emitTyped('terminal:exit', { sessionId: 'term_ghost', exitCode: 1, signal: null })
+    deps.events.emitTyped('terminal:exit', {
+      sessionId: 'term_ghost',
+      projectId: 'p1',
+      role: 'claude',
+      exitCode: 1,
+      signal: null,
+    })
     expect(store.rows.find((r) => r.id === 'a')!.status).toBe('todo')
   })
 

@@ -129,6 +129,15 @@ const api: CockpitApi = {
   chat: {
     ask: (projectId, prompt, opts) => invoke(IPC.chatAsk, { projectId, prompt, opts }),
   },
+  hermesChat: {
+    ask: (projectId, message) => invoke(IPC.hermesChatAsk, { projectId, message }),
+    clear: (projectId) => invoke(IPC.hermesChatClear, { projectId }),
+  },
+  secrets: {
+    set: (kind, value) => invoke(IPC.secretSet, { kind, value }),
+    has: (kind) => invoke(IPC.secretHas, { kind }),
+    delete: (kind) => invoke(IPC.secretDelete, { kind }),
+  },
   audit: {
     list: (projectId) => invoke(IPC.auditList, { projectId }),
   },

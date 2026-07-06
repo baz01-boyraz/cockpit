@@ -25,7 +25,14 @@ import { MemoryPipeline } from './MemoryPipeline'
 import { MemoryCaptureQueue } from './MemoryCaptureQueue'
 import { MemoryAutoCapture } from './MemoryAutoCapture'
 import { MemoryConsolidator } from './MemoryConsolidator'
+import { registerMemoryExitCapture } from './memoryExitTrigger'
 import { SwarmService } from './SwarmService'
+import { CardOutputTracker } from './hermes/CardOutputTracker'
+import { HermesMcpServer } from './hermes/HermesMcpServer'
+import { HermesApprovalExecutor } from './hermes/HermesApprovalExecutor'
+import { HermesChecksService } from './hermes/HermesChecksService'
+import { HermesChatService } from './hermes/HermesChatService'
+import { AppScreenshotService } from './hermes/AppScreenshotService'
 import { NamedAgentsService } from './NamedAgentsService'
 import { SwarmWorktrees } from './SwarmWorktrees'
 import { SwarmDoneSignal } from './SwarmDoneSignal'
@@ -63,6 +70,8 @@ export class Services {
   readonly terminals: TerminalManager
   readonly claudeSessions: ClaudeSessionsService
   readonly chat: ChatService
+  /** Backend for the Hermes chat widget (docs/plans/hermes.md Faz 7). */
+  readonly hermesChat: HermesChatService
   readonly review: ReviewService
   readonly council: CouncilService
   readonly memory: MemoryHubService
@@ -77,6 +86,16 @@ export class Services {
   readonly memoryConsolidator: MemoryConsolidator
   readonly swarm: SwarmService
   readonly namedAgents: NamedAgentsService
+  /** Session-scoped terminal-output tap for the Hermes `subscribe_card_output` tool. */
+  readonly cardOutput: CardOutputTracker
+  /** Allowlist-only check runner (test/typecheck/lint) for the Hermes `run_checks` tool. */
+  readonly hermesChecks: HermesChecksService
+  /** Build + serve + screenshot pipeline for the Hermes `take_app_screenshot` tool. */
+  readonly appScreenshot: AppScreenshotService
+  /** Local MCP server exposing the narrow Swarm tool set to the Hermes agent. */
+  readonly hermesMcp: HermesMcpServer
+  /** Opens+starts a Swarm card once the human approves a Hermes proposal (Faz 6). */
+  readonly hermesApprovalExecutor: HermesApprovalExecutor
   readonly appUpdate: AppUpdateService
   private closing = false
   /** Per-pane full-screen-TUI mode, so repaint frames never reach the matchers. */
@@ -97,6 +116,7 @@ export class Services {
     this.railway = new RailwayService(this.db, this.projects)
     this.claudeSessions = new ClaudeSessionsService()
     this.chat = new ChatService(this.projects)
+    this.hermesChat = new HermesChatService(this.projects)
     this.review = new ReviewService(this.projects, this.audit)
     this.council = new CouncilService(this.projects, this.audit)
     this.memory = new MemoryHubService(this.projects)
@@ -155,10 +175,50 @@ export class Services {
     // Forget a pane's TUI-mode state once it exits, so session ids never leak.
     opts.events.onTyped('terminal:exit', ({ sessionId }) => this.tuiState.delete(sessionId))
 
+    // Hermes control surface: a session-scoped output tap plus the local MCP
+    // server that fronts the swarm/usage tools. The server binds to loopback and
+    // starts in the background — a bind failure logs and is swallowed so Hermes
+    // being unavailable can never keep the app from booting.
+    this.cardOutput = new CardOutputTracker(opts.events)
+    this.hermesChecks = new HermesChecksService(this.projects)
+    this.appScreenshot = new AppScreenshotService(this.projects)
+    this.hermesMcp = new HermesMcpServer({
+      swarm: this.swarm,
+      agentUsage: this.agentUsage,
+      cardOutput: this.cardOutput,
+      git: this.git,
+      review: this.review,
+      checks: this.hermesChecks,
+      screenshot: this.appScreenshot,
+      memory: this.memory,
+      memoryReviews: this.memoryReviews,
+      memoryPipeline: this.memoryPipeline,
+      logs: this.logs,
+      approvals: this.approvals,
+    })
+    void this.hermesMcp.start().catch((err) => {
+      // Last-resort surface; matches the main process's crash-log fallback.
+      console.error('[Services] HermesMcpServer failed to start:', err)
+    })
+
+    // Faz 6: when the human approves a Hermes `propose_open_swarm_card` request
+    // on the Dashboard, open+start the proposed card. Registered here alongside
+    // the other event listeners; consumes the approval single-use (idempotent).
+    this.hermesApprovalExecutor = new HermesApprovalExecutor({
+      events: opts.events,
+      approvals: this.approvals,
+      swarm: this.swarm,
+    })
+    this.hermesApprovalExecutor.start()
+
     // The living brain: sweep idle Claude sessions into memory in the background
     // (docs/memory-imp.md Phase 4). Conservative defaults; all state is durable
     // in the capture queue, so a crash mid-drain resumes on the next boot.
     this.memoryAutoCapture.start()
+    // Faz 5: capture the instant a Claude pane closes, instead of waiting for the
+    // idle-poll. Non-claude terminals never trigger a capture. The idle-poll
+    // above remains the fallback for panes that never emit a clean exit.
+    registerMemoryExitCapture(opts.events, this.memoryAutoCapture)
   }
 
   /**
@@ -237,6 +297,9 @@ export class Services {
     if (this.closing) return
     this.closing = true
     this.memoryAutoCapture.stop()
+    this.cardOutput.clear()
+    // Fire-and-forget: the process is quitting; closing the socket is best-effort.
+    void this.hermesMcp.stop()
     // Kill terminals first (flags TerminalManager so late pty events are ignored),
     // then close the DB. Order + flags prevent "database connection is not open".
     this.terminals.killAll()

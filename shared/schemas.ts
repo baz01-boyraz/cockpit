@@ -19,6 +19,7 @@ export const approvalActionTypeSchema = z.enum([
   'database_reset',
   'env_write',
   'shell_command',
+  'propose_open_swarm_card',
 ])
 
 export const terminalRoleSchema = z.enum([
@@ -164,6 +165,21 @@ export const chatAskSchema = z.object({
     .optional(),
 })
 
+/**
+ * A single conversational turn with the Hermes chat widget. The service keeps
+ * the history itself (Hermes oneshot is stateless), so each call sends only the
+ * newest message; 8000 chars is a generous ceiling for a chat turn.
+ */
+export const hermesChatAskSchema = z.object({
+  projectId: z.string().min(1),
+  message: z.string().min(1).max(8000),
+})
+
+/** Reset a project's in-memory Hermes conversation ("new conversation"). */
+export const hermesChatClearSchema = z.object({
+  projectId: z.string().min(1),
+})
+
 export const reviewRunSchema = z.object({
   projectId: z.string().min(1),
   model: z.string().min(1).max(120).optional(),
@@ -235,6 +251,26 @@ export const memoryBazReadSchema = z.object({
   name: z.string().min(1).max(120),
 })
 
+// --- secret store (encrypted, OS-keychain backed) -------------------------
+//
+// The kind is a closed enum, not a bare string: it is a trust boundary. Each
+// kind maps to a fixed storage ref in the main process. The value is stored
+// encrypted and NEVER crosses back to the renderer (there is deliberately no
+// `secretGet` channel) — the renderer can only set, probe existence, or delete.
+export const SECRET_KINDS = ['openrouter'] as const
+export type SecretKind = (typeof SECRET_KINDS)[number]
+
+export const secretKindSchema = z.enum(SECRET_KINDS)
+
+export const secretSetSchema = z.object({
+  kind: secretKindSchema,
+  value: z.string().min(1).max(500),
+})
+
+export const secretKindOnlySchema = z.object({
+  kind: secretKindSchema,
+})
+
 export const swarmProjectSchema = z.object({
   projectId: z.string().min(1),
 })
@@ -263,6 +299,30 @@ export const swarmUpdateCardSchema = z.object({
   assignments: z.array(assignmentSchema).max(6).optional(),
 })
 
+// --- Hermes propose-card (Faz 6) ------------------------------------------
+//
+// `propose_swarm_card` does NOT open a card. It records an approval request the
+// human sees on the Dashboard; only after they approve does the main process
+// open+start the card (see HermesApprovalExecutor). `reason` explains WHY Hermes
+// thinks this is worth doing and becomes the approval summary. title/body reuse
+// the same limits as `swarmCreateCardSchema`; assignments reuse the pipeline cap.
+export const proposeSwarmCardSchema = z.object({
+  projectId: z.string().min(1),
+  title: z.string().min(1).max(200),
+  body: z.string().max(20_000).optional(),
+  reason: z.string().min(1).max(500),
+  assignments: z.array(assignmentSchema).max(6).optional(),
+})
+
+// The subset stashed in the approval request's payload — what the executor reads
+// back and re-validates before opening the card (the stored payload is untrusted
+// input like anything crossing a boundary: it has been through redaction on disk).
+export const proposedSwarmCardPayloadSchema = z.object({
+  title: z.string().min(1).max(200),
+  body: z.string().max(20_000).optional(),
+  assignments: z.array(assignmentSchema).max(6).optional(),
+})
+
 // The renderer is always the "user" actor: schema-level status choices exclude
 // in_progress, so a drag can never even *ask* for a service-owned transition.
 export const swarmMoveCardSchema = z.object({
@@ -278,6 +338,67 @@ export const swarmRemoveCardSchema = z.object({
 })
 
 export const swarmStartCardSchema = swarmRemoveCardSchema
+
+// --- Hermes MCP server (Faz 3): tool inputs -------------------------------
+//
+// The local MCP server exposes a NARROW set of tools so the Hermes agent can
+// drive the Swarm exactly the way a human does through the UI. MCP tool input
+// is as untrusted as renderer IPC input, so every tool re-parses with the SAME
+// schema its UI/IPC counterpart uses — no parallel validation.
+//
+// `subscribeCardOutputSchema` is the {projectId, cardId} pair (identical shape
+// to `swarmRemoveCardSchema`) — aliased rather than re-declared to keep a single
+// source of truth, mirroring how `swarmStartCardSchema` is aliased above.
+export const subscribeCardOutputSchema = swarmRemoveCardSchema
+
+/** get_usage_quota takes no input; the empty object is its validated contract. */
+export const usageQuotaSchema = z.object({})
+
+// --- Hermes MCP server (Faz 3b): checks + screenshot -----------------------
+//
+// `run_checks` is deliberately NOT a "run any npm script" surface. `check` is a
+// CLOSED enum, never a free-form string — it is a trust boundary. The main
+// process maps each enum member to ONE fixed, hardcoded npm command; there is
+// no way to pass extra flags/args through. This keeps the raw-shell risk the
+// Hermes plan discusses out of this tool entirely.
+export const RUN_CHECKS = ['test', 'typecheck', 'lint'] as const
+export type RunCheck = (typeof RUN_CHECKS)[number]
+
+export const runChecksSchema = z.object({
+  projectId: z.string().min(1),
+  check: z.enum(RUN_CHECKS),
+})
+
+/**
+ * `take_app_screenshot` input. `label` is passed to `screenshot.mjs` as an argv
+ * arg and becomes part of the output filename, so it is constrained to a plain
+ * slug (no path or shell metacharacters — belt-and-suspenders atop execFile's
+ * arg-array, which already avoids shell interpolation). `url`, when supplied,
+ * must be a loopback address: this tool drives a local build, never an arbitrary
+ * external page.
+ */
+export const takeAppScreenshotSchema = z.object({
+  projectId: z.string().min(1),
+  label: z
+    .string()
+    .min(1)
+    .max(80)
+    .regex(/^[A-Za-z0-9._-]+$/, 'label must be a simple slug (letters, numbers, dot, dash, underscore)'),
+  url: z
+    .string()
+    .url()
+    .max(2048)
+    .refine((raw) => {
+      try {
+        const host = new URL(raw).hostname
+        return host === 'localhost' || host === '127.0.0.1' || host === '::1'
+      } catch {
+        return false
+      }
+    }, 'Screenshot url must point at a loopback address (localhost/127.0.0.1).')
+    .optional(),
+  waitMs: z.number().int().min(0).max(60_000).optional(),
+})
 
 export const gitDiffInputSchema = z.object({
   projectId: z.string().min(1),

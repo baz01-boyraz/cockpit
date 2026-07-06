@@ -19,6 +19,8 @@ import {
   gitStageInputSchema,
   githubCreateRepoInputSchema,
   chatAskSchema,
+  hermesChatAskSchema,
+  hermesChatClearSchema,
   dismissInsightSchema,
   ingestLogSchema,
   memoryBazReadSchema,
@@ -36,6 +38,9 @@ import {
   councilRunSchema,
   resumeClaudeSchema,
   routeQuerySchema,
+  secretKindOnlySchema,
+  secretSetSchema,
+  type SecretKind,
   swarmCreateCardSchema,
   swarmMoveCardSchema,
   swarmProjectSchema,
@@ -327,6 +332,38 @@ export function registerIpc(services: Services): void {
   handle('chatAsk', (p) => {
     const { projectId, prompt, opts } = chatAskSchema.parse(p)
     return services.chat.ask(projectId, prompt, opts)
+  })
+
+  // --- Hermes chat widget (orchestrator persona + cockpit MCP tools; the
+  // service keeps conversation history itself since oneshot is stateless) ---
+  handle('hermesChatAsk', (p) => {
+    const { projectId, message } = hermesChatAskSchema.parse(p)
+    return services.hermesChat.ask(projectId, message)
+  })
+  handle('hermesChatClear', (p) => {
+    const { projectId } = hermesChatClearSchema.parse(p)
+    services.hermesChat.clear(projectId)
+  })
+
+  // --- secrets (encrypted key/value; the value never crosses back to the
+  // renderer — set/has/delete only, deliberately no get). Each kind maps to a
+  // fixed storage ref so the ref namespace is owned here, in main, never by the
+  // untrusted caller. Not a CLAUDE.md-gated action, so no `guarded()` wrapper —
+  // but Zod-validated at the boundary like every other handler. ---
+  const SECRET_REFS: Record<SecretKind, string> = {
+    openrouter: 'hermes.openrouter',
+  }
+  handle('secretSet', (p) => {
+    const { kind, value } = secretSetSchema.parse(p)
+    services.secrets.set(SECRET_REFS[kind], value)
+  })
+  handle('secretHas', (p) => {
+    const { kind } = secretKindOnlySchema.parse(p)
+    return services.secrets.has(SECRET_REFS[kind])
+  })
+  handle('secretDelete', (p) => {
+    const { kind } = secretKindOnlySchema.parse(p)
+    services.secrets.delete(SECRET_REFS[kind])
   })
 
   // --- audit ---

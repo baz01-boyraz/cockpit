@@ -1,3 +1,4 @@
+import type { ClaudeSessionSummary } from '@shared/domain'
 import type { ProjectService } from './ProjectService'
 import type { ClaudeSessionsService } from './ClaudeSessionsService'
 import type { MemoryCaptureQueue } from './MemoryCaptureQueue'
@@ -82,6 +83,30 @@ export class MemoryAutoCapture {
     await this.drain()
   }
 
+  /**
+   * Terminal-close trigger (docs/plans/hermes.md Faz 5): the instant a Claude
+   * pane exits, capture its project's most-recent session immediately instead of
+   * waiting up to a full idle-poll interval. This is ADDITIVE — the idle-poll
+   * (`sweep`) stays as the fallback for sessions that never emit a clean exit
+   * (crashed panes, Mac sleep). The idle age filter is intentionally skipped
+   * here: the pane just closed, so the session is done by definition. The
+   * per-session growth guard in {@link enqueueSession} still prevents
+   * re-mining an already-captured, unchanged transcript.
+   */
+  async captureNow(projectId: string): Promise<void> {
+    if (!this.enabled) return
+    try {
+      const project = this.projects.get(projectId)
+      // `list` is sorted most-recent-first, so the head is the session that was
+      // just active in the pane that closed.
+      const [latest] = this.sessions.list(project.path)
+      if (latest) this.enqueueSession(project.id, project.path, latest)
+    } catch {
+      /* a bad/removed project must never throw into the event emitter */
+    }
+    await this.drain()
+  }
+
   /** Enqueue sessions that are idle, recent, and have new content since last time. */
   private enqueueReady(): void {
     const nowMs = this.now()
@@ -95,14 +120,23 @@ export class MemoryAutoCapture {
       for (const s of sessions) {
         const age = nowMs - Date.parse(s.lastActiveAt)
         if (Number.isNaN(age) || age < this.idleMs || age > this.recentMs) continue
-        const job = this.queue.peek(s.id)
-        const source = this.sessions.transcriptPath(project.path, s.id)
-        if (!job) {
-          this.queue.enqueue({ projectId: project.id, sessionId: s.id, sourcePath: source })
-        } else if ((job.status === 'done' || job.status === 'error') && s.sizeBytes > job.lastOffset) {
-          this.queue.enqueue({ projectId: project.id, sessionId: s.id, sourcePath: source })
-        }
+        this.enqueueSession(project.id, project.path, s)
       }
+    }
+  }
+
+  /**
+   * Enqueue one session for capture, idempotently. Shared by the idle-poll and
+   * the terminal-close trigger so both use the exact same "first time, or grew
+   * since the last done/errored capture" rule — never two divergent copies.
+   */
+  private enqueueSession(projectId: string, projectPath: string, s: ClaudeSessionSummary): void {
+    const job = this.queue.peek(s.id)
+    const source = this.sessions.transcriptPath(projectPath, s.id)
+    if (!job) {
+      this.queue.enqueue({ projectId, sessionId: s.id, sourcePath: source })
+    } else if ((job.status === 'done' || job.status === 'error') && s.sizeBytes > job.lastOffset) {
+      this.queue.enqueue({ projectId, sessionId: s.id, sourcePath: source })
     }
   }
 

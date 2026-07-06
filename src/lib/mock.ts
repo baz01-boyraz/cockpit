@@ -70,6 +70,10 @@ import {
 
 const gitState = new Map<string, GitSnapshot>()
 const githubState = new Map<string, GitHubRepositoryStatus>()
+/** Browser-preview secret store (in-memory; values are never read back). */
+const mockSecrets = new Map<string, string>()
+/** Browser-preview Hermes chat turn counter, per project (reset on clear). */
+const mockHermesChats = new Map<string, number>()
 
 function gitSnapshotFor(projectId: string): GitSnapshot {
   const current = gitState.get(projectId)
@@ -917,6 +921,36 @@ export function createMockApi(): CockpitApi {
         text: `(browser preview) Bu mock yanıt — gerçek uygulamada Claude cevaplar.\n\nSoru: "${prompt.slice(0, 120)}"`,
         model: `Claude · ${resolveChatModel(opts?.model).label}`,
       }),
+    },
+    hermesChat: {
+      // Canned per-project conversation so browser preview keeps working
+      // without a real `hermes` binary. Mirrors the real backend's shape:
+      // history is remembered until cleared.
+      ask: async (projectId, message) => {
+        // A real turn is a full agentic loop that takes seconds-to-minutes; a
+        // short preview delay keeps the "thinking" state honest in the browser.
+        await new Promise((r) => setTimeout(r, 1200))
+        const turns = mockHermesChats.get(projectId) ?? 0
+        mockHermesChats.set(projectId, turns + 1)
+        return {
+          ok: true,
+          text: `(browser preview) Hermes burada — gerçek uygulamada orkestratör cevaplar.\n\nBu sohbetteki ${turns + 1}. mesajın: "${message.slice(0, 120)}"`,
+        }
+      },
+      clear: async (projectId) => {
+        mockHermesChats.delete(projectId)
+      },
+    },
+    secrets: {
+      // In-memory only for the browser preview — never persisted, and (like the
+      // real bridge) the stored value is never readable back out.
+      set: async (kind, value) => {
+        mockSecrets.set(kind, value)
+      },
+      has: async (kind) => mockSecrets.has(kind),
+      delete: async (kind) => {
+        mockSecrets.delete(kind)
+      },
     },
     audit: { list: async (projectId) => audit.filter((a) => a.projectId === projectId) },
     system: {
