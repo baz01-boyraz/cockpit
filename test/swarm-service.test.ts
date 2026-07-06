@@ -219,6 +219,23 @@ describe('SwarmService CRUD', () => {
     expect(todo.cards[2].position).toBe(3 * POSITION_GAP)
   })
 
+  it('createCard surfaces a clear error instead of a raw FK message for an unknown project', () => {
+    const { db } = makeRecordingDb({
+      run: (sql) => {
+        if (sql.startsWith('INSERT')) {
+          throw Object.assign(new Error('FOREIGN KEY constraint failed'), {
+            code: 'SQLITE_CONSTRAINT_FOREIGNKEY',
+          })
+        }
+        return { changes: 1 }
+      },
+    })
+    const svcWithBadDb = build({ db, rows: [] }, makeDeps())
+    expect(() => svcWithBadDb.createCard({ projectId: 'missing', title: 'x' })).toThrow(
+      /not a registered cockpit project/,
+    )
+  })
+
   it('updateCard patches only the provided fields', () => {
     svc.updateCard({ projectId: 'p1', cardId: 'a', title: 'Renamed', role: 'builder' })
     const row = store.rows.find((r) => r.id === 'a')!

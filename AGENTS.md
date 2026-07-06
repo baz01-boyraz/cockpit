@@ -15,6 +15,15 @@ on the human's behalf) starts from the cockpiT app itself.
 quota left) → you, only if explicitly asked and the human agreed to it in the conversation. Never
 switch silently — always tell the human what's available and let them choose when quota is short.
 
+## Your project id
+
+Every tool below that takes a `projectId` means the **cockpit** project id of the project
+currently open in chat — read it from the `COCKPIT_PROJECT_ID` environment variable and pass
+that value verbatim. Never guess, invent, or reuse an id from a different conversation: an id
+that doesn't match a real cockpit project fails the tool call outright (e.g. `create_swarm_card`
+rejects it with a foreign-key error). If `COCKPIT_PROJECT_ID` is unset or empty, say so plainly
+instead of making one up.
+
 ## Your tools (MCP server `cockpit`, connected via `hermes mcp add`)
 
 All of these call the exact same validated logic the cockpiT UI itself uses — there is no raw

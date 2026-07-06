@@ -22,11 +22,11 @@ const MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 export type HermesChatRunner = (
   cwd: string,
   args: string[],
-  opts: { timeout: number; maxBuffer: number },
+  opts: { timeout: number; maxBuffer: number; env?: Record<string, string> },
 ) => Promise<{ stdout: string }>
 
-const defaultRunner: HermesChatRunner = (cwd, args, opts) =>
-  execFileAsync(resolveBin('hermes'), args, { cwd, ...opts, env: { ...process.env } })
+const defaultRunner: HermesChatRunner = (cwd, args, { env, ...opts }) =>
+  execFileAsync(resolveBin('hermes'), args, { cwd, ...opts, env: { ...process.env, ...env } })
 
 /**
  * Backend for the Hermes chat widget (docs/plans/hermes.md Faz 7). Each user
@@ -92,7 +92,15 @@ export class HermesChatService {
       const { stdout } = await this.runner(
         cwd,
         buildHermesArgs(prompt, { ignoreRules: false, imagePath: safeImagePath }),
-        { timeout: HERMES_CHAT_TIMEOUT_MS, maxBuffer: MAX_OUTPUT_BYTES },
+        {
+          timeout: HERMES_CHAT_TIMEOUT_MS,
+          maxBuffer: MAX_OUTPUT_BYTES,
+          // The model has no other ground truth for "which cockpit project is
+          // this" — AGENTS.md tells it to read this and pass it verbatim as
+          // `projectId` on every Swarm/memory/git tool call. Without it the
+          // model has to invent an id, which fails the kanban_cards FK check.
+          env: { COCKPIT_PROJECT_ID: projectId },
+        },
       )
       const text = stdout.trim() || '(Hermes returned no message)'
       this.histories.set(

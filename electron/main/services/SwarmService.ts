@@ -420,20 +420,35 @@ export class SwarmService {
 
   createCard(input: { projectId: string; title: string; body?: string }): BoardColumn[] {
     const now = nowIso()
-    this.db
-      .prepare(
-        `INSERT INTO kanban_cards
-         (id, project_id, title, body, status, position, created_at, updated_at)
-         VALUES (@id, @projectId, @title, @body, 'todo', @position, @now, @now)`,
-      )
-      .run({
-        id: newId('card'),
-        projectId: input.projectId,
-        title: input.title,
-        body: input.body ?? '',
-        position: appendPosition(this.cards(input.projectId), 'todo'),
-        now,
-      })
+    try {
+      this.db
+        .prepare(
+          `INSERT INTO kanban_cards
+           (id, project_id, title, body, status, position, created_at, updated_at)
+           VALUES (@id, @projectId, @title, @body, 'todo', @position, @now, @now)`,
+        )
+        .run({
+          id: newId('card'),
+          projectId: input.projectId,
+          title: input.title,
+          body: input.body ?? '',
+          position: appendPosition(this.cards(input.projectId), 'todo'),
+          now,
+        })
+    } catch (err) {
+      // better-sqlite3 surfaces an unhelpful raw "FOREIGN KEY constraint
+      // failed" here when projectId doesn't match a real `projects` row —
+      // most commonly a Hermes MCP call that guessed the id instead of
+      // reading it from COCKPIT_PROJECT_ID (see AGENTS.md).
+      const code = (err as { code?: string }).code
+      if (code === 'SQLITE_CONSTRAINT_FOREIGNKEY' || code === 'SQLITE_CONSTRAINT') {
+        throw new Error(
+          `Project "${input.projectId}" is not a registered cockpit project — it must exist ` +
+            `in the Dashboard before a Swarm card can be created for it.`,
+        )
+      }
+      throw err
+    }
     return this.board(input.projectId)
   }
 
