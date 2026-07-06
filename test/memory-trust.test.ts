@@ -25,11 +25,11 @@ afterEach(() => {
 })
 
 describe('autoAcceptKinds', () => {
-  it('autopilot auto-accepts new + merge, never conflict', () => {
+  it('autopilot auto-accepts new + merge + conflict', () => {
     const set = autoAcceptKinds('autopilot')
     expect(set.has('new')).toBe(true)
     expect(set.has('merge')).toBe(true)
-    expect(set.has('conflict')).toBe(false)
+    expect(set.has('conflict')).toBe(true)
   })
 
   it('assisted auto-accepts only new facts', () => {
@@ -43,10 +43,10 @@ describe('autoAcceptKinds', () => {
     expect(autoAcceptKinds('manual').size).toBe(0)
   })
 
-  it('no mode ever auto-accepts a conflict', () => {
-    for (const mode of TRUST_MODES) {
-      expect(autoAcceptKinds(mode).has('conflict')).toBe(false)
-    }
+  it('only autopilot auto-accepts a conflict', () => {
+    expect(autoAcceptKinds('autopilot').has('conflict')).toBe(true)
+    expect(autoAcceptKinds('assisted').has('conflict')).toBe(false)
+    expect(autoAcceptKinds('manual').has('conflict')).toBe(false)
   })
 })
 

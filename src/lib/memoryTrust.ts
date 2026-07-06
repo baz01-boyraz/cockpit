@@ -6,13 +6,17 @@
  * queued for review should be auto-accepted so Baz doesn't babysit a "save save
  * save" queue while running many agents.
  *
- *  - autopilot: brand-new facts AND merges into existing notes save themselves;
- *    only real conflicts still ask. (default — the "I trust the brain" mode)
+ *  - autopilot: brand-new facts, merges, AND conflicts all save themselves —
+ *    recency wins, the newer (already precision-filtered) observation replaces
+ *    the old note. (default — the "I trust the brain" mode). Nothing is lost:
+ *    every write is ledgered with contentBefore/contentAfter, and `.cockpit-memory`
+ *    notes are plain files tracked in this repo's own git history.
  *  - assisted:  only brand-new facts save themselves; merges + conflicts ask.
  *  - manual:    nothing auto-accepts; every gated item waits for Baz.
  *
- * Persisted per project in localStorage. Conflicts are NEVER auto-accepted in
- * any mode — overwriting an existing note always needs a human decision.
+ * Persisted per project in localStorage. Assisted/manual never auto-accept a
+ * conflict — overwriting an existing note there always needs a human decision;
+ * autopilot is the one mode that trusts the brain to call it silently.
  */
 import type { ReviewKind } from '@shared/memory-review'
 
@@ -25,7 +29,7 @@ export const DEFAULT_TRUST_MODE: TrustMode = 'autopilot'
 export const TRUST_META: Record<TrustMode, { label: string; effect: string }> = {
   autopilot: {
     label: 'Autopilot',
-    effect: 'New facts and merges save automatically. Only conflicts ask.',
+    effect: 'New facts, merges, and conflicts all save automatically.',
   },
   assisted: {
     label: 'Assisted',
@@ -37,11 +41,11 @@ export const TRUST_META: Record<TrustMode, { label: string; effect: string }> = 
   },
 }
 
-/** Which review kinds a mode auto-accepts. Conflicts never qualify. */
+/** Which review kinds a mode auto-accepts. Only autopilot accepts conflicts. */
 export function autoAcceptKinds(mode: TrustMode): Set<ReviewKind> {
   switch (mode) {
     case 'autopilot':
-      return new Set<ReviewKind>(['new', 'merge'])
+      return new Set<ReviewKind>(['new', 'merge', 'conflict'])
     case 'assisted':
       return new Set<ReviewKind>(['new'])
     case 'manual':

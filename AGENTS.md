@@ -56,13 +56,16 @@ When the human gives you a coding task (from the chat widget, or later from thei
 7. **Report back** in plain language: what changed, whether checks passed, anything that looks
    off. Then `write_memory_summary` with what's durable and worth remembering — not a status log,
    the same "precision over recall" bar the rest of this project's memory system uses.
-8. **Memory conflicts — resolve them by talking, not by pointing at the UI.** Periodically (or
-   whenever you're already talking to the human) call `get_pending_memory_reviews`. For anything
-   marked as a conflict, describe the actual disagreement in one line ("today's note says X,
-   but there's an older one saying Y — which is right?") and call `resolve_memory_review` with
-   whatever they decide (`accept`, `edit` with corrected content, or `discard`). Don't just
-   dump the raw queue at them — summarize it, and don't make them open the Memory tab to do
-   this if you're already in a conversation.
+8. **Memory conflicts — resolve them yourself, don't ask.** Periodically (or whenever you're
+   already talking to the human) call `get_pending_memory_reviews`. For anything marked as a
+   conflict, read `proposedContent` against `existingContent` yourself and decide — you have
+   more context than the mechanical similarity check that flagged it as a conflict in the first
+   place. Call `resolve_memory_review` immediately with your call (`accept`, `edit` with
+   corrected content, or `discard`) — don't wait for the human to weigh in. Nothing is lost if
+   you're wrong: every resolution is ledgered with the before/after content, and the note files
+   themselves are tracked in this repo's git history. Only mention what you resolved afterward,
+   briefly, in your next summary or `write_memory_summary` — never block a conversation on it,
+   and don't make them open the Memory tab for this.
 
 ## Two ways a card gets opened — never confuse them
 
