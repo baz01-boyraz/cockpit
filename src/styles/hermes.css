@@ -10,6 +10,20 @@
 
 /* ---------- panel: fills its `.shell` grid column ---------- */
 .hermes__panel {
+  /* Hermes's own identity — platinum/white, not ember. Same idea as the
+   * rail's engineCore--hermes ring (#dde1e8/#ffffff instead of the app's
+   * default ember accent): Hermes is the orchestrator, not a coding engine.
+   * Overriding the shared --accent* tokens once, here at the panel root,
+   * recolors every rule below that already reads var(--accent...) — avatar
+   * ring, focus borders, the composer's focus ring, the send button —
+   * without having to touch each one individually. */
+  --accent: #dde1e8;
+  --accent-hi: #ffffff;
+  --accent-dim: #9aa1ad8f;
+  --accent-glow: rgba(221, 225, 232, 0.28);
+  --accent-wash: rgba(221, 225, 232, 0.1);
+  --border-accent: rgba(221, 225, 232, 0.46);
+  --text-on-accent: #14151a;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -221,6 +235,7 @@
 }
 
 .hermes__msg {
+  position: relative;
   max-width: 88%;
   padding: 10px var(--sp-4);
   border-radius: var(--r-md);
@@ -272,9 +287,58 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 .hermes__msgText > p {
   margin: 0;
+}
+
+/* ---------- copy action — sits under a Hermes reply, revealed on hover/focus ---------- */
+.hermes__msgActions {
+  display: flex;
+  justify-content: flex-end;
+  height: 0;
+  margin-top: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: opacity var(--dur) var(--ease-out), height var(--dur) var(--ease-out),
+    margin-top var(--dur) var(--ease-out);
+}
+.hermes__msg--hermes:hover .hermes__msgActions,
+.hermes__msgActions:focus-within {
+  height: 22px;
+  margin-top: 7px;
+  opacity: 1;
+}
+.hermes__copyBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  line-height: 1.5;
+  transition: color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out);
+}
+.hermes__copyBtn:hover {
+  color: var(--accent-hi);
+  border-color: var(--border-accent);
+  background: var(--accent-wash);
+}
+.hermes__copyBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+.hermes__copyBtn.is-copied {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+  background: var(--success-wash);
 }
 
 /* ---------- Hermes reply markup: bold, inline code, code blocks, lists ---------- */
@@ -359,11 +423,14 @@
   }
 }
 
-/* ---------- composer: roomy textarea that grows with the typed text ---------- */
+/* ---------- composer: one unified capsule (attach + input + send) that grows
+   with the typed text, plus a small keybinding hint underneath. The capsule
+   carries the focus ring as a whole — a single warm outline around the row
+   reads calmer than three separately-focusable boxes. ---------- */
 .hermes__composer {
   display: flex;
-  align-items: flex-end;
-  gap: var(--sp-2);
+  flex-direction: column;
+  gap: 6px;
   padding: var(--sp-3) var(--sp-4);
   border-top: 1px solid var(--border);
   background: var(--surface-1);
@@ -371,29 +438,41 @@
 .hermes__file {
   display: none;
 }
+.hermes__composerBar {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+}
+.hermes__composerBar:focus-within {
+  border-color: var(--border-accent);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3), 0 0 0 3px var(--accent-glow);
+}
 .hermes__attachBtn {
   align-self: flex-end;
   display: inline-grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
   border-radius: var(--r-md);
-  border: 1px solid var(--border);
-  background: var(--surface-inset);
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--text-muted);
-  transition: color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out),
-    background var(--dur) var(--ease-out);
+  transition: color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
 }
 .hermes__attachBtn:hover:not(:disabled) {
   color: var(--accent-hi);
-  border-color: var(--border-accent);
   background: var(--accent-wash);
 }
 .hermes__attachBtn:focus-visible {
   outline: none;
-  border-color: var(--border-accent);
-  box-shadow: 0 0 0 3px var(--accent-glow);
+  box-shadow: 0 0 0 2px var(--accent-glow);
 }
 .hermes__attachBtn:disabled {
   opacity: 0.4;
@@ -402,27 +481,23 @@
 .hermes__input {
   flex: 1;
   min-width: 0;
-  min-height: 38px;
+  min-height: 32px;
   max-height: 180px;
   resize: none;
   overflow-y: auto;
-  background: var(--surface-inset);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  padding: 9px var(--sp-3);
+  background: transparent;
+  border: none;
+  padding: 6px var(--sp-2);
   color: var(--text);
   font-family: var(--font-sans);
   font-size: var(--fs-body);
   line-height: 1.5;
-  transition: border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
 }
 .hermes__input::placeholder {
   color: var(--text-faint);
 }
-.hermes__input:focus-visible {
+.hermes__input:focus {
   outline: none;
-  border-color: var(--border-accent);
-  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 .hermes__input:disabled {
   opacity: 0.6;
@@ -431,8 +506,8 @@
 .hermes__send {
   display: inline-grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
   border-radius: var(--r-md);
   border: 1px solid var(--accent);
@@ -461,6 +536,25 @@
   box-shadow: none;
   opacity: 0.5;
   cursor: not-allowed;
+}
+.hermes__composerHint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+}
+.hermes__composerHint kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 9px;
+  line-height: 1.4;
 }
 
 /* ---------- image drop overlay + pending attachment chip ---------- */

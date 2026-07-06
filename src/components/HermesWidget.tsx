@@ -112,6 +112,21 @@ const IconX = (p: IconProps) => (
   </svg>
 )
 
+/** Copy-to-clipboard glyph — two overlapping sheets. */
+const IconCopy = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="8.5" y="8.5" width="11" height="11" rx="2" />
+    <path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2" />
+  </svg>
+)
+
+/** Confirmation glyph shown briefly after a successful copy. */
+const IconCheck = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M5 12.5 10 17.5 19 6.5" />
+  </svg>
+)
+
 let msgSeq = 0
 const nextId = (): string => `hm-${Date.now().toString(36)}-${(msgSeq++).toString(36)}`
 
@@ -125,6 +140,7 @@ export function HermesWidget() {
   const [attaching, setAttaching] = useState(false)
   const [attachError, setAttachError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
   const activeProjectId = useStore((s) => s.activeProjectId)
 
   const panelRef = useRef<HTMLElement>(null)
@@ -133,6 +149,7 @@ export function HermesWidget() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragDepthRef = useRef(0)
   const objectUrlsRef = useRef<string[]>([])
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const noProject = !activeProjectId
   const hasMessages = messages.length > 0
@@ -158,6 +175,13 @@ export function HermesWidget() {
     return () => {
       objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
       objectUrlsRef.current = []
+    }
+  }, [])
+
+  // Clear the pending "copied" reset timer when the widget unmounts.
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
     }
   }, [])
 
@@ -213,6 +237,28 @@ export function HermesWidget() {
   const clearAttachment = () => {
     setAttachment(null)
     setAttachError(null)
+  }
+
+  const copyMessage = async (id: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // Clipboard API can be unavailable/denied — fall back to a hidden textarea + execCommand.
+      const scratch = document.createElement('textarea')
+      scratch.value = text
+      scratch.style.position = 'fixed'
+      scratch.style.opacity = '0'
+      document.body.appendChild(scratch)
+      scratch.select()
+      try {
+        document.execCommand('copy')
+      } finally {
+        document.body.removeChild(scratch)
+      }
+    }
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+    setCopiedId(id)
+    copyTimeoutRef.current = setTimeout(() => setCopiedId(null), 1600)
   }
 
   const send = async () => {
@@ -325,7 +371,7 @@ export function HermesWidget() {
     ? 'Open a project to brief Hermes…'
     : sending
       ? 'Hermes is thinking…'
-      : 'Message Hermes…  (Enter to send, Shift+Enter newline)'
+      : 'Message Hermes…'
 
   return (
     <aside
@@ -380,6 +426,24 @@ export function HermesWidget() {
               {m.text && (
                 <div className="hermes__msgText">
                   {m.role === 'hermes' ? renderHermesText(m.text) : m.text}
+                </div>
+              )}
+              {m.role === 'hermes' && m.text && (
+                <div className="hermes__msgActions">
+                  <button
+                    type="button"
+                    className={`hermes__copyBtn ${copiedId === m.id ? 'is-copied' : ''}`}
+                    onClick={() => void copyMessage(m.id, m.text)}
+                    aria-label="Copy Hermes' reply"
+                    title="Copy reply"
+                  >
+                    {copiedId === m.id ? (
+                      <IconCheck width={12} height={12} />
+                    ) : (
+                      <IconCopy width={12} height={12} />
+                    )}
+                    <span>{copiedId === m.id ? 'Copied' : 'Copy'}</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -484,47 +548,54 @@ export function HermesWidget() {
             if (file) void saveImage(file)
           }}
         />
-        <button
-          type="button"
-          className="hermes__attachBtn"
-          title="Attach image"
-          aria-label="Attach image"
-          disabled={composerDisabled || attaching}
-          tabIndex={open ? 0 : -1}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <IconImage width={16} height={16} />
-        </button>
-        <textarea
-          ref={textareaRef}
-          className="hermes__input"
-          value={input}
-          rows={1}
-          onChange={(e) => {
-            setInput(e.target.value)
-            grow()
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              void send()
-            }
-          }}
-          onPaste={handlePaste}
-          placeholder={placeholder}
-          disabled={composerDisabled}
-          aria-label="Message Hermes"
-          tabIndex={open ? 0 : -1}
-        />
-        <button
-          type="submit"
-          className="hermes__send"
-          disabled={!canSend}
-          aria-label="Send message"
-          tabIndex={open ? 0 : -1}
-        >
-          <IconSend width={16} height={16} />
-        </button>
+        <div className="hermes__composerBar">
+          <button
+            type="button"
+            className="hermes__attachBtn"
+            title="Attach image"
+            aria-label="Attach image"
+            disabled={composerDisabled || attaching}
+            tabIndex={open ? 0 : -1}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <IconImage width={16} height={16} />
+          </button>
+          <textarea
+            ref={textareaRef}
+            className="hermes__input"
+            value={input}
+            rows={1}
+            onChange={(e) => {
+              setInput(e.target.value)
+              grow()
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                void send()
+              }
+            }}
+            onPaste={handlePaste}
+            placeholder={placeholder}
+            disabled={composerDisabled}
+            aria-label="Message Hermes"
+            tabIndex={open ? 0 : -1}
+          />
+          <button
+            type="submit"
+            className="hermes__send"
+            disabled={!canSend}
+            aria-label="Send message"
+            tabIndex={open ? 0 : -1}
+          >
+            <IconSend width={16} height={16} />
+          </button>
+        </div>
+        {!noProject && (
+          <div className="hermes__composerHint">
+            <kbd>Enter</kbd> to send · <kbd>Shift</kbd> + <kbd>Enter</kbd> for a new line
+          </div>
+        )}
       </form>
     </aside>
   )
