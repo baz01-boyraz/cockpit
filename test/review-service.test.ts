@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { simpleGit, type SimpleGit } from 'simple-git'
-import { ReviewService, collectDiffInputs, type ClaudeRunner } from '../electron/main/services/ReviewService'
+import { ReviewService, collectDiffInputs, type CliRunner } from '../electron/main/services/ReviewService'
 import type { AuditLogService } from '../electron/main/services/AuditLogService'
 import type { ProjectService } from '../electron/main/services/ProjectService'
 
@@ -87,7 +87,7 @@ describe('collectDiffInputs', () => {
 })
 
 describe('ReviewService.run', () => {
-  function makeService(config: FakeGitConfig, runnerImpl?: ClaudeRunner) {
+  function makeService(config: FakeGitConfig, runnerImpl?: CliRunner) {
     mockGit(config)
     const audit = { record: vi.fn() } as unknown as AuditLogService
     const projects = {
@@ -160,7 +160,7 @@ describe('ReviewService.run', () => {
 
   it('degrades to ok:false with the CLI error when the run fails', async () => {
     const { service } = makeService({ staged: patchFor('src/a.ts', '+x') }, async () => {
-      throw Object.assign(new Error('spawn failed'), { stderr: 'claude: not logged in' })
+      throw Object.assign(new Error('spawn failed'), { stderr: 'hermes: not logged in' })
     })
     const result = await service.run('prj_1')
     expect(result.ok).toBe(false)

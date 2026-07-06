@@ -684,7 +684,7 @@ export function GitPanel() {
             <div className="eyebrow">pre-ship review</div>
             <h3 className="review__title">Review before ship</h3>
             <p className="review__sub">
-              Claude reads this change set — staged, unstaged and untracked — through the
+              Hermes reads this change set — staged, unstaged and untracked — through the
               sanitizer boundary and reports bugs, regressions and security holes. Read-only,
               advisory; secrets never leave the machine.
             </p>

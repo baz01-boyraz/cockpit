@@ -18,9 +18,8 @@ import {
   type ReviewResult,
   type ReviewStats,
 } from '@shared/review'
-import { resolveChatModel } from '@shared/chat-models'
 import { personaById } from '@shared/agent-roles'
-import { buildClaudeArgs } from '@shared/claude-run'
+import { buildHermesArgs } from '@shared/hermes-run'
 import type { AuditLogService } from './AuditLogService'
 import type { ProjectService } from './ProjectService'
 import { resolveBin } from './resolveBin'
@@ -28,13 +27,13 @@ import { resolveBin } from './resolveBin'
 const execFileAsync = promisify(execFile)
 
 /** Injectable so tests never spawn a real CLI. */
-export type ClaudeRunner = (
+export type CliRunner = (
   bin: string,
   args: string[],
   opts: { cwd: string; timeout: number; maxBuffer: number },
 ) => Promise<{ stdout: string }>
 
-const defaultRunner: ClaudeRunner = (bin, args, opts) =>
+const defaultRunner: CliRunner = (bin, args, opts) =>
   execFileAsync(bin, args, { ...opts, env: { ...process.env } })
 
 /**
@@ -112,14 +111,14 @@ export async function collectDiffInputs(projectPath: string): Promise<DiffFileIn
 /**
  * Pre-ship AI Diff Review (VISION Phase 4). Read-only by design: collects the
  * change set, pushes it through the shared sanitizer boundary, asks the local
- * `claude` CLI for findings, and parses the answer defensively. Every run is
+ * `hermes` CLI for findings, and parses the answer defensively. Every run is
  * audit-logged with stats only — never content.
  */
 export class ReviewService {
   constructor(
     private readonly projects: ProjectService,
     private readonly audit: AuditLogService,
-    private readonly runner: ClaudeRunner = defaultRunner,
+    private readonly runner: CliRunner = defaultRunner,
   ) {}
 
   async run(
@@ -222,7 +221,7 @@ export class ReviewService {
     started: number,
   ): Promise<ReviewResult> {
     const sanitized = sanitizeDiff(inputs)
-    const model = resolveChatModel(opts.model)
+    const modelLabel = opts.model?.trim() || 'Hermes'
 
     // Sanitizer verdicts surface as findings regardless of the model's answer.
     const suspectFindings: ReviewFinding[] = sanitized.injectionSuspects.map((s) => ({
@@ -247,7 +246,7 @@ export class ReviewService {
         ok: true,
         findings: suspectFindings,
         raw: null,
-        model: model.label,
+        model: modelLabel,
         error: null,
         stats: stats(Date.now() - started),
       }
@@ -264,19 +263,26 @@ export class ReviewService {
     const prompt = lens ? `${lens.lens}\n\n${basePrompt}` : basePrompt
 
     try {
-      const { stdout } = await this.runner(resolveBin('claude'), buildClaudeArgs(prompt, { model: model.id }), {
-        cwd: project.path,
-        // Sonnet grounded in a real repo can legitimately take minutes; the
-        // timeout is a hang-guard, not a latency target.
-        timeout: 360_000,
-        maxBuffer: 8 * 1024 * 1024,
-      })
+      // `ignoreRules: true` — a review pass is a narrow analytical task, not a
+      // conversation, so it skips AGENTS.md/persona/MCP-tool injection just
+      // like the memory distiller does.
+      const { stdout } = await this.runner(
+        resolveBin('hermes'),
+        buildHermesArgs(prompt, { model: opts.model, ignoreRules: true }),
+        {
+          cwd: project.path,
+          // A real repo's full diff can legitimately take minutes to reason
+          // over; the timeout is a hang-guard, not a latency target.
+          timeout: 360_000,
+          maxBuffer: 8 * 1024 * 1024,
+        },
+      )
       const parsed = parseFindings(stdout)
       const result: ReviewResult = {
         ok: true,
         findings: [...suspectFindings, ...parsed.findings],
         raw: parsed.raw,
-        model: model.label,
+        model: modelLabel,
         error: null,
         stats: stats(Date.now() - started),
       }
@@ -289,7 +295,7 @@ export class ReviewService {
         ok: false,
         findings: suspectFindings,
         raw: null,
-        model: model.label,
+        model: modelLabel,
         error: timedOut
           ? 'Review timed out after 6 minutes — try a smaller change set or a faster model.'
           : e.stderr?.trim() || e.message || 'Review run failed.',
