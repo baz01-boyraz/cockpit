@@ -875,10 +875,13 @@
   text-transform: uppercase;
 }
 
-/* ---------- logo + quota ring ----------
- * The provider's 3D logo stays pristine and full-color; a slim conic ring
- * hugging it reads the remaining quota (filled arc = remaining, faint track =
- * spent). Per-provider `--logo-scale` normalizes the two marks to one size.
+/* ---------- logo + quota dial ----------
+ * The provider's 3D logo stays pristine and full-color, seated inside a real
+ * instrument dial: one fixed 56px SVG geometry shared by all three engines
+ * (RING_SIZE/STROKE in UsageStrip.tsx) so Claude / Codex / Hermes always read
+ * as a matched set — same size, same bezel weight — no matter how full each
+ * one is or whether the engine is offline. Per-provider `--logo-scale`
+ * normalizes the two logo marks to one visual size within the dial.
  * Animate only transform / opacity. */
 .logoMeter {
   position: relative;
@@ -886,6 +889,8 @@
   flex: 0 0 auto;
   width: 40px;
   height: 40px;
+  display: grid;
+  place-items: center;
 }
 .logoMeter__logo {
   position: absolute;
@@ -910,54 +915,74 @@
   border-radius: var(--r-pill);
   transform: scale(1.08);
 }
-/* the quota gauge: a 3px conic ring seated just outside the mark. The filled
- * arc sweeps from 12 o'clock to `--fill`%; the remainder is a faint track. */
+/* the halo: fixed 56px SVG, centered over the 40px logo box (-8px inset on
+ * every side, overflow visible) so the wide glow blur has room to bloom
+ * outward without being clipped by the logo box. */
 .logoMeter__ring {
   position: absolute;
-  inset: -7px;
-  border-radius: var(--r-pill);
-  /* a lit gradient arc: bright provider-hi lip melting into the base tone across
-   * the filled sweep, over a faint spent track. */
-  background: conic-gradient(
-    from -90deg,
-    color-mix(in srgb, var(--tone-hi) 92%, #fff 8%) 0%,
-    var(--tone) calc(var(--fill, 0) * 1%),
-    color-mix(in srgb, var(--tone) 12%, transparent) 0
-  );
-  -webkit-mask: radial-gradient(
-    farthest-side,
-    transparent calc(100% - 4px),
-    #000 calc(100% - 3px)
-  );
-  mask: radial-gradient(
-    farthest-side,
-    transparent calc(100% - 4px),
-    #000 calc(100% - 3px)
-  );
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--tone) 42%, transparent));
-  opacity: 0.9;
+  inset: -8px;
+  overflow: visible;
   pointer-events: none;
-  transition: opacity var(--dur) var(--ease-out);
-  /* instrument arc: the quota ring draws in on mount (registered --fill) */
-  animation: ring-draw 700ms var(--ease-out) 150ms backwards;
 }
-@keyframes ring-draw {
+/* Every stroke in this dial shares one hue per engine (`--tone`/`--tone-hi`)
+ * — only brightness/blur separate "resting" from "filled". That's what
+ * reads as one continuous light source instead of a colored arc sitting on
+ * a dead neutral track. */
+
+/* resting glow: a soft, wide bloom behind the full circle, always on — the
+ * ring has ambient presence even before any fill is drawn. */
+.logoMeter__trackGlow {
+  stroke: var(--tone);
+  stroke-width: 6;
+  opacity: 0.12;
+  filter: blur(4px);
+}
+/* resting line: the hairline itself, dim, drawn as a complete circle so an
+ * 11%-full engine still reads as the same ring as an 81%-full one — only
+ * the fill's brightness communicates the value, never the ring's presence. */
+.logoMeter__track {
+  stroke: var(--tone);
+  stroke-width: 1.6;
+  opacity: 0.34;
+}
+/* fill glow: the same wide bloom, brighter and tighter, only over the arc
+ * that's actually full — this is the "premium subtle glow" the resting
+ * ring doesn't have. */
+.logoMeter__fillGlow {
+  stroke: var(--tone-hi);
+  stroke-width: 7.5;
+  opacity: 0.4;
+  filter: blur(5.5px);
+  animation: logo-ring-draw 750ms var(--ease-out) 150ms backwards;
+}
+/* fill line: the bright hairline carrying the actual value, crisp against
+ * its own soft glow. */
+.logoMeter__fill {
+  stroke: var(--tone-hi);
+  stroke-width: 1.6;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--tone-hi) 55%, transparent));
+  animation: logo-ring-draw 750ms var(--ease-out) 150ms backwards;
+}
+@keyframes logo-ring-draw {
   from {
-    --fill: 0;
+    stroke-dashoffset: var(--ring-circ);
   }
 }
-.engineCore:hover .logoMeter__ring {
-  opacity: 1;
+.engineCore:hover .logoMeter__fillGlow {
+  opacity: 0.56;
 }
-.engineCore--off .logoMeter__ring {
-  opacity: 0.3;
+.engineCore--off .logoMeter__trackGlow {
+  opacity: 0.05;
+}
+.engineCore--off .logoMeter__track {
+  opacity: 0.16;
 }
 @media (prefers-reduced-motion: reduce) {
   .topbar__approvals--active::after {
     animation: none;
   }
-  .logoMeter__ring {
-    transition: none;
+  .logoMeter__fillGlow,
+  .logoMeter__fill {
     animation: none;
   }
   .engineCore {

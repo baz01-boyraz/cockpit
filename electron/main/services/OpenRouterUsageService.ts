@@ -1,6 +1,12 @@
 import type { OpenRouterUsageSnapshot } from '@shared/domain'
 import type { SecretStore } from './SecretStore'
 
+/** The SecretStore ref this service reads — must match the `openrouter` entry
+ *  in registerIpc.ts's `SECRET_REFS`, which is what Settings actually writes
+ *  to. Exported so registerIpc imports this instead of hardcoding its own
+ *  copy of the string (the two silently drifted once already). */
+export const OPENROUTER_SECRET_REF = 'hermes.openrouter'
+
 const CREDITS_URL = 'https://openrouter.ai/api/v1/credits'
 const FETCH_TIMEOUT_MS = 8_000
 /** Don't re-probe OpenRouter more often than this. */
@@ -55,7 +61,7 @@ export class OpenRouterUsageService {
   }
 
   private async fetchSnapshot(): Promise<OpenRouterUsageSnapshot> {
-    const key = this.secrets.get('openrouter')
+    const key = this.secrets.get(OPENROUTER_SECRET_REF)
     if (!key) return this.unavailable('Add an OpenRouter key in Settings to see live credit.')
 
     const body = await this.getJson(key)

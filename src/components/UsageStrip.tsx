@@ -29,11 +29,25 @@ function clampPercent(percent: number | null): number {
   return Math.max(0, Math.min(100, percent))
 }
 
+/** Every engine core's ring shares one dial geometry so the three read as a
+ *  matched set regardless of provider or fill — equal size is the point. */
+const RING_SIZE = 56
+const RING_STROKE = 1.6
+const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2
+const RING_CENTER = RING_SIZE / 2
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
+
 /**
- * The provider's 3D logo, kept crisp and full-color, ringed by a slim quota
- * gauge. A conic arc sweeps clockwise from 12 o'clock to `remaining%` in the
- * engine's tone over a faint spent-track; the logo itself never desaturates.
- * Decorative — the percent beneath carries the exact value.
+ * The provider's 3D logo, kept crisp and full-color, seated inside a soft
+ * instrument halo: a hairline circle in the engine's own tone is always
+ * fully drawn (dim resting glow), with a brighter hairline arc sweeping
+ * clockwise from 12 o'clock to `remaining%` on top of it — same hue
+ * throughout, only brightness changes, so the ring reads as one continuous
+ * light source rather than a colored-vs-neutral track. Each hairline has a
+ * blurred twin sitting behind it for a wide, atmospheric bloom (the
+ * "premium subtle glow"), separate from the crisp line that carries the
+ * actual value. Same geometry across all three engines — only
+ * `--tone`/`--tone-hi` and the fill vary.
  */
 function LogoMeter({
   src,
@@ -45,10 +59,54 @@ function LogoMeter({
   /** Hermes's mark is a face portrait, not a centered logo — crop it round. */
   avatar?: boolean
 }) {
+  const hasFill = percent !== null
   const fill = clampPercent(percent)
+  const offset = RING_CIRCUMFERENCE * (1 - fill / 100)
+  const dashProps = {
+    strokeDasharray: RING_CIRCUMFERENCE,
+    strokeDashoffset: offset,
+    transform: `rotate(-90 ${RING_CENTER} ${RING_CENTER})`,
+    style: { '--ring-circ': RING_CIRCUMFERENCE } as CSSProperties,
+  }
+
   return (
     <span className="logoMeter" aria-hidden>
-      <span className="logoMeter__ring" style={{ '--fill': fill } as CSSProperties} />
+      <svg
+        className="logoMeter__ring"
+        width={RING_SIZE}
+        height={RING_SIZE}
+        viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
+      >
+        <circle
+          className="logoMeter__trackGlow"
+          cx={RING_CENTER}
+          cy={RING_CENTER}
+          r={RING_RADIUS}
+          fill="none"
+        />
+        <circle className="logoMeter__track" cx={RING_CENTER} cy={RING_CENTER} r={RING_RADIUS} fill="none" />
+        {hasFill ? (
+          <>
+            <circle
+              className="logoMeter__fillGlow"
+              cx={RING_CENTER}
+              cy={RING_CENTER}
+              r={RING_RADIUS}
+              fill="none"
+              {...dashProps}
+            />
+            <circle
+              className="logoMeter__fill"
+              cx={RING_CENTER}
+              cy={RING_CENTER}
+              r={RING_RADIUS}
+              fill="none"
+              strokeLinecap="round"
+              {...dashProps}
+            />
+          </>
+        ) : null}
+      </svg>
       <img
         className={`logoMeter__logo ${avatar ? 'logoMeter__logo--avatar' : ''}`}
         src={src}

@@ -56,6 +56,7 @@ import {
 import { z } from 'zod'
 import type { Services } from '../services/Services'
 import { isCockpitSource, rebuildAndRelaunch } from '../services/localRebuild'
+import { OPENROUTER_SECRET_REF } from '../services/OpenRouterUsageService'
 
 /**
  * Registers every IPC handler. Each handler validates its payload with a Zod
@@ -352,7 +353,7 @@ export function registerIpc(services: Services): void {
   // untrusted caller. Not a CLAUDE.md-gated action, so no `guarded()` wrapper —
   // but Zod-validated at the boundary like every other handler. ---
   const SECRET_REFS: Record<SecretKind, string> = {
-    openrouter: 'hermes.openrouter',
+    openrouter: OPENROUTER_SECRET_REF,
   }
   handle('secretSet', (p) => {
     const { kind, value } = secretSetSchema.parse(p)
