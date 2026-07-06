@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { buildHermesArgs } from '@shared/hermes-run'
 import { buildTranscriptPrompt, capHistory, type ChatTurn } from '@shared/hermes-chat'
@@ -40,6 +41,13 @@ const defaultRunner: HermesChatRunner = (cwd, args, opts) =>
  */
 export class HermesChatService {
   private readonly histories = new Map<string, ChatTurn[]>()
+  /**
+   * Tracks back-to-back timeouts per project. The `hermes` CLI can hang
+   * silently during its own startup (before it ever reaches our MCP tool
+   * bridge or logs anything), so a single timeout is ambiguous — a second
+   * one in a row is the signal that it's genuinely stuck, not just slow.
+   */
+  private readonly consecutiveTimeouts = new Map<string, number>()
 
   constructor(
     private readonly projects: ProjectService,
@@ -62,34 +70,56 @@ export class HermesChatService {
   /** Drop a project's conversation — the widget's "new conversation" action. */
   clear(projectId: string): void {
     this.histories.delete(projectId)
+    this.consecutiveTimeouts.delete(projectId)
   }
 
-  async ask(projectId: string, message: string): Promise<HermesChatReply> {
+  /**
+   * `imagePath` must be an absolute path already saved via
+   * `AttachmentService.saveTerminalImage` (the renderer's attach flow) — it is
+   * re-confined to that project's `.dev-cockpit/attachments/` directory below
+   * so an untrusted IPC payload can't point Hermes's `--image` flag at an
+   * arbitrary file on disk.
+   */
+  async ask(projectId: string, message: string, imagePath?: string): Promise<HermesChatReply> {
+    const safeImagePath = imagePath ? this.resolveAttachment(projectId, imagePath) : undefined
+    const historyContent = safeImagePath ? `${message}\n\n[User attached an image]` : message
+
     const prior = this.histories.get(projectId) ?? []
-    const withUser = capHistory([...prior, { role: 'user', content: message }])
+    const withUser = capHistory([...prior, { role: 'user', content: historyContent }])
     const prompt = buildTranscriptPrompt(withUser)
     const cwd = this.cwdFor(projectId)
     try {
-      const { stdout } = await this.runner(cwd, buildHermesArgs(prompt, { ignoreRules: false }), {
-        timeout: HERMES_CHAT_TIMEOUT_MS,
-        maxBuffer: MAX_OUTPUT_BYTES,
-      })
+      const { stdout } = await this.runner(
+        cwd,
+        buildHermesArgs(prompt, { ignoreRules: false, imagePath: safeImagePath }),
+        { timeout: HERMES_CHAT_TIMEOUT_MS, maxBuffer: MAX_OUTPUT_BYTES },
+      )
       const text = stdout.trim() || '(Hermes returned no message)'
       this.histories.set(
         projectId,
         capHistory([...withUser, { role: 'assistant', content: text }]),
       )
+      this.consecutiveTimeouts.delete(projectId)
       return { ok: true, text }
     } catch (err) {
       // A failed turn must NOT leave a dangling user message in history — that
       // would desync the transcript on the next turn — so we never commit
       // `withUser`; the prior history stands.
-      return this.fail(err)
+      return this.fail(projectId, err)
     }
   }
 
-  private fail(err: unknown): HermesChatReply {
-    const e = err as { code?: string | number; stderr?: string; message?: string }
+  /** Returns the resolved path only if it sits inside the project's attachments dir. */
+  private resolveAttachment(projectId: string, imagePath: string): string | undefined {
+    const attachmentsDir = join(this.cwdFor(projectId), '.dev-cockpit', 'attachments')
+    const resolved = resolve(imagePath)
+    const rel = relative(attachmentsDir, resolved)
+    if (!rel || rel.startsWith('..') || isAbsolute(rel)) return undefined
+    return resolved
+  }
+
+  private fail(projectId: string, err: unknown): HermesChatReply {
+    const e = err as { code?: string | number; killed?: boolean; signal?: string; stderr?: string; message?: string }
     if (e.code === 'ENOENT') {
       return {
         ok: false,
@@ -97,6 +127,20 @@ export class HermesChatService {
         error:
           'Hermes CLI not found. Install hermes-agent and configure its OpenRouter key, then try again.',
       }
+    }
+    // execFile's own timeout kills the child (no distinct error code) — its
+    // generic "Command failed" message otherwise dumps the full argv (the
+    // entire transcript prompt) back at the user, which is both unreadable
+    // and a stderr-shaped leak of prior conversation content.
+    if (e.killed) {
+      const streak = (this.consecutiveTimeouts.get(projectId) ?? 0) + 1
+      this.consecutiveTimeouts.set(projectId, streak)
+      const seconds = HERMES_CHAT_TIMEOUT_MS / 1000
+      const error =
+        streak >= 2
+          ? `Hermes has now timed out ${streak} times in a row (${seconds}s each) — it's stuck starting up, not just slow. Retrying won't help; check ~/.hermes/logs/agent.log for where it stalls, or restart the hermes process.`
+          : `Hermes didn't respond within ${seconds}s and was stopped. This can be a one-off — try again.`
+      return { ok: false, text: '', error }
     }
     return {
       ok: false,

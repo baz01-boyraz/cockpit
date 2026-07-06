@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
   buildTranscriptPrompt,
@@ -93,6 +94,18 @@ describe('hermesChat schemas', () => {
     expect(hermesChatAskSchema.safeParse({ message: 'hey' }).success).toBe(false)
   })
 
+  it('accepts an optional imagePath', () => {
+    expect(
+      hermesChatAskSchema.parse({ projectId: 'prj_1', message: 'hey', imagePath: '/tmp/a.png' }),
+    ).toEqual({ projectId: 'prj_1', message: 'hey', imagePath: '/tmp/a.png' })
+  })
+
+  it('rejects an empty imagePath', () => {
+    expect(
+      hermesChatAskSchema.safeParse({ projectId: 'prj_1', message: 'hey', imagePath: '' }).success,
+    ).toBe(false)
+  })
+
   it('validates the clear payload', () => {
     expect(hermesChatClearSchema.parse({ projectId: 'prj_1' })).toEqual({ projectId: 'prj_1' })
     expect(hermesChatClearSchema.safeParse({ projectId: '' }).success).toBe(false)
@@ -119,6 +132,33 @@ describe('buildHermesArgs ignoreRules option', () => {
       '--oneshot',
       'p',
     ])
+  })
+})
+
+// --------------------------------------------------------------------------
+// buildHermesArgs — imagePath switches to `chat -q` (the only mode with --image)
+// --------------------------------------------------------------------------
+
+describe('buildHermesArgs imagePath option', () => {
+  it('builds a chat -q argv with --image and -Q, prompt right after -q', () => {
+    expect(buildHermesArgs('p', { ignoreRules: false, imagePath: '/tmp/img.png' })).toEqual([
+      'chat',
+      '-q',
+      'p',
+      '-Q',
+      '--image',
+      '/tmp/img.png',
+    ])
+  })
+
+  it('appends --ignore-rules and -m after --image when requested', () => {
+    expect(
+      buildHermesArgs('p', { ignoreRules: true, model: 'm', imagePath: '/tmp/img.png' }),
+    ).toEqual(['chat', '-q', 'p', '-Q', '--image', '/tmp/img.png', '--ignore-rules', '-m', 'm'])
+  })
+
+  it('is unaffected when imagePath is absent (legacy --oneshot path)', () => {
+    expect(buildHermesArgs('p', { ignoreRules: false })).toEqual(['--oneshot', 'p'])
   })
 })
 
@@ -189,6 +229,57 @@ describe('HermesChatService.ask', () => {
     expect(service.history('prj_1')).toEqual([])
   })
 
+  it('returns a friendly timeout error instead of leaking the raw argv when execFile kills the child', async () => {
+    const { service } = makeService(async () => {
+      throw Object.assign(new Error('Command failed: /path/hermes --oneshot <huge transcript>'), {
+        killed: true,
+        signal: 'SIGTERM',
+      })
+    })
+    const reply = await service.ask('prj_1', 'first')
+    expect(reply.ok).toBe(false)
+    expect(reply.error).toMatch(/didn't respond/i)
+    expect(reply.error).not.toContain('--oneshot')
+    expect(service.history('prj_1')).toEqual([])
+  })
+
+  it('escalates the message on a second consecutive timeout', async () => {
+    const { service } = makeService(async () => {
+      throw Object.assign(new Error('Command failed'), { killed: true, signal: 'SIGTERM' })
+    })
+    const first = await service.ask('prj_1', 'first')
+    const second = await service.ask('prj_1', 'second')
+    expect(first.error).toMatch(/one-off/i)
+    expect(second.error).toMatch(/2 times in a row/i)
+    expect(second.error).toMatch(/agent\.log/)
+  })
+
+  it('resets the timeout streak after a successful reply', async () => {
+    let calls = 0
+    const { service } = makeService(async () => {
+      calls += 1
+      if (calls === 1) throw Object.assign(new Error('Command failed'), { killed: true })
+      if (calls === 3) throw Object.assign(new Error('Command failed'), { killed: true })
+      return { stdout: 'ok' }
+    })
+    const first = await service.ask('prj_1', 'a') // timeout #1
+    const second = await service.ask('prj_1', 'b') // succeeds, resets streak
+    const third = await service.ask('prj_1', 'c') // timeout #1 again, not escalated
+    expect(first.error).toMatch(/one-off/i)
+    expect(second.ok).toBe(true)
+    expect(third.error).toMatch(/one-off/i)
+  })
+
+  it('resets the timeout streak when the conversation is cleared', async () => {
+    const { service } = makeService(async () => {
+      throw Object.assign(new Error('Command failed'), { killed: true })
+    })
+    await service.ask('prj_1', 'first')
+    service.clear('prj_1')
+    const reply = await service.ask('prj_1', 'second')
+    expect(reply.error).toMatch(/one-off/i)
+  })
+
   it('returns a friendly not-found error when the hermes binary is missing', async () => {
     const { service } = makeService(async () => {
       throw Object.assign(new Error('spawn hermes ENOENT'), { code: 'ENOENT' })
@@ -204,6 +295,50 @@ describe('HermesChatService.ask', () => {
     const reply = await service.ask('prj_1', 'hi')
     expect(reply.ok).toBe(true)
     expect(reply.text).toContain('no message')
+  })
+})
+
+// --------------------------------------------------------------------------
+// HermesChatService.ask — image attachments
+// --------------------------------------------------------------------------
+
+describe('HermesChatService.ask image attachment', () => {
+  const insideAttachments = join('/tmp/prj', '.dev-cockpit', 'attachments', 'shot.png')
+
+  it('forwards a path inside the project attachments dir to --image', async () => {
+    const { service, runner } = makeService(async () => ({ stdout: 'reply' }))
+    await service.ask('prj_1', 'look at this', insideAttachments)
+    const args = runner.mock.calls[0][1]
+    expect(args).toContain('--image')
+    expect(args[args.indexOf('--image') + 1]).toBe(insideAttachments)
+    expect(args[0]).toBe('chat')
+  })
+
+  it('notes the attachment in the stored history without inlining any path', async () => {
+    const { service } = makeService(async () => ({ stdout: 'reply' }))
+    await service.ask('prj_1', 'look at this', insideAttachments)
+    expect(service.history('prj_1')[0]).toEqual({
+      role: 'user',
+      content: 'look at this\n\n[User attached an image]',
+    })
+  })
+
+  it('drops a path outside the project attachments dir and falls back to --oneshot', async () => {
+    const { service, runner } = makeService(async () => ({ stdout: 'reply' }))
+    await service.ask('prj_1', 'hi', '/etc/passwd')
+    const args = runner.mock.calls[0][1]
+    expect(args).not.toContain('--image')
+    expect(args[0]).toBe('--oneshot')
+    expect(service.history('prj_1')[0]).toEqual({ role: 'user', content: 'hi' })
+  })
+
+  it('drops a path that only escapes via a sneaky prefix match', async () => {
+    const { service, runner } = makeService(async () => ({ stdout: 'reply' }))
+    // '/tmp/prj/.dev-cockpit/attachments-evil/x.png' starts with the dir's
+    // string prefix but is a sibling folder, not a descendant.
+    await service.ask('prj_1', 'hi', '/tmp/prj/.dev-cockpit/attachments-evil/x.png')
+    const args = runner.mock.calls[0][1]
+    expect(args).not.toContain('--image')
   })
 })
 
