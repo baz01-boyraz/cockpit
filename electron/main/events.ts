@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events'
 import type { AppUpdateState, TerminalExitEvent, TerminalOutputChunk } from '@shared/domain'
+import { logFatal } from './logging'
 
 /**
  * Internal main-process event bus. Services emit here; the IPC layer subscribes
@@ -15,8 +16,23 @@ export interface CockpitEventMap {
 }
 
 export class CockpitEvents extends EventEmitter {
+  /**
+   * `terminal:data`/`terminal:exit` fire from node-pty's native callback (a
+   * libuv thread calling back into V8 via a N-API ThreadSafeFunction) — there
+   * is no JS call stack above this for an uncaught exception to unwind into.
+   * If a listener throws here, Node aborts the whole process (SIGABRT, not a
+   * catchable 'uncaughtException') instead of just breaking that one feature.
+   * Isolating each listener in its own try/catch turns "one broken listener
+   * kills the app" into "one broken listener stops working."
+   */
   emitTyped<K extends keyof CockpitEventMap>(event: K, payload: CockpitEventMap[K]): void {
-    this.emit(event, payload)
+    for (const listener of this.listeners(event)) {
+      try {
+        ;(listener as (payload: CockpitEventMap[K]) => void)(payload)
+      } catch (err) {
+        logFatal(`event:${event}`, err)
+      }
+    }
   }
 
   onTyped<K extends keyof CockpitEventMap>(

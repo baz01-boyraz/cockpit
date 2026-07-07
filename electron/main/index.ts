@@ -1,9 +1,9 @@
-import { appendFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, BrowserWindow, nativeImage, screen, shell } from 'electron'
 import { IPC } from '@shared/ipc'
 import { CockpitEvents, TerminalDataCoalescer } from './events'
 import { registerIpc } from './ipc/registerIpc'
+import { logFatal } from './logging'
 import { Services } from './services/Services'
 
 /**
@@ -15,16 +15,6 @@ import { Services } from './services/Services'
  * hitting a bad session file) took the entire app down this way. Log and keep
  * running instead — a broken background sweep must never cost the whole app.
  */
-function logFatal(kind: string, err: unknown): void {
-  const line = `[${new Date().toISOString()}] ${kind}: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`
-  try {
-    appendFileSync(join(app.getPath('userData'), 'main-crash.log'), line)
-  } catch {
-    // last resort: at least surface it on stderr
-    console.error(line)
-  }
-}
-
 process.on('uncaughtException', (err) => logFatal('uncaughtException', err))
 process.on('unhandledRejection', (err) => logFatal('unhandledRejection', err))
 

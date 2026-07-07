@@ -4,6 +4,7 @@ import { countActiveAgents } from '@shared/dashboard-assembly'
 import type { TerminalRole, TerminalSession } from '@shared/domain'
 import type { Db } from '../db/Database'
 import type { CockpitEvents } from '../events'
+import { logFatal } from '../logging'
 import { newId, nowIso } from '../util/ids'
 import type { ProjectService } from './ProjectService'
 import { prepareShellIntegration } from './shellIntegration'
@@ -142,37 +143,50 @@ export class TerminalManager {
     })
     session.pid = proc.pid
 
+    // node-pty invokes these from a native ThreadSafeFunction callback (a
+    // libuv thread calling into V8), not from a normal JS call stack. Any
+    // exception that escapes this callback aborts the whole process (SIGABRT)
+    // instead of surfacing as a catchable 'uncaughtException' — so the entire
+    // body is guarded, not just the shared event bus.
     proc.onData((data) => {
-      if (this.disposed) return
-      this.touch(session.id)
-      this.events.emitTyped('terminal:data', {
-        sessionId: session.id,
-        data,
-        at: nowIso(),
-      })
-      this.onOutput(input.projectId, session.id, data)
+      try {
+        if (this.disposed) return
+        this.touch(session.id)
+        this.events.emitTyped('terminal:data', {
+          sessionId: session.id,
+          data,
+          at: nowIso(),
+        })
+        this.onOutput(input.projectId, session.id, data)
+      } catch (err) {
+        logFatal('pty:onData', err)
+      }
     })
 
     proc.onExit(({ exitCode, signal }) => {
-      if (this.disposed) return
-      const live = this.live.get(session.id)
-      if (live) {
-        // Any exit that reaches here with the session still live is a NATURAL
-        // exit — 'exited' whatever the code (a failing build is not 'killed').
-        // 'killed' is reserved for exits we initiated: kill()/killAll()/
-        // restart() remove the session from the live map (or set `disposed`)
-        // before the pty's exit event fires, so they never hit this branch.
-        live.session.status = 'exited'
-        live.session.exitCode = exitCode
-        this.updateRow(live.session)
+      try {
+        if (this.disposed) return
+        const live = this.live.get(session.id)
+        if (live) {
+          // Any exit that reaches here with the session still live is a NATURAL
+          // exit — 'exited' whatever the code (a failing build is not 'killed').
+          // 'killed' is reserved for exits we initiated: kill()/killAll()/
+          // restart() remove the session from the live map (or set `disposed`)
+          // before the pty's exit event fires, so they never hit this branch.
+          live.session.status = 'exited'
+          live.session.exitCode = exitCode
+          this.updateRow(live.session)
+        }
+        this.events.emitTyped('terminal:exit', {
+          sessionId: session.id,
+          projectId: session.projectId,
+          role: session.role,
+          exitCode,
+          signal: signal ?? null,
+        })
+      } catch (err) {
+        logFatal('pty:onExit', err)
       }
-      this.events.emitTyped('terminal:exit', {
-        sessionId: session.id,
-        projectId: session.projectId,
-        role: session.role,
-        exitCode,
-        signal: signal ?? null,
-      })
     })
 
     this.live.set(id, { session, proc, command: input.command ?? null })

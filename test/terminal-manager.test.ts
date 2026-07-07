@@ -186,6 +186,27 @@ describe('TerminalManager IO forwarding', () => {
     )
     expect(onOutput).toHaveBeenCalledWith('prj_1', session.id, 'hello from shell')
   })
+
+  it('a throwing terminal:data/terminal:exit listener never escapes into the pty callback', () => {
+    // node-pty invokes onData/onExit from a native ThreadSafeFunction callback —
+    // an exception escaping there aborts the whole process instead of raising a
+    // catchable 'uncaughtException'. A misbehaving listener (or onOutput) must
+    // never be able to reach that boundary.
+    const { mgr, events, onOutput } = makeManager()
+    events.onTyped('terminal:data', () => {
+      throw new Error('boom in data listener')
+    })
+    events.onTyped('terminal:exit', () => {
+      throw new Error('boom in exit listener')
+    })
+    onOutput.mockImplementation(() => {
+      throw new Error('boom in output sink')
+    })
+    mgr.create({ projectId: 'prj_1' })
+
+    expect(() => ptyState.spawned[0].emitData('hello')).not.toThrow()
+    expect(() => ptyState.spawned[0].emitExit(0)).not.toThrow()
+  })
 })
 
 describe('TerminalManager lifecycle', () => {
