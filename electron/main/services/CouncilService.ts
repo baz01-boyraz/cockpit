@@ -79,7 +79,11 @@ export class CouncilService {
     const started = Date.now()
     const mode: CouncilMode = opts.mode ?? 'diff'
     const project = this.projects.get(projectId)
-    const question = opts.question?.trim() || null
+    // The question is card title+body — user-authored, so it gets the same
+    // redaction as the spec/diff before it can reach a third-party engine
+    // (OpenRouter seats) or the persisted council_sessions row (argos M1).
+    const rawQuestion = opts.question?.trim() || null
+    const question = rawQuestion ? redactText(rawQuestion) : null
     const cardId = opts.cardId ?? null
 
     // Diff seats/chairman need the change set; spec seats need the fenced spec.

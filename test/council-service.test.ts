@@ -111,6 +111,18 @@ describe('CouncilService — spec mode orchestration', () => {
     expect(result.sessionId).toBe('sess-1')
   })
 
+  it('redacts secrets in the question before engines see it or it persists (argos M1)', async () => {
+    const { service, inserted } = makeService()
+    const result = await service.run('prj_1', {
+      mode: 'spec',
+      specText: 'Add caching to the gateway. It should be fast.',
+      question: 'Wire the deploy task.\n\nAPI_KEY=sk-live-9f8e7d6c5b4a3210',
+    })
+    expect(result.ok).toBe(true)
+    expect(inserted[0].question).toContain('[REDACTED]')
+    expect(inserted[0].question).not.toContain('sk-live-9f8e7d6c5b4a3210')
+  })
+
   it('returns a clean error (and persists nothing) when spec text is missing', async () => {
     const { service, inserted } = makeService()
     const result = await service.run('prj_1', { mode: 'spec' })

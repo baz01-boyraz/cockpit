@@ -8,9 +8,10 @@ import {
 } from '@shared/kanban'
 import { buildWorkerCommand } from '@shared/swarm-worker'
 import { composeCouncilBrief, type CouncilResult } from '@shared/council'
-import { rolePromptFor } from '@shared/agent-roles'
 import {
   assignmentLabel,
+  assignmentPrompt,
+  legacyIdentityToAssignment,
   parseAssignments,
   pipelinePrompt,
   type Assignment,
@@ -61,7 +62,9 @@ export interface DoneSignalOps {
  * prompt; the store returns null for a missing or corrupt-JSON row.
  */
 export interface CouncilSessionReader {
-  get(id: string): { result: CouncilResult } | null
+  /** `projectId` is part of the slice so the brief loader can scope-check the
+   *  (renderer/tool-supplied) session id against the card's own project. */
+  get(id: string): { projectId: string; result: CouncilResult } | null
 }
 
 /**
@@ -352,7 +355,11 @@ export class SwarmService {
     if (!card.councilSessionId || !this.councilSessions) return null
     try {
       const session = this.councilSessions.get(card.councilSessionId)
-      return session ? composeCouncilBrief(session.result) : null
+      // Scope guard (argos L1): councilSessionId is renderer/tool-supplied, so a
+      // card must never pull another project's session content into its worker
+      // prompt — a cross-project id degrades to no brief, like a missing one.
+      if (!session || session.projectId !== card.projectId) return null
+      return composeCouncilBrief(session.result)
     } catch {
       return null
     }
@@ -371,11 +378,17 @@ export class SwarmService {
     // Identity precedence: a Named Agent speaks with its authored voice; else
     // the pipeline step's role/spec prompt; else the legacy manual role/persona.
     const named = card.agent ? (this.namedAgents?.find(projectId, card.agent) ?? null) : null
+    // A legacy manual card (role/persona set, no pipeline, no named agent) folds
+    // onto the canonical taxonomy; an empty/unknown role yields null → no
+    // identity text, the same as an identity-less card.
+    const legacy = named ? null : legacyIdentityToAssignment(card.role, card.persona)
     const identityText = named
       ? composeAgentText(named)
       : assignments.length > 0
         ? pipelinePrompt(assignments[step], step, assignments.length)
-        : rolePromptFor(card.role, card.persona)
+        : legacy
+          ? assignmentPrompt(legacy)
+          : ''
     const badge = named
       ? `${named.displayName}: `
       : assignments.length > 0

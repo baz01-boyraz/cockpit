@@ -513,13 +513,14 @@ describe('SwarmService quota gate (6.6)', () => {
     expect(deps.spawned[0].name).toBe('Swarm — Vulcan: API work')
   })
 
-  it('folds the card role + persona into the worker prompt (6.5)', async () => {
+  it('folds a legacy card role + persona onto the taxonomy in the worker prompt', async () => {
     const store = seed()
     const deps = makeDeps()
     const svc = build(store, deps)
     await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    // reviewer + security-paranoid → Reviewer·Security in the canonical taxonomy.
     expect(deps.spawned[0].command).toContain('REVIEWER')
-    expect(deps.spawned[0].command).toContain('security veteran')
+    expect(deps.spawned[0].command).toContain('Domain: SECURITY')
   })
 })
 
@@ -545,7 +546,7 @@ describe('SwarmService council brief (Faz 2a)', () => {
   const buildWithCouncil = (
     store: ReturnType<typeof makeStore>,
     deps: ReturnType<typeof makeDeps>,
-    councilSessions: { get: (id: string) => { result: unknown } | null },
+    councilSessions: { get: (id: string) => { projectId: string; result: unknown } | null },
   ) =>
     new SwarmService(
       store.db,
@@ -564,7 +565,9 @@ describe('SwarmService council brief (Faz 2a)', () => {
   it('rides the approved session into the worker opening prompt and flags it on the audit', async () => {
     const store = makeStore([{ id: 'a', status: 'todo', position: POSITION_GAP, title: 'CRM webhook', council_session_id: 'sess_9' }])
     const deps = makeDeps()
-    const svc = buildWithCouncil(store, deps, { get: (id) => (id === 'sess_9' ? { result: councilResult() } : null) })
+    const svc = buildWithCouncil(store, deps, {
+      get: (id) => (id === 'sess_9' ? { projectId: 'p1', result: councilResult() } : null),
+    })
     await svc.startCard({ projectId: 'p1', cardId: 'a' })
     expect(deps.spawned[0].command).toContain('COUNCIL BRIEF')
     expect(deps.spawned[0].command).toContain('Wire the intake to the CRM webhook')
@@ -573,6 +576,17 @@ describe('SwarmService council brief (Faz 2a)', () => {
     const start = deps.audit.record as unknown as ReturnType<typeof vi.fn>
     const payload = start.mock.calls.map((c) => c[0]).find((c) => c.actionType === 'swarm.start_card')
     expect(payload.payload.councilBrief).toBe(true)
+  })
+
+  it('refuses a cross-project session — the brief degrades to none (argos L1)', async () => {
+    const store = makeStore([{ id: 'a', status: 'todo', position: POSITION_GAP, council_session_id: 'sess_9' }])
+    const deps = makeDeps()
+    const svc = buildWithCouncil(store, deps, {
+      get: (id) => (id === 'sess_9' ? { projectId: 'OTHER-project', result: councilResult() } : null),
+    })
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    expect(deps.spawned).toHaveLength(1)
+    expect(deps.spawned[0].command).not.toContain('COUNCIL BRIEF')
   })
 
   it('degrades to no brief (and never blocks the start) when the session is missing', async () => {
