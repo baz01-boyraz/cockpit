@@ -1,6 +1,7 @@
 import { useStore } from '../store/useStore'
 import { isMockBackend } from '../lib/cockpit'
 import { CockpitWordmark } from './CockpitBrand'
+import { SentinelBell } from './SentinelBell'
 import { IconBranch, IconSearch, IconShield, IconWarning } from './icons'
 
 export function TopBar() {
@@ -47,6 +48,7 @@ export function TopBar() {
 
       <div className="topbar__status">
         {isMockBackend() && <span className="chip chip--warning topbar__previewChip">browser preview</span>}
+        <SentinelBell />
         <button
           className={`topbar__approvals ${pending > 0 ? 'topbar__approvals--active' : ''}`}
           onClick={() => setView('dashboard')}

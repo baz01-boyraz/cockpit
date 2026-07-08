@@ -26,6 +26,7 @@ import type { SystemInfo } from '@shared/ipc'
 import type { BoardColumn, CardStatus } from '@shared/kanban'
 import type { Assignment } from '@shared/agent-taxonomy'
 import type { NamedAgentSummary } from '@shared/named-agents'
+import type { SentinelSource } from '@shared/sentinel'
 
 export type View =
   | 'dashboard'
@@ -38,18 +39,55 @@ export type View =
   | 'usage'
   | 'settings'
 
+/**
+ * A "continue from the notification" handoff (Faz A UI): a sentinel signal the
+ * user chose to take to Hermes. It opens the Hermes panel, seeds a muted signal
+ * context card at the top of the thread, and prefills an editable draft question
+ * — it does NOT auto-send (a later phase lets Hermes speak first).
+ */
+export interface HermesOpener {
+  signalId: string
+  source: SentinelSource
+  title: string
+  summary: string
+  context: string | null
+}
+
 export interface UiSlice {
   view: View
   projectSwitcherOpen: boolean
   chatOpen: boolean
   /** Hermes chat panel — triggered from the rail's Engines row, not a floating launcher. */
   hermesOpen: boolean
+  /** A pending sentinel→Hermes handoff, consumed by the widget once rendered. */
+  hermesOpener: HermesOpener | null
   aiDraft: string | null
   setView: (view: View) => void
   toggleSwitcher: (open?: boolean) => void
   toggleChat: (open?: boolean) => void
   toggleHermes: (open?: boolean) => void
+  /** Open Hermes carrying a signal's context (sets hermesOpen + stores the opener). */
+  openHermesWith: (opener: HermesOpener) => void
+  /** Clear the pending opener once the widget has absorbed it (single-use). */
+  clearHermesOpener: () => void
   setAiDraft: (text: string | null) => void
+}
+
+/**
+ * The renderer's view of the always-on sentinel signal layer (Faz A). The feed
+ * itself is fetched on demand (bell popover, toasts); the store only holds the
+ * unseen count so the bell badge and the toast host stay in sync across a
+ * markSeen from either surface.
+ */
+export interface SentinelSlice {
+  /** Unseen (status: 'new') signal count for the active project — the bell badge. */
+  sentinelUnseen: number
+  /** Re-read the unseen count for the active project (hydrate + after markSeen). */
+  refreshSentinelUnseen: () => Promise<void>
+  /** Mark signals seen server-side, then reconcile the unseen count. */
+  markSignalsSeen: (ids: string[]) => Promise<void>
+  /** Optimistically bump the badge when a live signal arrives (onAlert). */
+  bumpSentinelUnseen: () => void
 }
 
 export interface ProjectSlice {
@@ -143,6 +181,7 @@ export type CockpitState = UiSlice &
   ApprovalsSlice &
   InfraSlice &
   AppUpdateSlice &
-  SwarmSlice
+  SwarmSlice &
+  SentinelSlice
 
 export type SliceCreator<T> = StateCreator<CockpitState, [], [], T>

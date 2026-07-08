@@ -17,10 +17,18 @@ export function App() {
   const switcherOpen = useStore((s) => s.projectSwitcherOpen)
   const refreshApprovals = useStore((s) => s.refreshApprovals)
   const refreshInsights = useStore((s) => s.refreshInsights)
+  const activeProjectId = useStore((s) => s.activeProjectId)
+  const refreshSentinelUnseen = useStore((s) => s.refreshSentinelUnseen)
 
   useEffect(() => {
     void init()
   }, [init])
+
+  // Hydrate the sentinel bell badge for the active project (live increments then
+  // ride sentinel.onAlert inside the toast host).
+  useEffect(() => {
+    void refreshSentinelUnseen()
+  }, [activeProjectId, refreshSentinelUnseen])
 
   // Live-refresh approvals when the backend signals a change.
   useEffect(() => {

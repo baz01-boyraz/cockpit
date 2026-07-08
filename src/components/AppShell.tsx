@@ -4,6 +4,7 @@ import { LeftRail } from './LeftRail'
 import { TopBar } from './TopBar'
 import { RightPanel } from './RightPanel'
 import { UpdateToast } from './UpdateToast'
+import { SentinelToasts } from './SentinelToasts'
 import { HermesWidget } from './HermesWidget'
 import { IconBolt } from './icons'
 import { DashboardPanel } from '../panels/DashboardPanel'
@@ -60,6 +61,7 @@ export function AppShell() {
       {!CHAT_ENABLED && <HermesWidget />}
       <div className="floatingCorner">
         <UpdateToast />
+        <SentinelToasts />
       </div>
       {CHAT_ENABLED && <RightPanel />}
       {CHAT_ENABLED && (

@@ -171,6 +171,14 @@ export const IconSend = (p: IconProps) => (
   </svg>
 )
 
+/** Sentinel bell — the always-on signal feed affordance. */
+export const IconBell = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M6 9a6 6 0 0 1 12 0c0 4 1.2 5.4 2 6.4.5.6 0 1.6-.8 1.6H4.8c-.8 0-1.3-1-.8-1.6.8-1 2-2.4 2-6.4Z" />
+    <path d="M10.2 20a2 2 0 0 0 3.6 0" />
+  </svg>
+)
+
 export const IconRestart = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="M4 5v5h5" />

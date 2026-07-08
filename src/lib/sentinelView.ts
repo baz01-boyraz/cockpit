@@ -1,0 +1,50 @@
+/**
+ * Presentation helpers for the sentinel signal layer (Faz A UI), shared by the
+ * toast host, the bell popover, and the Hermes handoff. Pure + dependency-free
+ * so it stays trivially testable and reusable across the three surfaces.
+ */
+import type { HermesOpener } from '../store/slices/types'
+import type { SentinelSignal, SentinelSource } from '@shared/sentinel'
+
+/** Human-facing eyebrow label for a signal's source sensor. */
+const SOURCE_LABELS: Record<SentinelSource, string> = {
+  'log-intelligence': 'log intelligence',
+  'worker-exit': 'worker exit',
+  approval: 'approval',
+  council: 'council',
+}
+
+export function sourceLabel(source: SentinelSource): string {
+  return SOURCE_LABELS[source] ?? source
+}
+
+/** The editable draft question seeded into the Hermes composer on handoff. */
+export function draftQuestion(title: string): string {
+  return `Bu sinyale bakar mısın: ${title} — ne oldu, ne yapmalıyım?`
+}
+
+/** Shape a signal into the store's Hermes handoff payload. */
+export function toHermesOpener(signal: SentinelSignal): HermesOpener {
+  return {
+    signalId: signal.id,
+    source: signal.source,
+    title: signal.title,
+    summary: signal.summary,
+    context: signal.context,
+  }
+}
+
+/**
+ * Prepend the signal's facts to the user's outgoing message so Hermes receives
+ * the full context. Kept visible in the user's own bubble on purpose —
+ * transparent beats hidden. Returns the question untouched when there's no
+ * pending context.
+ */
+export function withSignalContext(
+  opener: Pick<HermesOpener, 'title' | 'summary' | 'context'>,
+  question: string,
+): string {
+  const lines = [`[sinyal] ${opener.title}`, opener.summary]
+  if (opener.context) lines.push('', opener.context)
+  return `${lines.join('\n')}\n\n${question}`
+}

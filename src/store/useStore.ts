@@ -14,6 +14,7 @@ import { createApprovalsSlice } from './slices/approvalsSlice'
 import { createInfraSlice } from './slices/infraSlice'
 import { createAppUpdateSlice } from './slices/appUpdateSlice'
 import { createSwarmSlice } from './slices/swarmSlice'
+import { createSentinelSlice } from './slices/sentinelSlice'
 
 export type { CockpitState, View }
 
@@ -27,4 +28,5 @@ export const useStore = create<CockpitState>()((...a) => ({
   ...createInfraSlice(...a),
   ...createAppUpdateSlice(...a),
   ...createSwarmSlice(...a),
+  ...createSentinelSlice(...a),
 }))

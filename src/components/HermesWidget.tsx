@@ -38,6 +38,8 @@ import {
   readBase64,
 } from '../lib/imageAttach'
 import { renderHermesText } from '../lib/hermesMarkup'
+import { draftQuestion, sourceLabel, withSignalContext } from '../lib/sentinelView'
+import type { HermesOpener } from '../store/slices/types'
 import hermesAvatar from '../assets/hermes/avatar.png'
 
 type IconProps = SVGProps<SVGSVGElement>
@@ -133,9 +135,17 @@ const nextId = (): string => `hm-${Date.now().toString(36)}-${(msgSeq++).toStrin
 export function HermesWidget() {
   const open = useStore((s) => s.hermesOpen)
   const toggleHermes = useStore((s) => s.toggleHermes)
+  const hermesOpener = useStore((s) => s.hermesOpener)
+  const clearHermesOpener = useStore((s) => s.clearHermesOpener)
   const [messages, setMessages] = useState<HermesMessage[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  // The signal that opened this thread (Faz A handoff): shown as a muted context
+  // card at the thread top, and prepended to the first outgoing message so
+  // Hermes receives the full context. Copied out of the store opener so the card
+  // survives after the single-use opener is consumed.
+  const [signalContext, setSignalContext] = useState<HermesOpener | null>(null)
+  const [contextSent, setContextSent] = useState(false)
   const [attachment, setAttachment] = useState<PendingAttachment | null>(null)
   const [attaching, setAttaching] = useState(false)
   const [attachError, setAttachError] = useState<string | null>(null)
@@ -153,6 +163,7 @@ export function HermesWidget() {
 
   const noProject = !activeProjectId
   const hasMessages = messages.length > 0
+  const hasThread = hasMessages || Boolean(signalContext)
 
   // Esc closes the panel while it's open.
   useEffect(() => {
@@ -164,11 +175,29 @@ export function HermesWidget() {
     return () => window.removeEventListener('keydown', onKey)
   }, [open, toggleHermes])
 
+  // Absorb a pending sentinel→Hermes handoff: seed the context card, prefill an
+  // editable draft question (never auto-send), then consume the single-use opener
+  // so a later reopen doesn't replay it.
+  useEffect(() => {
+    if (!open || !hermesOpener) return
+    setSignalContext(hermesOpener)
+    setContextSent(false)
+    setInput(draftQuestion(hermesOpener.title))
+    clearHermesOpener()
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current
+      if (!ta) return
+      ta.style.height = 'auto'
+      ta.style.height = `${Math.min(180, ta.scrollHeight)}px`
+      ta.focus()
+    })
+  }, [open, hermesOpener, clearHermesOpener])
+
   // Keep the thread pinned to the newest message / the thinking indicator.
   useEffect(() => {
     const el = threadRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [messages, sending])
+  }, [messages, sending, signalContext])
 
   // Revoke every object URL we created (previews) when the widget unmounts.
   useEffect(() => {
@@ -266,23 +295,31 @@ export function HermesWidget() {
     const att = attachment
     if ((!text && !att) || sending || !activeProjectId) return
 
+    // On the first turn of a signal handoff, prepend the signal's facts so Hermes
+    // gets the full context — kept visible in the user's own bubble on purpose.
+    const pendingContext = signalContext && !contextSent ? signalContext : null
+    const outgoing = pendingContext
+      ? withSignalContext(pendingContext, text || draftQuestion(pendingContext.title))
+      : text
+
     const userMsg: HermesMessage = {
       id: nextId(),
       role: 'user',
-      text,
+      text: outgoing,
       image: att ? { previewUrl: att.previewUrl, name: att.name } : undefined,
     }
     setMessages((prev) => [...prev, userMsg])
     setInput('')
     setAttachment(null)
     setAttachError(null)
+    if (pendingContext) setContextSent(true)
     requestAnimationFrame(grow)
     setSending(true)
 
     try {
       const reply = await cockpit().hermesChat.ask(
         activeProjectId,
-        text || 'Please review the attached image.',
+        outgoing || 'Please review the attached image.',
         att?.path,
       )
       const next: HermesMessage = reply.ok
@@ -311,6 +348,8 @@ export function HermesWidget() {
     if (sending) return
     setMessages([])
     setInput('')
+    setSignalContext(null)
+    setContextSent(false)
     clearAttachment()
     if (activeProjectId) {
       try {
@@ -399,7 +438,7 @@ export function HermesWidget() {
           type="button"
           className="hermes__reset"
           onClick={newConversation}
-          disabled={sending || !hasMessages}
+          disabled={sending || !hasThread}
           aria-label="New conversation"
           title="New conversation"
           tabIndex={open ? 0 : -1}
@@ -418,8 +457,16 @@ export function HermesWidget() {
         </button>
       </header>
 
-      {hasMessages ? (
+      {hasThread ? (
         <div className="hermes__thread" ref={threadRef} aria-live="polite">
+          {signalContext && (
+            <div className="hermes__signalCard" role="note" aria-label="Signal context">
+              <span className="hermes__signalEdge" aria-hidden="true" />
+              <span className="hermes__signalSource">{sourceLabel(signalContext.source)}</span>
+              <p className="hermes__signalTitle">{signalContext.title}</p>
+              <p className="hermes__signalSummary">{signalContext.summary}</p>
+            </div>
+          )}
           {messages.map((m) => (
             <div key={m.id} className={`hermes__msg hermes__msg--${m.role}`}>
               {m.image && <img className="hermes__msgImage" src={m.image.previewUrl} alt={m.image.name} />}
