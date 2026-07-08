@@ -23,7 +23,7 @@ import type {
   TerminalSession,
 } from '@shared/domain'
 import type { CockpitApi, SystemInfo, Unsubscribe } from '@shared/ipc'
-import type { CouncilResult } from '@shared/council'
+import type { CouncilResult, ScorecardEntry } from '@shared/council'
 import { resolveChatModel } from '@shared/chat-models'
 import { assembleDashboard, countActiveAgents } from '@shared/dashboard-assembly'
 import { aggregateInsights, insightFromMatch } from '@shared/insight-aggregation'
@@ -815,6 +815,7 @@ export function createMockApi(): CockpitApi {
             agent: null,
             assignments: [],
             pipelineStep: 0,
+            councilSessionId: null,
             terminalSessionId: null,
             worktreePath: null,
             branch: null,
@@ -825,7 +826,7 @@ export function createMockApi(): CockpitApi {
         kanbanSeed.set(projectId, next)
         return assembleBoard(next)
       },
-      updateCard: async ({ projectId, cardId, title, body, role, persona, agent, assignments }) => {
+      updateCard: async ({ projectId, cardId, title, body, role, persona, agent, assignments, councilSessionId }) => {
         const cards = kanbanFor(projectId)
         if (!cards.some((c) => c.id === cardId)) {
           throw new Error(`Card ${cardId} not found in this project.`)
@@ -842,6 +843,7 @@ export function createMockApi(): CockpitApi {
                 assignments: assignments === undefined ? c.assignments : assignments,
                 // A changed pipeline restarts at step 0 (mock parity with main).
                 pipelineStep: assignments === undefined ? c.pipelineStep : 0,
+                councilSessionId: councilSessionId === undefined ? c.councilSessionId : councilSessionId,
                 updatedAt: now(),
               }
             : c,
@@ -1045,6 +1047,15 @@ export function createMockApi(): CockpitApi {
         await new Promise((r) => setTimeout(r, 1600))
         return (opts?.mode ?? 'diff') === 'spec' ? mockSpecCouncil() : mockDiffCouncil()
       },
+      // A plausible cross-session standing, best (lowest average rank) first —
+      // enough for the browser preview to render the scorecard chips.
+      scorecard: async (): Promise<ScorecardEntry[]> => [
+        { seatId: 'first-principles', averageRank: 1.6, sessions: 8 },
+        { seatId: 'builder', averageRank: 2.1, sessions: 8 },
+        { seatId: 'contrarian', averageRank: 2.9, sessions: 8 },
+        { seatId: 'outsider', averageRank: 3.4, sessions: 7 },
+        { seatId: 'expansionist', averageRank: 4.2, sessions: 6 },
+      ],
     },
     chat: {
       ask: async (_projectId, prompt, opts) => ({

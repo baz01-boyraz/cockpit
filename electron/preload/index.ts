@@ -101,6 +101,7 @@ const api: CockpitApi = {
         dir: opts?.dir,
         question: opts?.question,
       }),
+    scorecard: (projectId) => invoke(IPC.councilScorecard, { projectId }),
   },
   memory: {
     list: (projectId) => invoke(IPC.memoryList, { projectId }),

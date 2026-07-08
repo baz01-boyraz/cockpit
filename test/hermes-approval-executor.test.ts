@@ -67,6 +67,7 @@ function makeCard(over: Partial<KanbanCard>): KanbanCard {
     agent: null,
     assignments: [],
     pipelineStep: 0,
+    councilSessionId: null,
     terminalSessionId: null,
     worktreePath: null,
     branch: null,

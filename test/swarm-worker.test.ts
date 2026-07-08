@@ -55,6 +55,30 @@ describe('buildWorkerPrompt', () => {
     expect(p).not.toContain('\x1b')
     expect(p).toContain('a\nb')
   })
+
+  it('places the council brief after the card body and before the hub pointers', () => {
+    const p = buildWorkerPrompt(card, ['diff-review'], '', 'COUNCIL BRIEF — reviewed by the council.')
+    expect(p).toContain('COUNCIL BRIEF — reviewed by the council.')
+    const bodyAt = p.indexOf('Zod schema on the API route.')
+    const briefAt = p.indexOf('COUNCIL BRIEF')
+    const hubAt = p.indexOf('.cockpit-memory/diff-review.md')
+    expect(bodyAt).toBeGreaterThanOrEqual(0)
+    expect(briefAt).toBeGreaterThan(bodyAt)
+    expect(hubAt).toBeGreaterThan(briefAt)
+  })
+
+  it('omits the brief section entirely when none is supplied (or it is blank)', () => {
+    expect(buildWorkerPrompt(card, [])).not.toContain('COUNCIL BRIEF')
+    expect(buildWorkerPrompt(card, [], '', null)).not.toContain('COUNCIL BRIEF')
+    expect(buildWorkerPrompt(card, [], '', '   ')).not.toContain('COUNCIL BRIEF')
+  })
+
+  it('strips control chars from the brief too (it arrives via model output)', () => {
+    const p = buildWorkerPrompt(card, [], '', 'brief\rline\x03two')
+    expect(p).not.toContain('\r')
+    expect(p).not.toContain('\x03')
+    expect(p).toContain('briefline') // \r and \x03 removed, chars join
+  })
 })
 
 describe('buildWorkerCommand', () => {
@@ -77,5 +101,13 @@ describe('buildWorkerCommand', () => {
   it('never contains a carriage return (a \\r would submit the pty line early)', () => {
     const cmd = buildWorkerCommand({ title: 'x\r rm -rf /', body: 'y\rz' }, ['n\rote'])
     expect(cmd).not.toContain('\r')
+  })
+
+  it('forwards the council brief into the quoted prompt alongside a validated model', () => {
+    const cmd = buildWorkerCommand({ title: 'T', body: 'B' }, [], '', 'opus', 'COUNCIL BRIEF — go.')
+    expect(cmd).toContain('--model opus ')
+    expect(cmd).toContain('COUNCIL BRIEF — go.')
+    // No brief → no leak of the section.
+    expect(buildWorkerCommand({ title: 'T', body: 'B' }, [], '', 'opus')).not.toContain('COUNCIL BRIEF')
   })
 })

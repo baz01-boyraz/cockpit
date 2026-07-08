@@ -31,6 +31,7 @@ export function buildWorkerPrompt(
   card: { title: string; body: string },
   hubNoteNames: readonly string[],
   roleText = '',
+  councilBrief: string | null = null,
 ): string {
   const lines = [
     `You are a swarm worker in the cockpiT Kanban board, started for one card.`,
@@ -39,6 +40,11 @@ export function buildWorkerPrompt(
     `CARD: ${card.title}`,
   ]
   if (card.body.trim().length > 0) lines.push(``, card.body)
+  // The council brief sits AFTER the card body, BEFORE the hub pointers: the
+  // worker reads the task, then the meeting's conclusions, then where to look.
+  // It is authored by our own chairman but arrives via model output, so it goes
+  // through the same stripPtyControls hygiene as everything else below.
+  if (councilBrief && councilBrief.trim().length > 0) lines.push(``, councilBrief.trim())
   if (hubNoteNames.length > 0) {
     const pointers = hubNoteNames
       .slice(0, HUB_POINTER_CAP)
@@ -69,9 +75,10 @@ export function buildWorkerCommand(
   hubNoteNames: readonly string[],
   roleText = '',
   model: string | null = null,
+  councilBrief: string | null = null,
 ): string {
   // The model id reaches a shell line, so it is allowlisted by shape — an
   // agent definition file with a hostile model value gets ignored, not run.
   const flag = model && MODEL_RE.test(model) ? `--model ${model} ` : ''
-  return `claude ${flag}${shellQuote(buildWorkerPrompt(card, hubNoteNames, roleText))}; exit`
+  return `claude ${flag}${shellQuote(buildWorkerPrompt(card, hubNoteNames, roleText, councilBrief))}; exit`
 }

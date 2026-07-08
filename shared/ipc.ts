@@ -11,7 +11,7 @@
  */
 import type { ClaudeRunOptions } from './claude-run'
 import type { DiffStat, ReviewResult } from './review'
-import type { CouncilResult } from './council'
+import type { CouncilResult, ScorecardEntry } from './council'
 import type { MemoryHubSnapshot, MemoryNote } from './memory-hub'
 import type { MemoryHealth } from './memory-health'
 import type { CaptureResult } from './memory-pipeline'
@@ -107,6 +107,7 @@ export const IPC = {
   reviewRunText: 'review:runText',
   reviewDiffStat: 'review:diffStat',
   councilRun: 'council:run',
+  councilScorecard: 'council:scorecard',
 
   memoryList: 'memory:list',
   memoryRead: 'memory:read',
@@ -361,6 +362,12 @@ export interface CockpitApi {
         cardId?: string
       },
     ): Promise<CouncilResult>
+    /**
+     * Cross-session seat standings for a project (Faz 2a) — recent persisted
+     * council sessions merged into a per-seat scorecard, best (lowest average
+     * rank) first. Read-only; the merge math is the pure `computeScorecard`.
+     */
+    scorecard(projectId: string): Promise<ScorecardEntry[]>
   }
   memory: {
     /**
@@ -406,7 +413,13 @@ export interface CockpitApi {
      * position. Every mutation returns the fresh board to save a round trip.
      */
     board(projectId: string): Promise<BoardColumn[]>
-    createCard(input: { projectId: string; title: string; body?: string }): Promise<BoardColumn[]>
+    createCard(input: {
+      projectId: string
+      title: string
+      body?: string
+      /** An approved council session that shaped the card (Faz 2a); history, no FK. */
+      councilSessionId?: string | null
+    }): Promise<BoardColumn[]>
     updateCard(input: {
       projectId: string
       cardId: string
@@ -417,6 +430,8 @@ export interface CockpitApi {
       agent?: string | null
       /** Ordered role pipeline; when set it supersedes role/persona/agent. */
       assignments?: Assignment[]
+      /** Link/clear the card's approved council session (Faz 2a). */
+      councilSessionId?: string | null
     }): Promise<BoardColumn[]>
     /**
      * Human drag/drop. `index` is the insertion index in the destination
@@ -570,6 +585,7 @@ export interface IpcResultMap {
   reviewRunText: R<CockpitApi['review']['runText']>
   reviewDiffStat: R<CockpitApi['review']['diffStat']>
   councilRun: R<CockpitApi['council']['run']>
+  councilScorecard: R<CockpitApi['council']['scorecard']>
   memoryList: R<CockpitApi['memory']['list']>
   memoryRead: R<CockpitApi['memory']['read']>
   memoryWrite: R<CockpitApi['memory']['write']>

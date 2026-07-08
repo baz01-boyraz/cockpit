@@ -18,6 +18,7 @@ interface Row {
   agent: string | null
   assignments: string
   pipeline_step: number
+  council_session_id: string | null
   terminal_session_id: string | null
   worktree_path: string | null
   branch: string | null
@@ -39,6 +40,7 @@ function makeStore(seed: Partial<Row>[] = []) {
     agent: null,
     assignments: '[]',
     pipeline_step: 0,
+    council_session_id: null,
     terminal_session_id: null,
     worktree_path: null,
     branch: null,
@@ -77,6 +79,7 @@ function makeStore(seed: Partial<Row>[] = []) {
           agent: null,
           assignments: '[]',
           pipeline_step: 0,
+          council_session_id: p.councilSessionId === null || p.councilSessionId === undefined ? null : String(p.councilSessionId),
           terminal_session_id: null,
           worktree_path: null,
           branch: null,
@@ -97,6 +100,10 @@ function makeStore(seed: Partial<Row>[] = []) {
           r.agent = p.agent as string | null
           r.assignments = String(p.assignments)
           r.pipeline_step = Number(p.step)
+          r.council_session_id =
+            p.councilSessionId === null || p.councilSessionId === undefined
+              ? null
+              : String(p.councilSessionId)
           r.updated_at = String(p.now)
         }
       } else if (sql.includes('SET terminal_session_id') && sql.includes('worktree_path')) {
@@ -513,6 +520,98 @@ describe('SwarmService quota gate (6.6)', () => {
     await svc.startCard({ projectId: 'p1', cardId: 'a' })
     expect(deps.spawned[0].command).toContain('REVIEWER')
     expect(deps.spawned[0].command).toContain('security veteran')
+  })
+})
+
+describe('SwarmService council brief (Faz 2a)', () => {
+  const councilResult = () =>
+    ({
+      ok: true,
+      mode: 'spec',
+      seats: [
+        { id: 'builder', label: 'Builder', engine: { engine: 'claude', model: 'opus' }, usedFallback: false, text: 'Effort M; watch the retry backoff.', ok: true },
+        { id: 'contrarian', label: 'Contrarian', engine: { engine: 'claude', model: 'opus' }, usedFallback: false, text: 'The webhook has no idempotency key.', ok: true },
+      ],
+      rankings: [],
+      aggregate: [],
+      labelToSeat: {},
+      verdict: '### 📋 Refined Spec\n**Goal** Wire the intake to the CRM webhook.',
+      specVerdict: { kind: 'approved', questions: [] },
+      error: null,
+      stats: { seatsRun: 2, seatsFailed: 0, filesReviewed: 0, durationMs: 5 },
+      sessionId: 'sess_9',
+    }) as never
+
+  const buildWithCouncil = (
+    store: ReturnType<typeof makeStore>,
+    deps: ReturnType<typeof makeDeps>,
+    councilSessions: { get: (id: string) => { result: unknown } | null },
+  ) =>
+    new SwarmService(
+      store.db,
+      deps.terminals,
+      deps.memory,
+      deps.audit,
+      deps.events,
+      deps.projects,
+      deps.worktrees,
+      undefined,
+      undefined,
+      deps.doneSignal,
+      councilSessions as never,
+    )
+
+  it('rides the approved session into the worker opening prompt and flags it on the audit', async () => {
+    const store = makeStore([{ id: 'a', status: 'todo', position: POSITION_GAP, title: 'CRM webhook', council_session_id: 'sess_9' }])
+    const deps = makeDeps()
+    const svc = buildWithCouncil(store, deps, { get: (id) => (id === 'sess_9' ? { result: councilResult() } : null) })
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    expect(deps.spawned[0].command).toContain('COUNCIL BRIEF')
+    expect(deps.spawned[0].command).toContain('Wire the intake to the CRM webhook')
+    expect(deps.spawned[0].command).toContain('Builder seat notes')
+    expect(deps.spawned[0].command).toContain('Sharpest objection (Contrarian)')
+    const start = deps.audit.record as unknown as ReturnType<typeof vi.fn>
+    const payload = start.mock.calls.map((c) => c[0]).find((c) => c.actionType === 'swarm.start_card')
+    expect(payload.payload.councilBrief).toBe(true)
+  })
+
+  it('degrades to no brief (and never blocks the start) when the session is missing', async () => {
+    const store = makeStore([{ id: 'a', status: 'todo', position: POSITION_GAP, council_session_id: 'gone' }])
+    const deps = makeDeps()
+    const svc = buildWithCouncil(store, deps, { get: () => null })
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    expect(deps.spawned).toHaveLength(1)
+    expect(deps.spawned[0].command).not.toContain('COUNCIL BRIEF')
+    const rec = deps.audit.record as unknown as ReturnType<typeof vi.fn>
+    const payload = rec.mock.calls.map((c) => c[0]).find((c) => c.actionType === 'swarm.start_card')
+    expect(payload.payload.councilBrief).toBe(false)
+  })
+
+  it('degrades cleanly when the store throws on a corrupt row', async () => {
+    const store = makeStore([{ id: 'a', status: 'todo', position: POSITION_GAP, council_session_id: 'corrupt' }])
+    const deps = makeDeps()
+    const svc = buildWithCouncil(store, deps, {
+      get: () => {
+        throw new Error('corrupt result_json')
+      },
+    })
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    expect(deps.spawned).toHaveLength(1)
+    expect(deps.spawned[0].command).not.toContain('COUNCIL BRIEF')
+  })
+
+  it('createCard and updateCard persist councilSessionId', () => {
+    const store = makeStore([{ id: 'a', status: 'todo', position: POSITION_GAP }])
+    const svc = build(store, makeDeps())
+    svc.createCard({ projectId: 'p1', title: 'Gated task', councilSessionId: 'sess_new' })
+    const created = store.rows.find((r) => r.title === 'Gated task')!
+    expect(created.council_session_id).toBe('sess_new')
+
+    svc.updateCard({ projectId: 'p1', cardId: 'a', councilSessionId: 'sess_link' })
+    expect(store.rows.find((r) => r.id === 'a')!.council_session_id).toBe('sess_link')
+    // Clearing it back to null is representable.
+    svc.updateCard({ projectId: 'p1', cardId: 'a', councilSessionId: null })
+    expect(store.rows.find((r) => r.id === 'a')!.council_session_id).toBeNull()
   })
 })
 

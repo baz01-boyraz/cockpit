@@ -287,6 +287,8 @@ export const swarmCreateCardSchema = z.object({
   projectId: z.string().min(1),
   title: z.string().min(1).max(200),
   body: z.string().max(20_000).optional(),
+  /** An approved council session that shaped this card (Faz 2a); history, no FK. */
+  councilSessionId: z.string().max(200).nullable().optional(),
 })
 
 /** One role/spec assignment — ids validated against the taxonomy catalog. */
@@ -305,6 +307,17 @@ export const swarmUpdateCardSchema = z.object({
   agent: z.string().min(1).max(60).nullable().optional(),
   /** Ordered role pipeline; capped so a card can never fan out unboundedly. */
   assignments: z.array(assignmentSchema).max(6).optional(),
+  /** Link/clear the card's approved council session (Faz 2a); history, no FK. */
+  councilSessionId: z.string().max(200).nullable().optional(),
+})
+
+// --- council scorecard (Faz 2a) -------------------------------------------
+//
+// Cross-session seat standings for a project — the read side of the persisted
+// council history. Input is just the project id; the merge math is the pure
+// `computeScorecard` in shared/council.
+export const councilScorecardSchema = z.object({
+  projectId: z.string().min(1),
 })
 
 // --- Hermes propose-card (Faz 6) ------------------------------------------

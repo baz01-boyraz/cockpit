@@ -124,11 +124,14 @@ export class Services {
     this.chat = new ChatService(this.projects)
     this.hermesChat = new HermesChatService(this.projects)
     this.review = new ReviewService(this.projects, this.audit)
+    // One session store, shared: the council writes runs to it, the swarm reads
+    // a card's approved session back from it at spawn (Faz 2a).
+    const councilSessions = new CouncilSessionStore(this.db)
     this.council = new CouncilService(
       this.projects,
       this.audit,
       new EngineRunner(this.secrets),
-      new CouncilSessionStore(this.db),
+      councilSessions,
     )
     this.memory = new MemoryHubService(this.projects)
     this.globalMemory = new MemoryHubService(this.projects, join(opts.userDataDir, 'baz-memory'))
@@ -182,6 +185,7 @@ export class Services {
       this.agentUsage,
       this.namedAgents,
       new SwarmDoneSignal(),
+      councilSessions,
     )
     // Forget a pane's TUI-mode state once it exits, so session ids never leak.
     opts.events.onTyped('terminal:exit', ({ sessionId }) => this.tuiState.delete(sessionId))

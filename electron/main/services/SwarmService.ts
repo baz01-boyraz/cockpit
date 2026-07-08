@@ -7,6 +7,7 @@ import {
   type KanbanCard,
 } from '@shared/kanban'
 import { buildWorkerCommand } from '@shared/swarm-worker'
+import { composeCouncilBrief, type CouncilResult } from '@shared/council'
 import { rolePromptFor } from '@shared/agent-roles'
 import {
   assignmentLabel,
@@ -47,6 +48,16 @@ export interface DoneSignalOps {
   consume(worktreePath: string): boolean
 }
 
+/**
+ * The council-session lookup the swarm needs at spawn (Faz 2a) — the narrow
+ * slice of `CouncilSessionStore`, structural so tests can fake it. A card's
+ * approved session is read here so its conclusions ride the worker's opening
+ * prompt; the store returns null for a missing or corrupt-JSON row.
+ */
+export interface CouncilSessionReader {
+  get(id: string): { result: CouncilResult } | null
+}
+
 /** Parallel cards ceiling (plan D6). Raise only after Gate 6 passes at 4. */
 export const RUNNING_CAP = 3
 
@@ -62,6 +73,7 @@ interface CardRow {
   agent: string | null
   assignments: string
   pipeline_step: number
+  council_session_id: string | null
   terminal_session_id: string | null
   worktree_path: string | null
   branch: string | null
@@ -90,6 +102,7 @@ export class SwarmService {
     private readonly agentUsage?: { getReport(): Promise<AgentUsageReport> },
     private readonly namedAgents?: { find(projectId: string, slug: string): NamedAgent | null },
     private readonly doneSignal?: DoneSignalOps,
+    private readonly councilSessions?: CouncilSessionReader,
   ) {
     // 6.4: any card still in_progress at construction is an orphan — its
     // worker died with the previous app instance (TerminalManager already
@@ -173,7 +186,7 @@ export class SwarmService {
       // retiring worker's exit can never match this card (onWorkerExit is a
       // no-op for it) and the card stays Running across the handoff.
       this.doneSignal?.arm(projectPath, worktree.path)
-      const session = this.spawnWorker(projectId, card, worktree, assignments, nextStep)
+      const session = this.spawnWorker(projectId, card, worktree, assignments, nextStep, this.councilBriefFor(card))
       this.db
         .prepare(`UPDATE kanban_cards SET terminal_session_id = ?, pipeline_step = ?, updated_at = ? WHERE id = ?`)
         .run(session.id, nextStep, nowIso(), card.id)
@@ -253,7 +266,11 @@ export class SwarmService {
     // advance the pipeline on).
     if (worktree) this.doneSignal?.arm(projectPath, worktree.path)
 
-    const session = this.spawnWorker(input.projectId, card, worktree, assignments, step)
+    // The card's approved council session (if any) rides the worker's opening
+    // prompt. A degraded/missing session yields null — never a refused start —
+    // and the fact is recorded on the audit line either way.
+    const councilBrief = this.councilBriefFor(card)
+    const session = this.spawnWorker(input.projectId, card, worktree, assignments, step, councilBrief)
 
     const now = nowIso()
     this.db
@@ -278,7 +295,7 @@ export class SwarmService {
       actor: 'user',
       actionType: 'swarm.start_card',
       summary: `Started swarm card "${card.title}"${this.pipelineSummary(assignments, step)}${worktree ? ` in ${worktree.branch}` : ' (project root — no worktree)'}`,
-      payload: { cardId: card.id, sessionId: session.id, worktree: worktree?.branch ?? null, assignments, step },
+      payload: { cardId: card.id, sessionId: session.id, worktree: worktree?.branch ?? null, assignments, step, councilBrief: councilBrief !== null },
     })
     return assembleBoard(next)
   }
@@ -297,6 +314,22 @@ export class SwarmService {
     return classifyRoles(card.title, card.body).pipeline.map((p) => ({ role: p.role, spec: p.spec ?? null }))
   }
 
+  /**
+   * The council brief a card's worker opens with, or null. The session is
+   * HISTORY: a missing store, an unset/dangling id, a corrupt-JSON row, or a
+   * verdict-less result all degrade to no brief — a spec-gate meeting that can't
+   * be read must never block a start.
+   */
+  private councilBriefFor(card: KanbanCard): string | null {
+    if (!card.councilSessionId || !this.councilSessions) return null
+    try {
+      const session = this.councilSessions.get(card.councilSessionId)
+      return session ? composeCouncilBrief(session.result) : null
+    } catch {
+      return null
+    }
+  }
+
   /** Launch the worker for one pipeline step (or a named/legacy identity). */
   private spawnWorker(
     projectId: string,
@@ -304,6 +337,7 @@ export class SwarmService {
     worktree: { path: string; branch: string } | null,
     assignments: Assignment[],
     step: number,
+    councilBrief: string | null = null,
   ): TerminalSession {
     const hubNames = this.hubNoteNames(projectId)
     // Identity precedence: a Named Agent speaks with its authored voice; else
@@ -329,6 +363,7 @@ export class SwarmService {
         hubNames,
         identityText,
         named?.model ?? null,
+        councilBrief,
       ),
     })
   }
@@ -418,14 +453,19 @@ export class SwarmService {
     }
   }
 
-  createCard(input: { projectId: string; title: string; body?: string }): BoardColumn[] {
+  createCard(input: {
+    projectId: string
+    title: string
+    body?: string
+    councilSessionId?: string | null
+  }): BoardColumn[] {
     const now = nowIso()
     try {
       this.db
         .prepare(
           `INSERT INTO kanban_cards
-           (id, project_id, title, body, status, position, created_at, updated_at)
-           VALUES (@id, @projectId, @title, @body, 'todo', @position, @now, @now)`,
+           (id, project_id, title, body, status, position, council_session_id, created_at, updated_at)
+           VALUES (@id, @projectId, @title, @body, 'todo', @position, @councilSessionId, @now, @now)`,
         )
         .run({
           id: newId('card'),
@@ -433,6 +473,7 @@ export class SwarmService {
           title: input.title,
           body: input.body ?? '',
           position: appendPosition(this.cards(input.projectId), 'todo'),
+          councilSessionId: input.councilSessionId ?? null,
           now,
         })
     } catch (err) {
@@ -461,6 +502,7 @@ export class SwarmService {
     persona?: string | null
     agent?: string | null
     assignments?: Assignment[]
+    councilSessionId?: string | null
   }): BoardColumn[] {
     const card = this.cardOrThrow(input.projectId, input.cardId)
     // A changed pipeline starts fresh at step 0; leaving it unset preserves
@@ -471,7 +513,8 @@ export class SwarmService {
       .prepare(
         `UPDATE kanban_cards SET title = @title, body = @body, role = @role,
          persona = @persona, agent = @agent, assignments = @assignments,
-         pipeline_step = @step, updated_at = @now WHERE id = @id`,
+         pipeline_step = @step, council_session_id = @councilSessionId,
+         updated_at = @now WHERE id = @id`,
       )
       .run({
         id: card.id,
@@ -482,6 +525,8 @@ export class SwarmService {
         agent: input.agent === undefined ? card.agent : input.agent,
         assignments: JSON.stringify(assignments),
         step: pipelineStep,
+        councilSessionId:
+          input.councilSessionId === undefined ? card.councilSessionId : input.councilSessionId,
         now: nowIso(),
       })
     return this.board(input.projectId)
@@ -557,6 +602,7 @@ export class SwarmService {
       agent: row.agent,
       assignments: parseAssignments(safeJsonParse(row.assignments)),
       pipelineStep: row.pipeline_step ?? 0,
+      councilSessionId: row.council_session_id ?? null,
       terminalSessionId: row.terminal_session_id,
       worktreePath: row.worktree_path,
       branch: row.branch,

@@ -36,6 +36,7 @@ import {
   reviewRunTextSchema,
   reviewDiffStatSchema,
   councilRunSchema,
+  councilScorecardSchema,
   resumeClaudeSchema,
   routeQuerySchema,
   secretKindOnlySchema,
@@ -267,6 +268,9 @@ export function registerIpc(services: Services): void {
     const { projectId, model, mode, dir, question, spec, cardId } = councilRunSchema.parse(p)
     return services.council.run(projectId, { model, mode, dir, question, specText: spec, cardId })
   })
+  handle('councilScorecard', (p) =>
+    services.council.scorecard(councilScorecardSchema.parse(p).projectId),
+  )
 
   // --- memory hub (per-project markdown knowledge, files are the truth) ---
   handle('memoryList', (p) => services.memory.list(projectIdSchema.parse(p).projectId))

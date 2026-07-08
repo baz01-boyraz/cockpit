@@ -4,11 +4,14 @@ import {
   COUNCIL_SEATS,
   COUNCIL_SEAT_IDS,
   anonymizeSeats,
+  composeCouncilBrief,
   computeAggregateRankings,
   computeScorecard,
+  extractRefinedSpec,
   parseRankingFromText,
   parseSpecVerdict,
   type CouncilRanking,
+  type CouncilResult,
   type CouncilSeatOutput,
 } from '../shared/council'
 import {
@@ -209,6 +212,112 @@ describe('parseSpecVerdict', () => {
 
   it('returns a null kind for garbage', () => {
     expect(parseSpecVerdict('nothing structured here')).toEqual({ kind: null, questions: [] })
+  })
+})
+
+describe('extractRefinedSpec', () => {
+  const verdict = [
+    '### ⚖️ Consensus & Disagreement',
+    'They agree on the goal.',
+    '',
+    '### 🎯 Verdict',
+    'APPROVED',
+    '',
+    '### 📋 Refined Spec',
+    '**Goal** Cache the gateway.',
+    '**Context** The gateway is hot.',
+    '',
+    '### ❓ Questions for the author',
+    '1. none',
+  ].join('\n')
+
+  it('pulls the body up to the next heading, preserving inner labels verbatim', () => {
+    const spec = extractRefinedSpec(verdict)
+    expect(spec).toContain('**Goal** Cache the gateway.')
+    expect(spec).toContain('**Context** The gateway is hot.')
+    // Neither the sibling headings nor their text leak in.
+    expect(spec).not.toContain('Questions for the author')
+    expect(spec).not.toContain('APPROVED')
+  })
+
+  it('matches the heading case-insensitively and without the emoji', () => {
+    const emojiless = '### refined spec\n**Goal** ship it.\n### ❓ Questions'
+    expect(extractRefinedSpec(emojiless)).toBe('**Goal** ship it.')
+  })
+
+  it('returns null when the section is absent or empty', () => {
+    expect(extractRefinedSpec('### 🎯 Verdict\nAPPROVED')).toBeNull()
+    expect(extractRefinedSpec('### 📋 Refined Spec\n\n### ❓ Questions')).toBeNull()
+  })
+})
+
+describe('composeCouncilBrief', () => {
+  const base = (over: Partial<CouncilResult> = {}): CouncilResult => ({
+    ok: true,
+    mode: 'spec',
+    seats: [
+      { id: 'builder', label: 'Builder', engine: { engine: 'claude', model: 'opus' }, usedFallback: false, text: 'Effort M.', ok: true },
+      { id: 'contrarian', label: 'Contrarian', engine: { engine: 'claude', model: 'opus' }, usedFallback: false, text: 'No idempotency key.', ok: true },
+    ],
+    rankings: [],
+    aggregate: [],
+    labelToSeat: {},
+    verdict: '### 📋 Refined Spec\n**Goal** Wire the webhook.',
+    specVerdict: { kind: 'approved', questions: [] },
+    error: null,
+    stats: { seatsRun: 2, seatsFailed: 0, filesReviewed: 0, durationMs: 5 },
+    sessionId: 'sess_1',
+    ...over,
+  })
+
+  it('composes preface, refined spec, builder notes, and the contrarian objection in order', () => {
+    const brief = composeCouncilBrief(base())!
+    expect(brief.startsWith('COUNCIL BRIEF —')).toBe(true)
+    const specAt = brief.indexOf('Wire the webhook.')
+    const builderAt = brief.indexOf('Builder seat notes:')
+    const contrarianAt = brief.indexOf('Sharpest objection (Contrarian):')
+    expect(specAt).toBeGreaterThan(0)
+    expect(builderAt).toBeGreaterThan(specAt)
+    expect(contrarianAt).toBeGreaterThan(builderAt)
+  })
+
+  it('falls back to the raw verdict when there is no Refined Spec section', () => {
+    const brief = composeCouncilBrief(base({ verdict: '### 🎯 Verdict\nAPPROVED — ship it.' }))!
+    expect(brief).toContain('APPROVED — ship it.')
+  })
+
+  it('skips a seat that is not ok, and omits missing pieces', () => {
+    const brief = composeCouncilBrief(
+      base({
+        verdict: null,
+        seats: [
+          { id: 'builder', label: 'Builder', engine: { engine: 'claude', model: 'opus' }, usedFallback: false, text: 'partial', ok: false },
+          { id: 'contrarian', label: 'Contrarian', engine: { engine: 'claude', model: 'opus' }, usedFallback: false, text: 'Real risk.', ok: true },
+        ],
+      }),
+    )!
+    expect(brief).not.toContain('Builder seat notes:')
+    expect(brief).toContain('Sharpest objection (Contrarian):')
+  })
+
+  it('returns null when there is neither a verdict nor a single ok seat', () => {
+    expect(
+      composeCouncilBrief(
+        base({
+          verdict: null,
+          seats: [
+            { id: 'builder', label: 'Builder', engine: { engine: 'claude', model: 'opus' }, usedFallback: false, text: 'x', ok: false },
+          ],
+        }),
+      ),
+    ).toBeNull()
+  })
+
+  it('hard-caps the brief at 6000 chars with a truncation marker', () => {
+    const huge = 'A'.repeat(20_000)
+    const brief = composeCouncilBrief(base({ verdict: `### 📋 Refined Spec\n${huge}` }))!
+    expect(brief.length).toBe(6_000)
+    expect(brief.endsWith('…[truncated]')).toBe(true)
   })
 })
 

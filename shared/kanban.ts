@@ -28,6 +28,13 @@ export interface KanbanCard {
   assignments: Assignment[]
   /** How far the pipeline has advanced — index of the currently-running step. */
   pipelineStep: number
+  /**
+   * The approved council session that shaped this card (Faz 2a). When set, the
+   * session's conclusions are composed into the worker's opening prompt at spawn
+   * — the builder "was in the meeting". It is history, not a live relation: a
+   * dangling id degrades to no brief, never a failed start (see schema V12).
+   */
+  councilSessionId: string | null
   terminalSessionId: string | null
   worktreePath: string | null
   branch: string | null

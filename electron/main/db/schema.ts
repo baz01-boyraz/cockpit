@@ -378,3 +378,19 @@ CREATE TABLE IF NOT EXISTS council_sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_council_sessions_project ON council_sessions(project_id, created_at);
 `
+
+/**
+ * V12 — a card can carry an approved council session (Faz 2a spec-gate wiring).
+ * When the card's worker spawns, that session's conclusions ride along in the
+ * opening prompt ("the worker was in the meeting").
+ *
+ * Like V11's `card_id`, this column deliberately has NO foreign key: the session
+ * is HISTORY, not a live relation — a card must keep pointing at the meeting that
+ * shaped it even though the row lives in `council_sessions`, and an ON DELETE
+ * side effect is exactly the wrong behavior here. A dangling id simply degrades
+ * to "no brief" at spawn time. Append-only ALTER (SQLite has no ADD COLUMN IF
+ * NOT EXISTS, so this lives only here, never back-edited into V5).
+ */
+export const SCHEMA_V12 = /* sql */ `
+ALTER TABLE kanban_cards ADD COLUMN council_session_id TEXT;
+`

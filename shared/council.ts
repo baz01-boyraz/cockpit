@@ -307,3 +307,68 @@ function extractQuestions(text: string): string[] {
   }
   return out
 }
+
+/**
+ * Pull the markdown BODY under the spec chairman's `### 📋 Refined Spec` heading
+ * (up to the next markdown heading, or end of text). Tolerant: the heading is
+ * matched case-insensitively, with OR without the emoji, at any heading level.
+ * The UI pastes this into the card body, so the inner subsection labels
+ * (bold Goal/Context/…) are preserved verbatim — only outer blank lines are
+ * trimmed. Returns null when the section is absent or its body is empty.
+ */
+export function extractRefinedSpec(verdict: string): string | null {
+  const lines = verdict.split('\n')
+  const startIdx = lines.findIndex((l) => /^#{1,6}\s+.*refined spec/i.test(l.trim()))
+  if (startIdx < 0) return null
+  const body: string[] = []
+  for (const raw of lines.slice(startIdx + 1)) {
+    if (/^#{1,6}\s/.test(raw.trim())) break // the next section heading ends the body
+    body.push(raw)
+  }
+  const text = body.join('\n').trim()
+  return text.length > 0 ? text : null
+}
+
+/**
+ * A worker "was in the meeting" — the total brief is hard-capped so a runaway
+ * verdict or seat reply can never balloon the pty opening prompt (the same
+ * diff-review budget lesson the worker prompt itself obeys).
+ */
+const COUNCIL_BRIEF_CAP = 6_000
+const COUNCIL_BRIEF_TRUNCATION = '…[truncated]'
+
+/**
+ * The meeting minutes a swarm worker reads before it builds. In order: a fixed
+ * preface, the refined spec (or the raw chairman verdict when no Refined Spec
+ * section parsed), the Builder seat's notes, and the Contrarian's sharpest
+ * objection. Only OK seats contribute. Returns null when there is nothing to say
+ * — neither a verdict nor a single OK seat. Pure: the caller feeds it a stored
+ * CouncilResult.
+ */
+export function composeCouncilBrief(result: CouncilResult): string | null {
+  const okSeats = result.seats.filter((s) => s.ok)
+  if (!result.verdict && okSeats.length === 0) return null
+
+  const parts: string[] = [
+    "COUNCIL BRIEF — this task's spec was reviewed by an LLM council; build with these conclusions in mind.",
+  ]
+
+  const conclusions = (result.verdict ? extractRefinedSpec(result.verdict) : null) ?? result.verdict?.trim() ?? null
+  if (conclusions) parts.push('', conclusions)
+
+  const seatText = (id: CouncilTone): string | null => {
+    const seat = okSeats.find((s) => s.id === id)
+    const text = seat?.text.trim()
+    return text ? text : null
+  }
+
+  const builder = seatText('builder')
+  if (builder) parts.push('', 'Builder seat notes:', builder)
+
+  const contrarian = seatText('contrarian')
+  if (contrarian) parts.push('', 'Sharpest objection (Contrarian):', contrarian)
+
+  const brief = parts.join('\n')
+  if (brief.length <= COUNCIL_BRIEF_CAP) return brief
+  return brief.slice(0, COUNCIL_BRIEF_CAP - COUNCIL_BRIEF_TRUNCATION.length) + COUNCIL_BRIEF_TRUNCATION
+}
