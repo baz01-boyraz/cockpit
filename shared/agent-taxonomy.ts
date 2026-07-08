@@ -125,6 +125,33 @@ export function pipelinePrompt(a: Assignment, index: number, total: number): str
 }
 
 /**
+ * Persona → Spec fold for retired legacy cards. Only the two personas with an
+ * honest domain equivalent map; `pragmatic-shipper` (and anything unknown)
+ * carries no spec — a pragmatic reviewer is just a reviewer.
+ */
+const LEGACY_PERSONA_SPEC: Readonly<Record<string, Spec>> = {
+  'security-paranoid': 'security',
+  'type-zealot': 'types',
+}
+
+/**
+ * Map a legacy card's free-text role/persona (the retired role/persona identity
+ * model, Faz 4) onto a taxonomy Assignment. The four legacy roles — builder,
+ * reviewer, scout, planner — are all taxonomy Roles, so they fold directly; the
+ * persona folds onto the nearest honest Spec and is otherwise dropped. Returns
+ * null when the role is empty or unknown, so an identity-less legacy card falls
+ * through to the caller's no-identity behaviour rather than getting a
+ * fabricated one.
+ */
+export function legacyIdentityToAssignment(
+  role: string | null | undefined,
+  persona: string | null | undefined,
+): Assignment | null {
+  if (!isRole(role)) return null
+  return { role, spec: LEGACY_PERSONA_SPEC[persona ?? ''] ?? null }
+}
+
+/**
  * Coerce untrusted input (IPC payloads, a persisted JSON column) into a clean
  * assignment list: non-arrays yield [], malformed entries are dropped, and an
  * unknown spec degrades to no spec rather than failing the whole card.

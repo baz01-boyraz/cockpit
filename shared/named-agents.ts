@@ -4,7 +4,7 @@
 // cards, terminal Claudes, and workers' own subagents. Pure module: used by
 // the main service AND the browser mock, never duplicated.
 
-import { rolePromptFor } from './agent-roles'
+import { assignmentPrompt, legacyIdentityToAssignment } from './agent-taxonomy'
 
 export interface NamedAgent {
   slug: string
@@ -117,9 +117,14 @@ export function toSummary(a: NamedAgent): NamedAgentSummary {
 /**
  * The identity text folded into a worker prompt: the authored body leads
  * (who they are), the role/persona defaults follow (what function they
- * default to). Composed here so the service and any future consumer agree.
+ * default to). The file's free-text role/persona are folded onto the canonical
+ * taxonomy (agent-taxonomy) — a role that is not one of the formal taxonomy
+ * roles contributes no default text, exactly as before, so an agent whose
+ * `cockpit:` block omits (or free-texts) its role still composes to its body
+ * alone. Composed here so the service and any future consumer agree.
  */
 export function composeAgentText(agent: NamedAgent): string {
-  const roleText = rolePromptFor(agent.role, agent.persona)
+  const assignment = legacyIdentityToAssignment(agent.role, agent.persona)
+  const roleText = assignment ? assignmentPrompt(assignment) : ''
   return roleText ? `${agent.body}\n\n${roleText}` : agent.body
 }

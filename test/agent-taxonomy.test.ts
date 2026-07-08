@@ -8,6 +8,7 @@ import {
   isSpec,
   assignmentLabel,
   assignmentPrompt,
+  legacyIdentityToAssignment,
   parseAssignments,
   pipelinePrompt,
   type Assignment,
@@ -72,6 +73,38 @@ describe('pipelinePrompt', () => {
   it('omits the step banner for a single-step pipeline', () => {
     const a: Assignment = { role: 'builder' }
     expect(pipelinePrompt(a, 0, 1)).toBe(assignmentPrompt(a))
+  })
+})
+
+describe('legacyIdentityToAssignment', () => {
+  it('folds the four legacy roles directly onto taxonomy roles', () => {
+    expect(legacyIdentityToAssignment('builder', null)).toEqual({ role: 'builder', spec: null })
+    expect(legacyIdentityToAssignment('reviewer', null)).toEqual({ role: 'reviewer', spec: null })
+    expect(legacyIdentityToAssignment('scout', null)).toEqual({ role: 'scout', spec: null })
+    expect(legacyIdentityToAssignment('planner', null)).toEqual({ role: 'planner', spec: null })
+  })
+
+  it('folds a persona onto the nearest honest spec and drops the rest', () => {
+    expect(legacyIdentityToAssignment('reviewer', 'security-paranoid')).toEqual({
+      role: 'reviewer',
+      spec: 'security',
+    })
+    expect(legacyIdentityToAssignment('builder', 'type-zealot')).toEqual({
+      role: 'builder',
+      spec: 'types',
+    })
+    // pragmatic-shipper has no honest domain equivalent → bare role.
+    expect(legacyIdentityToAssignment('builder', 'pragmatic-shipper')).toEqual({
+      role: 'builder',
+      spec: null,
+    })
+    expect(legacyIdentityToAssignment('builder', 'made-up')).toEqual({ role: 'builder', spec: null })
+  })
+
+  it('returns null for an empty or unknown role — no fabricated identity', () => {
+    expect(legacyIdentityToAssignment(null, 'security-paranoid')).toBeNull()
+    expect(legacyIdentityToAssignment('', null)).toBeNull()
+    expect(legacyIdentityToAssignment('architect', null)).toBeNull()
   })
 })
 

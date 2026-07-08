@@ -18,7 +18,7 @@ import {
   type ReviewResult,
   type ReviewStats,
 } from '@shared/review'
-import { personaById } from '@shared/agent-roles'
+import { SPECS, isSpec } from '@shared/agent-taxonomy'
 import { buildHermesArgs } from '@shared/hermes-run'
 import type { AuditLogService } from './AuditLogService'
 import type { ProjectService } from './ProjectService'
@@ -255,12 +255,12 @@ export class ReviewService {
     }
 
     const fenceTag = `====COCKPIT-UNTRUSTED-DIFF-${randomUUID()}====`
-    // Persona lens (6.5 council): the text ALWAYS comes from our own catalog,
+    // Domain lens: the text ALWAYS comes from the canonical taxonomy (SPECS),
     // keyed by id — renderer-supplied prose never reaches the prompt.
-    const lens = opts.lens ? personaById(opts.lens) : null
-    if (opts.lens && !lens) throw new Error('Unknown review lens.')
+    const lensSpec = opts.lens && isSpec(opts.lens) ? opts.lens : null
+    if (opts.lens && !lensSpec) throw new Error('Unknown review lens.')
     const basePrompt = buildReviewPrompt(sanitized, { fenceTag, projectName: project.name })
-    const prompt = lens ? `${lens.lens}\n\n${basePrompt}` : basePrompt
+    const prompt = lensSpec ? `${SPECS[lensSpec].prompt}\n\n${basePrompt}` : basePrompt
 
     try {
       // `ignoreRules: true` — a review pass is a narrow analytical task, not a

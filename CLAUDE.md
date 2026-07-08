@@ -27,6 +27,18 @@ confidence).
   runtime-dependency-free so it works in the browser mock too.
 - Every IPC handler validates its payload with a Zod schema. The renderer is untrusted input.
 
+### LLM Council & engines
+The Swarm runs a **multi-engine LLM Council**: independent seats spread across the `claude`
+and `codex` CLIs plus OpenRouter (keys resolved through `SecretStore`, never source) analyze
+material from different angles, then a chairman synthesizes one verdict. In `spec` mode the
+council is a **gate before build** — a draft task spec must pass before an autonomous builder
+touches it; in `diff` mode it judges a worktree change set. Council runs are persisted in the
+`council_sessions` table and ride a card's opening prompt. The seat roster is **code-level
+config in `shared/council.ts`** (with per-seat fallbacks so a missing engine or key degrades
+safely) — there is deliberately **no Settings UI** for seats. There is **one identity system**:
+`shared/agent-taxonomy.ts` (formal Role × Spec) plus file-based **named agents**
+(`shared/named-agents.ts`); the old role/persona catalog is retired.
+
 ### Mock bridge
 The renderer runs against `window.cockpit` in Electron, or a fully-featured **mock**
 (`src/lib/mock.ts`) when served as a plain web page. This is what makes the localhost

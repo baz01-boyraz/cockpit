@@ -72,11 +72,12 @@ describe('parseAgentFile', () => {
 describe('composeAgentText', () => {
   const agent = parseAgentFile(FILE) as NamedAgent
 
-  it('folds identity body plus role/persona defaults', () => {
+  it('folds identity body plus role/persona defaults (taxonomy wording)', () => {
     const t = composeAgentText(agent)
     expect(t.indexOf('forge god')).toBeGreaterThan(-1)
+    // builder → ROLES.builder, type-zealot persona folds onto SPECS.types.
     expect(t).toContain('BUILDER')
-    expect(t).toContain('type-safety zealot')
+    expect(t).toContain('Domain: TYPE-SAFETY')
   })
 
   it('body comes first — identity leads, function follows', () => {
