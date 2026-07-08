@@ -13,6 +13,7 @@ import { createChecksTools } from './hermesToolsChecks'
 import { createMemoryTools } from './hermesToolsMemory'
 import { createLogTools } from './hermesToolsLogs'
 import { createProposeTools } from './hermesToolsPropose'
+import { createCouncilTools } from './hermesToolsCouncil'
 
 // Re-exported so existing importers (and the tests) keep a single entry point.
 export type { HermesTool, HermesToolContext } from './hermesToolTypes'
@@ -38,6 +39,7 @@ function findCard(board: readonly BoardColumn[], cardId: string): KanbanCard | n
 export function createHermesTools(ctx: HermesToolContext): HermesTool[] {
   return [
     ...createSwarmTools(ctx),
+    ...createCouncilTools(ctx),
     ...createGitTools(ctx),
     ...createChecksTools(ctx),
     ...createMemoryTools(ctx),
@@ -52,14 +54,14 @@ function createSwarmTools(ctx: HermesToolContext): HermesTool[] {
     {
       name: 'create_swarm_card',
       description:
-        'Create a new Swarm Kanban card (lands in "To do") for a project — the same validated path as the UI "new card" action. title ≤ 200 chars, body ≤ 20,000 chars. Returns the updated board.',
+        'Create a new Swarm Kanban card (lands in "To do") for a project — the same validated path as the UI "new card" action. title ≤ 200 chars, body ≤ 20,000 chars. Returns the updated board. For non-trivial work, gate the spec first with `council_refine_spec` and pass its approved `sessionId` as `councilSessionId` here — the returned refined spec becomes the card body. Trivial/deterministic tasks may skip the gate (councilSessionId is optional).',
       inputShape: swarmCreateCardSchema.shape,
       run: async (raw) => ({ board: ctx.swarm.createCard(swarmCreateCardSchema.parse(raw)) }),
     },
     {
       name: 'update_swarm_card',
       description:
-        'Update a Swarm card: title/body and its role pipeline (`assignments`, an ordered list of {role, spec} capped at 6 steps, validated against the agent taxonomy). Same path as editing a card in the UI. Returns the updated board.',
+        'Update a Swarm card: title/body and its role pipeline (`assignments`, an ordered list of {role, spec} capped at 6 steps, validated against the agent taxonomy). Same path as editing a card in the UI. Returns the updated board. Pass `councilSessionId` to link (or clear, with null) the card\'s approved `council_refine_spec` session.',
       inputShape: swarmUpdateCardSchema.shape,
       run: async (raw) => ({ board: ctx.swarm.updateCard(swarmUpdateCardSchema.parse(raw)) }),
     },

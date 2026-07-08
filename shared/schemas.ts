@@ -333,6 +333,9 @@ export const proposeSwarmCardSchema = z.object({
   body: z.string().max(20_000).optional(),
   reason: z.string().min(1).max(500),
   assignments: z.array(assignmentSchema).max(6).optional(),
+  /** An approved council spec-gate session that shaped this proposal (Faz 3);
+   *  carried through to the card the executor opens on approval. History, no FK. */
+  councilSessionId: z.string().max(200).nullable().optional(),
 })
 
 // The subset stashed in the approval request's payload — what the executor reads
@@ -342,6 +345,9 @@ export const proposedSwarmCardPayloadSchema = z.object({
   title: z.string().min(1).max(200),
   body: z.string().max(20_000).optional(),
   assignments: z.array(assignmentSchema).max(6).optional(),
+  /** Persisted onto the opened card so a self-initiated proposal keeps its
+   *  council provenance the same way a human-created card does. */
+  councilSessionId: z.string().max(200).nullable().optional(),
 })
 
 // The renderer is always the "user" actor: schema-level status choices exclude
@@ -374,6 +380,19 @@ export const subscribeCardOutputSchema = swarmRemoveCardSchema
 
 /** get_usage_quota takes no input; the empty object is its validated contract. */
 export const usageQuotaSchema = z.object({})
+
+// --- Hermes MCP server (Faz 3): council spec gate --------------------------
+//
+// `council_refine_spec` runs a draft task spec through the LLM council's spec
+// gate before Hermes creates/proposes a card. The `spec` cap mirrors
+// `councilRunSchema.spec` (the same fenced-as-untrusted input the diff/spec
+// council already validates); `cardId`, when supplied, ties the run to an
+// existing card as session history (no FK).
+export const councilRefineSpecSchema = z.object({
+  projectId: z.string().min(1),
+  spec: z.string().min(1).max(16_000),
+  cardId: z.string().max(200).optional(),
+})
 
 // --- Hermes MCP server (Faz 3b): checks + screenshot -----------------------
 //

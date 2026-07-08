@@ -199,6 +199,7 @@ export class Services {
     this.appScreenshot = new AppScreenshotService(this.projects)
     this.hermesMcp = new HermesMcpServer({
       swarm: this.swarm,
+      council: this.council,
       agentUsage: this.agentUsage,
       cardOutput: this.cardOutput,
       git: this.git,

@@ -80,7 +80,7 @@ function makeCard(over: Partial<KanbanCard>): KanbanCard {
 /** In-memory swarm: createCard actually adds a card so the executor can find it. */
 class FakeSwarm {
   private cards: KanbanCard[] = []
-  create: Array<{ projectId: string; title: string; body?: string }> = []
+  create: Array<{ projectId: string; title: string; body?: string; councilSessionId?: string | null }> = []
   update: unknown[] = []
   start: Array<{ projectId: string; cardId: string }> = []
 
@@ -88,11 +88,22 @@ class FakeSwarm {
     return [{ status: 'todo', cards: [...this.cards] }]
   }
 
-  createCard(input: { projectId: string; title: string; body?: string }): BoardColumn[] {
+  createCard(input: {
+    projectId: string
+    title: string
+    body?: string
+    councilSessionId?: string | null
+  }): BoardColumn[] {
     this.create.push(input)
     this.cards = [
       ...this.cards,
-      makeCard({ id: `card-${this.cards.length + 1}`, projectId: input.projectId, title: input.title, body: input.body ?? '' }),
+      makeCard({
+        id: `card-${this.cards.length + 1}`,
+        projectId: input.projectId,
+        title: input.title,
+        body: input.body ?? '',
+        councilSessionId: input.councilSessionId ?? null,
+      }),
     ]
     return this.board()
   }
@@ -139,6 +150,20 @@ describe('HermesApprovalExecutor — opens a proposed card only after approval',
     expect(swarm.update).toEqual([{ projectId: 'p1', cardId: 'card-1', assignments }])
     expect(swarm.start).toEqual([{ projectId: 'p1', cardId: 'card-1' }])
     expect(approvals.get('apr-1')?.status).toBe('consumed')
+  })
+
+  it('carries the proposal councilSessionId onto the opened card', async () => {
+    const { approvals, swarm, executor } = setup()
+    approvals.seed(
+      makeApproval({ payload: { title: 'Gated fix', body: 'refined spec', councilSessionId: 'sess-42' } }),
+    )
+
+    await executor.processProject('p1')
+
+    expect(swarm.create).toEqual([
+      { projectId: 'p1', title: 'Gated fix', body: 'refined spec', councilSessionId: 'sess-42' },
+    ])
+    expect(swarm.board()[0].cards[0].councilSessionId).toBe('sess-42')
   })
 
   it('skips the pipeline update when there are no assignments', async () => {

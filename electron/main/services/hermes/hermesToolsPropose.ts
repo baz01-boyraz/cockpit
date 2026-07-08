@@ -16,15 +16,16 @@ export function createProposeTools(ctx: HermesToolContext): HermesTool[] {
     {
       name: 'propose_swarm_card',
       description:
-        "Propose (do NOT open) a Swarm card for something you noticed on your own — a recurring error, a risky diff, tech debt. This records an approval request on the human's Dashboard; the card is only opened and started if they approve it. `reason` is a short WHY (shown in the approval). title ≤ 200 chars, body ≤ 20,000 chars, optional `assignments` role pipeline. Returns the approval id — tell the human you've PROPOSED it (not started it) and to check their Dashboard. Use `create_swarm_card`/`start_swarm_card` instead only when the human explicitly asked you to build something.",
+        "Propose (do NOT open) a Swarm card for something you noticed on your own — a recurring error, a risky diff, tech debt. This records an approval request on the human's Dashboard; the card is only opened and started if they approve it. `reason` is a short WHY (shown in the approval). title ≤ 200 chars, body ≤ 20,000 chars, optional `assignments` role pipeline. For non-trivial work, gate the spec with `council_refine_spec` first and pass its approved `sessionId` as `councilSessionId` — it rides through to the card the human's approval opens; the returned refined spec becomes the body. Returns the approval id — tell the human you've PROPOSED it (not started it) and to check their Dashboard. Use `create_swarm_card`/`start_swarm_card` instead only when the human explicitly asked you to build something.",
       inputShape: proposeSwarmCardSchema.shape,
       run: async (raw) => {
-        const { projectId, title, body, reason, assignments } = proposeSwarmCardSchema.parse(raw)
+        const { projectId, title, body, reason, assignments, councilSessionId } =
+          proposeSwarmCardSchema.parse(raw)
         const request = ctx.approvals.request({
           projectId,
           actionType: 'propose_open_swarm_card',
           summary: `${reason} — ${title}`,
-          payload: { title, body, assignments },
+          payload: { title, body, assignments, councilSessionId },
         })
         return {
           approvalId: request.id,

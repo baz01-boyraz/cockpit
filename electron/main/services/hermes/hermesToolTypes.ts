@@ -1,5 +1,6 @@
 import type { z } from 'zod'
 import type { SwarmService } from '../SwarmService'
+import type { CouncilService } from '../CouncilService'
 import type { AgentUsageService } from '../AgentUsageService'
 import type { GitService } from '../GitService'
 import type { ReviewService } from '../ReviewService'
@@ -22,6 +23,8 @@ import type { AppScreenshotService } from './AppScreenshotService'
 export interface HermesToolContext {
   // Faz 3a — swarm + usage
   swarm: Pick<SwarmService, 'createCard' | 'updateCard' | 'startCard' | 'board'>
+  // Faz 3 (council) — spec gate before a card is created/proposed.
+  council: Pick<CouncilService, 'run' | 'scorecard'>
   agentUsage: Pick<AgentUsageService, 'getReport'>
   cardOutput: Pick<CardOutputTracker, 'track' | 'drain' | 'untrack'>
   // Faz 3b — git (read-only), checks (allowlist-only), screenshot, memory

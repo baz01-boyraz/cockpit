@@ -5,6 +5,7 @@ import { HermesChecksService } from '../electron/main/services/hermes/HermesChec
 import { createHermesTools, type HermesTool, type HermesToolContext } from '../electron/main/services/hermes/hermesTools'
 import type { BoardColumn, CardStatus, KanbanCard } from '../shared/kanban'
 import type { AgentUsageReport, ApprovalRequest, ErrorInsight, GitSnapshot, LogEvent } from '../shared/domain'
+import type { CouncilResult } from '../shared/council'
 import type { DiffStat } from '../shared/review'
 import type { MemoryHubSnapshot, MemoryNote } from '../shared/memory-hub'
 import type { ReviewItem } from '../shared/memory-review'
@@ -110,11 +111,33 @@ function makeReviewItem(over: Partial<ReviewItem> = {}): ReviewItem {
   }
 }
 
+/** A spec-gate result whose verdict carries a parseable "Refined Spec" section. */
+function makeCouncilResult(over: Partial<CouncilResult> = {}): CouncilResult {
+  return {
+    ok: true,
+    mode: 'spec',
+    seats: [],
+    rankings: [],
+    aggregate: [
+      { seatId: 'builder', averageRank: 1.3, count: 3 },
+      { seatId: 'contrarian', averageRank: 2.1, count: 3 },
+    ],
+    labelToSeat: {},
+    verdict: '## 🎯 Verdict\nAPPROVED\n\n### 📋 Refined Spec\n**Goal**: Ship the widget\n**Acceptance criteria**: it renders',
+    specVerdict: { kind: 'approved', questions: [] },
+    error: null,
+    stats: { seatsRun: 5, seatsFailed: 0, filesReviewed: 0, durationMs: 10 },
+    sessionId: 'sess-1',
+    ...over,
+  }
+}
+
 interface Calls {
   create: unknown[]
   update: unknown[]
   start: unknown[]
   board: string[]
+  councilRun: unknown[]
   gitStatus: string[]
   diffStat: unknown[]
   checks: unknown[]
@@ -135,6 +158,7 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
     update: [],
     start: [],
     board: [],
+    councilRun: [],
     gitStatus: [],
     diffStat: [],
     checks: [],
@@ -167,6 +191,13 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
   }
   const ctx: HermesToolContext = {
     swarm,
+    council: {
+      run: async (projectId, opts) => {
+        calls.councilRun.push({ projectId, opts })
+        return makeCouncilResult()
+      },
+      scorecard: () => [],
+    },
     agentUsage: { getReport: async () => USAGE_REPORT },
     cardOutput: new CardOutputTracker(new CockpitEvents()),
     git: {
@@ -304,6 +335,7 @@ describe('Hermes MCP tools — the scoped tool set', () => {
   it('exposes exactly the registered tools and nothing else', () => {
     const { ctx } = makeContext()
     expect(createHermesTools(ctx).map((t) => t.name).sort()).toEqual([
+      'council_refine_spec',
       'create_swarm_card',
       'get_git_diff_stat',
       'get_git_status',
@@ -407,6 +439,115 @@ describe('Hermes MCP tools — the scoped tool set', () => {
       await expect(
         toolNamed(ctx, 'create_swarm_card').run({ projectId: 'p1', title: 'x'.repeat(201) }),
       ).rejects.toThrow()
+    })
+
+    it('threads a councilSessionId through to swarm.createCard', async () => {
+      const { ctx, calls } = makeContext()
+      await toolNamed(ctx, 'create_swarm_card').run({
+        projectId: 'p1',
+        title: 'Build the gated thing',
+        body: 'refined spec body',
+        councilSessionId: 'sess-1',
+      })
+      expect(calls.create).toEqual([
+        { projectId: 'p1', title: 'Build the gated thing', body: 'refined spec body', councilSessionId: 'sess-1' },
+      ])
+    })
+  })
+
+  describe('council_refine_spec', () => {
+    it('APPROVED: returns a compact payload with the refined spec and sessionId, no seat prose', async () => {
+      const { ctx, calls } = makeContext()
+      const result = (await toolNamed(ctx, 'council_refine_spec').run({
+        projectId: 'p1',
+        spec: '**Goal**: ship it',
+        cardId: 'c9',
+      })) as Record<string, unknown>
+
+      // Ran the spec gate with the right mode + material.
+      expect(calls.councilRun).toEqual([
+        { projectId: 'p1', opts: { mode: 'spec', specText: '**Goal**: ship it', cardId: 'c9' } },
+      ])
+      expect(result.verdictKind).toBe('APPROVED')
+      expect(result.questions).toEqual([])
+      expect(result.refinedSpec).toBe('**Goal**: Ship the widget\n**Acceptance criteria**: it renders')
+      expect(result.ranking).toBe('Builder 1.3 · Contrarian 2.1')
+      expect(result.sessionId).toBe('sess-1')
+      // Compact by contract: the full seat outputs never cross back.
+      expect(result).not.toHaveProperty('seats')
+    })
+
+    it('NEEDS_CLARIFICATION: lists the author questions to relay verbatim', async () => {
+      const council: HermesToolContext['council'] = {
+        run: async () =>
+          makeCouncilResult({
+            verdict: '## 🎯 Verdict\nNEEDS_CLARIFICATION\n\n### ❓ Questions for the author\n1. What scope?\n2. Which environment?',
+            specVerdict: { kind: 'needs_clarification', questions: ['What scope?', 'Which environment?'] },
+          }),
+        scorecard: () => [],
+      }
+      const { ctx } = makeContext({ council })
+      const result = (await toolNamed(ctx, 'council_refine_spec').run({
+        projectId: 'p1',
+        spec: 'do a thing',
+      })) as Record<string, unknown>
+
+      expect(result.verdictKind).toBe('NEEDS_CLARIFICATION')
+      expect(result.questions).toEqual(['What scope?', 'Which environment?'])
+      expect(result.sessionId).toBe('sess-1')
+    })
+
+    it('synthesis-failed: a run with no parseable gate degrades cleanly, not as clarification', async () => {
+      const council: HermesToolContext['council'] = {
+        run: async () =>
+          makeCouncilResult({
+            ok: false,
+            verdict: null,
+            specVerdict: null,
+            aggregate: [],
+            error: 'Every council seat failed to respond.',
+            sessionId: null,
+          }),
+        scorecard: () => [],
+      }
+      const { ctx } = makeContext({ council })
+      const result = (await toolNamed(ctx, 'council_refine_spec').run({
+        projectId: 'p1',
+        spec: 'do a thing',
+      })) as Record<string, unknown>
+
+      expect(result.verdictKind).toBe('synthesis-failed')
+      expect(result.questions).toEqual([])
+      expect(result.refinedSpec).toBeNull()
+      expect(result.error).toBe('Every council seat failed to respond.')
+      expect(result.sessionId).toBeNull()
+    })
+
+    it('surfaces a clean tool error when council.run throws', async () => {
+      const council: HermesToolContext['council'] = {
+        run: async () => {
+          throw new Error('engine unavailable')
+        },
+        scorecard: () => [],
+      }
+      const { ctx } = makeContext({ council })
+      await expect(
+        toolNamed(ctx, 'council_refine_spec').run({ projectId: 'p1', spec: 'x' }),
+      ).rejects.toThrow('engine unavailable')
+    })
+
+    it('rejects an empty spec at the boundary (before the council runs)', async () => {
+      const { ctx, calls } = makeContext()
+      await expect(toolNamed(ctx, 'council_refine_spec').run({ projectId: 'p1', spec: '' })).rejects.toThrow()
+      expect(calls.councilRun).toEqual([])
+    })
+
+    it('rejects a spec over the 16,000 char cap', async () => {
+      const { ctx, calls } = makeContext()
+      await expect(
+        toolNamed(ctx, 'council_refine_spec').run({ projectId: 'p1', spec: 'x'.repeat(16_001) }),
+      ).rejects.toThrow()
+      expect(calls.councilRun).toEqual([])
     })
   })
 

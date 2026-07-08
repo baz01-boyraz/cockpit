@@ -88,7 +88,13 @@ export class HermesApprovalExecutor {
 
     // Open the card, identify the one that appeared, wire its pipeline, start it.
     const before = collectCardIds(this.deps.swarm.board(projectId))
-    const after = this.deps.swarm.createCard({ projectId, title: payload.title, body: payload.body })
+    const after = this.deps.swarm.createCard({
+      projectId,
+      title: payload.title,
+      body: payload.body,
+      // Keep the proposal's council provenance on the opened card (Faz 3).
+      councilSessionId: payload.councilSessionId,
+    })
     const created = firstAddedCard(after, before)
     if (!created) {
       this.logError(`executeOne ${approvalId}`, new Error('could not locate the newly created card'))
