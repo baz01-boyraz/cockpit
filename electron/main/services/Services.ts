@@ -161,6 +161,7 @@ export class Services {
       this.memoryDistiller,
       undefined,
       this.globalMemory,
+      this.audit,
     )
     this.memoryConsolidator = new MemoryConsolidator(this.memory, this.memoryReviews)
     this.memoryCaptureQueue = new MemoryCaptureQueue(this.db)
@@ -234,6 +235,8 @@ export class Services {
       memoryPipeline: this.memoryPipeline,
       logs: this.logs,
       approvals: this.approvals,
+      // Faz C: gate outcomes (accept/review/reject counts, no content) land here.
+      audit: this.audit,
     })
     void this.hermesMcp.start().catch((err) => {
       // Last-resort surface; matches the main process's crash-log fallback.

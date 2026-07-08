@@ -145,6 +145,8 @@ interface Calls {
   screenshot: unknown[]
   memoryList: string[]
   memoryWrite: unknown[]
+  memoryReviewCreate: unknown[]
+  auditRecord: unknown[]
   listPending: string[]
   resolveReview: unknown[]
   logsList: string[]
@@ -167,6 +169,8 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
     screenshot: [],
     memoryList: [],
     memoryWrite: [],
+    memoryReviewCreate: [],
+    auditRecord: [],
     listPending: [],
     resolveReview: [],
     logsList: [],
@@ -261,6 +265,10 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
         calls.listPending.push(brain)
         return [makeReviewItem({ brain })]
       },
+      create: (input) => {
+        calls.memoryReviewCreate.push(input)
+        return makeReviewItem({ brain: input.brain, slug: input.slug, proposedContent: input.proposedContent })
+      },
     },
     memoryPipeline: {
       resolveReview: (projectId, reviewId, decision, editedContent) => {
@@ -286,6 +294,20 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
           summary: input.summary,
           payload: input.payload ?? {},
         })
+      },
+    },
+    audit: {
+      record: (input) => {
+        calls.auditRecord.push(input)
+        return {
+          id: 'aud-1',
+          projectId: input.projectId,
+          actor: input.actor,
+          actionType: input.actionType,
+          summary: input.summary,
+          payloadRedacted: input.payload ?? {},
+          createdAt: 't0',
+        }
       },
     },
     ...over,
@@ -948,30 +970,86 @@ describe('Hermes MCP tools — the scoped tool set', () => {
     })
   })
 
-  describe('write_memory_summary', () => {
-    it('validates and forwards name + content', async () => {
+  describe('write_memory_summary — charter write-gate (Faz C)', () => {
+    const justification = {
+      sevenDayScenario: 'when someone re-reads how the router placement decision was reached',
+      dedupChecked: 'no-overlap' as const,
+      evidence: 'the session where we moved the router into shared',
+    }
+
+    it('accepts a justified, deduped, secret-free write and forwards it', async () => {
       const { ctx, calls } = makeContext()
       const result = await toolNamed(ctx, 'write_memory_summary').run({
         projectId: 'p1',
         name: 'run-summary',
-        content: 'we shipped it',
+        content: 'The router lives in shared so both bridges classify identically.',
+        justification,
       })
-      expect(calls.memoryWrite).toEqual([{ projectId: 'p1', name: 'run-summary', content: 'we shipped it' }])
-      expect(result).toMatchObject({ name: 'run-summary', content: 'we shipped it' })
+      expect(calls.memoryWrite).toEqual([
+        { projectId: 'p1', name: 'run-summary', content: 'The router lives in shared so both bridges classify identically.' },
+      ])
+      expect(result).toMatchObject({ name: 'run-summary' })
+      // acceptance is audited (stats only)
+      expect(calls.auditRecord).toHaveLength(1)
+      expect(calls.auditRecord[0]).toMatchObject({ actionType: 'memory_write_gate', payload: { verdict: 'accept' } })
     })
 
-    it('rejects a name over the 120 char cap', async () => {
+    it('routes a junk write ("might be useful") to the review queue instead of writing it', async () => {
+      const { ctx, calls } = makeContext()
+      const result = (await toolNamed(ctx, 'write_memory_summary').run({
+        projectId: 'p1',
+        name: 'stray-thought',
+        content: 'random note body',
+        justification: { ...justification, sevenDayScenario: 'might be useful someday maybe' },
+      })) as { queued: boolean; verdict: string }
+      // never written directly...
+      expect(calls.memoryWrite).toEqual([])
+      // ...queued into the SAME review mechanism the distiller uses
+      expect(calls.memoryReviewCreate).toHaveLength(1)
+      expect(calls.memoryReviewCreate[0]).toMatchObject({ brain: projectBrain('p1'), slug: 'stray-thought' })
+      expect(result).toMatchObject({ queued: true, verdict: 'review' })
+    })
+
+    it('routes an unjustified write (no justification at all) to review, never lost', async () => {
+      const { ctx, calls } = makeContext()
+      const result = (await toolNamed(ctx, 'write_memory_summary').run({
+        projectId: 'p1',
+        name: 'no-justification',
+        content: 'a fact with no justification attached',
+      })) as { queued: boolean }
+      expect(calls.memoryWrite).toEqual([])
+      expect(calls.memoryReviewCreate).toHaveLength(1)
+      expect(result.queued).toBe(true)
+    })
+
+    it('rejects secret-shaped content with a clear error citing the charter', async () => {
       const { ctx, calls } = makeContext()
       await expect(
-        toolNamed(ctx, 'write_memory_summary').run({ projectId: 'p1', name: 'x'.repeat(121), content: 'c' }),
+        toolNamed(ctx, 'write_memory_summary').run({
+          projectId: 'p1',
+          name: 'leaky-note',
+          content: 'the key is sk-or-v1-0123456789abcdefghijklmnop keep it safe',
+          justification,
+        }),
+      ).rejects.toThrow(/MEMORY-CHARTER/)
+      // nothing written, nothing queued — a secret never lands anywhere
+      expect(calls.memoryWrite).toEqual([])
+      expect(calls.memoryReviewCreate).toEqual([])
+      expect(calls.auditRecord[0]).toMatchObject({ payload: { verdict: 'reject' } })
+    })
+
+    it('rejects a name over the 120 char cap at the boundary', async () => {
+      const { ctx, calls } = makeContext()
+      await expect(
+        toolNamed(ctx, 'write_memory_summary').run({ projectId: 'p1', name: 'x'.repeat(121), content: 'c', justification }),
       ).rejects.toThrow()
       expect(calls.memoryWrite).toEqual([])
     })
 
-    it('rejects content over the 500,000 char cap', async () => {
+    it('rejects content over the 500,000 char cap at the boundary', async () => {
       const { ctx } = makeContext()
       await expect(
-        toolNamed(ctx, 'write_memory_summary').run({ projectId: 'p1', name: 'n', content: 'x'.repeat(500_001) }),
+        toolNamed(ctx, 'write_memory_summary').run({ projectId: 'p1', name: 'n', content: 'x'.repeat(500_001), justification }),
       ).rejects.toThrow()
     })
   })

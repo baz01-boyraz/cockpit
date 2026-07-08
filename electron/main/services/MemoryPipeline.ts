@@ -6,6 +6,7 @@ import {
 } from '@shared/memory-commit'
 import { validateNoteContent } from '@shared/memory-note-schema'
 import { BAZ_GLOBAL_BRAIN, projectBrain } from '@shared/memory-ledger'
+import { gateMemoryWrite } from '@shared/memory-gate'
 import { reconcile, type Reconciled } from '@shared/memory-reconcile'
 import type { MemoryDoc } from '@shared/memory-hub'
 import type { Observation } from '@shared/memory-observation'
@@ -15,6 +16,7 @@ import type { MemoryHubService } from './MemoryHubService'
 import type { MemoryLedgerService } from './MemoryLedgerService'
 import type { MemoryReviewService } from './MemoryReviewService'
 import type { MemoryDistiller } from './MemoryDistiller'
+import type { AuditLogService } from './AuditLogService'
 
 export interface CaptureRequest {
   projectId: string
@@ -45,6 +47,8 @@ export class MemoryPipeline {
     private readonly now: () => string = () => new Date().toISOString(),
     /** The cross-project Baz brain (Phase 6). When set, user-scope facts route here. */
     private readonly userMemory?: MemoryHubService,
+    /** Faz C: gate outcome counters (accept/review/reject, no content). Optional. */
+    private readonly audit?: Pick<AuditLogService, 'record'>,
   ) {}
 
   /** Which hub, docs, brain-key, and hub-id a given scope's fact belongs to. */
@@ -113,21 +117,35 @@ export class MemoryPipeline {
       if (gate === 'skip') {
         skipped += 1
       } else if (gate === 'commit' && proposedContent) {
-        this.commit(target.memory, target.hubId, target.brain, rec, proposedContent, req.sessionId)
-        committed += 1
-        // keep the right docs list fresh so later same-batch observations reconcile correctly
-        target.docs.push({ name: rec.targetSlug, content: proposedContent, updatedAt: this.now() })
-      } else if (gate === 'review' && proposedContent) {
-        this.reviews.create({
-          brain: target.brain,
-          kind: rec.decision === 'conflict' ? 'conflict' : rec.decision === 'merge' ? 'merge' : 'new',
-          slug: rec.targetSlug,
-          title: obs.title,
-          proposedContent,
-          reason: obs.reason,
-          existingContent: rec.existingContent,
-          sourceId: req.sessionId ?? null,
+        // Faz C charter gate — a last, cautious pass over a would-be auto-commit.
+        // It can only make the pipeline MORE careful: a secret-shaped note is
+        // dropped (never persisted), a vague/oversized one downgrades to review.
+        const decision = gateMemoryWrite({
+          name: rec.targetSlug,
+          content: proposedContent,
+          justification: {
+            sevenDayScenario: obs.reason,
+            dedupChecked: rec.decision === 'merge' ? 'updates-existing' : 'no-overlap',
+            targetNote: rec.targetSlug,
+            evidence: obs.body,
+          },
+          existingNames: target.docs.map((d) => d.name),
         })
+        if (decision.verdict === 'reject') {
+          this.recordGate(req.projectId, rec.targetSlug, 'reject', decision.reasons)
+          skipped += 1
+        } else if (decision.verdict === 'review') {
+          this.queueReview(target.brain, rec, obs, proposedContent, req.sessionId, decision.reasons.join('; '))
+          this.recordGate(req.projectId, rec.targetSlug, 'review', decision.reasons)
+          queued += 1
+        } else {
+          this.commit(target.memory, target.hubId, target.brain, rec, proposedContent, req.sessionId)
+          committed += 1
+          // keep the right docs list fresh so later same-batch observations reconcile correctly
+          target.docs.push({ name: rec.targetSlug, content: proposedContent, updatedAt: this.now() })
+        }
+      } else if (gate === 'review' && proposedContent) {
+        this.queueReview(target.brain, rec, obs, proposedContent, req.sessionId, obs.reason)
         queued += 1
       }
     }
@@ -140,6 +158,43 @@ export class MemoryPipeline {
       nextOffset: distilled.nextOffset,
       dryRun: !!req.dryRun,
     }
+  }
+
+  /** Enqueue a proposal for human review (shared by the model-ask and gate-review paths). */
+  private queueReview(
+    brain: string,
+    rec: Reconciled,
+    obs: Observation,
+    proposedContent: string,
+    sessionId: string | undefined,
+    reason: string,
+  ): void {
+    this.reviews.create({
+      brain,
+      kind: rec.decision === 'conflict' ? 'conflict' : rec.decision === 'merge' ? 'merge' : 'new',
+      slug: rec.targetSlug,
+      title: obs.title,
+      proposedContent,
+      reason,
+      existingContent: rec.existingContent,
+      sourceId: sessionId ?? null,
+    })
+  }
+
+  /** Record a gate outcome for the junk-rate metric (stats only, never note content). */
+  private recordGate(
+    projectId: string,
+    slug: string,
+    verdict: 'review' | 'reject',
+    reasons: string[],
+  ): void {
+    this.audit?.record({
+      projectId,
+      actor: 'system',
+      actionType: 'memory_write_gate',
+      summary: `auto-capture write ${verdict === 'reject' ? 'rejected' : 'routed to review'} by charter`,
+      payload: { slug, verdict, reasons },
+    })
   }
 
   /** Build the note bytes for a commit/review proposal (gate picks the note's gate). */

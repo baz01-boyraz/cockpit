@@ -64,6 +64,12 @@ const fakeLedger = () => {
   return { svc: svc as unknown as MemoryLedgerService, records }
 }
 
+const fakeAudit = () => {
+  const records: Array<{ actionType: string; payload?: Record<string, unknown> }> = []
+  const svc = { record: (r: { actionType: string; payload?: Record<string, unknown> }) => { records.push(r); return r } }
+  return { svc: svc as unknown as ConstructorParameters<typeof MemoryPipeline>[6], records }
+}
+
 describe('MemoryPipeline.capture', () => {
   let dir: string
   let memory: MemoryHubService
@@ -113,6 +119,40 @@ describe('MemoryPipeline.capture', () => {
     expect(res.proposals[0].gate).toBe('commit')
     expect(memory.read('p1', 'router-placement')).toBeNull()
     expect(ledger.records).toHaveLength(0)
+  })
+
+  it('CHARTER GATE: drops a would-be commit whose content is secret-shaped, never persisting it', async () => {
+    const ledger = fakeLedger()
+    const reviews = fakeReviews()
+    const audit = fakeAudit()
+    const leaky = obs({
+      targetSlug: 'leaky-fact',
+      body: 'The deploy token is sk-or-v1-0123456789abcdefghijklmnop and it must be rotated.',
+    })
+    const pipe = new MemoryPipeline(
+      memory, ledger.svc, reviews.svc, stubDistiller([leaky]), undefined, undefined, audit.svc,
+    )
+    const res = await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
+    // not committed, not queued (a secret never lands in the review queue either) — dropped
+    expect(res.committed).toBe(0)
+    expect(res.skipped).toBe(1)
+    expect(memory.read('p1', 'leaky-fact')).toBeNull()
+    expect(reviews.items.size).toBe(0)
+    expect(audit.records.some((r) => r.payload?.verdict === 'reject')).toBe(true)
+  })
+
+  it('CHARTER GATE: downgrades a confident commit with a too-vague reason to review', async () => {
+    const reviews = fakeReviews()
+    const audit = fakeAudit()
+    const vague = obs({ reason: 'idk' }) // shorter than the 20-char scenario floor
+    const pipe = new MemoryPipeline(
+      memory, fakeLedger().svc, reviews.svc, stubDistiller([vague]), undefined, undefined, audit.svc,
+    )
+    const res = await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
+    expect(res.committed).toBe(0)
+    expect(res.queued).toBe(1)
+    expect(memory.read('p1', 'router-placement')).toBeNull()
+    expect(audit.records.some((r) => r.payload?.verdict === 'review')).toBe(true)
   })
 
   it('propagates a distiller error without writing', async () => {

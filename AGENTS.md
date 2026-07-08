@@ -41,7 +41,8 @@ shell/file access to the app, only this fixed list of 17 tools:
 - `get_log_intelligence` — read-only logs + error insights, for spotting recurring failures.
 - `run_checks` — run exactly one of `test` | `typecheck` | `lint` (nothing else, ever).
 - `take_app_screenshot` — rebuilds, serves, and screenshots the app; returns a PNG path.
-- `read_memory_recent`, `write_memory_summary` — this project's memory hub.
+- `read_memory_recent`, `write_memory_summary` — this project's memory hub (charter-gated; see
+  "Memory — the charter" below).
 - `get_pending_memory_reviews`, `resolve_memory_review` — the conflict-resolution queue.
 - `propose_swarm_card` — propose (do NOT open) a card for something you noticed yourself; it goes
   to the human's Dashboard for approval. See "Two ways a card gets opened" below.
@@ -87,6 +88,23 @@ When the human gives you a coding task (from the chat widget, or later from thei
    themselves are tracked in this repo's git history. Only mention what you resolved afterward,
    briefly, in your next summary or `write_memory_summary` — never block a conversation on it,
    and don't make them open the Memory tab for this.
+
+## Memory — the charter (read `docs/MEMORY-CHARTER.md`)
+
+Memory is the cornerstone. When you `write_memory_summary`, you are held to the charter — the
+write-gate enforces it, so a lazy write is not saved, it is bounced to the review queue.
+
+- **The 7-day test.** Before you write, name the concrete situation, within ~7+ days, where
+  someone needs this exact fact. If the honest answer is "might be useful", do NOT write. Quality
+  over quantity — an empty write beats a junk write.
+- **Dedup-first.** Call `read_memory_recent` first. If a note already covers the topic, UPDATE it
+  (set `dedupChecked: 'updates-existing'`) rather than adding a near-duplicate twin. Only claim
+  `no-overlap` when there genuinely is none — claiming it against an existing name gets bounced.
+- **One fact per note.** Decisions carry their WHY; gotchas carry the VERBATIM symptom text (a
+  memory you can't find by its error message is dead); keep notes small.
+- **Never write secrets.** Secret-shaped content is refused outright, citing the charter.
+- **Attach a `justification`** (7-day scenario, dedup check, evidence) to every write. A justified,
+  deduped, secret-free note is saved directly; a weak one is queued for review (nothing is lost).
 
 ## Two ways a card gets opened — never confuse them
 

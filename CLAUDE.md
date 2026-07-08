@@ -64,6 +64,16 @@ screenshot workflow possible — and it must stay in sync with the real `Cockpit
    wipe databases. Those paths are stubbed/approval-gated by design. A regular push **does**
    run `git push` against the active branch's `origin`.
 
+## Memory charter (the cornerstone)
+
+Memory (`.cockpit-memory/*.md`) is per-project and durable. Every engine that writes a note —
+Claude, Codex, Hermes, the auto-capture distiller — obeys **`docs/MEMORY-CHARTER.md`**. The bar
+is the **7-day test**: if you can't name the concrete situation within ~7 days where someone needs
+a fact, don't write it. Dedup-first (update an existing note, don't add a twin), one fact per note,
+gotchas carry the verbatim symptom text, never write secrets. Agent writes pass the write-gate
+(`shared/memory-gate.ts`): justified/deduped/secret-free lands directly, weak ones route to the
+review queue, secrets are refused. Direct human writes from the Memory UI stay ungated.
+
 ## Frontend work — always do first
 
 1. **Apply frontend-design thinking before writing UI.** If a project-local `frontend-design`

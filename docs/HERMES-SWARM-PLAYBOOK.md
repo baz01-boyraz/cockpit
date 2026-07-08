@@ -94,3 +94,20 @@ builds already knowing the meeting's conclusions — don't repeat them at it.
   the council scorecard (per-seat standings across sessions). You don't manage it — it accrues
   automatically from every gated spec, so gating consistently is also what keeps the council's own
   quality signal honest over time.
+
+## Memory conduct — the charter (`docs/MEMORY-CHARTER.md`)
+
+Memory is per-project and the cornerstone of this cockpit. Both you AND the Swarm workers write
+notes into the hub (a worker's prompt points it at the same `.cockpit-memory/` notes), so the same
+bar applies to everyone:
+
+- **7-day test before any write.** Name the concrete situation, within ~7+ days, where someone
+  needs this exact fact. No concrete scenario → no write. Quality over quantity; an empty write
+  beats a junk write.
+- **Dedup-first.** Read the hub, then UPDATE an existing note instead of adding a twin; link
+  related notes with `[[note-name]]`.
+- **One fact per note.** Decisions carry their WHY; gotchas carry the VERBATIM symptom text so the
+  note is findable by the error that sends someone looking. Never write secrets.
+- The write-gate enforces this: a justified, deduped, secret-free note lands directly; a weak or
+  unjustified one is routed to the review queue (surfaced via `get_pending_memory_reviews`); a
+  secret is refused. When you draft a completion summary, hold it to this bar before you save it.

@@ -8,6 +8,7 @@ import type { MemoryHubService } from '../MemoryHubService'
 import type { MemoryReviewService } from '../MemoryReviewService'
 import type { MemoryPipeline } from '../MemoryPipeline'
 import type { ApprovalService } from '../ApprovalService'
+import type { AuditLogService } from '../AuditLogService'
 import type { LogIntelligenceService } from '../LogIntelligenceService'
 import type { CardOutputTracker } from './CardOutputTracker'
 import type { HermesChecksService } from './HermesChecksService'
@@ -33,8 +34,13 @@ export interface HermesToolContext {
   checks: Pick<HermesChecksService, 'run'>
   screenshot: Pick<AppScreenshotService, 'capture'>
   memory: Pick<MemoryHubService, 'list' | 'write'>
-  memoryReviews: Pick<MemoryReviewService, 'listPending'>
+  // `create` lets the charter write-gate (Faz C) route a junk/unjustified write
+  // into the SAME review queue the distiller uses, instead of persisting it.
+  memoryReviews: Pick<MemoryReviewService, 'listPending' | 'create'>
   memoryPipeline: Pick<MemoryPipeline, 'resolveReview'>
+  // Optional: gate outcomes (accept/review/reject counts, no content) are
+  // recorded here for the junk-rate metric when an audit sink is wired.
+  audit?: Pick<AuditLogService, 'record'>
   // Faz 6 — git/log stewardship
   logs: Pick<LogIntelligenceService, 'listLogs' | 'listInsights'>
   // `propose_swarm_card` only ever REQUESTS an approval — it can never open a
