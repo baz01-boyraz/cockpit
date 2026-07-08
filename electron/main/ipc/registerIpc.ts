@@ -55,7 +55,7 @@ import {
 } from '@shared/schemas'
 import { z } from 'zod'
 import type { Services } from '../services/Services'
-import { isCockpitSource, rebuildAndRelaunch } from '../services/localRebuild'
+import { installLatestRelease, isCockpitSource, rebuildAndRelaunch } from '../services/localRebuild'
 import { OPENROUTER_SECRET_REF } from '../services/OpenRouterUsageService'
 
 /**
@@ -450,6 +450,47 @@ export function registerIpc(services: Services): void {
       summary: result.ok
         ? `Rebuild & relaunch started from ${project.path}`
         : `Rebuild refused: ${result.message}`,
+      payload: { path: project.path, ok: result.ok },
+    })
+    return result
+  })
+  handle('appUpdateInstallRelease', async (p) => {
+    const { projectId } = projectIdSchema.parse(p)
+    const project = services.projects.get(projectId)
+    // Same identity gate as the rebuild path: this runs an npm script from the
+    // project directory, so only cockpiT's own verified source qualifies.
+    if (!isCockpitSource(project.path)) {
+      return {
+        ok: false,
+        message: 'Installing a release is only available when the active project is the cockpiT source.',
+      }
+    }
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    const confirmOpts = {
+      type: 'warning' as const,
+      buttons: ['Install latest release', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      message: 'Replace this local build with the latest GitHub release?',
+      detail:
+        `Runs "npm run app:install-release" in ${project.path}. Downloads the newest release, ` +
+        'quits this app, replaces /Applications/cockpiT.app and reopens it. ' +
+        'In-app auto-update works again afterwards — until the next local rebuild.',
+    }
+    const { response } = win
+      ? await dialog.showMessageBox(win, confirmOpts)
+      : await dialog.showMessageBox(confirmOpts)
+    if (response !== 0) {
+      return { ok: false, message: 'Install cancelled.' }
+    }
+    const result = installLatestRelease(project.path)
+    services.audit.record({
+      projectId,
+      actor: 'user',
+      actionType: 'app_install_release',
+      summary: result.ok
+        ? `Release install started from ${project.path}`
+        : `Release install refused: ${result.message}`,
       payload: { path: project.path, ok: result.ok },
     })
     return result

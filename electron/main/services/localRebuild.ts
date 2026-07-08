@@ -49,17 +49,14 @@ export function isCockpitSource(sourceDir: string): boolean {
   )
 }
 
-export function rebuildAndRelaunch(sourceDir: string): AppRefreshResult {
-  if (!isCockpitSource(sourceDir)) {
-    return {
-      ok: false,
-      message: 'Active project is not the cockpiT source — rebuild refused.',
-    }
-  }
-
+function spawnDetachedNpmScript(
+  sourceDir: string,
+  script: string,
+  successMessage: string,
+): AppRefreshResult {
   const shell = process.env.SHELL || '/bin/zsh'
   try {
-    const child = spawn(shell, ['-ilc', 'npm run app:refresh'], {
+    const child = spawn(shell, ['-ilc', `npm run ${script}`], {
       cwd: sourceDir,
       detached: true,
       stdio: 'ignore',
@@ -68,11 +65,49 @@ export function rebuildAndRelaunch(sourceDir: string): AppRefreshResult {
     child.unref()
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    return { ok: false, message: `Could not start rebuild: ${message}` }
+    return { ok: false, message: `Could not start ${script}: ${message}` }
   }
+  return { ok: true, message: successMessage }
+}
 
-  return {
-    ok: true,
-    message: 'Rebuilding… the app will quit and relaunch automatically in ~1–2 minutes.',
+export function rebuildAndRelaunch(sourceDir: string): AppRefreshResult {
+  if (!isCockpitSource(sourceDir)) {
+    return {
+      ok: false,
+      message: 'Active project is not the cockpiT source — rebuild refused.',
+    }
   }
+  return spawnDetachedNpmScript(
+    sourceDir,
+    'app:refresh',
+    'Rebuilding… the app will quit and relaunch automatically in ~1–2 minutes.',
+  )
+}
+
+/**
+ * Rebaseline the installed app onto the latest published GitHub release. This
+ * is the way OFF a local `app:refresh` build (ad-hoc signed, no
+ * `app-update.yml`, auto-update "unsupported") and back onto the release train
+ * where in-app auto-update works. Same trust model as the rebuild path: only
+ * cockpiT's own verified source may be an execution target.
+ */
+export function installLatestRelease(sourceDir: string): AppRefreshResult {
+  if (!isCockpitSource(sourceDir)) {
+    return {
+      ok: false,
+      message: 'Active project is not the cockpiT source — install refused.',
+    }
+  }
+  const pkg = readPackageJson(sourceDir)
+  if (!pkg?.scripts?.['app:install-release']) {
+    return {
+      ok: false,
+      message: 'This checkout has no app:install-release script — pull the latest source first.',
+    }
+  }
+  return spawnDetachedNpmScript(
+    sourceDir,
+    'app:install-release',
+    'Installing the latest release… the app will quit, replace itself and reopen in ~1 minute.',
+  )
 }

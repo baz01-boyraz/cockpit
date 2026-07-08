@@ -145,6 +145,7 @@ export const IPC = {
   appUpdateDownload: 'appUpdate:download',
   appUpdateInstall: 'appUpdate:install',
   appUpdateRefresh: 'appUpdate:refresh',
+  appUpdateInstallRelease: 'appUpdate:installRelease',
   appUpdateRefreshEligible: 'appUpdate:refreshEligible',
 
   // main -> renderer push events
@@ -475,6 +476,11 @@ export interface CockpitApi {
     install(): Promise<void>
     /** Rebuild the cockpit from the given project's source and relaunch it. Dev-only. */
     refresh(projectId: string): Promise<AppRefreshResult>
+    /**
+     * Replace the installed app with the latest published GitHub release —
+     * the way back onto the auto-update train from a local build. Dev-only.
+     */
+    installRelease(projectId: string): Promise<AppRefreshResult>
     /** True only when the active project is verifiably cockpiT's own source. */
     refreshEligible(projectId: string): Promise<boolean>
     onChange(cb: (state: AppUpdateState) => void): Unsubscribe
@@ -587,6 +593,7 @@ export interface IpcResultMap {
   appUpdateDownload: R<CockpitApi['appUpdate']['download']>
   appUpdateInstall: R<CockpitApi['appUpdate']['install']>
   appUpdateRefresh: R<CockpitApi['appUpdate']['refresh']>
+  appUpdateInstallRelease: R<CockpitApi['appUpdate']['installRelease']>
   appUpdateRefreshEligible: R<CockpitApi['appUpdate']['refreshEligible']>
 }
 

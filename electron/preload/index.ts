@@ -155,6 +155,7 @@ const api: CockpitApi = {
     download: () => invoke(IPC.appUpdateDownload),
     install: () => invoke(IPC.appUpdateInstall),
     refresh: (projectId) => invoke(IPC.appUpdateRefresh, { projectId }),
+    installRelease: (projectId) => invoke(IPC.appUpdateInstallRelease, { projectId }),
     refreshEligible: (projectId) => invoke(IPC.appUpdateRefreshEligible, { projectId }),
     onChange: (cb) => subscribe(IPC.evtAppUpdateChanged, cb),
   },

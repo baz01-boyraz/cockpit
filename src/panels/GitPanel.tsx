@@ -426,6 +426,22 @@ export function GitPanel() {
     }
   }
 
+  // Escape hatch from an "unsupported" local build: replace it with the latest
+  // published release so in-app auto-update works again.
+  const installRelease = async () => {
+    if (!activeProjectId) return
+    setBusy('installRelease')
+    setNotice(null)
+    try {
+      const res = await cockpit().appUpdate.installRelease(activeProjectId)
+      setNotice(res.message)
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const connectGitHub = async () => {
     if (!activeProjectId) return
     await cockpit().terminals.create({
@@ -654,6 +670,17 @@ export function GitPanel() {
             {appUpdate?.phase === 'downloaded' ? <IconRestart width={14} height={14} /> : <IconDownload width={14} height={14} />}
             {updateActionLabel(appUpdate)}
           </button>
+          {appUpdate?.phase === 'unsupported' && canRefreshApp ? (
+            <button
+              className="btn git__wideAction"
+              onClick={installRelease}
+              disabled={busy === 'installRelease'}
+              title="Replace this local build with the latest GitHub release — re-enables in-app auto-update"
+            >
+              <IconDownload width={14} height={14} />
+              {busy === 'installRelease' ? 'Installing…' : 'Install latest release'}
+            </button>
+          ) : null}
           {canRefreshApp ? (
             <button
               className="btn git__wideAction"

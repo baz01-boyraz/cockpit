@@ -997,6 +997,10 @@ export function createMockApi(): CockpitApi {
         ok: false,
         message: 'Rebuild & relaunch is only available in the desktop app.',
       }),
+      installRelease: async () => ({
+        ok: false,
+        message: 'Installing a release build is only available in the desktop app.',
+      }),
       // Preview the button on the cockpit project only, matching the real
       // main-process identity check.
       refreshEligible: async (projectId) => projectId === 'prj_cockpit',
