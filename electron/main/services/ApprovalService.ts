@@ -5,6 +5,11 @@ import type { Db } from '../db/Database'
 import type { CockpitEvents } from '../events'
 import { newId, nowIso, safeJson } from '../util/ids'
 import type { AuditLogService } from './AuditLogService'
+import type { SentinelService } from './SentinelService'
+
+/** The narrow sentinel slice this service feeds — structural so tests pass
+ *  `undefined` (no-op). Sentinel never depends on ApprovalService. */
+type SentinelReporter = Pick<SentinelService, 'report'>
 
 interface ApprovalRow {
   id: string
@@ -29,6 +34,9 @@ export class ApprovalService {
     private readonly db: Db,
     private readonly audit: AuditLogService,
     private readonly events: CockpitEvents,
+    /** Optional Faz A collaborator — a new request raises an `alert` signal.
+     *  Undefined in tests (no-op); sentinel never depends on this service. */
+    private readonly sentinel?: SentinelReporter,
   ) {}
 
   request(input: {
@@ -73,6 +81,17 @@ export class ApprovalService {
       payload: req.payload,
     })
     this.events.emitTyped('approvals:changed', { projectId: req.projectId })
+    // Faz A: a filed approval is an `alert` — it blocks a mutating action until
+    // the human decides, so it earns a feed entry, a toast, and a macOS
+    // notification. Fire-and-forget; report() never throws.
+    this.sentinel?.report({
+      projectId: req.projectId,
+      severity: 'alert',
+      source: 'approval',
+      title: `Approval needed: ${req.summary}`,
+      summary: `A ${req.actionType} action is waiting for your decision.`,
+      context: `action=${req.actionType} · risk=${req.riskLevel}`,
+    })
     return req
   }
 

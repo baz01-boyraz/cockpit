@@ -259,6 +259,26 @@ export const memoryBazReadSchema = z.object({
   name: z.string().min(1).max(120),
 })
 
+// --- sentinel signals (Faz A: always-on, LLM-free signal layer) -----------
+//
+// Read-only surface for the renderer: list the feed, mark seen, count unseen.
+// Signals are PRODUCED in main by sensors, never by the renderer — there is no
+// "report" channel here. `ids` is capped so a mark-seen call can never fan out
+// unboundedly.
+export const sentinelListSchema = z.object({
+  projectId: z.string().min(1),
+  limit: z.number().int().min(1).max(200).optional(),
+})
+
+export const sentinelMarkSeenSchema = z.object({
+  projectId: z.string().min(1),
+  ids: z.array(z.string().min(1).max(200)).max(200),
+})
+
+export const sentinelUnseenCountSchema = z.object({
+  projectId: z.string().min(1),
+})
+
 // --- secret store (encrypted, OS-keychain backed) -------------------------
 //
 // The kind is a closed enum, not a bare string: it is a trust boundary. Each

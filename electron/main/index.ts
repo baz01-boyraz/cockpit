@@ -125,6 +125,7 @@ function forwardEvents(): void {
   events.onTyped('logs:changed', (p) => send(IPC.evtLogsChanged, p))
   events.onTyped('appUpdate:changed', (p) => send(IPC.evtAppUpdateChanged, p))
   events.onTyped('swarm:cardCompleted', (p) => send(IPC.evtSwarmCardCompleted, p))
+  events.onTyped('sentinel:alert', (p) => send(IPC.evtSentinelAlert, p))
 }
 
 app.whenReady().then(() => {

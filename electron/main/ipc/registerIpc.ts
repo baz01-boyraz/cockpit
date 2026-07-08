@@ -41,6 +41,9 @@ import {
   routeQuerySchema,
   secretKindOnlySchema,
   secretSetSchema,
+  sentinelListSchema,
+  sentinelMarkSeenSchema,
+  sentinelUnseenCountSchema,
   type SecretKind,
   swarmCreateCardSchema,
   swarmMoveCardSchema,
@@ -338,6 +341,20 @@ export function registerIpc(services: Services): void {
     const { projectId, cardId } = swarmCompletionReportSchema.parse(p)
     return services.swarm.completionReport(projectId, cardId)
   })
+
+  // --- sentinel (Faz A: always-on, LLM-free signal layer; read-only surface —
+  // signals are produced by sensors in main, never by the renderer) ---
+  handle('sentinelList', (p) => {
+    const { projectId, limit } = sentinelListSchema.parse(p)
+    return services.sentinel.list(projectId, limit)
+  })
+  handle('sentinelMarkSeen', (p) => {
+    const { projectId, ids } = sentinelMarkSeenSchema.parse(p)
+    return services.sentinel.markSeen(projectId, ids)
+  })
+  handle('sentinelUnseenCount', (p) =>
+    services.sentinel.unseenCount(sentinelUnseenCountSchema.parse(p).projectId),
+  )
 
   // --- chat (real answers via the local Claude Code CLI) ---
   handle('chatAsk', (p) => {

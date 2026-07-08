@@ -6,7 +6,16 @@ import { sanitizeStoredLine, stripAnsi } from '@shared/log-sanitize'
 import { redactText } from '@shared/redaction'
 import type { Db } from '../db/Database'
 import type { CockpitEvents } from '../events'
+import type { SentinelService } from './SentinelService'
 import { newId, nowIso, safeJson } from '../util/ids'
+
+/**
+ * The narrow sentinel slice this service feeds — structural so a test can pass
+ * `undefined` (no-op) and there is no dependency on the concrete SentinelService
+ * beyond its `report` shape. Sentinel never depends on log-intelligence, so no
+ * import cycle forms.
+ */
+type SentinelReporter = Pick<SentinelService, 'report'>
 
 interface LogRow {
   id: string
@@ -65,6 +74,9 @@ export class LogIntelligenceService {
   constructor(
     private readonly db: Db,
     private readonly events: CockpitEvents,
+    /** Optional Faz A collaborator — a new insight raises a `notice` signal.
+     *  Undefined in tests (no-op); sentinel never depends on this service. */
+    private readonly sentinel?: SentinelReporter,
   ) {
     this.insertLogStmt = this.db.prepare(
       `INSERT INTO log_events (id, project_id, source_type, source_id, level, message, metadata_json, created_at)
@@ -95,6 +107,7 @@ export class LogIntelligenceService {
     if (lines.length === 0) return null
 
     let latestInsight: ErrorInsight | null = null
+    let latestLine: string | null = null
     const tx = this.db.transaction(() => {
       for (const line of lines) {
         const level: LogLevel = inferLogLevel(line)
@@ -133,12 +146,27 @@ export class LogIntelligenceService {
             createdAt: insight.createdAt,
           })
           latestInsight = insight
+          latestLine = line
         }
       }
     })
     tx()
 
     this.events.emitTyped('logs:changed', { projectId: input.projectId })
+    // Faz A: a fresh insight raises a `notice` signal (feed + toast, no macOS
+    // notification). Fire-and-forget — report() never throws, and a missing
+    // collaborator (tests) is a no-op. The already-redacted line is the excerpt.
+    if (latestInsight && this.sentinel) {
+      const ins: ErrorInsight = latestInsight
+      this.sentinel.report({
+        projectId: input.projectId,
+        severity: 'notice',
+        source: 'log-intelligence',
+        title: ins.title,
+        summary: `${ins.likelyCause} · ${ins.suggestedAction}`,
+        context: latestLine,
+      })
+    }
     return latestInsight
   }
 

@@ -24,6 +24,7 @@ import type {
 } from '@shared/domain'
 import type { CockpitApi, SystemInfo, Unsubscribe } from '@shared/ipc'
 import type { CouncilResult, ScorecardEntry } from '@shared/council'
+import { buildSignal, type SentinelSignal } from '@shared/sentinel'
 import { resolveChatModel } from '@shared/chat-models'
 import { assembleDashboard, countActiveAgents } from '@shared/dashboard-assembly'
 import { aggregateInsights, insightFromMatch } from '@shared/insight-aggregation'
@@ -77,6 +78,38 @@ const githubState = new Map<string, GitHubRepositoryStatus>()
 const mockSecrets = new Map<string, string>()
 /** Browser-preview Hermes chat turn counter, per project (reset on clear). */
 const mockHermesChats = new Map<string, number>()
+
+/** Browser-preview sentinel feed, seeded lazily per project so the signal layer
+ *  (Faz A) renders one alert + one notice without a backend. */
+const mockSentinel = new Map<string, SentinelSignal[]>()
+function sentinelFor(projectId: string): SentinelSignal[] {
+  const existing = mockSentinel.get(projectId)
+  if (existing) return existing
+  const seeded: SentinelSignal[] = [
+    buildSignal({
+      id: `sig_${projectId}_approval`,
+      projectId,
+      severity: 'alert',
+      source: 'approval',
+      title: 'Approval needed: Force-push rewrites main',
+      summary: 'A git_force_push action is waiting for your decision.',
+      context: 'action=git_force_push · risk=high',
+      createdAt: now(),
+    }),
+    buildSignal({
+      id: `sig_${projectId}_log`,
+      projectId,
+      severity: 'notice',
+      source: 'log-intelligence',
+      title: 'Cannot find module "@shared/schemas"',
+      summary: 'A stale build likely dropped the alias · run the build step, then retry.',
+      context: "Error: Cannot find module '@shared/schemas'",
+      createdAt: now(),
+    }),
+  ]
+  mockSentinel.set(projectId, seeded)
+  return seeded
+}
 
 function gitSnapshotFor(projectId: string): GitSnapshot {
   const current = gitState.get(projectId)
@@ -1002,6 +1035,31 @@ export function createMockApi(): CockpitApi {
       // The mock finishes cards via board polling, not push events, so this is a
       // no-op subscription (matching how the other push events are mocked).
       onCardCompleted: () => () => {},
+    },
+    sentinel: {
+      list: async (projectId, opts) =>
+        sentinelFor(projectId)
+          .slice()
+          .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+          .slice(0, opts?.limit ?? 50),
+      markSeen: async (projectId, ids) => {
+        const set = new Set(ids)
+        let changed = 0
+        const next = sentinelFor(projectId).map((s) => {
+          if (set.has(s.id) && s.status === 'new') {
+            changed += 1
+            return { ...s, status: 'seen' as const }
+          }
+          return s
+        })
+        mockSentinel.set(projectId, next)
+        return changed
+      },
+      unseenCount: async (projectId) =>
+        sentinelFor(projectId).filter((s) => s.status === 'new').length,
+      // The mock never pushes signals (no backend sensors), so this is a no-op
+      // subscription — matching how the other push events are mocked.
+      onAlert: () => () => {},
     },
     review: {
       // Staged review session so the surface is fully explorable in the

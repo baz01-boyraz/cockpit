@@ -27,6 +27,11 @@ import { collectDiffInputs } from './ReviewService'
 import type { AuditLogService } from './AuditLogService'
 import type { EngineRunner } from './EngineRunner'
 import type { ProjectService } from './ProjectService'
+import type { SentinelService } from './SentinelService'
+
+/** The narrow sentinel slice this service feeds — structural so tests pass
+ *  `undefined` (no-op). Sentinel never depends on CouncilService. */
+type SentinelReporter = Pick<SentinelService, 'report'>
 
 /** One seat/ranking/chairman call: grounded in the repo, hang-guarded. */
 const CALL_TIMEOUT_MS = 360_000
@@ -73,6 +78,10 @@ export class CouncilService {
     private readonly audit: AuditLogService,
     private readonly engine: EngineRunner,
     private readonly sessions: CouncilSessionStore,
+    /** Optional Faz A collaborator — a spec gate that returns
+     *  needs_clarification raises a `notice` signal. Undefined in tests (no-op);
+     *  sentinel never depends on this service. */
+    private readonly sentinel?: SentinelReporter,
   ) {}
 
   async run(projectId: string, opts: CouncilRunOpts = {}): Promise<CouncilResult> {
@@ -349,6 +358,24 @@ export class CouncilService {
     }
     const withId: CouncilResult = { ...result, sessionId }
     this.record(projectId, withId)
+    // Faz A: a spec gate that comes back needs_clarification is a `notice` — the
+    // draft can't proceed to a builder until the author answers. Fire-and-forget;
+    // report() never throws. `question` is the already-redacted card title/body.
+    if (mode === 'spec' && withId.specVerdict?.kind === 'needs_clarification') {
+      const subject = question ?? (cardId ? `card ${cardId}` : 'the draft spec')
+      const questions = withId.specVerdict.questions
+      this.sentinel?.report({
+        projectId,
+        severity: 'notice',
+        source: 'council',
+        title: `Council needs clarification on '${subject}'`,
+        summary:
+          questions.length > 0
+            ? `${questions.length} open question(s) before a builder can start.`
+            : 'The spec gate needs more detail before a builder can start.',
+        context: questions.join('\n'),
+      })
+    }
     return withId
   }
 

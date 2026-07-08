@@ -133,6 +133,12 @@ const api: CockpitApi = {
       invoke(IPC.swarmCompletionReport, { projectId, cardId }),
     onCardCompleted: (cb) => subscribe(IPC.evtSwarmCardCompleted, cb),
   },
+  sentinel: {
+    list: (projectId, opts) => invoke(IPC.sentinelList, { projectId, limit: opts?.limit }),
+    markSeen: (projectId, ids) => invoke(IPC.sentinelMarkSeen, { projectId, ids }),
+    unseenCount: (projectId) => invoke(IPC.sentinelUnseenCount, { projectId }),
+    onAlert: (cb) => subscribe(IPC.evtSentinelAlert, cb),
+  },
   chat: {
     ask: (projectId, prompt, opts) => invoke(IPC.chatAsk, { projectId, prompt, opts }),
   },

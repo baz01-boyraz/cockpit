@@ -30,6 +30,11 @@ import type { CockpitEvents } from '../events'
 import { newId, nowIso } from '../util/ids'
 import type { AuditLogService } from './AuditLogService'
 import type { MemoryHubService } from './MemoryHubService'
+import type { SentinelService } from './SentinelService'
+
+/** The narrow sentinel slice the swarm feeds — structural so tests pass
+ *  `undefined` (no-op). Sentinel never depends on SwarmService. */
+type SentinelReporter = Pick<SentinelService, 'report'>
 
 /** The TerminalManager capabilities the swarm needs — injectable for tests. */
 export interface WorkerSpawner {
@@ -131,6 +136,9 @@ export class SwarmService {
     private readonly councilSessions?: CouncilSessionReader,
     private readonly review?: DiffStatReader,
     private readonly notifier?: SwarmNotifier,
+    /** Optional Faz A collaborator — a nonzero worker exit raises a `notice`
+     *  signal. Undefined in tests (no-op); sentinel never depends on the swarm. */
+    private readonly sentinel?: SentinelReporter,
   ) {
     // 6.4: any card still in_progress at construction is an orphan — its
     // worker died with the previous app instance (TerminalManager already
@@ -461,6 +469,19 @@ export class SwarmService {
       summary: `Swarm card "${row.title}" finished (exit ${exitCode}) — moved to In review`,
       payload: { cardId: row.id, sessionId, exitCode },
     })
+    // Faz A: a nonzero exit means the worker crashed/errored rather than finishing
+    // cleanly — raise a `notice` so it surfaces beyond the silent board move. A
+    // clean (0) exit is the normal path and stays quiet. Fire-and-forget.
+    if (exitCode !== 0) {
+      this.sentinel?.report({
+        projectId: row.project_id,
+        severity: 'notice',
+        source: 'worker-exit',
+        title: `Swarm worker exited with code ${exitCode}`,
+        summary: `Card "${row.title}" moved to In review after a nonzero exit.`,
+        context: `card=${row.title}`,
+      })
+    }
     // Same best-effort announcement as the done-signal path — the card is
     // already in In review; the notification is an epilogue, never a gate.
     void this.announceCompletion(row.project_id, row.id, row.title)

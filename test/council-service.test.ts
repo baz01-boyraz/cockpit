@@ -157,6 +157,39 @@ describe('CouncilService — spec mode orchestration', () => {
   })
 })
 
+describe('CouncilService — sentinel signal (Faz A)', () => {
+  it('raises a council notice when a spec gate returns needs_clarification', async () => {
+    const report = vi.fn()
+    const service = new CouncilService(makeProjects(), makeAudit(), makeEngine(), makeStore().store, {
+      report,
+    })
+    await service.run('prj_1', {
+      mode: 'spec',
+      specText: 'Add caching to the gateway.',
+      question: 'Cache the gateway reads',
+    })
+    expect(report).toHaveBeenCalledTimes(1)
+    const arg = report.mock.calls[0][0] as { severity: string; source: string; title: string; context: string }
+    expect(arg.severity).toBe('notice')
+    expect(arg.source).toBe('council')
+    expect(arg.title).toContain('clarification')
+    expect(arg.title).toContain('Cache the gateway reads')
+    // The open questions ride along as the context that seeds a later chat opener.
+    expect(arg.context).toContain('latency target')
+  })
+
+  it('stays silent when no seat responds (no verdict to gate on)', async () => {
+    const report = vi.fn()
+    const deadEngine = { call: vi.fn(async () => { throw new Error('all engines down') }) } as never
+    const service = new CouncilService(makeProjects(), makeAudit(), deadEngine, makeStore().store, {
+      report,
+    })
+    const result = await service.run('prj_1', { mode: 'spec', specText: 'do the thing' })
+    expect(result.ok).toBe(false)
+    expect(report).not.toHaveBeenCalled()
+  })
+})
+
 // ---- CouncilSessionStore against a tiny fake Db (no better-sqlite3 in Node) ----
 
 interface StoredRow {

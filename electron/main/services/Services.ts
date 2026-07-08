@@ -29,6 +29,7 @@ import { MemoryAutoCapture } from './MemoryAutoCapture'
 import { MemoryConsolidator } from './MemoryConsolidator'
 import { registerMemoryExitCapture } from './memoryExitTrigger'
 import { SwarmService } from './SwarmService'
+import { SentinelService, type SentinelNotifier } from './SentinelService'
 import { CardOutputTracker } from './hermes/CardOutputTracker'
 import { HermesMcpServer } from './hermes/HermesMcpServer'
 import { HermesApprovalExecutor } from './hermes/HermesApprovalExecutor'
@@ -91,6 +92,8 @@ export class Services {
   readonly memoryAutoCapture: MemoryAutoCapture
   readonly memoryConsolidator: MemoryConsolidator
   readonly swarm: SwarmService
+  /** Always-on, LLM-free signal layer (Faz A): sensors → dedup → feed + notify. */
+  readonly sentinel: SentinelService
   readonly namedAgents: NamedAgentsService
   /** Session-scoped terminal-output tap for the Hermes `subscribe_card_output` tool. */
   readonly cardOutput: CardOutputTracker
@@ -114,10 +117,21 @@ export class Services {
     this.usage = new UsageService(this.db)
     this.agentUsage = new AgentUsageService()
     this.openRouterUsage = new OpenRouterUsageService(this.secrets)
-    this.logs = new LogIntelligenceService(this.db, opts.events)
+    // One guarded macOS notification sink, shared by every notifier consumer
+    // (the swarm's Faz 2.5 completion pop and the sentinel's alert pop). Guarded
+    // behind Notification.isSupported() so headless/unsupported hosts no-op.
+    const notifier: SentinelNotifier = (input) => {
+      if (!Notification.isSupported()) return
+      new Notification({ title: input.title, body: input.body }).show()
+    }
+    // Faz A: the sentinel is constructed BEFORE the sensors that feed it (log
+    // intelligence, approvals, council, swarm) so it can be injected as their
+    // optional collaborator. It is a fire-and-forget sink — report() never throws.
+    this.sentinel = new SentinelService(this.db, opts.events, notifier)
+    this.logs = new LogIntelligenceService(this.db, opts.events, this.sentinel)
     this.projects = new ProjectService(this.db)
     this.attachments = new AttachmentService(this.projects)
-    this.approvals = new ApprovalService(this.db, this.audit, opts.events)
+    this.approvals = new ApprovalService(this.db, this.audit, opts.events, this.sentinel)
     this.git = new GitService(this.db, this.projects)
     this.github = new GitHubService(this.projects)
     this.railway = new RailwayService(this.db, this.projects)
@@ -133,6 +147,7 @@ export class Services {
       this.audit,
       new EngineRunner(this.secrets),
       councilSessions,
+      this.sentinel,
     )
     this.memory = new MemoryHubService(this.projects)
     this.globalMemory = new MemoryHubService(this.projects, join(opts.userDataDir, 'baz-memory'))
@@ -189,12 +204,11 @@ export class Services {
       councilSessions,
       // Reuse the review service's diff-stat plumbing for the completion report.
       this.review,
-      // Faz 2.5: a card reaching In review pops a native notification. Guarded
-      // behind Notification.isSupported() so headless/unsupported hosts no-op.
-      (input) => {
-        if (!Notification.isSupported()) return
-        new Notification({ title: input.title, body: input.body }).show()
-      },
+      // Faz 2.5: a card reaching In review pops a native notification — the same
+      // guarded sink the sentinel uses.
+      notifier,
+      // Faz A: a nonzero worker exit also raises a sentinel signal (optional).
+      this.sentinel,
     )
     // Forget a pane's TUI-mode state once it exits, so session ids never leak.
     opts.events.onTyped('terminal:exit', ({ sessionId }) => this.tuiState.delete(sessionId))

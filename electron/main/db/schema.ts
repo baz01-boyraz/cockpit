@@ -394,3 +394,31 @@ CREATE INDEX IF NOT EXISTS idx_council_sessions_project ON council_sessions(proj
 export const SCHEMA_V12 = /* sql */ `
 ALTER TABLE kanban_cards ADD COLUMN council_session_id TEXT;
 `
+
+/**
+ * V13 — sentinel signal spine (Faz A). An always-on, LLM-FREE signal layer:
+ * sensors (log intelligence, worker exits, approvals, council) emit structured
+ * signals that the SentinelService dedups, persists here, and pushes to the
+ * renderer + macOS notifications. `project_id` keeps its FK (a signal belongs to
+ * a project and vanishes with it, ON DELETE CASCADE). Two indexes:
+ *   - (project_id, created_at) for the feed read (`list`, newest first);
+ *   - (project_id, fingerprint, created_at) for the cooldown dedup lookup
+ *     (same-fingerprint rows within the window).
+ * `status` is 'new' | 'seen' (the unseen badge). Append-only.
+ */
+export const SCHEMA_V13 = /* sql */ `
+CREATE TABLE IF NOT EXISTS sentinel_signals (
+  id           TEXT PRIMARY KEY,
+  project_id   TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  severity     TEXT NOT NULL,
+  source       TEXT NOT NULL,
+  title        TEXT NOT NULL,
+  summary      TEXT NOT NULL,
+  context      TEXT,
+  fingerprint  TEXT NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'new',
+  created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sentinel_signals_project ON sentinel_signals(project_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_sentinel_signals_fingerprint ON sentinel_signals(project_id, fingerprint, created_at);
+`

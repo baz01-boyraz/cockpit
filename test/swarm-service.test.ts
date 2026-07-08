@@ -757,3 +757,52 @@ describe('SwarmService boot orphan reconcile (6.4)', () => {
     expect(deps.audits).toContain('swarm.card_orphaned')
   })
 })
+
+describe('SwarmService worker-exit sentinel signal (Faz A)', () => {
+  const buildWithSentinel = (
+    store: ReturnType<typeof makeStore>,
+    deps: ReturnType<typeof makeDeps>,
+    sentinel: { report: ReturnType<typeof vi.fn> },
+  ) =>
+    new SwarmService(
+      store.db,
+      deps.terminals,
+      deps.memory,
+      deps.audit,
+      deps.events,
+      deps.projects,
+      deps.worktrees,
+      undefined,
+      undefined,
+      deps.doneSignal,
+      undefined,
+      undefined,
+      undefined,
+      sentinel,
+    )
+
+  it('raises a notice on a nonzero worker exit; a clean (0) exit stays silent', async () => {
+    const store = makeStore([{ id: 'a', status: 'todo', position: POSITION_GAP, title: 'Do the thing' }])
+    const deps = makeDeps()
+    const sentinel = { report: vi.fn() }
+    const svc = buildWithSentinel(store, deps, sentinel)
+
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    deps.events.emitTyped('terminal:exit', { sessionId: 'term_1', projectId: 'p1', role: 'claude', exitCode: 2, signal: null })
+    expect(store.rows.find((r) => r.id === 'a')!.status).toBe('in_review')
+    expect(sentinel.report).toHaveBeenCalledTimes(1)
+    const arg = sentinel.report.mock.calls[0][0]
+    expect(arg.severity).toBe('notice')
+    expect(arg.source).toBe('worker-exit')
+    expect(arg.title).toContain('code 2')
+
+    // A second card that exits cleanly must not raise a signal.
+    const store2 = makeStore([{ id: 'b', status: 'todo', position: POSITION_GAP, title: 'Clean run' }])
+    const deps2 = makeDeps()
+    const sentinel2 = { report: vi.fn() }
+    const svc2 = buildWithSentinel(store2, deps2, sentinel2)
+    await svc2.startCard({ projectId: 'p1', cardId: 'b' })
+    deps2.events.emitTyped('terminal:exit', { sessionId: 'term_1', projectId: 'p1', role: 'claude', exitCode: 0, signal: null })
+    expect(sentinel2.report).not.toHaveBeenCalled()
+  })
+})

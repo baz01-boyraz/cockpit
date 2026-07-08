@@ -5,6 +5,7 @@ import type {
   TerminalExitEvent,
   TerminalOutputChunk,
 } from '@shared/domain'
+import type { SentinelSignal } from '@shared/sentinel'
 import { logFatal } from './logging'
 
 /**
@@ -19,6 +20,7 @@ export interface CockpitEventMap {
   'logs:changed': { projectId: string }
   'appUpdate:changed': AppUpdateState
   'swarm:cardCompleted': SwarmCardCompletedEvent
+  'sentinel:alert': SentinelSignal
 }
 
 export class CockpitEvents extends EventEmitter {

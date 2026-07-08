@@ -22,6 +22,7 @@ import type { BoardColumn, CardStatus } from './kanban'
 import type { CompletionReport } from './completion-report'
 import type { Assignment } from './agent-taxonomy'
 import type { NamedAgentSummary } from './named-agents'
+import type { SentinelSignal } from './sentinel'
 import type { SecretKind } from './schemas'
 import type {
   AgentType,
@@ -135,6 +136,10 @@ export const IPC = {
   swarmAgents: 'swarm:agents',
   swarmCompletionReport: 'swarm:completionReport',
 
+  sentinelList: 'sentinel:list',
+  sentinelMarkSeen: 'sentinel:markSeen',
+  sentinelUnseenCount: 'sentinel:unseenCount',
+
   secretSet: 'secret:set',
   secretHas: 'secret:has',
   secretDelete: 'secret:delete',
@@ -159,6 +164,7 @@ export const IPC = {
   evtLogsChanged: 'evt:logs:changed',
   evtAppUpdateChanged: 'evt:appUpdate:changed',
   evtSwarmCardCompleted: 'evt:swarm:cardCompleted',
+  evtSentinelAlert: 'evt:sentinel:alert',
 } as const
 
 export type Unsubscribe = () => void
@@ -471,6 +477,24 @@ export interface CockpitApi {
      */
     onCardCompleted(cb: (evt: SwarmCardCompletedEvent) => void): Unsubscribe
   }
+  sentinel: {
+    /**
+     * The project's recent signals from the always-on, LLM-free signal layer
+     * (Faz A), newest first. Sensors (log intelligence, worker exits, approvals,
+     * council) feed it; the sentinel dedups + persists. Read-only.
+     */
+    list(projectId: string, opts?: { limit?: number }): Promise<SentinelSignal[]>
+    /** Mark signals seen (clears them from the unseen badge). Returns the count updated. */
+    markSeen(projectId: string, ids: string[]): Promise<number>
+    /** How many of the project's signals are still unseen (the rail badge). */
+    unseenCount(projectId: string): Promise<number>
+    /**
+     * Fires when a fresh signal is recorded, so the feed/badge update without
+     * polling. `notice`/`alert` also drive a renderer toast; `alert` additionally
+     * pops a macOS notification from main. The mock never emits it.
+     */
+    onAlert(cb: (signal: SentinelSignal) => void): Unsubscribe
+  }
   chat: {
     /**
      * Ask Claude a question via the local `claude` CLI; returns its reply.
@@ -623,6 +647,9 @@ export interface IpcResultMap {
   swarmParkCard: R<CockpitApi['swarm']['parkCard']>
   swarmAgents: R<CockpitApi['swarm']['agents']>
   swarmCompletionReport: R<CockpitApi['swarm']['completionReport']>
+  sentinelList: R<CockpitApi['sentinel']['list']>
+  sentinelMarkSeen: R<CockpitApi['sentinel']['markSeen']>
+  sentinelUnseenCount: R<CockpitApi['sentinel']['unseenCount']>
   secretSet: R<CockpitApi['secrets']['set']>
   secretHas: R<CockpitApi['secrets']['has']>
   secretDelete: R<CockpitApi['secrets']['delete']>
