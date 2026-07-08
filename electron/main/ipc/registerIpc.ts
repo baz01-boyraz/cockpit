@@ -262,10 +262,10 @@ export function registerIpc(services: Services): void {
     return services.review.diffStat(projectId, { dir })
   })
 
-  // --- council (read-only LLM-Council: advisors → peer review → verdict) ---
+  // --- council (multi-engine LLM-Council: seats → peer rankings → verdict) ---
   handle('councilRun', (p) => {
-    const { projectId, model, dir, question } = councilRunSchema.parse(p)
-    return services.council.run(projectId, { model, dir, question })
+    const { projectId, model, mode, dir, question, spec, cardId } = councilRunSchema.parse(p)
+    return services.council.run(projectId, { model, mode, dir, question, specText: spec, cardId })
   })
 
   // --- memory hub (per-project markdown knowledge, files are the truth) ---

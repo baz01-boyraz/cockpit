@@ -342,13 +342,24 @@ export interface CockpitApi {
   }
   council: {
     /**
-     * LLM-Council over a card's change set (Karpathy's method): five
-     * independent advisors → anonymous peer review → chairman verdict. Read-only
-     * — same sanitized diff as the reviewer, prompts authored in shared/council.
+     * Multi-engine LLM-Council (Karpathy's method): five seats across three
+     * vendors → anonymized peer rankings → chairman verdict, persisted as a
+     * session for the scorecard. `mode` picks what is judged — `diff` (default)
+     * reviews a card's change set (read-only, same sanitized diff as the
+     * reviewer); `spec` gates a draft task `spec` before it reaches an autonomous
+     * builder and returns a NEEDS_CLARIFICATION/APPROVED gate. Prompts are
+     * authored in shared/council-prompts; the diff/spec is fenced as untrusted.
      */
     run(
       projectId: string,
-      opts?: { model?: string; dir?: string; question?: string },
+      opts?: {
+        model?: string
+        mode?: 'diff' | 'spec'
+        dir?: string
+        question?: string
+        spec?: string
+        cardId?: string
+      },
     ): Promise<CouncilResult>
   }
   memory: {

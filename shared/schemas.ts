@@ -207,10 +207,16 @@ export const reviewDiffStatSchema = z.object({
 export const councilRunSchema = z.object({
   projectId: z.string().min(1),
   model: z.string().min(1).max(120).optional(),
+  // 'diff' judges a worktree change set; 'spec' gates a draft task spec.
+  mode: z.enum(['diff', 'spec']).optional(),
   // Absolute path of a swarm worktree; main re-validates it sits inside the project.
   dir: z.string().min(1).max(1024).optional(),
-  // The card's own title/body — the author's stated intent, grounds the advisors.
+  // The card's own title/body — the author's stated intent, grounds the seats.
   question: z.string().max(4000).optional(),
+  // Spec-mode input: a draft task spec (markdown/plain), fenced as UNTRUSTED by main.
+  spec: z.string().max(16_000).optional(),
+  // The card a spec-gate run belongs to — kept as session history, no card FK.
+  cardId: z.string().max(200).optional(),
 })
 
 export const memoryNameSchema = z.object({

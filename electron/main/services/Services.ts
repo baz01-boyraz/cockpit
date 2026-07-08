@@ -39,6 +39,8 @@ import { SwarmWorktrees } from './SwarmWorktrees'
 import { SwarmDoneSignal } from './SwarmDoneSignal'
 import { ReviewService } from './ReviewService'
 import { CouncilService } from './CouncilService'
+import { EngineRunner } from './EngineRunner'
+import { CouncilSessionStore } from '../db/CouncilSessionStore'
 import { ClaudeSessionsService } from './ClaudeSessionsService'
 import { GitService } from './GitService'
 import { GitHubService } from './GitHubService'
@@ -122,7 +124,12 @@ export class Services {
     this.chat = new ChatService(this.projects)
     this.hermesChat = new HermesChatService(this.projects)
     this.review = new ReviewService(this.projects, this.audit)
-    this.council = new CouncilService(this.projects, this.audit)
+    this.council = new CouncilService(
+      this.projects,
+      this.audit,
+      new EngineRunner(this.secrets),
+      new CouncilSessionStore(this.db),
+    )
     this.memory = new MemoryHubService(this.projects)
     this.globalMemory = new MemoryHubService(this.projects, join(opts.userDataDir, 'baz-memory'))
     this.memoryLedger = new MemoryLedgerService(this.db)

@@ -4,7 +4,7 @@ import { cockpit } from '../lib/cockpit'
 import type { CardStatus, KanbanCard } from '@shared/kanban'
 import type { ReviewResult } from '@shared/review'
 import type { CouncilResult } from '@shared/council'
-import { COUNCIL_ADVISORS } from '@shared/council'
+import { COUNCIL_SEATS } from '@shared/council'
 import { IconShieldSearch, IconWarning, IconX } from '../components/icons'
 import { ReviewFindings, reviewFailure } from '../components/ReviewFindings'
 import { CouncilVerdict } from '../components/CouncilVerdict'
@@ -35,12 +35,16 @@ function councilFailure(error: unknown): CouncilResult {
   const message = error instanceof Error ? error.message : 'The council run failed.'
   return {
     ok: false,
-    advisors: [],
-    peerReview: null,
+    mode: 'diff',
+    seats: [],
+    rankings: [],
+    aggregate: [],
+    labelToSeat: {},
     verdict: null,
-    model: '',
+    specVerdict: null,
     error: message,
-    stats: { advisorsRun: 0, advisorsFailed: 0, filesReviewed: 0, durationMs: 0 },
+    stats: { seatsRun: 0, seatsFailed: 0, filesReviewed: 0, durationMs: 0 },
+    sessionId: null,
   }
 }
 
@@ -334,7 +338,7 @@ export function SwarmPanel() {
             <div className="swarmReview__headText">
               <div className="eyebrow">
                 {cardReview.kind === 'council'
-                  ? `llm council · ${COUNCIL_ADVISORS.length} advisors`
+                  ? `llm council · ${COUNCIL_SEATS.length} seats`
                   : 'diff review'}
               </div>
               <div className="swarmReview__title">{cardReview.cardTitle}</div>
@@ -352,7 +356,7 @@ export function SwarmPanel() {
             <div className="review__busy review__busy--compact">
               <span className="review__pulse" aria-hidden />
               {cardReview.kind === 'council'
-                ? 'Convening the council — five advisors, peer review, then a verdict…'
+                ? 'Convening the council — five seats, peer rankings, then a verdict…'
                 : 'Reviewing the working-tree diff…'}
             </div>
           ) : cardReview.kind === 'council' ? (

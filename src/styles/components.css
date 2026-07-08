@@ -5426,12 +5426,29 @@
   border-top: 2px solid var(--advisor, var(--border));
 }
 .councilAdvisor__label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
   margin-bottom: 5px;
   font-size: var(--fs-micro);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--advisor, var(--text-muted));
+}
+/* Engine chip — which back-end produced this seat (opus / codex / deepseek). */
+.councilAdvisor__engine {
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--advisor, var(--border)) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--advisor, var(--border)) 40%, transparent);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--advisor, var(--text-muted));
+  white-space: nowrap;
 }
 .councilAdvisor__text {
   margin: 0;
@@ -5464,6 +5481,40 @@
 }
 .council__peer[open] .council__peerSummary { border-bottom: 1px solid var(--border-faint); }
 .council__peer .council__body { padding: var(--sp-3); font-size: var(--fs-xs); }
+.council__ranking + .council__ranking { margin-top: var(--sp-3); }
+.council__rankingHead {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  margin-bottom: 4px;
+}
+/* Spec-mode gate — the buildable/needs-clarification decision leads the panel. */
+.council__gate {
+  padding: var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  border: 1px solid var(--border-faint);
+  border-left: 3px solid var(--gate, var(--border));
+}
+.council__gate--approved { --gate: var(--signal, #b6e34d); }
+.council__gate--clarify { --gate: var(--ember-400, #e08a5b); }
+.council__gateKind {
+  margin-top: 4px;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--gate, var(--text));
+}
+.council__questions {
+  margin: var(--sp-2) 0 0;
+  padding-left: 1.2em;
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.council__questions li + li { margin-top: 4px; }
 
 /* --- memory --- */
 /* Per-project markdown knowledge hub (VISION 5.4): three zones — note list ·

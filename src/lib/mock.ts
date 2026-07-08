@@ -23,6 +23,7 @@ import type {
   TerminalSession,
 } from '@shared/domain'
 import type { CockpitApi, SystemInfo, Unsubscribe } from '@shared/ipc'
+import type { CouncilResult } from '@shared/council'
 import { resolveChatModel } from '@shared/chat-models'
 import { assembleDashboard, countActiveAgents } from '@shared/dashboard-assembly'
 import { aggregateInsights, insightFromMatch } from '@shared/insight-aggregation'
@@ -201,6 +202,174 @@ function dashboardFor(projectId: string): DashboardSnapshot {
     pendingApprovals: approvals.filter((a) => a.projectId === projectId && a.status === 'pending').length,
     usage: projectId === 'prj_serbest' ? usage : [],
   })
+}
+
+// A finished diff-mode council session for the browser preview. The engine mix
+// (opus / deepseek via openrouter / haiku / sonnet / codex) mirrors the real
+// roster so the seat chips render exactly as production does.
+function mockDiffCouncil(): CouncilResult {
+  const seats: CouncilResult['seats'] = [
+    {
+      id: 'contrarian',
+      label: 'Contrarian',
+      engine: { engine: 'claude', model: 'opus' },
+      usedFallback: false,
+      ok: true,
+      text: 'The intake handler in Hero.tsx:42 posts formData with no schema guard — a crafted payload reaches the API unchecked. Under a project switch the useEffect fetch at Hero.tsx:58 also races and can apply stale results.',
+    },
+    {
+      id: 'first-principles',
+      label: 'First Principles',
+      engine: { engine: 'openrouter', model: 'deepseek/deepseek-chat' },
+      usedFallback: false,
+      ok: true,
+      text: 'The real problem is trust at the boundary, not the form UI. schemas.ts already exports the shape both sides import — validation belongs there, not inline in the view at Hero.tsx:44.',
+    },
+    {
+      id: 'expansionist',
+      label: 'Expansionist',
+      engine: { engine: 'claude', model: 'haiku' },
+      usedFallback: false,
+      ok: true,
+      text: 'If the submit path at Hero.tsx:42 validated through the shared zod schema, every other form inherits it for free. The bigger play is a single validated-submit hook.',
+    },
+    {
+      id: 'outsider',
+      label: 'Outsider',
+      engine: { engine: 'claude', model: 'sonnet' },
+      usedFallback: false,
+      ok: true,
+      text: 'A newcomer would not guess that `--accent-2` is defined twice in tokens.css:31 and tokens.css:77 and the second silently wins. That invisible override is exactly what trips people up later.',
+    },
+    {
+      id: 'builder',
+      label: 'Builder',
+      engine: { engine: 'claude', model: 'opus' },
+      usedFallback: true,
+      ok: true,
+      text: 'Buildable after one change. FEASIBILITY: buildable-with-risks — the fix is local but touches a shared schema. EFFORT: S — ~30 min. PLAN: shared/schemas.ts (add submit schema), src/components/Hero.tsx (validate + abort guard). AMBIGUITIES: 1. which fields are required on submit is not stated.',
+    },
+  ]
+  const labelToSeat: Record<string, CouncilResult['labelToSeat'][string]> = {
+    'Response A': 'first-principles',
+    'Response B': 'builder',
+    'Response C': 'contrarian',
+    'Response D': 'expansionist',
+    'Response E': 'outsider',
+  }
+  const rankings: CouncilResult['rankings'] = [
+    {
+      seatId: 'contrarian',
+      text: 'Response A reframes the fix best; Response E is cosmetic. COLLECTIVE GAP: none proposed a regression test.\n\nFINAL RANKING:\n1. Response A\n2. Response B\n3. Response C\n4. Response D\n5. Response E',
+      parsed: ['Response A', 'Response B', 'Response C', 'Response D', 'Response E'],
+    },
+    {
+      seatId: 'builder',
+      text: 'Response A is the highest-leverage. COLLECTIVE GAP: no one named the missing test.\n\nFINAL RANKING:\n1. Response A\n2. Response C\n3. Response B\n4. Response D\n5. Response E',
+      parsed: ['Response A', 'Response C', 'Response B', 'Response D', 'Response E'],
+    },
+  ]
+  return {
+    ok: true,
+    mode: 'diff',
+    seats,
+    rankings,
+    aggregate: [
+      { seatId: 'first-principles', averageRank: 1, count: 2 },
+      { seatId: 'contrarian', averageRank: 2.5, count: 2 },
+      { seatId: 'builder', averageRank: 2.5, count: 2 },
+      { seatId: 'expansionist', averageRank: 4, count: 2 },
+      { seatId: 'outsider', averageRank: 5, count: 2 },
+    ],
+    labelToSeat,
+    verdict: `### ⚖️ Consensus & Disagreement\nAll five agree the unvalidated submit is the real risk; they split on scope — fix-it-here vs. fix-it-in-the-schema-layer.\n\n### 🎯 Verdict\nShip it, but not as written. Move validation into the shared schema at the submit boundary and add the mounted/abort guard — this closes the security hole and the race in one pass.\n\n### ➡️ Next step\nAdd a failing test that posts an invalid payload, then make it pass by validating through the shared zod schema before the API call.`,
+    specVerdict: null,
+    error: null,
+    stats: { seatsRun: 5, seatsFailed: 0, filesReviewed: 4, durationMs: 1600 },
+    sessionId: 'mock-council-diff',
+  }
+}
+
+// A finished spec-mode gate for the browser preview: a NEEDS_CLARIFICATION
+// verdict with the questions the author must answer before a build starts.
+function mockSpecCouncil(): CouncilResult {
+  const seats: CouncilResult['seats'] = [
+    {
+      id: 'contrarian',
+      label: 'Contrarian',
+      engine: { engine: 'claude', model: 'opus' },
+      usedFallback: false,
+      ok: true,
+      text: 'The spec says "add caching" but never states what to cache or the invalidation rule — that sentence hides the hardest decision. Without it the builder will guess and ship the wrong TTL.',
+    },
+    {
+      id: 'first-principles',
+      label: 'First Principles',
+      engine: { engine: 'openrouter', model: 'deepseek/deepseek-chat' },
+      usedFallback: true,
+      ok: true,
+      text: 'The acceptance criterion "should be fast" is untestable as written. Fast against what baseline, measured how? The real requirement is a concrete latency budget.',
+    },
+    {
+      id: 'expansionist',
+      label: 'Expansionist',
+      engine: { engine: 'claude', model: 'haiku' },
+      usedFallback: false,
+      ok: true,
+      text: 'If the cache key were derived from the existing request schema, the same layer could memoize three other endpoints for free — the spec scopes this too narrowly.',
+    },
+    {
+      id: 'outsider',
+      label: 'Outsider',
+      engine: { engine: 'claude', model: 'sonnet' },
+      usedFallback: false,
+      ok: true,
+      text: 'The spec assumes I know where "the gateway" is. A newcomer cannot find it from this text — name the module.',
+    },
+    {
+      id: 'builder',
+      label: 'Builder',
+      engine: { engine: 'codex', model: '' },
+      usedFallback: false,
+      ok: true,
+      text: 'FEASIBILITY: not-yet — two blockers. EFFORT: M once resolved. PLAN: the gateway service + a cache util. AMBIGUITIES: 1. what to cache; 2. invalidation rule; 3. the latency target.',
+    },
+  ]
+  return {
+    ok: true,
+    mode: 'spec',
+    seats,
+    rankings: [
+      {
+        seatId: 'builder',
+        text: 'Response A found the untestable criterion. COLLECTIVE GAP: no one asked about cache size limits.\n\nFINAL RANKING:\n1. Response A\n2. Response B\n3. Response C\n4. Response D\n5. Response E',
+        parsed: ['Response A', 'Response B', 'Response C', 'Response D', 'Response E'],
+      },
+    ],
+    aggregate: [
+      { seatId: 'first-principles', averageRank: 1, count: 1 },
+      { seatId: 'contrarian', averageRank: 2, count: 1 },
+    ],
+    labelToSeat: {
+      'Response A': 'first-principles',
+      'Response B': 'contrarian',
+      'Response C': 'builder',
+      'Response D': 'expansionist',
+      'Response E': 'outsider',
+    },
+    verdict: `### ⚖️ Consensus & Disagreement\nEvery seat agrees the spec is directionally right but under-specified; they split on whether the caching scope should widen.\n\n### 🎯 Verdict\nNEEDS_CLARIFICATION\nThe goal is clear but two acceptance criteria are untestable and the target module is unnamed — a builder would guess.\n\n### 📋 Refined Spec\n**Goal** — Cache the gateway's read responses to cut repeat latency.\n**Context** — Applies to the request/response layer both sides already share.\n**Acceptance criteria** — 1. p95 latency for a cached read drops below the agreed budget. 2. A write invalidates the matching cache key. 3. Cache size is bounded.\n**Out of scope** — Write-path batching, cross-service cache.\n**Constraints** — No new external dependency; keys derived from the existing schema.\n\n### ❓ Questions for the author\n1. What exactly should be cached, and what is the invalidation rule?\n2. What is the concrete latency target the cache must hit?\n3. Which module is "the gateway"?`,
+    specVerdict: {
+      kind: 'needs_clarification',
+      questions: [
+        'What exactly should be cached, and what is the invalidation rule?',
+        'What is the concrete latency target the cache must hit?',
+        'Which module is "the gateway"?',
+      ],
+    },
+    error: null,
+    stats: { seatsRun: 5, seatsFailed: 0, filesReviewed: 0, durationMs: 1600 },
+    sessionId: 'mock-council-spec',
+  }
 }
 
 export function createMockApi(): CockpitApi {
@@ -874,47 +1043,7 @@ export function createMockApi(): CockpitApi {
     council: {
       run: async (_projectId, opts) => {
         await new Promise((r) => setTimeout(r, 1600))
-        return {
-          ok: true,
-          advisors: [
-            {
-              id: 'contrarian' as const,
-              label: 'Contrarian',
-              ok: true,
-              text: 'The intake handler in Hero.tsx:42 posts formData with no schema guard — a crafted payload reaches the API unchecked. Under a project switch the useEffect fetch also races and can apply stale results. These are the two ways this ships broken.',
-            },
-            {
-              id: 'first-principles' as const,
-              label: 'First Principles',
-              ok: true,
-              text: 'The real problem is trust at the boundary, not the form UI. The change treats validation as a view concern when it belongs in the shared schema layer both sides already import — solve it once there and the component gets simpler.',
-            },
-            {
-              id: 'expansionist' as const,
-              label: 'Expansionist',
-              ok: true,
-              text: 'If the submit path validated through the shared zod schema, every other form in the app inherits it for free. The bigger play is a single validated-submit hook, not a one-off fix on this screen.',
-            },
-            {
-              id: 'outsider' as const,
-              label: 'Outsider',
-              ok: true,
-              text: 'A newcomer would not guess that `--accent-2` is defined twice in tokens.css and the second silently wins. That kind of invisible override is exactly what trips people up later — name or remove it.',
-            },
-            {
-              id: 'executor' as const,
-              label: 'Executor',
-              ok: true,
-              text: 'Mergeable after one thing: add the schema validation before the post and a mounted/abort guard on the fetch. ~30 minutes. Everything else here is follow-up, not a blocker.',
-            },
-          ],
-          peerReview:
-            'STRONGEST: the First Principles response — it moves the fix to the layer that removes the whole class of bug. BIGGEST BLIND SPOT: the Outsider stayed on a cosmetic token issue and missed the security exposure. COLLECTIVE GAP: none of the five asked whether there is a test that would catch the unvalidated payload regressing later.',
-          verdict: `### ⚖️ Consensus & Disagreement\nAll five agree the unvalidated submit is the real risk; they split on scope — fix-it-here (Executor) vs. fix-it-in-the-schema-layer (First Principles, Expansionist).\n\n### 🎯 Verdict\nShip it, but not as written. Move validation into the shared schema at the submit boundary and add the mounted/abort guard — this closes the security hole and the race in one pass without over-building.\n\n### ➡️ Next step\nAdd a failing test that posts an invalid payload, then make it pass by validating through the shared zod schema before the API call.`,
-          model: `Claude · ${resolveChatModel(opts?.model).label}`,
-          error: null,
-          stats: { advisorsRun: 5, advisorsFailed: 0, filesReviewed: 4, durationMs: 1600 },
-        }
+        return (opts?.mode ?? 'diff') === 'spec' ? mockSpecCouncil() : mockDiffCouncil()
       },
     },
     chat: {

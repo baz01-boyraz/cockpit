@@ -353,3 +353,28 @@ export const SCHEMA_V10 = /* sql */ `
 ALTER TABLE kanban_cards ADD COLUMN assignments TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE kanban_cards ADD COLUMN pipeline_step INTEGER NOT NULL DEFAULT 0;
 `
+
+/**
+ * V11 — Council v2 persisted sessions (Faz 1). Every completed council run is
+ * kept as history so the aggregate rankings can be merged into a cross-session
+ * scorecard. `result_json` is the full serialized CouncilResult; `verdict_kind`
+ * mirrors the spec gate (approved/needs_clarification) for cheap filtering.
+ *
+ * `card_id` deliberately has NO foreign key: a session is history and must
+ * survive the card being removed from the board — the ON DELETE CASCADE that a
+ * FK would impose is exactly the wrong behavior here. `project_id` keeps its FK
+ * (a session belongs to a project and should vanish with it). Append-only.
+ */
+export const SCHEMA_V11 = /* sql */ `
+CREATE TABLE IF NOT EXISTS council_sessions (
+  id           TEXT PRIMARY KEY,
+  project_id   TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  card_id      TEXT,
+  mode         TEXT NOT NULL,
+  question     TEXT,
+  result_json  TEXT NOT NULL,
+  verdict_kind TEXT,
+  created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_council_sessions_project ON council_sessions(project_id, created_at);
+`

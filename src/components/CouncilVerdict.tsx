@@ -1,14 +1,15 @@
 import type { ReactNode } from 'react'
 import type { CouncilResult, CouncilTone } from '@shared/council'
+import { engineLabel } from '@shared/engines'
 import { IconWarning } from './icons'
 
-/** Advisor id → its render hue (mirrors the swarm identity palette). */
+/** Seat id → its render hue (mirrors the swarm identity palette). */
 const TONE_CLASS: Record<CouncilTone, string> = {
   contrarian: 'councilAdvisor--contrarian',
   'first-principles': 'councilAdvisor--firstPrinciples',
   expansionist: 'councilAdvisor--expansionist',
   outsider: 'councilAdvisor--outsider',
-  executor: 'councilAdvisor--executor',
+  builder: 'councilAdvisor--executor',
 }
 
 /** Inline `**bold**` → <strong>; everything else passes through verbatim. */
@@ -56,14 +57,33 @@ function MarkdownLite({ text }: { text: string }) {
   return <>{blocks}</>
 }
 
+/** The spec-mode gate banner: APPROVED / NEEDS_CLARIFICATION + author questions. */
+function SpecGate({ specVerdict }: { specVerdict: NonNullable<CouncilResult['specVerdict']> }) {
+  const approved = specVerdict.kind === 'approved'
+  return (
+    <div className={`council__gate council__gate--${approved ? 'approved' : 'clarify'}`}>
+      <div className="eyebrow">spec verdict</div>
+      <div className="council__gateKind">{approved ? 'APPROVED' : 'NEEDS CLARIFICATION'}</div>
+      {specVerdict.questions.length > 0 && (
+        <ol className="council__questions">
+          {specVerdict.questions.map((q, i) => (
+            <li key={i}>{q}</li>
+          ))}
+        </ol>
+      )}
+    </div>
+  )
+}
+
 /**
- * Renders a finished LLM-Council session: the chairman's verdict leads (it is
- * the answer), then the five advisor perspectives, then the anonymous peer
- * review folded away. Model prose is rendered markdown-lite — headings and
- * bold, no runtime dependency.
+ * Renders a finished LLM-Council v2 session: the spec gate (spec mode) and the
+ * chairman's verdict lead, then each seat's perspective with its engine chip
+ * (and "(fallback)" when the primary engine was down), then the peer rankings
+ * folded away. Model prose is rendered markdown-lite — headings and bold, no
+ * runtime dependency.
  */
 export function CouncilVerdict({ result }: { result: CouncilResult }) {
-  if (!result.ok && result.advisors.length === 0) {
+  if (!result.ok && result.seats.length === 0) {
     return (
       <div className="review__notice" role="alert">
         <IconWarning width={14} height={14} /> {result.error ?? 'The council could not convene.'}
@@ -73,6 +93,8 @@ export function CouncilVerdict({ result }: { result: CouncilResult }) {
 
   return (
     <div className="council">
+      {result.specVerdict && <SpecGate specVerdict={result.specVerdict} />}
+
       {result.verdict && (
         <div className="council__verdict">
           <div className="eyebrow">chairman verdict</div>
@@ -83,22 +105,35 @@ export function CouncilVerdict({ result }: { result: CouncilResult }) {
       )}
 
       <div className="council__advisors">
-        {result.advisors.map((a) => (
+        {result.seats.map((s) => (
           <article
-            key={a.id}
-            className={`councilAdvisor ${TONE_CLASS[a.id] ?? ''}${a.ok ? '' : ' councilAdvisor--failed'}`}
+            key={s.id}
+            className={`councilAdvisor ${TONE_CLASS[s.id] ?? ''}${s.ok ? '' : ' councilAdvisor--failed'}`}
           >
-            <header className="councilAdvisor__label">{a.label}</header>
-            <p className="councilAdvisor__text">{a.text}</p>
+            <header className="councilAdvisor__label">
+              {s.label}
+              <span className="councilAdvisor__engine">
+                {engineLabel(s.engine)}
+                {s.usedFallback ? ' (fallback)' : ''}
+              </span>
+            </header>
+            <p className="councilAdvisor__text">{s.text}</p>
           </article>
         ))}
       </div>
 
-      {result.peerReview && (
+      {result.rankings.length > 0 && (
         <details className="council__peer">
-          <summary className="council__peerSummary">Anonymous peer review</summary>
+          <summary className="council__peerSummary">
+            Peer rankings · {result.rankings.length} of {result.stats.seatsRun}
+          </summary>
           <div className="council__body">
-            <MarkdownLite text={result.peerReview} />
+            {result.rankings.map((r, i) => (
+              <div key={r.seatId} className="council__ranking">
+                <div className="council__rankingHead">Ranking {i + 1}</div>
+                <MarkdownLite text={r.text} />
+              </div>
+            ))}
           </div>
         </details>
       )}

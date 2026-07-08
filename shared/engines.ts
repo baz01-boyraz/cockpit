@@ -38,6 +38,31 @@ export interface EngineSpec {
 export const ENGINE_MODEL_RE = /^[a-zA-Z0-9._/:-]{0,64}$/
 
 /**
+ * A short, human-readable chip for a seat's engine — what the council UI shows
+ * next to each seat ("opus", "codex", "deepseek"). For OpenRouter the vendor
+ * prefix reads best (deepseek/deepseek-chat → "deepseek"); for the CLIs the
+ * model alias is the useful label, falling back to the engine name when the
+ * model is the CLI default (empty string).
+ */
+export function engineLabel(spec: EngineSpec): string {
+  switch (spec.engine) {
+    case 'claude':
+      return spec.model || 'claude'
+    case 'codex':
+      return spec.model || 'codex'
+    case 'openrouter': {
+      const slug = spec.model
+      const vendor = slug.includes('/') ? slug.split('/')[0] : slug
+      return vendor || 'openrouter'
+    }
+    default: {
+      const unreachable: never = spec.engine
+      return String(unreachable)
+    }
+  }
+}
+
+/**
  * Builds the argv for a one-shot, non-interactive Codex run. Verified against
  * the real `codex` CLI (v0.142.5); each flag is load-bearing:
  *
