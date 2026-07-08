@@ -3,8 +3,9 @@ import type { CouncilResult, CouncilTone } from '@shared/council'
 import { engineLabel } from '@shared/engines'
 import { IconWarning } from './icons'
 
-/** Seat id → its render hue (mirrors the swarm identity palette). */
-const TONE_CLASS: Record<CouncilTone, string> = {
+/** Seat id → its render hue (mirrors the swarm identity palette). Exported so
+ *  the scorecard renders each seat in the same voice as its verdict card. */
+export const COUNCIL_TONE_CLASS: Record<CouncilTone, string> = {
   contrarian: 'councilAdvisor--contrarian',
   'first-principles': 'councilAdvisor--firstPrinciples',
   expansionist: 'councilAdvisor--expansionist',
@@ -108,7 +109,7 @@ export function CouncilVerdict({ result }: { result: CouncilResult }) {
         {result.seats.map((s) => (
           <article
             key={s.id}
-            className={`councilAdvisor ${TONE_CLASS[s.id] ?? ''}${s.ok ? '' : ' councilAdvisor--failed'}`}
+            className={`councilAdvisor ${COUNCIL_TONE_CLASS[s.id] ?? ''}${s.ok ? '' : ' councilAdvisor--failed'}`}
           >
             <header className="councilAdvisor__label">
               {s.label}

@@ -276,7 +276,9 @@ export function SwarmCard({
   /** Parked with a kept worktree → Start resumes where the worker stopped. */
   const resumable = card.status === 'parked' && card.worktreePath !== null
   const identity = resolveIdentity(card, agent)
-  const hasMeta = Boolean(card.agent || card.assignments.length > 0 || card.role || card.branch)
+  const hasMeta = Boolean(
+    card.agent || card.assignments.length > 0 || card.role || card.branch || card.councilSessionId,
+  )
 
   const handleDragStart = (e: DragEvent<HTMLDivElement>) => {
     e.dataTransfer.setData('text/plain', card.id)
@@ -355,6 +357,14 @@ export function SwarmCard({
             <span className="swarmTag swarmTag--branch" title={card.branch}>
               <IconBranch width={10} height={10} />
               <span className="swarmTag__text mono">{card.branch}</span>
+            </span>
+          )}
+          {card.councilSessionId && (
+            <span
+              className="swarmTag swarmTag--council"
+              title="Spec approved by the LLM council"
+            >
+              <IconCouncil width={10} height={10} /> council
             </span>
           )}
         </div>

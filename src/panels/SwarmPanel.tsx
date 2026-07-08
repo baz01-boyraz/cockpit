@@ -3,16 +3,17 @@ import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import type { CardStatus, KanbanCard } from '@shared/kanban'
 import type { ReviewResult } from '@shared/review'
-import type { CouncilResult } from '@shared/council'
+import type { CouncilResult, ScorecardEntry } from '@shared/council'
 import { COUNCIL_SEATS } from '@shared/council'
 import { IconShieldSearch, IconWarning, IconX } from '../components/icons'
 import { ReviewFindings, reviewFailure } from '../components/ReviewFindings'
 import { CouncilVerdict } from '../components/CouncilVerdict'
+import { CouncilScorecard } from '../components/CouncilScorecard'
 import { SwarmBoard } from '../components/swarm/SwarmBoard'
 import { SwarmEmptyState } from '../components/swarm/SwarmEmptyState'
 import { SwarmUsageChips } from '../components/swarm/SwarmUsageChips'
 import type { SwarmCardActions } from '../components/swarm/SwarmCard'
-import type { SwarmCardPatch } from '../components/swarm/SwarmCardEditor'
+import type { SwarmCardPatch, SwarmCouncilGate } from '../components/swarm/SwarmCardEditor'
 
 /** Poll cadence while a worker is live — the mock finishes in ~15s. */
 const RUNNING_POLL_MS = 5_000
@@ -29,13 +30,14 @@ function errorMessage(error: unknown): string {
 type CardReviewState =
   | { kind: 'diff'; cardTitle: string; result: ReviewResult | null }
   | { kind: 'council'; cardTitle: string; result: CouncilResult | null }
+  | { kind: 'spec'; cardId: string; cardTitle: string; result: CouncilResult | null }
 
 /** A thrown council IPC call → a renderable failure result. */
-function councilFailure(error: unknown): CouncilResult {
+function councilFailure(error: unknown, mode: CouncilResult['mode'] = 'diff'): CouncilResult {
   const message = error instanceof Error ? error.message : 'The council run failed.'
   return {
     ok: false,
-    mode: 'diff',
+    mode,
     seats: [],
     rankings: [],
     aggregate: [],
@@ -79,9 +81,11 @@ export function SwarmPanel() {
   const [parkingId, setParkingId] = useState<string | null>(null)
   const [reviewingId, setReviewingId] = useState<string | null>(null)
   const [councilingId, setCouncilingId] = useState<string | null>(null)
+  const [conveningId, setConveningId] = useState<string | null>(null)
   const [cardReview, setCardReview] = useState<CardReviewState | null>(null)
+  const [scorecard, setScorecard] = useState<ScorecardEntry[] | null>(null)
 
-  const reviewBusy = reviewingId !== null || councilingId !== null
+  const reviewBusy = reviewingId !== null || councilingId !== null || conveningId !== null
 
   // Project switch (or first mount): reset the surface, then load the board.
   useEffect(() => {
@@ -90,6 +94,8 @@ export function SwarmPanel() {
     setCardReview(null)
     setReviewingId(null)
     setCouncilingId(null)
+    setConveningId(null)
+    setScorecard(null)
     if (!projectId) return
     refreshBoard(projectId).catch((err: unknown) => setNotice(errorMessage(err)))
     // The Named Agents roster rides along (once per project — the slice skips
@@ -218,6 +224,21 @@ export function SwarmPanel() {
     [projectId, parkingId, parkCard],
   )
 
+  // Seat standings ride alongside any council surface — fetched fresh each time
+  // one opens (skeleton while it lands), and dropped on a project switch. Stale
+  // standings from another project must never flash under a new verdict.
+  const loadScorecard = useCallback(async () => {
+    if (!projectId) return
+    setScorecard(null)
+    try {
+      const rows = await cockpit().council.scorecard(projectId)
+      if (useStore.getState().activeProjectId === projectId) setScorecard(rows)
+    } catch {
+      // A standings miss never blocks the verdict — render the empty state.
+      if (useStore.getState().activeProjectId === projectId) setScorecard([])
+    }
+  }, [projectId])
+
   // AI diff review for an In review card — one advisory pass (read-only) over
   // the card's own worktree when it has one, rendered under the header with
   // the same ReviewFindings surface as Git.
@@ -247,6 +268,7 @@ export function SwarmPanel() {
       if (!projectId || reviewBusy) return
       setCouncilingId(card.id)
       setCardReview({ kind: 'council', cardTitle: card.title, result: null })
+      void loadScorecard()
       const question = [card.title, card.body].filter(Boolean).join('\n\n')
       try {
         const result = await cockpit().council.run(projectId, {
@@ -262,7 +284,65 @@ export function SwarmPanel() {
         setCouncilingId(null)
       }
     },
-    [projectId, reviewBusy],
+    [projectId, reviewBusy, loadScorecard],
+  )
+
+  // Faz 2b — gate a draft spec BEFORE a builder starts: the same five-seat
+  // council, in `spec` mode, judging the card's title+body as a buildable spec.
+  // The full verdict lands in the wide surface; the editor keeps the decision
+  // and the apply action. One long main-process call — guarded against a
+  // project switch outliving it, exactly like the diff council.
+  const handleConvene = useCallback(
+    async (card: KanbanCard, spec: string) => {
+      if (!projectId || reviewBusy) return
+      setConveningId(card.id)
+      setCardReview({ kind: 'spec', cardId: card.id, cardTitle: card.title, result: null })
+      void loadScorecard()
+      try {
+        const result = await cockpit().council.run(projectId, { mode: 'spec', spec, cardId: card.id })
+        if (useStore.getState().activeProjectId !== projectId) return
+        setCardReview({ kind: 'spec', cardId: card.id, cardTitle: card.title, result })
+      } catch (err: unknown) {
+        if (useStore.getState().activeProjectId !== projectId) return
+        setCardReview({
+          kind: 'spec',
+          cardId: card.id,
+          cardTitle: card.title,
+          result: councilFailure(err, 'spec'),
+        })
+      } finally {
+        setConveningId(null)
+      }
+    },
+    [projectId, reviewBusy, loadScorecard],
+  )
+
+  // Apply an approved council's refined spec: it becomes the card body and the
+  // session is linked so the card reads "council-approved" on the board.
+  const handleApplyRefined = useCallback(
+    async (cardId: string, body: string, sessionId: string) => {
+      if (!projectId) return
+      try {
+        await updateCard({ projectId, cardId, body, councilSessionId: sessionId })
+        setNotice(null)
+      } catch (err: unknown) {
+        setNotice(errorMessage(err))
+      }
+    },
+    [projectId, updateCard],
+  )
+
+  const councilGate = useMemo<SwarmCouncilGate>(
+    () => ({
+      conveningId,
+      result:
+        cardReview?.kind === 'spec'
+          ? { cardId: cardReview.cardId, result: cardReview.result }
+          : null,
+      onConvene: (card, spec) => void handleConvene(card, spec),
+      onApplyRefined: handleApplyRefined,
+    }),
+    [conveningId, cardReview, handleConvene, handleApplyRefined],
   )
 
   const cardActions = useMemo<SwarmCardActions>(
@@ -337,16 +417,18 @@ export function SwarmPanel() {
             </span>
             <div className="swarmReview__headText">
               <div className="eyebrow">
-                {cardReview.kind === 'council'
-                  ? `llm council · ${COUNCIL_SEATS.length} seats`
-                  : 'diff review'}
+                {cardReview.kind === 'spec'
+                  ? 'llm council · spec gate'
+                  : cardReview.kind === 'council'
+                    ? `llm council · ${COUNCIL_SEATS.length} seats`
+                    : 'diff review'}
               </div>
               <div className="swarmReview__title">{cardReview.cardTitle}</div>
             </div>
             <button
               className="swarmNotice__dismiss swarmReview__dismiss"
               onClick={() => setCardReview(null)}
-              disabled={reviewBusy}
+              disabled={cardReview.result === null}
               aria-label="Dismiss review results"
             >
               <IconX width={13} height={13} />
@@ -355,14 +437,19 @@ export function SwarmPanel() {
           {cardReview.result === null ? (
             <div className="review__busy review__busy--compact">
               <span className="review__pulse" aria-hidden />
-              {cardReview.kind === 'council'
-                ? 'Convening the council — five seats, peer rankings, then a verdict…'
-                : 'Reviewing the working-tree diff…'}
+              {cardReview.kind === 'spec'
+                ? 'Convening the council on this spec — five seats, then a build/clarify gate…'
+                : cardReview.kind === 'council'
+                  ? 'Convening the council — five seats, peer rankings, then a verdict…'
+                  : 'Reviewing the working-tree diff…'}
             </div>
-          ) : cardReview.kind === 'council' ? (
-            <CouncilVerdict result={cardReview.result} />
-          ) : (
+          ) : cardReview.kind === 'diff' ? (
             <ReviewFindings result={cardReview.result} />
+          ) : (
+            <div className="swarmReview__council">
+              <CouncilVerdict result={cardReview.result} />
+              <CouncilScorecard entries={scorecard} />
+            </div>
           )}
         </section>
       )}
@@ -386,6 +473,7 @@ export function SwarmPanel() {
           onSave={handleSave}
           onDelete={handleDelete}
           cardActions={cardActions}
+          councilGate={councilGate}
         />
       )}
     </div>

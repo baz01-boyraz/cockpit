@@ -3,7 +3,7 @@ import type { BoardColumn, CardStatus, KanbanCard } from '@shared/kanban'
 import type { NamedAgentSummary } from '@shared/named-agents'
 import { IconPlus, IconSwarm } from '../icons'
 import { SwarmCard, type SwarmCardActions } from './SwarmCard'
-import { SwarmCardEditor, type SwarmCardPatch } from './SwarmCardEditor'
+import { SwarmCardEditor, type SwarmCardPatch, type SwarmCouncilGate } from './SwarmCardEditor'
 import { SwarmComposer } from './SwarmComposer'
 
 export interface DragInfo {
@@ -31,6 +31,8 @@ interface SwarmColumnProps {
   onDelete: (cardId: string) => Promise<void>
   /** Per-card actions (start/resume, park, view terminal, review, council). */
   cardActions: SwarmCardActions
+  /** Spec-gate wiring for the open editor (convene + apply refined spec). */
+  councilGate: SwarmCouncilGate
   /** Present only on the To do column — enables the "+ New card" composer. */
   onCreate?: (title: string, body: string) => Promise<boolean>
 }
@@ -58,6 +60,7 @@ export function SwarmColumn({
   onSave,
   onDelete,
   cardActions,
+  councilGate,
   onCreate,
 }: SwarmColumnProps) {
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -127,6 +130,7 @@ export function SwarmColumn({
                 onSave={onSave}
                 onDelete={onDelete}
                 onClose={onCloseEditor}
+                council={councilGate}
               />
             ) : (
               <SwarmCard

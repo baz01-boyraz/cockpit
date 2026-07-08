@@ -24,6 +24,7 @@ import type {
 } from '@shared/domain'
 import type { SystemInfo } from '@shared/ipc'
 import type { BoardColumn, CardStatus } from '@shared/kanban'
+import type { Assignment } from '@shared/agent-taxonomy'
 import type { NamedAgentSummary } from '@shared/named-agents'
 
 export type View =
@@ -122,6 +123,9 @@ export interface SwarmSlice {
     role?: string | null
     persona?: string | null
     agent?: string | null
+    assignments?: Assignment[]
+    /** Link/clear the approved council session that shaped this card (Faz 2b). */
+    councilSessionId?: string | null
   }) => Promise<void>
   moveCard: (input: { projectId: string; cardId: string; to: CardStatus; index: number }) => Promise<void>
   removeCard: (input: { projectId: string; cardId: string }) => Promise<void>

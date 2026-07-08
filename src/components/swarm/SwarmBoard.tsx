@@ -3,7 +3,7 @@ import type { BoardColumn, CardStatus, KanbanCard } from '@shared/kanban'
 import type { NamedAgentSummary } from '@shared/named-agents'
 import { SwarmColumn, type DragInfo } from './SwarmColumn'
 import type { SwarmCardActions } from './SwarmCard'
-import type { SwarmCardPatch } from './SwarmCardEditor'
+import type { SwarmCardPatch, SwarmCouncilGate } from './SwarmCardEditor'
 
 const COLUMN_LABELS: Record<CardStatus, string> = {
   todo: 'To do',
@@ -26,6 +26,8 @@ interface SwarmBoardProps {
   onDelete: (cardId: string) => Promise<void>
   /** Per-card actions (start/resume, park, view terminal, review, council). */
   cardActions: SwarmCardActions
+  /** Spec-gate wiring for the open editor (convene + apply refined spec). */
+  councilGate: SwarmCouncilGate
 }
 
 /**
@@ -46,6 +48,7 @@ export function SwarmBoard({
   onSave,
   onDelete,
   cardActions,
+  councilGate,
 }: SwarmBoardProps) {
   const [drag, setDrag] = useState<DragInfo | null>(null)
   const [drop, setDrop] = useState<{ status: CardStatus; index: number } | null>(null)
@@ -104,6 +107,7 @@ export function SwarmBoard({
           onSave={onSave}
           onDelete={onDelete}
           cardActions={cardActions}
+          councilGate={councilGate}
           onCreate={column.status === 'todo' ? onCreate : undefined}
         />
       ))}

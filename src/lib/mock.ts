@@ -372,6 +372,25 @@ function mockSpecCouncil(): CouncilResult {
   }
 }
 
+// A finished spec-mode gate that APPROVES: the council finds the draft
+// buildable and returns a refined spec the editor can paste into the body.
+// Reached in the browser preview when the draft mentions "acceptance", so both
+// gate branches (approve / clarify) are visually reviewable without a backend.
+function mockSpecCouncilApproved(): CouncilResult {
+  const base = mockSpecCouncil()
+  return {
+    ...base,
+    seats: base.seats.map((s) =>
+      s.id === 'builder'
+        ? { ...s, text: 'FEASIBILITY: buildable. EFFORT: M. PLAN: the gateway service + a cache util. The acceptance criteria are concrete and the target module is named — no blocking guesses remain.' }
+        : s,
+    ),
+    verdict: `### ⚖️ Consensus & Disagreement\nEvery seat agrees the spec is now concrete: a named module, a measurable latency budget, and a clear invalidation rule.\n\n### 🎯 Verdict\nAPPROVED\nThe goal, acceptance criteria, and scope are all testable — a builder can start without guessing.\n\n### 📋 Refined Spec\n**Goal** — Cache the gateway service's read responses to cut repeat-read latency.\n**Context** — Applies to the shared request/response layer both sides already import.\n**Acceptance criteria** — 1. p95 latency for a cached read drops below 40ms. 2. A write to a key invalidates its cached entry within one request. 3. The cache is bounded to 500 entries (LRU).\n**Out of scope** — Write-path batching, cross-service cache sharing.\n**Constraints** — No new external dependency; keys derived from the existing request schema.\n\n### ❓ Questions for the author\n(None — the spec is buildable as written.)`,
+    specVerdict: { kind: 'approved', questions: [] },
+    sessionId: 'mock-council-spec-approved',
+  }
+}
+
 export function createMockApi(): CockpitApi {
   return {
     projects: {
@@ -1045,7 +1064,9 @@ export function createMockApi(): CockpitApi {
     council: {
       run: async (_projectId, opts) => {
         await new Promise((r) => setTimeout(r, 1600))
-        return (opts?.mode ?? 'diff') === 'spec' ? mockSpecCouncil() : mockDiffCouncil()
+        if ((opts?.mode ?? 'diff') !== 'spec') return mockDiffCouncil()
+        // A draft that already spells out acceptance criteria gates through.
+        return /acceptance/i.test(opts?.spec ?? '') ? mockSpecCouncilApproved() : mockSpecCouncil()
       },
       // A plausible cross-session standing, best (lowest average rank) first —
       // enough for the browser preview to render the scorecard chips.

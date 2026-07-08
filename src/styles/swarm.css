@@ -588,6 +588,16 @@
 .swarmTag--branch svg {
   filter: drop-shadow(0 0 3px var(--glacier-glow));
 }
+/* council-approved = a settled positive state → quiet signal-lime, never loud.
+   Reads at a glance beside the branch/agent chips without competing with them. */
+.swarmTag--council {
+  color: var(--signal);
+  background: linear-gradient(180deg, rgba(205, 232, 95, 0.11), rgba(205, 232, 95, 0.03));
+  border-color: rgba(205, 232, 95, 0.24);
+}
+.swarmTag--council svg {
+  filter: drop-shadow(0 0 3px rgba(205, 232, 95, 0.45));
+}
 .swarmTag__text {
   min-width: 0;
   overflow: hidden;
@@ -1075,6 +1085,82 @@
   outline: 1px solid var(--border-accent);
   outline-offset: 1px;
 }
+/* ----- spec gate (Faz 2b): the editor's compact council control. The heavy
+ * deliberation renders in the panel's wide surface; this stays the decision +
+ * action so it fits the narrow card column. ----- */
+.swarmGate {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle, var(--border));
+}
+.swarmGate__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.swarmGate__legend {
+  margin: 0;
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  line-height: 1.45;
+}
+.swarmGate__pending {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.swarmGate__pending .swarmStart__pulse {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+/* the gate decision — a hue-edged inset, approve = signal, clarify = ember */
+.swarmGate__verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--sp-2) 10px;
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border-faint);
+  border-left: 2px solid var(--gate, var(--border));
+}
+.swarmGate__verdict--approved {
+  --gate: var(--signal, #b6e34d);
+}
+.swarmGate__verdict--clarify {
+  --gate: var(--ember-400, #e08a5b);
+}
+.swarmGate__kind {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gate, var(--text));
+}
+.swarmGate__note {
+  margin: 0;
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.swarmGate__questions {
+  margin: 0;
+  padding-left: 1.25em;
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.swarmGate__questions li + li {
+  margin-top: 3px;
+}
+
 .swarmEdit__advanced {
   border-top: 1px solid var(--border-subtle, var(--border));
   padding-top: 4px;

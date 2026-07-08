@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { KanbanCard } from '@shared/kanban'
 import type { NamedAgentSummary } from '@shared/named-agents'
+import type { CouncilResult } from '@shared/council'
+import { extractRefinedSpec } from '@shared/council'
 import {
   ROLES,
   SPECS,
@@ -12,6 +14,7 @@ import {
   type Spec,
 } from '@shared/agent-taxonomy'
 import { classifyRoles } from '@shared/role-router'
+import { IconCheck, IconCouncil } from '../icons'
 
 export interface SwarmCardPatch {
   title: string
@@ -22,6 +25,23 @@ export interface SwarmCardPatch {
   assignments: Assignment[]
 }
 
+/**
+ * The spec-gate wiring the editor drives (Faz 2b). The heavy deliberation
+ * (five seats + verdict + scorecard) renders in the panel's wide surface; the
+ * editor keeps only the control, the gate decision, and the apply action —
+ * whichever card is being edited reads its own slice out of this bundle.
+ */
+export interface SwarmCouncilGate {
+  /** Card id whose spec council is in flight, or null. */
+  conveningId: string | null
+  /** The latest spec-council result, keyed by the card it judged. */
+  result: { cardId: string; result: CouncilResult | null } | null
+  /** Send the draft (title + body) to the council as a spec to gate. */
+  onConvene: (card: KanbanCard, spec: string) => void
+  /** Persist the refined spec as the card body and link the approved session. */
+  onApplyRefined: (cardId: string, body: string, sessionId: string) => Promise<void>
+}
+
 interface SwarmCardEditorProps {
   card: KanbanCard
   /** Named Agents roster — an optional advanced identity override. */
@@ -30,6 +50,8 @@ interface SwarmCardEditorProps {
   onSave: (cardId: string, patch: SwarmCardPatch) => Promise<void>
   onDelete: (cardId: string) => Promise<void>
   onClose: () => void
+  /** Spec-gate wiring — convene the council on the draft, then apply its verdict. */
+  council: SwarmCouncilGate
 }
 
 /**
@@ -39,7 +61,14 @@ interface SwarmCardEditorProps {
  * (previewed live here). A Named Agent stays available as an advanced override;
  * picking one supersedes the pipeline, and adding a step clears the override.
  */
-export function SwarmCardEditor({ card, agents, onSave, onDelete, onClose }: SwarmCardEditorProps) {
+export function SwarmCardEditor({
+  card,
+  agents,
+  onSave,
+  onDelete,
+  onClose,
+  council,
+}: SwarmCardEditorProps) {
   const [title, setTitle] = useState(card.title)
   const [body, setBody] = useState(card.body)
   const [assignments, setAssignments] = useState<Assignment[]>(card.assignments)
@@ -49,12 +78,43 @@ export function SwarmCardEditor({ card, agents, onSave, onDelete, onClose }: Swa
   const [advancedOpen, setAdvancedOpen] = useState(Boolean(card.agent))
   const [deleteArmed, setDeleteArmed] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [applied, setApplied] = useState(false)
 
   const selectedAgent = agent ? (agents.find((a) => a.slug === agent) ?? null) : null
   /** The card may reference an agent whose file has since been removed. */
   const agentMissing = agent !== '' && selectedAgent === null
 
   const canSave = title.trim().length > 0 && !busy
+
+  // --- spec gate (Faz 2b) ---------------------------------------------------
+  const convening = council.conveningId === card.id
+  /** The council result belongs to us only when it judged THIS card's spec. */
+  const specResult =
+    council.result && council.result.cardId === card.id ? council.result.result : null
+  const specVerdict = specResult?.specVerdict ?? null
+  const refinedSpec = specResult?.verdict ? extractRefinedSpec(specResult.verdict) : null
+  const canApply = refinedSpec !== null && Boolean(specResult?.sessionId) && !busy
+  /** Council-approved once a session is linked (persisted) or just applied. */
+  const approved = applied || card.councilSessionId !== null
+
+  const convene = () => {
+    const spec = [title.trim(), body.trim()].filter(Boolean).join('\n\n')
+    if (!spec || convening) return
+    setApplied(false)
+    council.onConvene(card, spec)
+  }
+
+  const applyRefined = async () => {
+    if (!canApply || !refinedSpec || !specResult?.sessionId) return
+    setBusy(true)
+    setBody(refinedSpec)
+    try {
+      await council.onApplyRefined(card.id, refinedSpec, specResult.sessionId)
+      setApplied(true)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   /** What the router would auto-assign — shown only when nothing is set yet. */
   const autoPreview = useMemo(() => {
@@ -141,6 +201,91 @@ export function SwarmCardEditor({ card, agents, onSave, onDelete, onClose }: Swa
           aria-label="Card body"
           placeholder="Details for the agent (optional)…"
         />
+
+        <div className="swarmGate">
+          <div className="swarmGate__head">
+            <span className="swarmEdit__label">council</span>
+            {approved && (
+              <span
+                className="swarmTag swarmTag--council"
+                title="This card's spec was approved by the LLM council"
+              >
+                <IconCheck width={10} height={10} aria-hidden /> approved
+              </span>
+            )}
+          </div>
+
+          {convening ? (
+            <p className="swarmGate__pending">
+              <span className="swarmStart__pulse live-dot" aria-hidden />
+              Convening the council — five seats deliberate, then a gate. This takes a few
+              minutes; the full verdict lands in the panel above. Keep editing while it runs.
+            </p>
+          ) : specVerdict ? (
+            <div
+              className={`swarmGate__verdict swarmGate__verdict--${
+                specVerdict.kind === 'approved' ? 'approved' : 'clarify'
+              }`}
+            >
+              <div className="swarmGate__kind">
+                {specVerdict.kind === 'approved' ? 'Approved' : 'Needs clarification'}
+              </div>
+              {specVerdict.kind === 'approved' ? (
+                applied ? (
+                  <p className="swarmGate__note">
+                    Refined spec applied — this card is council-approved.
+                  </p>
+                ) : (
+                  <>
+                    <p className="swarmGate__note">
+                      {refinedSpec
+                        ? 'The council finds this buildable. Apply its refined spec to the body.'
+                        : 'Approved, but no refined-spec section was returned — your body stays as written.'}
+                    </p>
+                    <button
+                      className="btn btn--accent btn--sm"
+                      onClick={() => void applyRefined()}
+                      disabled={!canApply}
+                    >
+                      Apply refined spec
+                    </button>
+                  </>
+                )
+              ) : (
+                <>
+                  <p className="swarmGate__note">
+                    Answer these in the card body, then re-convene:
+                  </p>
+                  {specVerdict.questions.length > 0 && (
+                    <ol className="swarmGate__questions">
+                      {specVerdict.questions.map((q, i) => (
+                        <li key={i}>{q}</li>
+                      ))}
+                    </ol>
+                  )}
+                  <button className="btn btn--ghost btn--sm" onClick={convene} disabled={!title.trim()}>
+                    <IconCouncil width={11} height={11} aria-hidden /> Re-convene
+                  </button>
+                </>
+              )}
+            </div>
+          ) : (
+            <>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={convene}
+                disabled={!title.trim()}
+                title="Gate this spec through five advisors before a builder starts"
+              >
+                <IconCouncil width={11} height={11} aria-hidden /> Convene council
+              </button>
+              <p className="swarmGate__legend">
+                Five advisors gate the spec before a builder starts — approve it, or return the
+                questions that would make the build guess.
+              </p>
+            </>
+          )}
+        </div>
 
         {!agent && (
           <div className="swarmEdit__pipeline">

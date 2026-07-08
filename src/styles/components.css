@@ -5516,6 +5516,101 @@
 }
 .council__questions li + li { margin-top: 4px; }
 
+/* Council review surface body — verdict, then seat standings, stacked. */
+.swarmReview__council {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: var(--sp-2) var(--sp-3) var(--sp-3);
+}
+.swarmReview__council .council { gap: var(--sp-3); }
+
+/* --- council seat standings (Faz 2b): cross-session scorecard, best first.
+   A quiet ledger companion to the verdict — each seat in its own voice hue. */
+.councilScore {
+  max-width: 620px;
+  padding: var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  border: 1px solid var(--border-faint);
+}
+.councilScore .eyebrow { margin-bottom: var(--sp-2); }
+.councilScore__empty {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+.councilScore__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.councilScore__ghost {
+  height: 26px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border-faint);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+.councilScore__ghost:nth-child(2) { animation-delay: 0.18s; }
+.councilScore__ghost:nth-child(3) { animation-delay: 0.36s; }
+@media (prefers-reduced-motion: reduce) {
+  .councilScore__ghost { animation: none; }
+}
+.councilScore__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.councilScore__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  border-left: 2px solid var(--advisor, var(--border));
+  background: color-mix(in srgb, var(--advisor, var(--border)) 6%, transparent);
+  font-size: var(--fs-xs);
+}
+.councilScore__pos {
+  width: 1.1em;
+  flex-shrink: 0;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  color: var(--text-faint);
+}
+.councilScore__seat {
+  font-weight: 600;
+  color: var(--advisor, var(--text));
+  white-space: nowrap;
+}
+.councilScore__engine {
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--advisor, var(--border)) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--advisor, var(--border)) 36%, transparent);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--advisor, var(--text-muted));
+  white-space: nowrap;
+}
+.councilScore__avg {
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.councilScore__sessions {
+  flex-shrink: 0;
+  min-width: 2.2em;
+  text-align: right;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
 /* --- memory --- */
 /* Per-project markdown knowledge hub (VISION 5.4): three zones — note list ·
    reader/editor · connections. Files are the truth; the UI renders content as
