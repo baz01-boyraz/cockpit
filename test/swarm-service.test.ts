@@ -615,6 +615,121 @@ describe('SwarmService council brief (Faz 2a)', () => {
   })
 })
 
+describe('SwarmService completion report + notify (Faz 2.5)', () => {
+  const reviewStub = { diffStat: vi.fn(async () => ({ files: 3, insertions: 42, deletions: 7 })) }
+
+  beforeEach(() => reviewStub.diffStat.mockClear())
+
+  const buildWithReport = (
+    store: ReturnType<typeof makeStore>,
+    deps: ReturnType<typeof makeDeps>,
+    notifier?: (input: { title: string; body: string }) => void,
+  ) =>
+    new SwarmService(
+      store.db,
+      deps.terminals,
+      deps.memory,
+      deps.audit,
+      deps.events,
+      deps.projects,
+      deps.worktrees,
+      undefined,
+      undefined,
+      deps.doneSignal,
+      undefined,
+      reviewStub,
+      notifier,
+    )
+
+  it('computes a report on demand: branch, diff stat, acceptance, council flag', async () => {
+    const store = makeStore([
+      {
+        id: 'a',
+        status: 'in_review',
+        worktree_path: '/proj/wt/a',
+        branch: 'swarm/a',
+        council_session_id: 'sess-1',
+        body: '**Acceptance criteria**\n1. renders\n2. tested',
+      },
+    ])
+    const svc = buildWithReport(store, makeDeps())
+    const report = await svc.completionReport('p1', 'a')
+    expect(report).toMatchObject({
+      cardId: 'a',
+      branch: 'swarm/a',
+      diffStat: { files: 3, insertions: 42, deletions: 7 },
+      acceptance: ['renders', 'tested'],
+      hasCouncilSpec: true,
+    })
+    expect(reviewStub.diffStat).toHaveBeenCalledWith('p1', { dir: '/proj/wt/a' })
+  })
+
+  it('returns a null diff stat for a card with no worktree', async () => {
+    const store = makeStore([{ id: 'a', status: 'in_review', body: '' }])
+    const svc = buildWithReport(store, makeDeps())
+    const report = await svc.completionReport('p1', 'a')
+    expect(report.diffStat).toBeNull()
+    expect(report.acceptance).toEqual([])
+    expect(reviewStub.diffStat).not.toHaveBeenCalled()
+  })
+
+  it('throws for a missing card', async () => {
+    const svc = buildWithReport(makeStore([]), makeDeps())
+    await expect(svc.completionReport('p1', 'nope')).rejects.toThrow(/not found/)
+  })
+
+  it('fires swarm:cardCompleted and notifies when a worker exit lands a card in review', async () => {
+    const store = makeStore([{ id: 'a', status: 'todo', title: 'Add the widget' }])
+    const deps = makeDeps()
+    const completed: { projectId: string; cardId: string; title: string; summary: string }[] = []
+    deps.events.onTyped('swarm:cardCompleted', (e) => completed.push(e))
+    const notifier = vi.fn()
+    const svc = buildWithReport(store, deps, notifier)
+
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    deps.events.emitTyped('terminal:exit', {
+      sessionId: 'term_1',
+      projectId: 'p1',
+      role: 'claude',
+      exitCode: 0,
+      signal: null,
+    })
+    expect(store.rows.find((r) => r.id === 'a')!.status).toBe('in_review')
+
+    await vi.waitFor(() => expect(notifier).toHaveBeenCalledTimes(1))
+    expect(completed).toHaveLength(1)
+    expect(completed[0]).toMatchObject({ projectId: 'p1', cardId: 'a', title: 'Add the widget' })
+    expect(completed[0].summary).toContain('ready for review')
+    expect(notifier.mock.calls[0][0]).toMatchObject({ title: 'Swarm — ready for review' })
+    expect(notifier.mock.calls[0][0].body).toBe(completed[0].summary)
+  })
+
+  it('a throwing notifier never breaks the transition', async () => {
+    const store = makeStore([{ id: 'a', status: 'todo' }])
+    const deps = makeDeps()
+    const completed: unknown[] = []
+    deps.events.onTyped('swarm:cardCompleted', (e) => completed.push(e))
+    const notifier = vi.fn(() => {
+      throw new Error('no notification host')
+    })
+    const svc = buildWithReport(store, deps, notifier)
+
+    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    expect(() =>
+      deps.events.emitTyped('terminal:exit', {
+        sessionId: 'term_1',
+        projectId: 'p1',
+        role: 'claude',
+        exitCode: 0,
+        signal: null,
+      }),
+    ).not.toThrow()
+    expect(store.rows.find((r) => r.id === 'a')!.status).toBe('in_review')
+    // The event still fanned out before the notifier threw and was swallowed.
+    await vi.waitFor(() => expect(completed).toHaveLength(1))
+  })
+})
+
 describe('SwarmService boot orphan reconcile (6.4)', () => {
   it('parks cards left in_progress by a dead app instance, with an audit entry', () => {
     const store = makeStore([

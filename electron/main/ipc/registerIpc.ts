@@ -47,6 +47,7 @@ import {
   swarmProjectSchema,
   swarmRemoveCardSchema,
   swarmStartCardSchema,
+  swarmCompletionReportSchema,
   swarmUpdateCardSchema,
   terminalAttachmentInputSchema,
   terminalIdSchema,
@@ -333,6 +334,10 @@ export function registerIpc(services: Services): void {
   handle('swarmAgents', (p) =>
     services.namedAgents.list(swarmProjectSchema.parse(p).projectId).map(toSummary),
   )
+  handle('swarmCompletionReport', (p) => {
+    const { projectId, cardId } = swarmCompletionReportSchema.parse(p)
+    return services.swarm.completionReport(projectId, cardId)
+  })
 
   // --- chat (real answers via the local Claude Code CLI) ---
   handle('chatAsk', (p) => {

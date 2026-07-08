@@ -129,6 +129,9 @@ const api: CockpitApi = {
     startCard: (input) => invoke(IPC.swarmStartCard, input),
     parkCard: (input) => invoke(IPC.swarmParkCard, input),
     agents: (projectId) => invoke(IPC.swarmAgents, { projectId }),
+    completionReport: (projectId, cardId) =>
+      invoke(IPC.swarmCompletionReport, { projectId, cardId }),
+    onCardCompleted: (cb) => subscribe(IPC.evtSwarmCardCompleted, cb),
   },
   chat: {
     ask: (projectId, prompt, opts) => invoke(IPC.chatAsk, { projectId, prompt, opts }),

@@ -18,6 +18,12 @@ import {
 import { classifyRoles } from '@shared/role-router'
 import { composeAgentText, type NamedAgent } from '@shared/named-agents'
 import type { AgentUsageReport, TerminalSession } from '@shared/domain'
+import {
+  extractAcceptanceCriteria,
+  formatCompletionSummary,
+  type CompletionReport,
+} from '@shared/completion-report'
+import type { DiffStat } from '@shared/review'
 import type { Db } from '../db/Database'
 import type { CockpitEvents } from '../events'
 import { newId, nowIso } from '../util/ids'
@@ -58,6 +64,23 @@ export interface CouncilSessionReader {
   get(id: string): { result: CouncilResult } | null
 }
 
+/**
+ * The read-only diff-stat capability the completion report needs (Faz 2.5) —
+ * structurally satisfied by `ReviewService.diffStat`, so the swarm reuses the
+ * exact same git plumbing the board badge already runs rather than duplicating
+ * it. Injectable and optional so tests (and a degraded build) never need git.
+ */
+export interface DiffStatReader {
+  diffStat(projectId: string, opts?: { dir?: string }): Promise<DiffStat>
+}
+
+/**
+ * Best-effort OS notification sink (Faz 2.5). The concrete wiring guards behind
+ * `Notification.isSupported()`; this service additionally wraps every call in a
+ * try/catch so a completion announcement can never break a board transition.
+ */
+export type SwarmNotifier = (input: { title: string; body: string }) => void
+
 /** Parallel cards ceiling (plan D6). Raise only after Gate 6 passes at 4. */
 export const RUNNING_CAP = 3
 
@@ -96,13 +119,15 @@ export class SwarmService {
     private readonly terminals: WorkerSpawner,
     private readonly memory: Pick<MemoryHubService, 'list'>,
     private readonly audit: AuditLogService,
-    events: CockpitEvents,
+    private readonly events: CockpitEvents,
     private readonly projects: { get(projectId: string): { path: string } },
     private readonly worktrees: WorktreeOps,
     private readonly agentUsage?: { getReport(): Promise<AgentUsageReport> },
     private readonly namedAgents?: { find(projectId: string, slug: string): NamedAgent | null },
     private readonly doneSignal?: DoneSignalOps,
     private readonly councilSessions?: CouncilSessionReader,
+    private readonly review?: DiffStatReader,
+    private readonly notifier?: SwarmNotifier,
   ) {
     // 6.4: any card still in_progress at construction is an orphan — its
     // worker died with the previous app instance (TerminalManager already
@@ -217,6 +242,9 @@ export class SwarmService {
       summary: `Swarm card "${card.title}" — worker finished${assignments.length > 1 ? ' the pipeline' : ' its turn'}; moved to In review (terminal stays open)`,
       payload: { cardId: card.id, sessionId: card.terminalSessionId },
     })
+    // The transition is now durable; announcing it (event + notification) is a
+    // best-effort epilogue that must never unwind the move above.
+    void this.announceCompletion(projectId, card.id, card.title)
   }
 
   /**
@@ -420,6 +448,61 @@ export class SwarmService {
       summary: `Swarm card "${row.title}" finished (exit ${exitCode}) — moved to In review`,
       payload: { cardId: row.id, sessionId, exitCode },
     })
+    // Same best-effort announcement as the done-signal path — the card is
+    // already in In review; the notification is an epilogue, never a gate.
+    void this.announceCompletion(row.project_id, row.id, row.title)
+  }
+
+  /**
+   * Compute a card's completion report on demand (Faz 2.5) — NO new table. The
+   * card row supplies title/branch/body/council provenance; the diff stat reuses
+   * `ReviewService.diffStat` over the card's worktree (a card with no worktree,
+   * or a missing reader, yields a null diff stat rather than an error).
+   */
+  async completionReport(projectId: string, cardId: string): Promise<CompletionReport> {
+    const card = this.cardOrThrow(projectId, cardId)
+    let diffStat: DiffStat | null = null
+    if (card.worktreePath && this.review) {
+      try {
+        diffStat = await this.review.diffStat(projectId, { dir: card.worktreePath })
+      } catch {
+        // A non-repo/removed worktree degrades to no diff stat — the report is
+        // still worth returning (title, branch, acceptance criteria).
+        diffStat = null
+      }
+    }
+    return {
+      cardId: card.id,
+      title: card.title,
+      branch: card.branch,
+      diffStat,
+      acceptance: extractAcceptanceCriteria(card.body),
+      hasCouncilSpec: card.councilSessionId !== null,
+      finishedAt: card.updatedAt,
+    }
+  }
+
+  /**
+   * Fire the `swarm:cardCompleted` renderer event and a macOS notification for a
+   * freshly-reviewable card. Wholly best-effort: the diff stat, the event, and
+   * the notification are each isolated so a slow git call or an unsupported
+   * Notification host can never surface as a thrown board transition.
+   */
+  private async announceCompletion(projectId: string, cardId: string, title: string): Promise<void> {
+    try {
+      const report = await this.completionReport(projectId, cardId)
+      const summary = formatCompletionSummary(report)
+      this.events.emitTyped('swarm:cardCompleted', { projectId, cardId, title, summary })
+      try {
+        this.notifier?.({ title: 'Swarm — ready for review', body: summary })
+      } catch {
+        // Notifications are best-effort; a host that refuses one must not
+        // break the event fan-out above.
+      }
+    } catch {
+      // The transition already happened and the board reflects it — a failed
+      // announcement is invisible by design, never a user-facing error.
+    }
   }
 
   /**

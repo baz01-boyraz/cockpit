@@ -137,6 +137,7 @@ interface Calls {
   update: unknown[]
   start: unknown[]
   board: string[]
+  completionReport: unknown[]
   councilRun: unknown[]
   gitStatus: string[]
   diffStat: unknown[]
@@ -158,6 +159,7 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
     update: [],
     start: [],
     board: [],
+    completionReport: [],
     councilRun: [],
     gitStatus: [],
     diffStat: [],
@@ -187,6 +189,18 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
     board: (projectId) => {
       calls.board.push(projectId)
       return EMPTY_BOARD
+    },
+    completionReport: async (projectId, cardId) => {
+      calls.completionReport.push({ projectId, cardId })
+      return {
+        cardId,
+        title: 'Add the widget',
+        branch: 'swarm/add-the-widget-1a2b',
+        diffStat: { files: 3, insertions: 42, deletions: 7 },
+        acceptance: ['It renders', 'It has a test'],
+        hasCouncilSpec: true,
+        finishedAt: 't2',
+      }
     },
   }
   const ctx: HermesToolContext = {
@@ -337,6 +351,7 @@ describe('Hermes MCP tools — the scoped tool set', () => {
     expect(createHermesTools(ctx).map((t) => t.name).sort()).toEqual([
       'council_refine_spec',
       'create_swarm_card',
+      'get_completion_report',
       'get_git_diff_stat',
       'get_git_status',
       'get_log_intelligence',
@@ -418,6 +433,45 @@ describe('Hermes MCP tools — the scoped tool set', () => {
         }),
       ).rejects.toThrow()
       expect(calls.approvalsRequest).toEqual([])
+    })
+  })
+
+  describe('get_completion_report', () => {
+    it('returns a compact text report: summary line, branch, and acceptance list', async () => {
+      const { ctx, calls } = makeContext()
+      const result = (await toolNamed(ctx, 'get_completion_report').run({
+        projectId: 'p1',
+        cardId: 'c1',
+      })) as { report: string }
+      expect(calls.completionReport).toEqual([{ projectId: 'p1', cardId: 'c1' }])
+      expect(result.report).toContain('"Add the widget" ready for review — +42 −7 across 3 files')
+      expect(result.report).toContain('2 acceptance criteria')
+      expect(result.report).toContain('Branch: swarm/add-the-widget-1a2b')
+      expect(result.report).toContain('- It renders')
+      expect(result.report).toContain('- It has a test')
+    })
+
+    it('propagates a missing-card error from the service', async () => {
+      const { ctx } = makeContext({
+        swarm: {
+          createCard: () => EMPTY_BOARD,
+          updateCard: () => EMPTY_BOARD,
+          startCard: async () => EMPTY_BOARD,
+          board: () => EMPTY_BOARD,
+          completionReport: async () => {
+            throw new Error('Card c9 not found in this project.')
+          },
+        },
+      })
+      await expect(
+        toolNamed(ctx, 'get_completion_report').run({ projectId: 'p1', cardId: 'c9' }),
+      ).rejects.toThrow(/not found/)
+    })
+
+    it('rejects invalid input (missing cardId)', async () => {
+      const { ctx, calls } = makeContext()
+      await expect(toolNamed(ctx, 'get_completion_report').run({ projectId: 'p1' })).rejects.toThrow()
+      expect(calls.completionReport).toEqual([])
     })
   })
 
@@ -632,6 +686,9 @@ describe('Hermes MCP tools — the scoped tool set', () => {
         updateCard: () => EMPTY_BOARD,
         startCard: async () => EMPTY_BOARD,
         board: () => boardWith(card),
+        completionReport: async () => {
+          throw new Error('not used in subscribe_card_output tests')
+        },
       }
       const { ctx } = makeContext({ swarm, cardOutput: tracker })
       const tool = toolNamed(ctx, 'subscribe_card_output')

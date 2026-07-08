@@ -43,6 +43,7 @@ import {
   moveCardInList,
   type KanbanCard,
 } from '@shared/kanban'
+import { extractAcceptanceCriteria } from '@shared/completion-report'
 import { normalizeNoteName, renameLinkTargets } from '@shared/wikilink'
 import { classifyRoute } from '@shared/router'
 import { classifyRoles } from '@shared/role-router'
@@ -983,6 +984,24 @@ export function createMockApi(): CockpitApi {
         kanbanSeed.set(projectId, next)
         return assembleBoard(next)
       },
+      // Faz 2.5 — a plausible on-demand completion report (the same derivation the
+      // real service runs: acceptance from the body, diff stat over the worktree).
+      completionReport: async (projectId, cardId) => {
+        const card = kanbanFor(projectId).find((c) => c.id === cardId)
+        if (!card) throw new Error(`Card ${cardId} not found in this project.`)
+        return {
+          cardId: card.id,
+          title: card.title,
+          branch: card.branch,
+          diffStat: card.worktreePath ? { files: 3, insertions: 42, deletions: 7 } : null,
+          acceptance: extractAcceptanceCriteria(card.body),
+          hasCouncilSpec: card.councilSessionId !== null,
+          finishedAt: card.updatedAt,
+        }
+      },
+      // The mock finishes cards via board polling, not push events, so this is a
+      // no-op subscription (matching how the other push events are mocked).
+      onCardCompleted: () => () => {},
     },
     review: {
       // Staged review session so the surface is fully explorable in the

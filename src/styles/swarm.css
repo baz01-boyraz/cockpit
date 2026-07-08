@@ -869,6 +869,45 @@
   letter-spacing: 0.02em;
 }
 
+/* ----- completion report surface (Faz 2.5) — quiet, reuses swarmStat pill ----- */
+.swarmReport {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3, 12px);
+}
+.swarmReport__summary {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.swarmReport__criteria {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.swarmReport__criterion {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+.swarmReport__criterion svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--signal);
+}
+.swarmReport__empty {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+}
+
 /* ----- drop-position indicator ----- */
 .swarmDropline {
   flex-shrink: 0;

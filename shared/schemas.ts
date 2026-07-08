@@ -366,6 +366,10 @@ export const swarmRemoveCardSchema = z.object({
 
 export const swarmStartCardSchema = swarmRemoveCardSchema
 
+// A completion report / a card-output tail take the same {projectId, cardId}
+// pair — aliased rather than re-declared, keeping one source of truth.
+export const swarmCompletionReportSchema = swarmRemoveCardSchema
+
 // --- Hermes MCP server (Faz 3): tool inputs -------------------------------
 //
 // The local MCP server exposes a NARROW set of tools so the Hermes agent can

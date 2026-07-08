@@ -19,6 +19,7 @@ import type { ReviewDecision, ReviewItem } from './memory-review'
 import type { LedgerEntry } from './memory-ledger'
 import type { ConsolidationResult } from './memory-consolidate'
 import type { BoardColumn, CardStatus } from './kanban'
+import type { CompletionReport } from './completion-report'
 import type { Assignment } from './agent-taxonomy'
 import type { NamedAgentSummary } from './named-agents'
 import type { SecretKind } from './schemas'
@@ -44,6 +45,7 @@ import type {
   RailwayConnection,
   RailwayService,
   RouterResult,
+  SwarmCardCompletedEvent,
   TerminalExitEvent,
   TerminalAttachment,
   TerminalOutputChunk,
@@ -131,6 +133,7 @@ export const IPC = {
   swarmStartCard: 'swarm:startCard',
   swarmParkCard: 'swarm:parkCard',
   swarmAgents: 'swarm:agents',
+  swarmCompletionReport: 'swarm:completionReport',
 
   secretSet: 'secret:set',
   secretHas: 'secret:has',
@@ -155,6 +158,7 @@ export const IPC = {
   evtApprovalsChanged: 'evt:approvals:changed',
   evtLogsChanged: 'evt:logs:changed',
   evtAppUpdateChanged: 'evt:appUpdate:changed',
+  evtSwarmCardCompleted: 'evt:swarm:cardCompleted',
 } as const
 
 export type Unsubscribe = () => void
@@ -455,6 +459,17 @@ export interface CockpitApi {
     parkCard(input: { projectId: string; cardId: string }): Promise<BoardColumn[]>
     /** Named Agents roster from .claude/agents (user + project scope; project wins). */
     agents(projectId: string): Promise<NamedAgentSummary[]>
+    /**
+     * Decision-ready completion report for a card (Faz 2.5) — computed on demand
+     * (no new table): branch, worktree diff stat, acceptance criteria from the
+     * body, and whether it was council-gated. Read-only.
+     */
+    completionReport(projectId: string, cardId: string): Promise<CompletionReport>
+    /**
+     * Fires when a worker finishes and its card moves to In review, so the board
+     * surfaces the fresh review without polling. The mock never emits it.
+     */
+    onCardCompleted(cb: (evt: SwarmCardCompletedEvent) => void): Unsubscribe
   }
   chat: {
     /**
@@ -607,6 +622,7 @@ export interface IpcResultMap {
   swarmStartCard: R<CockpitApi['swarm']['startCard']>
   swarmParkCard: R<CockpitApi['swarm']['parkCard']>
   swarmAgents: R<CockpitApi['swarm']['agents']>
+  swarmCompletionReport: R<CockpitApi['swarm']['completionReport']>
   secretSet: R<CockpitApi['secrets']['set']>
   secretHas: R<CockpitApi['secrets']['has']>
   secretDelete: R<CockpitApi['secrets']['delete']>

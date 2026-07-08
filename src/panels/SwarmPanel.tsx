@@ -3,9 +3,11 @@ import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import type { CardStatus, KanbanCard } from '@shared/kanban'
 import type { ReviewResult } from '@shared/review'
+import type { CompletionReport } from '@shared/completion-report'
+import { formatCompletionSummary } from '@shared/completion-report'
 import type { CouncilResult, ScorecardEntry } from '@shared/council'
 import { COUNCIL_SEATS } from '@shared/council'
-import { IconShieldSearch, IconWarning, IconX } from '../components/icons'
+import { IconCheck, IconShieldSearch, IconWarning, IconX } from '../components/icons'
 import { ReviewFindings, reviewFailure } from '../components/ReviewFindings'
 import { CouncilVerdict } from '../components/CouncilVerdict'
 import { CouncilScorecard } from '../components/CouncilScorecard'
@@ -31,6 +33,7 @@ type CardReviewState =
   | { kind: 'diff'; cardTitle: string; result: ReviewResult | null }
   | { kind: 'council'; cardTitle: string; result: CouncilResult | null }
   | { kind: 'spec'; cardId: string; cardTitle: string; result: CouncilResult | null }
+  | { kind: 'report'; cardTitle: string; result: CompletionReport | null }
 
 /** A thrown council IPC call → a renderable failure result. */
 function councilFailure(error: unknown, mode: CouncilResult['mode'] = 'diff'): CouncilResult {
@@ -82,10 +85,12 @@ export function SwarmPanel() {
   const [reviewingId, setReviewingId] = useState<string | null>(null)
   const [councilingId, setCouncilingId] = useState<string | null>(null)
   const [conveningId, setConveningId] = useState<string | null>(null)
+  const [reportingId, setReportingId] = useState<string | null>(null)
   const [cardReview, setCardReview] = useState<CardReviewState | null>(null)
   const [scorecard, setScorecard] = useState<ScorecardEntry[] | null>(null)
 
-  const reviewBusy = reviewingId !== null || councilingId !== null || conveningId !== null
+  const reviewBusy =
+    reviewingId !== null || councilingId !== null || conveningId !== null || reportingId !== null
 
   // Project switch (or first mount): reset the surface, then load the board.
   useEffect(() => {
@@ -95,6 +100,7 @@ export function SwarmPanel() {
     setReviewingId(null)
     setCouncilingId(null)
     setConveningId(null)
+    setReportingId(null)
     setScorecard(null)
     if (!projectId) return
     refreshBoard(projectId).catch((err: unknown) => setNotice(errorMessage(err)))
@@ -259,6 +265,29 @@ export function SwarmPanel() {
     [projectId, reviewBusy],
   )
 
+  // Faz 2.5 — the decision-ready completion report for an In review card: branch,
+  // diff stat, and the acceptance-criteria checklist, computed on demand and shown
+  // in the same wide surface as the review/council results (kept visually quiet).
+  const handleReport = useCallback(
+    async (card: KanbanCard) => {
+      if (!projectId || reviewBusy) return
+      setReportingId(card.id)
+      setCardReview({ kind: 'report', cardTitle: card.title, result: null })
+      try {
+        const result = await cockpit().swarm.completionReport(projectId, card.id)
+        if (useStore.getState().activeProjectId !== projectId) return
+        setCardReview({ kind: 'report', cardTitle: card.title, result })
+      } catch (err: unknown) {
+        if (useStore.getState().activeProjectId !== projectId) return
+        setNotice(errorMessage(err))
+        setCardReview(null)
+      } finally {
+        setReportingId(null)
+      }
+    },
+    [projectId, reviewBusy],
+  )
+
   // The LLM-Council (Karpathy's method): five independent advisors judge the
   // card's worktree diff, an anonymous peer reviewer critiques them, and a
   // chairman synthesizes one verdict. One long main-process call — the card's
@@ -351,21 +380,25 @@ export function SwarmPanel() {
       parkingId,
       reviewingId,
       councilingId,
+      reportingId,
       onStart: (cardId) => void handleStart(cardId),
       onPark: (cardId) => void handlePark(cardId),
       onViewTerminal: () => setView('terminals'),
       onReview: (card) => void handleReview(card),
       onCouncil: (card) => void handleCouncil(card),
+      onReport: (card) => void handleReport(card),
     }),
     [
       startingId,
       parkingId,
       reviewingId,
       councilingId,
+      reportingId,
       handleStart,
       handlePark,
       handleReview,
       handleCouncil,
+      handleReport,
       setView,
     ],
   )
@@ -421,7 +454,9 @@ export function SwarmPanel() {
                   ? 'llm council · spec gate'
                   : cardReview.kind === 'council'
                     ? `llm council · ${COUNCIL_SEATS.length} seats`
-                    : 'diff review'}
+                    : cardReview.kind === 'report'
+                      ? 'completion report'
+                      : 'diff review'}
               </div>
               <div className="swarmReview__title">{cardReview.cardTitle}</div>
             </div>
@@ -441,10 +476,14 @@ export function SwarmPanel() {
                 ? 'Convening the council on this spec — five seats, then a build/clarify gate…'
                 : cardReview.kind === 'council'
                   ? 'Convening the council — five seats, peer rankings, then a verdict…'
-                  : 'Reviewing the working-tree diff…'}
+                  : cardReview.kind === 'report'
+                    ? 'Gathering the completion report — diff stat and acceptance criteria…'
+                    : 'Reviewing the working-tree diff…'}
             </div>
           ) : cardReview.kind === 'diff' ? (
             <ReviewFindings result={cardReview.result} />
+          ) : cardReview.kind === 'report' ? (
+            <CompletionReportView report={cardReview.result} />
           ) : (
             <div className="swarmReview__council">
               <CouncilVerdict result={cardReview.result} />
@@ -475,6 +514,46 @@ export function SwarmPanel() {
           cardActions={cardActions}
           councilGate={councilGate}
         />
+      )}
+    </div>
+  )
+}
+
+/**
+ * The completion report body: the notification-sized summary line, a quiet
+ * diff-stat pill (reusing the board's `swarmStat` classes), and the acceptance
+ * criteria as a checklist. Deliberately calm — the same surface style as the
+ * review/council results, no new design language.
+ */
+function CompletionReportView({ report }: { report: CompletionReport }) {
+  return (
+    <div className="swarmReport">
+      <p className="swarmReport__summary">{formatCompletionSummary(report)}</p>
+      {report.diffStat && report.diffStat.files > 0 && (
+        <div
+          className="swarmStat"
+          role="status"
+          aria-label={`${report.diffStat.files} files changed, ${report.diffStat.insertions} added, ${report.diffStat.deletions} removed`}
+        >
+          <span className="swarmStat__add mono">+{report.diffStat.insertions}</span>
+          <span className="swarmStat__del mono">−{report.diffStat.deletions}</span>
+          <span className="swarmStat__files">
+            {report.diffStat.files} file{report.diffStat.files === 1 ? '' : 's'}
+          </span>
+          {report.branch && <span className="swarmStat__files mono">{report.branch}</span>}
+        </div>
+      )}
+      {report.acceptance.length > 0 ? (
+        <ul className="swarmReport__criteria">
+          {report.acceptance.map((item, i) => (
+            <li key={i} className="swarmReport__criterion">
+              <IconCheck width={12} height={12} aria-hidden />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="swarmReport__empty">No acceptance criteria listed in the card body.</p>
       )}
     </div>
   )

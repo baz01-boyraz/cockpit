@@ -1,5 +1,10 @@
 import { EventEmitter } from 'node:events'
-import type { AppUpdateState, TerminalExitEvent, TerminalOutputChunk } from '@shared/domain'
+import type {
+  AppUpdateState,
+  SwarmCardCompletedEvent,
+  TerminalExitEvent,
+  TerminalOutputChunk,
+} from '@shared/domain'
 import { logFatal } from './logging'
 
 /**
@@ -13,6 +18,7 @@ export interface CockpitEventMap {
   'approvals:changed': { projectId: string }
   'logs:changed': { projectId: string }
   'appUpdate:changed': AppUpdateState
+  'swarm:cardCompleted': SwarmCardCompletedEvent
 }
 
 export class CockpitEvents extends EventEmitter {

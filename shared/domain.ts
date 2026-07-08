@@ -117,6 +117,19 @@ export interface TerminalExitEvent {
 }
 
 /**
+ * Fired when a Swarm worker finishes and its card moves to In review (Faz 2.5) —
+ * the push that turns a silent board transition into an active notification. The
+ * `summary` is the notification-sized completion one-liner (see
+ * `formatCompletionSummary`); the renderer records it in its activity feed.
+ */
+export interface SwarmCardCompletedEvent {
+  projectId: string
+  cardId: string
+  title: string
+  summary: string
+}
+
+/**
  * A resumable Claude Code conversation for a project, derived from the agent's
  * own on-disk transcripts. `id` is the Claude session id passed to
  * `claude --resume <id>`. Title is the opening user prompt.

@@ -4,7 +4,7 @@ import type { NamedAgentSummary } from '@shared/named-agents'
 import type { DiffStat } from '@shared/review'
 import { assignmentLabel } from '@shared/agent-taxonomy'
 import { cockpit } from '../../lib/cockpit'
-import { useSessionActivity } from '../../store/swarmActivityStore'
+import { useCardCompletion, useSessionActivity } from '../../store/swarmActivityStore'
 import {
   IconBranch,
   IconCheck,
@@ -25,11 +25,14 @@ export interface SwarmCardActions {
   reviewingId: string | null
   /** Card id with a council run in flight, if any. */
   councilingId: string | null
+  /** Card id with a completion-report fetch in flight, if any. */
+  reportingId: string | null
   onStart: (cardId: string) => void
   onPark: (cardId: string) => void
   onViewTerminal: () => void
   onReview: (card: KanbanCard) => void
   onCouncil: (card: KanbanCard) => void
+  onReport: (card: KanbanCard) => void
 }
 
 /** Deterministic identity hue. An agent's own declared color wins; otherwise
@@ -110,6 +113,8 @@ interface SwarmCardProps {
   reviewing: boolean
   /** True while a council run is live for THIS card. */
   counciling: boolean
+  /** True while a completion-report fetch is live for THIS card. */
+  reporting: boolean
   onDragStart: (card: KanbanCard) => void
   onDragEnd: () => void
   onOpen: (cardId: string) => void
@@ -123,6 +128,8 @@ interface SwarmCardProps {
   onReview: (card: KanbanCard) => void
   /** 6.5 — run the reviewer council: every persona lens over the same diff. */
   onCouncil: (card: KanbanCard) => void
+  /** Faz 2.5 — fetch the decision-ready completion report (In review cards only). */
+  onReport: (card: KanbanCard) => void
 }
 
 const startable = (status: KanbanCard['status']): boolean =>
@@ -263,6 +270,7 @@ export function SwarmCard({
   parking,
   reviewing,
   counciling,
+  reporting,
   onDragStart,
   onDragEnd,
   onOpen,
@@ -271,8 +279,11 @@ export function SwarmCard({
   onViewTerminal,
   onReview,
   onCouncil,
+  onReport,
 }: SwarmCardProps) {
   const running = card.status === 'in_progress'
+  /** A push-recorded completion (Faz 2.5), surfaced as the In review hint. */
+  const completion = useCardCompletion(card.id)
   /** Parked with a kept worktree → Start resumes where the worker stopped. */
   const resumable = card.status === 'parked' && card.worktreePath !== null
   const identity = resolveIdentity(card, agent)
@@ -432,7 +443,13 @@ export function SwarmCard({
 
       {card.status === 'in_review' && (
         <p className="swarmCard__hint">
-          Agent paused — review the diff below, or drag to <strong>Done</strong>.
+          {completion ? (
+            completion.summary
+          ) : (
+            <>
+              Agent paused — review the diff below, or drag to <strong>Done</strong>.
+            </>
+          )}
         </p>
       )}
 
@@ -440,8 +457,17 @@ export function SwarmCard({
         <div className="swarmCard__foot">
           <button
             className="swarmCardLink"
+            onClick={act(() => onReport(card))}
+            disabled={reviewing || counciling || reporting}
+            title="Decision-ready summary — diff stat and acceptance criteria"
+          >
+            <IconCheck width={11} height={11} />
+            {reporting ? 'Report…' : 'Report'}
+          </button>
+          <button
+            className="swarmCardLink"
             onClick={act(() => onReview(card))}
-            disabled={reviewing || counciling}
+            disabled={reviewing || counciling || reporting}
             title="AI review of the card's worktree diff"
           >
             <IconShieldSearch width={11} height={11} />
@@ -450,7 +476,7 @@ export function SwarmCard({
           <button
             className="swarmCardLink"
             onClick={act(() => onCouncil(card))}
-            disabled={reviewing || counciling}
+            disabled={reviewing || counciling || reporting}
             title="LLM Council — five advisors debate the diff, then a chairman verdict"
           >
             <IconCouncil width={11} height={11} />

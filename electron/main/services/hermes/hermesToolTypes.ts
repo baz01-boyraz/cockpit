@@ -21,8 +21,8 @@ import type { AppScreenshotService } from './AppScreenshotService'
  * Hermes gains a new capability, which is exactly why it is spelled out here.
  */
 export interface HermesToolContext {
-  // Faz 3a — swarm + usage
-  swarm: Pick<SwarmService, 'createCard' | 'updateCard' | 'startCard' | 'board'>
+  // Faz 3a — swarm + usage (Faz 2.5 adds the on-demand completion report)
+  swarm: Pick<SwarmService, 'createCard' | 'updateCard' | 'startCard' | 'board' | 'completionReport'>
   // Faz 3 (council) — spec gate before a card is created/proposed.
   council: Pick<CouncilService, 'run' | 'scorecard'>
   agentUsage: Pick<AgentUsageService, 'getReport'>

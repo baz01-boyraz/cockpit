@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { Notification } from 'electron'
 import type {
   DashboardSnapshot,
   RouterResult,
@@ -186,6 +187,14 @@ export class Services {
       this.namedAgents,
       new SwarmDoneSignal(),
       councilSessions,
+      // Reuse the review service's diff-stat plumbing for the completion report.
+      this.review,
+      // Faz 2.5: a card reaching In review pops a native notification. Guarded
+      // behind Notification.isSupported() so headless/unsupported hosts no-op.
+      (input) => {
+        if (!Notification.isSupported()) return
+        new Notification({ title: input.title, body: input.body }).show()
+      },
     )
     // Forget a pane's TUI-mode state once it exits, so session ids never leak.
     opts.events.onTyped('terminal:exit', ({ sessionId }) => this.tuiState.delete(sessionId))

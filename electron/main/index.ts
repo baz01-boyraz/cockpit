@@ -124,6 +124,7 @@ function forwardEvents(): void {
   events.onTyped('approvals:changed', (p) => send(IPC.evtApprovalsChanged, p))
   events.onTyped('logs:changed', (p) => send(IPC.evtLogsChanged, p))
   events.onTyped('appUpdate:changed', (p) => send(IPC.evtAppUpdateChanged, p))
+  events.onTyped('swarm:cardCompleted', (p) => send(IPC.evtSwarmCardCompleted, p))
 }
 
 app.whenReady().then(() => {

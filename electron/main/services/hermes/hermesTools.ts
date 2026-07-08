@@ -1,11 +1,13 @@
 import {
   subscribeCardOutputSchema,
+  swarmCompletionReportSchema,
   swarmCreateCardSchema,
   swarmProjectSchema,
   swarmStartCardSchema,
   swarmUpdateCardSchema,
   usageQuotaSchema,
 } from '@shared/schemas'
+import { formatCompletionSummary, type CompletionReport } from '@shared/completion-report'
 import type { BoardColumn, KanbanCard } from '@shared/kanban'
 import type { HermesTool, HermesToolContext } from './hermesToolTypes'
 import { createGitTools } from './hermesToolsGit'
@@ -24,6 +26,19 @@ function findCard(board: readonly BoardColumn[], cardId: string): KanbanCard | n
     if (card) return card
   }
   return null
+}
+
+/** Compact, model-readable rendering of a completion report: the summary
+ *  one-liner, the branch, and the acceptance-criteria checklist. */
+function formatCompletionReportText(report: CompletionReport): string {
+  const lines = [formatCompletionSummary(report), `Branch: ${report.branch ?? 'none'}`]
+  if (report.acceptance.length > 0) {
+    lines.push('Acceptance criteria:')
+    for (const item of report.acceptance) lines.push(`- ${item}`)
+  } else {
+    lines.push('Acceptance criteria: none listed in the card body')
+  }
+  return lines.join('\n')
 }
 
 /**
@@ -111,6 +126,17 @@ function createSwarmTools(ctx: HermesToolContext): HermesTool[] {
           exitCode: drained.exitCode,
           isDone,
         }
+      },
+    },
+    {
+      name: 'get_completion_report',
+      description:
+        "Fetch the completion report for a swarm card that has reached \"In review\". When a card lands there, use this to relay a 30-second decision summary to the user: what was built, the diff size (+added −removed across N files), whether acceptance criteria are met (the report lists them from the refined spec — check the actual diff with get_git_diff_stat/review tools if you need to confirm they were satisfied), and whether it was council-spec'd. Then ask the user to approve (drag to Done), request changes, or park it. Returns a compact text report: the summary line, the branch, and the acceptance-criteria list.",
+      inputShape: swarmCompletionReportSchema.shape,
+      run: async (raw) => {
+        const { projectId, cardId } = swarmCompletionReportSchema.parse(raw)
+        const report = await ctx.swarm.completionReport(projectId, cardId)
+        return { report: formatCompletionReportText(report) }
       },
     },
     {
