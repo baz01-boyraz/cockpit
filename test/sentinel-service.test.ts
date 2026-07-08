@@ -1,8 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { SentinelService } from '../electron/main/services/SentinelService'
+import {
+  SentinelService,
+  type SentinelReviewSink,
+  type SentinelTriager,
+} from '../electron/main/services/SentinelService'
 import { CockpitEvents } from '../electron/main/events'
-import { type SentinelSignal } from '../shared/sentinel'
+import { type SentinelSignal, type SentinelTriage } from '../shared/sentinel'
 import type { Db } from '../electron/main/db/Database'
+import type { CreateReviewInput } from '../electron/main/services/MemoryReviewService'
+import type { ReviewItem } from '../shared/memory-review'
+
+/** Drain the microtask + macrotask queue so a fire-and-forget `void enrich()` settles. */
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+const triageVerdict = (over: Partial<SentinelTriage> = {}): SentinelTriage => ({
+  reportWorthy: true,
+  headline: 'Build broke on a missing alias',
+  action: 'Run the build step, then retry',
+  gotchaCandidate: false,
+  at: '2026-07-08T00:00:00.000Z',
+  ...over,
+})
 
 interface Row {
   id: string
@@ -15,6 +33,7 @@ interface Row {
   fingerprint: string
   status: string
   created_at: string
+  triage: string | null
 }
 
 /**
@@ -44,8 +63,18 @@ function makeDb() {
               fingerprint: String(p.fingerprint),
               status: String(p.status),
               created_at: String(p.createdAt),
+              triage: null,
             })
             return { changes: 1 }
+          }
+          if (sql.startsWith('UPDATE sentinel_signals SET triage')) {
+            const p = arg as { triage: string | null; id: string }
+            const r = rows.find((x) => x.id === p.id)
+            if (r) {
+              r.triage = p.triage
+              return { changes: 1 }
+            }
+            return { changes: 0 }
           }
           if (sql.includes("SET status = 'seen'")) {
             const [projectId, id] = [arg as string, rest[0] as string]
@@ -209,5 +238,137 @@ describe('SentinelService.markSeen / list / unseenCount', () => {
     // p2 has nothing.
     expect(svc.unseenCount('p2')).toBe(0)
     expect(svc.list('p2')).toEqual([])
+  })
+})
+
+describe('SentinelService enrich (Faz B triage)', () => {
+  let store: ReturnType<typeof makeDb>
+  let events: CockpitEvents
+  let alerts: SentinelSignal[]
+
+  beforeEach(() => {
+    store = makeDb()
+    events = new CockpitEvents()
+    alerts = captureAlerts(events)
+  })
+
+  const makeReviews = () => {
+    const create = vi.fn((_input: CreateReviewInput): ReviewItem => ({}) as ReviewItem)
+    const reviews: SentinelReviewSink = { create }
+    return { reviews, create }
+  }
+
+  it('persists the triage blob and re-emits the enriched signal under the same id', async () => {
+    const verdict = triageVerdict()
+    const triager: SentinelTriager = { triage: vi.fn(async () => verdict) }
+    const { reviews, create } = makeReviews()
+    const svc = new SentinelService(store.db, events, undefined, triager, reviews)
+
+    const sig = svc.report({ projectId: 'p1', severity: 'notice', source: 'log-intelligence', title: 'Build failed', summary: 's' })!
+    await flush()
+
+    // The row carries the triage JSON; list() re-hydrates it.
+    expect(store.rows[0].triage).toBe(JSON.stringify(verdict))
+    expect(svc.list('p1')[0].triage).toEqual(verdict)
+    // Two emits for the same id: the spine's original, then the enriched one.
+    expect(alerts).toHaveLength(2)
+    expect(alerts[0].id).toBe(sig.id)
+    expect(alerts[0].triage).toBeNull()
+    expect(alerts[1].id).toBe(sig.id)
+    expect(alerts[1].triage).toEqual(verdict)
+    // A reportWorthy signal is NOT demoted, and no gotcha is routed.
+    expect(store.rows[0].status).toBe('new')
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('demotes a not-reportWorthy signal to seen but still re-emits the verdict', async () => {
+    const verdict = triageVerdict({ reportWorthy: false })
+    const triager: SentinelTriager = { triage: vi.fn(async () => verdict) }
+    const svc = new SentinelService(store.db, events, undefined, triager)
+
+    svc.report({ projectId: 'p1', severity: 'notice', source: 'council', title: 'noise', summary: 's' })
+    await flush()
+
+    expect(alerts).toHaveLength(2)
+    expect(alerts[1].triage?.reportWorthy).toBe(false)
+    // Badge pressure cleared: the row is demoted to seen.
+    expect(store.rows[0].status).toBe('seen')
+    expect(svc.unseenCount('p1')).toBe(0)
+  })
+
+  it('routes a gotcha candidate through the gate into the review queue', async () => {
+    const verdict = triageVerdict({ gotchaCandidate: true, action: 'Rebuild @shared before running the worker' })
+    const triager: SentinelTriager = { triage: vi.fn(async () => verdict) }
+    const { reviews, create } = makeReviews()
+    const svc = new SentinelService(store.db, events, undefined, triager, reviews)
+
+    svc.report({ projectId: 'p1', severity: 'alert', source: 'worker-exit', title: 'Worker exited nonzero', summary: 'stale alias' })
+    await flush()
+
+    expect(create).toHaveBeenCalledTimes(1)
+    const arg = create.mock.calls[0][0]
+    expect(arg.brain).toBe('project:p1')
+    expect(arg.kind).toBe('new')
+    expect(arg.slug).toBe('signal-worker-exited-nonzero')
+    expect(arg.title).toBe('Worker exited nonzero')
+    expect(arg.proposedContent).toContain('captured from sentinel signal')
+    expect(arg.reason).toContain('Rebuild @shared')
+  })
+
+  it('drops a gotcha whose content is secret-shaped — never reaches the review queue', async () => {
+    const verdict = triageVerdict({ gotchaCandidate: true })
+    const triager: SentinelTriager = { triage: vi.fn(async () => verdict) }
+    const { reviews, create } = makeReviews()
+    const svc = new SentinelService(store.db, events, undefined, triager, reviews)
+
+    // An AWS-key-shaped token in the summary makes the built note look like a secret.
+    svc.report({ projectId: 'p1', severity: 'alert', source: 'log-intelligence', title: 'Leaked key', summary: 'key AKIAIOSFODNN7EXAMPLE spotted' })
+    await flush()
+
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('a null verdict (Hermes missing/slow/wrong) changes nothing after the spine', async () => {
+    const triager: SentinelTriager = { triage: vi.fn(async () => null) }
+    const { reviews, create } = makeReviews()
+    const svc = new SentinelService(store.db, events, undefined, triager, reviews)
+
+    svc.report({ projectId: 'p1', severity: 'notice', source: 'approval', title: 'x', summary: 's' })
+    await flush()
+
+    // Exactly the spine's one emit, no triage on the row, no demotion, no review.
+    expect(alerts).toHaveLength(1)
+    expect(store.rows[0].triage).toBeNull()
+    expect(store.rows[0].status).toBe('new')
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('never triages an info signal (feed-only) — no triager call', async () => {
+    const triage = vi.fn(async () => triageVerdict())
+    const triager: SentinelTriager = { triage }
+    const svc = new SentinelService(store.db, events, undefined, triager)
+
+    svc.report({ projectId: 'p1', severity: 'info', source: 'council', title: 'fyi', summary: 's' })
+    await flush()
+
+    expect(triage).not.toHaveBeenCalled()
+    expect(alerts).toHaveLength(1)
+  })
+
+  it('a throwing triager never disturbs the already-emitted spine signal', async () => {
+    const triager: SentinelTriager = {
+      triage: vi.fn(async () => {
+        throw new Error('triage exploded')
+      }),
+    }
+    const svc = new SentinelService(store.db, events, undefined, triager)
+
+    const sig = svc.report({ projectId: 'p1', severity: 'alert', source: 'approval', title: 'boom', summary: 's' })
+    await flush()
+
+    expect(sig).not.toBeNull()
+    expect(alerts).toHaveLength(1)
+    expect(store.rows).toHaveLength(1)
+    expect(store.rows[0].status).toBe('new')
   })
 })

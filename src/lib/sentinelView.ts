@@ -23,13 +23,19 @@ export function draftQuestion(title: string): string {
   return `Bu sinyale bakar mısın: ${title} — ne oldu, ne yapmalıyım?`
 }
 
-/** Shape a signal into the store's Hermes handoff payload. */
+/**
+ * Shape a signal into the store's Hermes handoff payload. When triage has
+ * landed (Faz B re-emit), its headline replaces the raw sensor title and the
+ * suggested action rides the summary — the chat opens with a running start.
+ */
 export function toHermesOpener(signal: SentinelSignal): HermesOpener {
   return {
     signalId: signal.id,
     source: signal.source,
-    title: signal.title,
-    summary: signal.summary,
+    title: signal.triage?.headline ?? signal.title,
+    summary: signal.triage
+      ? `${signal.summary}\nÖnerilen adım: ${signal.triage.action}`
+      : signal.summary,
     context: signal.context,
   }
 }

@@ -35,6 +35,7 @@ import { HermesMcpServer } from './hermes/HermesMcpServer'
 import { HermesApprovalExecutor } from './hermes/HermesApprovalExecutor'
 import { HermesChecksService } from './hermes/HermesChecksService'
 import { HermesChatService } from './hermes/HermesChatService'
+import { HermesTriageService } from './hermes/HermesTriageService'
 import { AppScreenshotService } from './hermes/AppScreenshotService'
 import { NamedAgentsService } from './NamedAgentsService'
 import { SwarmWorktrees } from './SwarmWorktrees'
@@ -79,6 +80,8 @@ export class Services {
   readonly chat: ChatService
   /** Backend for the Hermes chat widget (docs/plans/hermes.md Faz 7). */
   readonly hermesChat: HermesChatService
+  /** Faz B: the cheap DeepSeek seat that triages sentinel signals asynchronously. */
+  readonly hermesTriage: HermesTriageService
   readonly review: ReviewService
   readonly council: CouncilService
   readonly memory: MemoryHubService
@@ -127,7 +130,18 @@ export class Services {
     // Faz A: the sentinel is constructed BEFORE the sensors that feed it (log
     // intelligence, approvals, council, swarm) so it can be injected as their
     // optional collaborator. It is a fire-and-forget sink — report() never throws.
-    this.sentinel = new SentinelService(this.db, opts.events, notifier)
+    // Faz B: its two enrichment collaborators (the DeepSeek triage seat + the
+    // review-queue sink) are built here first so the sentinel gets them at
+    // construction; both are optional — absent, the spine behaves identically.
+    this.hermesTriage = new HermesTriageService()
+    this.memoryReviews = new MemoryReviewService(this.db)
+    this.sentinel = new SentinelService(
+      this.db,
+      opts.events,
+      notifier,
+      this.hermesTriage,
+      this.memoryReviews,
+    )
     this.logs = new LogIntelligenceService(this.db, opts.events, this.sentinel)
     this.projects = new ProjectService(this.db)
     this.attachments = new AttachmentService(this.projects)
@@ -152,7 +166,8 @@ export class Services {
     this.memory = new MemoryHubService(this.projects)
     this.globalMemory = new MemoryHubService(this.projects, join(opts.userDataDir, 'baz-memory'))
     this.memoryLedger = new MemoryLedgerService(this.db)
-    this.memoryReviews = new MemoryReviewService(this.db)
+    // this.memoryReviews is constructed earlier (Faz B) so the sentinel can take
+    // it as its gotcha-route review sink.
     this.memoryDistiller = new MemoryDistiller(this.projects)
     this.memoryPipeline = new MemoryPipeline(
       this.memory,

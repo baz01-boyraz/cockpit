@@ -422,3 +422,18 @@ CREATE TABLE IF NOT EXISTS sentinel_signals (
 CREATE INDEX IF NOT EXISTS idx_sentinel_signals_project ON sentinel_signals(project_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_sentinel_signals_fingerprint ON sentinel_signals(project_id, fingerprint, created_at);
 `
+
+/**
+ * V14 — Hermes triage enrichment (Faz B). A cheap Hermes oneshot (DeepSeek)
+ * judges a notice/alert signal asynchronously and stores its verdict here. A
+ * SINGLE JSON column because triage is an enrichment blob the renderer treats as
+ * one unit (headline, action, reportWorthy, gotchaCandidate, at) — no query ever
+ * filters on its parts, so decomposing it into columns would buy nothing and add
+ * a migration per field. NULL means "not yet triaged" (Hermes missing/slow/wrong
+ * always leaves it NULL and the spine works identically). Append-only ALTER
+ * (SQLite has no ADD COLUMN IF NOT EXISTS, so it lives only here, never back-
+ * edited into V13).
+ */
+export const SCHEMA_V14 = /* sql */ `
+ALTER TABLE sentinel_signals ADD COLUMN triage TEXT;
+`

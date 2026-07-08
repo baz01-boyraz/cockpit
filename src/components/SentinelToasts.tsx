@@ -48,9 +48,14 @@ export function SentinelToasts() {
 
   const enqueue = useCallback(
     (signal: SentinelSignal) => {
-      // Guard against a replay/onAlert double-add and against re-showing a
-      // signal the user already dismissed.
-      if (shownRef.current.has(signal.id)) return
+      // A repeat id is the triage re-emit (the enriched signal rides the same
+      // sentinel:alert event with the same id): update the visible toast in
+      // place. A repeat for a toast already dismissed stays dismissed — the
+      // enrichment is not a reason to resurface it.
+      if (shownRef.current.has(signal.id)) {
+        setToasts((prev) => prev.map((s) => (s.id === signal.id ? signal : s)))
+        return
+      }
       shownRef.current.add(signal.id)
       setToasts((prev) => [signal, ...prev])
       if (signal.severity === 'notice') {
@@ -134,8 +139,11 @@ export function SentinelToasts() {
               <IconX width={12} height={12} />
             </button>
           </div>
-          <p className="sentinelToast__title">{signal.title}</p>
-          <p className="sentinelToast__summary">{signal.summary}</p>
+          {/* Once Hermes triage lands (a re-emit of the same id), its headline
+              and next action replace the raw sensor text — the toast gets
+              smarter in place instead of a second toast appearing. */}
+          <p className="sentinelToast__title">{signal.triage?.headline ?? signal.title}</p>
+          <p className="sentinelToast__summary">{signal.triage?.action ?? signal.summary}</p>
           <div className="sentinelToast__actions">
             <button
               type="button"

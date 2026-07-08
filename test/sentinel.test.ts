@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   SENTINEL_COOLDOWN_MS,
+  TRIAGE_FIELD_CAP,
   buildSignal,
+  buildTriagePrompt,
+  parseTriageResponse,
   shouldSuppress,
   signalFingerprint,
   type SentinelSource,
@@ -109,5 +112,92 @@ describe('buildSignal', () => {
     expect(sig.fingerprint).toBe(
       signalFingerprint({ projectId: 'p1', source: 'log-intelligence', title: '  Build failed  ' }),
     )
+  })
+
+  it('starts a fresh signal with null triage (enrichment is later + async)', () => {
+    expect(buildSignal({ ...base, title: 't', summary: 's' }).triage).toBeNull()
+  })
+})
+
+describe('buildTriagePrompt', () => {
+  const signal = {
+    source: 'log-intelligence' as SentinelSource,
+    title: 'Cannot find module',
+    summary: 'a stale build dropped the alias',
+    context: "Error: Cannot find module '@shared/x'",
+  }
+
+  it('fences the signal fields inside caller-supplied markers and demands strict JSON', () => {
+    const tag = '====TAG-123===='
+    const prompt = buildTriagePrompt(signal, tag)
+    expect(prompt).toContain('STRICT JSON')
+    // The tag appears three times: the SECURITY RULE reference + the open/close fence.
+    expect(prompt.match(new RegExp(tag.replace(/[-]/g, '\\-'), 'g'))).toHaveLength(3)
+    expect(prompt).toContain('UNTRUSTED DATA')
+    expect(prompt).toContain('title: Cannot find module')
+    expect(prompt).toContain('reportWorthy')
+    expect(prompt).toContain('gotchaCandidate')
+  })
+
+  it('renders a null context as (none) rather than the literal null', () => {
+    const prompt = buildTriagePrompt({ ...signal, context: null }, '====T====')
+    expect(prompt).toContain('context: (none)')
+  })
+})
+
+describe('parseTriageResponse', () => {
+  const NOW = '2026-07-08T12:00:00.000Z'
+
+  it('parses a clean strict-JSON reply', () => {
+    const text = JSON.stringify({
+      reportWorthy: true,
+      headline: 'Build broke on a missing alias',
+      action: 'Run the build step, then retry',
+      gotchaCandidate: false,
+    })
+    expect(parseTriageResponse(text, NOW)).toEqual({
+      reportWorthy: true,
+      headline: 'Build broke on a missing alias',
+      action: 'Run the build step, then retry',
+      gotchaCandidate: false,
+      at: NOW,
+    })
+  })
+
+  it('recovers JSON wrapped in prose and markdown fences', () => {
+    const text =
+      'Sure, here is my verdict:\n```json\n{"reportWorthy": false, "headline": "noise", "action": "ignore it", "gotchaCandidate": false}\n```\nHope that helps!'
+    const parsed = parseTriageResponse(text, NOW)
+    expect(parsed?.reportWorthy).toBe(false)
+    expect(parsed?.headline).toBe('noise')
+    expect(parsed?.action).toBe('ignore it')
+  })
+
+  it('returns null when a required field is missing or mistyped', () => {
+    expect(parseTriageResponse('{"headline":"h","action":"a","gotchaCandidate":false}', NOW)).toBeNull()
+    expect(parseTriageResponse('{"reportWorthy":"yes","headline":"h","action":"a","gotchaCandidate":false}', NOW)).toBeNull()
+    expect(parseTriageResponse('{"reportWorthy":true,"headline":"","action":"a","gotchaCandidate":false}', NOW)).toBeNull()
+  })
+
+  it('control-strips and hard-caps hostile headline/action lengths', () => {
+    const long = 'x'.repeat(500)
+    const text = JSON.stringify({
+      reportWorthy: true,
+      headline: `heading\u0007${long}`,
+      action: long,
+      gotchaCandidate: true,
+    })
+    const parsed = parseTriageResponse(text, NOW)
+    expect(parsed?.headline.length).toBe(TRIAGE_FIELD_CAP)
+    expect(parsed?.headline.startsWith('heading')).toBe(true)
+    expect(parsed?.headline).not.toContain('\u0007')
+    expect(parsed?.action.length).toBe(TRIAGE_FIELD_CAP)
+  })
+
+  it('returns null on non-JSON / empty / garbage input', () => {
+    expect(parseTriageResponse('not json at all', NOW)).toBeNull()
+    expect(parseTriageResponse('', NOW)).toBeNull()
+    expect(parseTriageResponse('{ broken', NOW)).toBeNull()
+    expect(parseTriageResponse('[1,2,3]', NOW)).toBeNull()
   })
 })
