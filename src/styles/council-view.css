@@ -1,0 +1,323 @@
+/* ==========================================================================
+   Council standalone view (roadmap E4)
+   A project-level entry to the LLM Council: type a free-form spec or question,
+   convene the five-seat council in spec mode, and read the build/clarify gate
+   verdict + cross-session seat standings. The verdict/scorecard bodies reuse the
+   swarm board's CouncilVerdict / CouncilScorecard components (styled in
+   components.css); this file owns only the surrounding compose + history chrome.
+   ========================================================================== */
+
+.councilView {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+/* ----- compose: the spec/question the council will deliberate on ----- */
+.councilView__compose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.councilView__composeHead {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.councilView__composeHint {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+.councilView__input {
+  width: 100%;
+  resize: vertical;
+  min-height: 118px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  transition:
+    border-color var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
+}
+.councilView__input::placeholder {
+  color: var(--text-faint);
+}
+.councilView__input:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+.councilView__input:focus-visible,
+.councilView__input:focus {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.councilView__input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.councilView__composeFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.councilView__kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+}
+.councilView__kbd kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  color: var(--text-muted);
+  font-size: var(--fs-micro);
+  line-height: 1;
+}
+.councilView__convene {
+  flex-shrink: 0;
+}
+
+.councilView__noproject {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--warning);
+  font-size: var(--fs-xs);
+}
+.councilView__noproject svg {
+  flex-shrink: 0;
+}
+
+/* ----- result: the convened verdict + seat standings ----- */
+.councilView__result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.councilView__resultHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.councilView__resultIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: var(--r-sm);
+  background: var(--accent-wash);
+  border: 1px solid var(--border-accent);
+  color: var(--accent-hi);
+}
+.councilView__resultText {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.councilView__resultTitle {
+  color: var(--text);
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  letter-spacing: var(--tracking-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.councilView__dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: var(--r-sm);
+  color: var(--text-faint);
+  background: transparent;
+  border: 1px solid transparent;
+  transition:
+    color var(--dur) var(--ease-out),
+    background-color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
+}
+.councilView__dismiss:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--surface-3);
+  border-color: var(--border);
+}
+.councilView__dismiss:active:not(:disabled) {
+  transform: scale(0.9);
+}
+.councilView__dismiss:focus-visible {
+  outline: none;
+  color: var(--text);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.councilView__dismiss:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.councilView__busy {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-2);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.councilView__pulse {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 var(--accent-glow);
+  animation: council-pulse 1.4s var(--ease-out) infinite;
+}
+@keyframes council-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-glow);
+    opacity: 1;
+  }
+  70% {
+    box-shadow: 0 0 0 7px transparent;
+    opacity: 0.65;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    opacity: 1;
+  }
+}
+
+.councilView__verdict {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+/* ----- history: this session's runs (in-memory; no session-list IPC yet) ----- */
+.councilView__history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.councilView__historyHead {
+  padding: 0 2px;
+}
+.councilView__historyList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.councilView__historyRow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 9px 12px;
+  border-radius: var(--r-sm);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  text-align: left;
+  transition:
+    background-color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
+}
+.councilView__historyRow:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+.councilView__historyRow:active {
+  transform: scale(0.995);
+}
+.councilView__historyRow:focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.councilView__historyRow--on {
+  background: var(--accent-wash);
+  border-color: var(--border-accent);
+}
+.councilView__historyRow--on:hover {
+  background: var(--accent-wash);
+}
+.councilView__historyDot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid transparent;
+}
+.councilView__historyDot--approved {
+  color: var(--success);
+  background: var(--success-wash);
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+}
+.councilView__historyDot--clarify {
+  color: var(--warning);
+  background: var(--warning-wash);
+  border-color: color-mix(in srgb, var(--warning) 40%, transparent);
+}
+.councilView__historyDot--failed {
+  color: var(--danger);
+  background: var(--danger-wash);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+}
+.councilView__historyTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.councilView__historyTime {
+  flex-shrink: 0;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.councilView__historyNote {
+  margin: 2px;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .councilView__pulse {
+    animation: none;
+  }
+}

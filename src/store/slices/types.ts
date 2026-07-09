@@ -33,6 +33,7 @@ export type View =
   | 'terminals'
   | 'git'
   | 'swarm'
+  | 'council'
   | 'railway'
   | 'logs'
   | 'audit'

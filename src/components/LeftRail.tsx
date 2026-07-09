@@ -2,6 +2,7 @@ import { useStore, type View } from '../store/useStore'
 import {
   IconBranch,
   IconChevron,
+  IconCouncil,
   IconDashboard,
   IconGit,
   IconLogs,
@@ -29,6 +30,7 @@ const NAV: NavItem[] = [
   { view: 'terminals', label: 'Terminals', Icon: IconTerminal },
   { view: 'git', label: 'Git', Icon: IconGit },
   { view: 'swarm', label: 'Swarm', Icon: IconSwarm },
+  { view: 'council', label: 'Council', Icon: IconCouncil },
   { view: 'railway', label: 'Railway', Icon: IconRailway },
   { view: 'logs', label: 'Logs & Errors', Icon: IconLogs },
   { view: 'audit', label: 'Audit', Icon: IconShieldSearch },

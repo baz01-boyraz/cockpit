@@ -11,6 +11,7 @@ import { DashboardPanel } from '../panels/DashboardPanel'
 import { TerminalsPanel } from '../panels/TerminalsPanel'
 import { GitPanel } from '../panels/GitPanel'
 import { SwarmPanel } from '../panels/SwarmPanel'
+import { CouncilPanel } from '../panels/CouncilPanel'
 import { RailwayPanel } from '../panels/RailwayPanel'
 import { LogsPanel } from '../panels/LogsPanel'
 import { AuditPanel } from '../panels/AuditPanel'
@@ -52,6 +53,7 @@ export function AppShell() {
           </section>
           {view === 'git' && <GitPanel />}
           {view === 'swarm' && <SwarmPanel />}
+          {view === 'council' && <CouncilPanel />}
           {view === 'railway' && <RailwayPanel />}
           {view === 'logs' && <LogsPanel />}
           {view === 'audit' && <AuditPanel />}
