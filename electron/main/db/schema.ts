@@ -437,3 +437,25 @@ CREATE INDEX IF NOT EXISTS idx_sentinel_signals_fingerprint ON sentinel_signals(
 export const SCHEMA_V14 = /* sql */ `
 ALTER TABLE sentinel_signals ADD COLUMN triage TEXT;
 `
+
+/**
+ * V15 — Hermes chat transcript persistence (roadmap A7b). The chat widget's
+ * per-project history was in-memory only, so conversations evaporated on restart.
+ * Each turn is one row; the `id` is an AUTOINCREMENT rowid so insert order is
+ * conversation order (hydration reads `ORDER BY id`). `project_id` keeps its FK
+ * (a project's chat vanishes with it, ON DELETE CASCADE). The service rewrites a
+ * project's rows on each successful turn — delete-then-insert the capped history
+ * — so the table stays bounded to the same transcript cap as the in-memory Map.
+ * No redaction is applied here by design (that is security task D1's concern);
+ * this migration is purely persistence. Append-only.
+ */
+export const SCHEMA_V15 = /* sql */ `
+CREATE TABLE IF NOT EXISTS hermes_chat_turns (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id   TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  role         TEXT NOT NULL,
+  content      TEXT NOT NULL,
+  created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_hermes_chat_turns_project ON hermes_chat_turns(project_id, id);
+`

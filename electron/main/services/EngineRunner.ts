@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
 import { buildClaudeArgs } from '@shared/claude-run'
 import { buildCodexArgs, type EngineSpec } from '@shared/engines'
@@ -38,19 +38,6 @@ const NETWORK_MSG = 'Could not reach OpenRouter. Check your connection and try a
 const MALFORMED_MSG = 'OpenRouter returned a malformed response.'
 const NO_CONTENT_MSG = 'OpenRouter returned no message content.'
 
-/**
- * The default CLI runner spawns `claude`/`codex` with `execFile` (never a shell)
- * and CLOSES the child's stdin immediately. That close is mandatory for Codex:
- * with an open stdin pipe, `codex exec` prints "Reading additional input from
- * stdin..." and blocks until timeout (see `buildCodexArgs`). Claude tolerates a
- * closed stdin, so one runner serves both branches.
- */
-const defaultCliRunner: CliRunner = (bin, args, opts) => {
-  const running = execFileAsync(bin, args, { ...opts, env: { ...process.env } })
-  running.child.stdin?.end()
-  return running
-}
-
 /** Map an OpenRouter HTTP status to actionable text — never the response body,
  *  which can echo request fields. Codes cover the ones a key actually hits. */
 function mapHttpStatus(status: number): string {
@@ -86,14 +73,67 @@ function extractMessageContent(body: unknown): string | null {
 export class EngineRunner {
   private readonly cliRunner: CliRunner
   private readonly fetchImpl: HttpFetch
+  /**
+   * Live CLI child processes — the `claude`/`codex` seats currently spawned. On
+   * app quit `Services.shutdown()` calls {@link killAll} BEFORE `db.close()`, so a
+   * council mid-run doesn't reparent and keep burning CPU/API spend until its own
+   * 360s timeout (roadmap A2). A child is tracked whenever the runner's returned
+   * promise carries a `.child` handle (the real `execFile` promise always does),
+   * and forgotten when it emits `close`. A Set is the right shape here — this is
+   * process bookkeeping, not domain state.
+   */
+  private readonly children = new Set<ChildProcess>()
 
   constructor(
     private readonly secrets: SecretStore,
     cliRunner?: CliRunner,
     fetchImpl?: HttpFetch,
   ) {
-    this.cliRunner = cliRunner ?? defaultCliRunner
+    this.cliRunner = cliRunner ?? this.spawnCli.bind(this)
     this.fetchImpl = fetchImpl ?? fetch
+  }
+
+  /**
+   * The default CLI runner spawns `claude`/`codex` with `execFile` (never a shell)
+   * and CLOSES the child's stdin immediately. That close is mandatory for Codex:
+   * with an open stdin pipe, `codex exec` prints "Reading additional input from
+   * stdin..." and blocks until timeout (see `buildCodexArgs`). Claude tolerates a
+   * closed stdin, so one runner serves both branches.
+   */
+  private spawnCli(bin: string, args: string[], opts: EngineCallOpts): Promise<{ stdout: string }> {
+    const running = execFileAsync(bin, args, { ...opts, env: { ...process.env } })
+    running.child.stdin?.end()
+    return running
+  }
+
+  /**
+   * Register the child of an in-flight CLI call so {@link killAll} can reach it,
+   * dropping it once it closes. Works for any runner whose promise exposes a
+   * `.child` (the real `execFile` promise, or a test double that mirrors it); a
+   * runner without one simply isn't tracked.
+   */
+  private track(running: Promise<{ stdout: string }>): void {
+    const child = (running as { child?: ChildProcess }).child
+    if (!child) return
+    this.children.add(child)
+    child.once('close', () => this.children.delete(child))
+  }
+
+  /**
+   * Terminate every in-flight CLI child (the app-quit path). Best-effort and
+   * synchronous-safe: each kill is guarded (a child may have already exited) and
+   * we clear the set so a double-call is idempotent. SIGTERM is enough — these
+   * are cooperative CLIs, not shells that ignore it.
+   */
+  killAll(): void {
+    for (const child of this.children) {
+      try {
+        child.kill('SIGTERM')
+      } catch {
+        /* already exited */
+      }
+    }
+    this.children.clear()
   }
 
   async call(spec: EngineSpec, prompt: string, opts: EngineCallOpts): Promise<string> {
@@ -113,7 +153,9 @@ export class EngineRunner {
   }
 
   private async runCli(bin: string, args: string[], opts: EngineCallOpts): Promise<string> {
-    const { stdout } = await this.cliRunner(bin, args, opts)
+    const running = this.cliRunner(bin, args, opts)
+    this.track(running)
+    const { stdout } = await running
     return stdout.trim()
   }
 

@@ -1,14 +1,26 @@
-import { execFile } from 'node:child_process'
+import { execFile, type ChildProcess } from 'node:child_process'
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { buildHermesArgs } from '@shared/hermes-run'
-import { buildTranscriptPrompt, capHistory, type ChatTurn } from '@shared/hermes-chat'
+import { buildTranscriptPrompt, capHistory, type ChatRole, type ChatTurn } from '@shared/hermes-chat'
 import type { HermesChatReply } from '@shared/ipc'
+import type { Db } from '../../db/Database'
+import { logFatal } from '../../logging'
+import { nowIso } from '../../util/ids'
 import type { ProjectService } from '../ProjectService'
 import { resolveBin } from '../resolveBin'
 
 const execFileAsync = promisify(execFile)
+
+/**
+ * Restrict the Hermes CLI's loaded tool namespaces to the two the chat widget
+ * actually needs. Live testing (see `.cockpit-memory/hermes-chat-latency-*`)
+ * measured `-t memory,skills` at ~20-25% faster per turn than loading the full
+ * tool set; roadmap A7a applies that finding. Kept as a frozen tuple so callers
+ * spread it without mutating the shared array.
+ */
+export const HERMES_CHAT_TOOLS = ['-t', 'memory,skills'] as const
 
 /**
  * A single conversational turn may have Hermes call several MCP tools (checking
@@ -25,8 +37,12 @@ export type HermesChatRunner = (
   opts: { timeout: number; maxBuffer: number; env?: Record<string, string> },
 ) => Promise<{ stdout: string }>
 
-const defaultRunner: HermesChatRunner = (cwd, args, { env, ...opts }) =>
-  execFileAsync(resolveBin('hermes'), args, { cwd, ...opts, env: { ...process.env, ...env } })
+/** One persisted transcript row, hydrated back into the in-memory Map on boot. */
+interface ChatTurnRow {
+  projectId: string
+  role: ChatRole
+  content: string
+}
 
 /**
  * Backend for the Hermes chat widget (docs/plans/hermes.md Faz 7). Each user
@@ -34,10 +50,11 @@ const defaultRunner: HermesChatRunner = (cwd, args, { env, ...opts }) =>
  * `--ignore-rules` so the orchestrator persona (`AGENTS.md`) and the `cockpit`
  * MCP tools stay loaded — that back-and-forth is the whole point of the widget.
  *
- * Because Hermes oneshot is stateless, this service owns the conversation: an
- * in-memory per-project history, re-sent as a transcript each turn and capped so
- * the prompt can't grow unbounded. Failures degrade to `{ ok: false, error }`;
- * an unhandled exception never crosses the IPC boundary.
+ * Because Hermes oneshot is stateless, this service owns the conversation: a
+ * per-project history that is BOTH held in memory (re-sent as a transcript each
+ * turn and capped so the prompt can't grow unbounded) AND persisted to SQLite so
+ * it survives an app restart (roadmap A7b). Failures degrade to
+ * `{ ok: false, error }`; an unhandled exception never crosses the IPC boundary.
  */
 export class HermesChatService {
   private readonly histories = new Map<string, ChatTurn[]>()
@@ -48,11 +65,57 @@ export class HermesChatService {
    * one in a row is the signal that it's genuinely stuck, not just slow.
    */
   private readonly consecutiveTimeouts = new Map<string, number>()
+  /**
+   * Live `hermes` child processes. On app quit `Services.shutdown()` calls
+   * {@link killAll} BEFORE `db.close()` so a chat turn mid-flight (up to 5min)
+   * doesn't reparent and keep burning CPU/API spend (roadmap A2). Tracked
+   * whenever the runner's promise carries a `.child` handle.
+   */
+  private readonly children = new Set<ChildProcess>()
+  private readonly runner: HermesChatRunner
 
   constructor(
     private readonly projects: ProjectService,
-    private readonly runner: HermesChatRunner = defaultRunner,
-  ) {}
+    private readonly db: Db,
+    runner?: HermesChatRunner,
+  ) {
+    this.runner = runner ?? this.spawnHermes.bind(this)
+    this.hydrate()
+  }
+
+  /** The default runner spawns `hermes` with `execFile` (never a shell). */
+  private spawnHermes(
+    cwd: string,
+    args: string[],
+    opts: { timeout: number; maxBuffer: number; env?: Record<string, string> },
+  ): Promise<{ stdout: string }> {
+    const { env, ...rest } = opts
+    return execFileAsync(resolveBin('hermes'), args, {
+      cwd,
+      ...rest,
+      env: { ...process.env, ...env },
+    })
+  }
+
+  /** Register the in-flight child so {@link killAll} can reach it; drop on close. */
+  private track(running: Promise<{ stdout: string }>): void {
+    const child = (running as { child?: ChildProcess }).child
+    if (!child) return
+    this.children.add(child)
+    child.once('close', () => this.children.delete(child))
+  }
+
+  /** Terminate every in-flight chat child (app-quit path). Best-effort, idempotent. */
+  killAll(): void {
+    for (const child of this.children) {
+      try {
+        child.kill('SIGTERM')
+      } catch {
+        /* already exited */
+      }
+    }
+    this.children.clear()
+  }
 
   private cwdFor(projectId: string): string {
     try {
@@ -71,6 +134,7 @@ export class HermesChatService {
   clear(projectId: string): void {
     this.histories.delete(projectId)
     this.consecutiveTimeouts.delete(projectId)
+    this.purge(projectId)
   }
 
   /**
@@ -88,25 +152,28 @@ export class HermesChatService {
     const withUser = capHistory([...prior, { role: 'user', content: historyContent }])
     const prompt = buildTranscriptPrompt(withUser)
     const cwd = this.cwdFor(projectId)
+    // The tools flag rides after the oneshot/chat argv so the prompt keeps its
+    // slot right after --oneshot (or -q for the image path).
+    const args = [
+      ...buildHermesArgs(prompt, { ignoreRules: false, imagePath: safeImagePath }),
+      ...HERMES_CHAT_TOOLS,
+    ]
     try {
-      const { stdout } = await this.runner(
-        cwd,
-        buildHermesArgs(prompt, { ignoreRules: false, imagePath: safeImagePath }),
-        {
-          timeout: HERMES_CHAT_TIMEOUT_MS,
-          maxBuffer: MAX_OUTPUT_BYTES,
-          // The model has no other ground truth for "which cockpit project is
-          // this" — AGENTS.md tells it to read this and pass it verbatim as
-          // `projectId` on every Swarm/memory/git tool call. Without it the
-          // model has to invent an id, which fails the kanban_cards FK check.
-          env: { COCKPIT_PROJECT_ID: projectId },
-        },
-      )
+      const running = this.runner(cwd, args, {
+        timeout: HERMES_CHAT_TIMEOUT_MS,
+        maxBuffer: MAX_OUTPUT_BYTES,
+        // The model has no other ground truth for "which cockpit project is
+        // this" — AGENTS.md tells it to read this and pass it verbatim as
+        // `projectId` on every Swarm/memory/git tool call. Without it the
+        // model has to invent an id, which fails the kanban_cards FK check.
+        env: { COCKPIT_PROJECT_ID: projectId },
+      })
+      this.track(running)
+      const { stdout } = await running
       const text = stdout.trim() || '(Hermes returned no message)'
-      this.histories.set(
-        projectId,
-        capHistory([...withUser, { role: 'assistant', content: text }]),
-      )
+      const next = capHistory([...withUser, { role: 'assistant', content: text }])
+      this.histories.set(projectId, next)
+      this.persist(projectId, next)
       this.consecutiveTimeouts.delete(projectId)
       return { ok: true, text }
     } catch (err) {
@@ -154,6 +221,72 @@ export class HermesChatService {
       ok: false,
       text: '',
       error: e.stderr?.trim() || e.message || 'Hermes request failed.',
+    }
+  }
+
+  /**
+   * Rewrite a project's persisted transcript to match its capped in-memory
+   * history: delete the project's rows, then re-insert the (already capped) turns
+   * in order. A blunt delete+insert keeps the DB == memory with no reconciliation
+   * logic; a capped history is at most `MAX_HISTORY_TURNS` rows, so the cost is
+   * trivial. Insert order preserves conversation order (AUTOINCREMENT id).
+   *
+   * Durability is best-effort: the live turn is already in the in-memory Map, so
+   * a write failure only forfeits cross-restart survival, never the current
+   * reply. It is logged (not swallowed) rather than surfaced to the widget.
+   */
+  private persist(projectId: string, turns: readonly ChatTurn[]): void {
+    try {
+      const write = this.db.transaction(() => {
+        this.db.prepare('DELETE FROM hermes_chat_turns WHERE project_id = ?').run(projectId)
+        const insert = this.db.prepare(
+          `INSERT INTO hermes_chat_turns (project_id, role, content, created_at)
+           VALUES (@projectId, @role, @content, @createdAt)`,
+        )
+        const at = nowIso()
+        for (const turn of turns) {
+          insert.run({ projectId, role: turn.role, content: turn.content, createdAt: at })
+        }
+      })
+      write()
+    } catch (err) {
+      logFatal('hermesChat:persist', err)
+    }
+  }
+
+  /** Drop a project's persisted transcript (the "new conversation" action). */
+  private purge(projectId: string): void {
+    try {
+      this.db.prepare('DELETE FROM hermes_chat_turns WHERE project_id = ?').run(projectId)
+    } catch (err) {
+      logFatal('hermesChat:purge', err)
+    }
+  }
+
+  /**
+   * Load persisted transcripts into the in-memory Map at construction so a
+   * restart resumes each project's conversation. Rows are read in insert order
+   * and re-capped per project (a transcript persisted before a cap change could
+   * exceed the current bound). A read failure just starts empty — never a boot
+   * blocker.
+   */
+  private hydrate(): void {
+    try {
+      const rows = this.db
+        .prepare(
+          `SELECT project_id AS projectId, role, content
+           FROM hermes_chat_turns ORDER BY id`,
+        )
+        .all() as ChatTurnRow[]
+      for (const row of rows) {
+        const prior = this.histories.get(row.projectId) ?? []
+        this.histories.set(row.projectId, [...prior, { role: row.role, content: row.content }])
+      }
+      for (const [projectId, turns] of this.histories) {
+        this.histories.set(projectId, capHistory(turns))
+      }
+    } catch (err) {
+      logFatal('hermesChat:hydrate', err)
     }
   }
 }

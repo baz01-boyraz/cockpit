@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, type ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { promisify } from 'node:util'
@@ -56,11 +56,38 @@ const defaultRunner: HermesTriageRunner = (cwd, args, opts) =>
  */
 export class HermesTriageService {
   private inFlight = 0
+  /**
+   * Live triage child processes. On app quit `Services.shutdown()` calls
+   * {@link killAll} BEFORE `db.close()` so a fire-and-forget triage doesn't
+   * reparent and keep burning its 45s (roadmap A2). Tracked whenever the runner's
+   * promise carries a `.child` handle (the real `execFile` promise always does).
+   */
+  private readonly children = new Set<ChildProcess>()
 
   constructor(
     private readonly runner: HermesTriageRunner = defaultRunner,
     private readonly now: () => string = () => new Date().toISOString(),
   ) {}
+
+  /** Register the in-flight child so {@link killAll} can reach it; drop on close. */
+  private track(running: Promise<{ stdout: string }>): void {
+    const child = (running as { child?: ChildProcess }).child
+    if (!child) return
+    this.children.add(child)
+    child.once('close', () => this.children.delete(child))
+  }
+
+  /** Terminate every in-flight triage child (app-quit path). Best-effort, idempotent. */
+  killAll(): void {
+    for (const child of this.children) {
+      try {
+        child.kill('SIGTERM')
+      } catch {
+        /* already exited */
+      }
+    }
+    this.children.clear()
+  }
 
   async triage(signal: SentinelSignal): Promise<SentinelTriage | null> {
     // Concurrency guard: the check-then-increment is atomic (no await between
@@ -72,10 +99,12 @@ export class HermesTriageService {
       const fenceTag = `====COCKPIT-UNTRUSTED-SIGNAL-${randomUUID()}====`
       const prompt = buildTriagePrompt(signal, fenceTag)
       const args = buildHermesArgs(prompt, { model: HERMES_TRIAGE_MODEL, ignoreRules: true })
-      const { stdout } = await this.runner(homedir(), args, {
+      const running = this.runner(homedir(), args, {
         timeout: HERMES_TRIAGE_TIMEOUT_MS,
         maxBuffer: MAX_OUTPUT_BYTES,
       })
+      this.track(running)
+      const { stdout } = await running
       return parseTriageResponse(stdout, this.now())
     } catch {
       // Timeout / spawn-fail / anything: a missed triage is fine, so we swallow

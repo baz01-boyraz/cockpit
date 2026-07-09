@@ -309,26 +309,74 @@ describe('TerminalManager lifecycle', () => {
   })
 
   it('killAll() disposes every session and blocks late pty events from the DB', () => {
-    const { mgr, rec, events, onOutput } = makeManager()
-    const dataSpy = vi.fn()
-    const exitSpy = vi.fn()
-    events.onTyped('terminal:data', dataSpy)
-    events.onTyped('terminal:exit', exitSpy)
-    mgr.create({ projectId: 'prj_1' })
-    mgr.create({ projectId: 'prj_1' })
+    // Fake timers so the SIGKILL escalation timer never fires with the real
+    // process.kill after this test restores the spy; stub process.kill so the
+    // group-kill layer never signals a real group sharing a fake pid.
+    vi.useFakeTimers()
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true)
+    try {
+      const { mgr, rec, events, onOutput } = makeManager()
+      const dataSpy = vi.fn()
+      const exitSpy = vi.fn()
+      events.onTyped('terminal:data', dataSpy)
+      events.onTyped('terminal:exit', exitSpy)
+      mgr.create({ projectId: 'prj_1' })
+      mgr.create({ projectId: 'prj_1' })
 
-    mgr.killAll()
-    expect(ptyState.spawned[0].kill).toHaveBeenCalled()
-    expect(ptyState.spawned[1].kill).toHaveBeenCalled()
-    expect(mgr.list('prj_1')).toEqual([])
+      mgr.killAll()
+      expect(ptyState.spawned[0].kill).toHaveBeenCalled()
+      expect(ptyState.spawned[1].kill).toHaveBeenCalled()
+      expect(mgr.list('prj_1')).toEqual([])
 
-    // Late async pty events after shutdown must not touch the DB or event bus.
-    const dbCallsAfterShutdown = rec.calls.length
-    ptyState.spawned[0].emitData('late output')
-    ptyState.spawned[0].emitExit(0)
-    expect(rec.calls.length).toBe(dbCallsAfterShutdown)
-    expect(dataSpy).not.toHaveBeenCalled()
-    expect(exitSpy).not.toHaveBeenCalled()
-    expect(onOutput).not.toHaveBeenCalled()
+      // Late async pty events after shutdown must not touch the DB or event bus.
+      const dbCallsAfterShutdown = rec.calls.length
+      ptyState.spawned[0].emitData('late output')
+      ptyState.spawned[0].emitExit(0)
+      expect(rec.calls.length).toBe(dbCallsAfterShutdown)
+      expect(dataSpy).not.toHaveBeenCalled()
+      expect(exitSpy).not.toHaveBeenCalled()
+      expect(onOutput).not.toHaveBeenCalled()
+    } finally {
+      killSpy.mockRestore()
+    }
+  })
+
+  it('killAll() signals the process group with SIGTERM and escalates to SIGKILL after the grace', () => {
+    vi.useFakeTimers()
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true)
+    try {
+      const { mgr } = makeManager()
+      const session = mgr.create({ projectId: 'prj_1' })
+      const proc = ptyState.spawned[0]
+      const pid = session.pid as number
+
+      mgr.killAll()
+      // Layer 1: node-pty's own SIGTERM. Layer 2: the process group gets SIGTERM.
+      expect(proc.kill).toHaveBeenCalledWith()
+      expect(killSpy).toHaveBeenCalledWith(-pid, 'SIGTERM')
+      // No SIGKILL yet — that waits out the grace window.
+      expect(killSpy).not.toHaveBeenCalledWith(-pid, 'SIGKILL')
+
+      vi.advanceTimersByTime(500)
+      expect(killSpy).toHaveBeenCalledWith(-pid, 'SIGKILL')
+      expect(proc.kill).toHaveBeenCalledWith('SIGKILL')
+    } finally {
+      killSpy.mockRestore()
+    }
+  })
+
+  it('killAll() survives a process-group kill that throws (already-exited group)', () => {
+    vi.useFakeTimers()
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' })
+    })
+    try {
+      const { mgr } = makeManager()
+      mgr.create({ projectId: 'prj_1' })
+      expect(() => mgr.killAll()).not.toThrow()
+      expect(mgr.list('prj_1')).toEqual([])
+    } finally {
+      killSpy.mockRestore()
+    }
   })
 })

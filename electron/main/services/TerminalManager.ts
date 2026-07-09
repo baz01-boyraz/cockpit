@@ -19,6 +19,9 @@ type OutputSink = (projectId: string, sessionId: string, data: string) => void
 
 const MAX_TERMINALS = 6
 
+/** Grace after SIGTERM before a killAll SIGKILL escalation (roadmap A5). */
+const KILL_GRACE_MS = 500
+
 /**
  * Owns real terminal sessions backed by node-pty. Enforces the per-project cap
  * (max 6), streams output to the renderer via the event bus, and mirrors session
@@ -286,13 +289,54 @@ export class TerminalManager {
     // we (and the caller) close it.
     this.disposed = true
     for (const live of this.live.values()) {
-      try {
-        live.proc.kill()
-      } catch {
-        /* already dead */
-      }
+      this.terminate(live.proc)
     }
     this.live.clear()
+  }
+
+  /**
+   * Best-effort, synchronous-safe termination of one pty for the before-quit path
+   * (roadmap A5). Three layers, each guarded so one failure never stops the rest:
+   *   1. node-pty's own `kill()` (SIGTERM to the shell);
+   *   2. a process-GROUP SIGTERM — node-pty runs the shell in its own session, so
+   *      its pid is the group leader and `-pid` reaches children (dev servers,
+   *      agent CLIs) that would otherwise ignore the shell's signal and survive;
+   *   3. a SIGKILL escalation after a short grace for anything still alive.
+   *
+   * The escalation timer is fired-and-`unref()`d: it never blocks the synchronous
+   * shutdown and never keeps the (quitting) process alive on its own account.
+   */
+  private terminate(proc: pty.IPty): void {
+    const pid = proc.pid
+    try {
+      proc.kill()
+    } catch {
+      /* already dead */
+    }
+    this.killGroup(pid, 'SIGTERM')
+    const timer = setTimeout(() => {
+      this.killGroup(pid, 'SIGKILL')
+      try {
+        proc.kill('SIGKILL')
+      } catch {
+        /* already gone */
+      }
+    }, KILL_GRACE_MS)
+    timer.unref()
+  }
+
+  /**
+   * Signal a pty's whole process group (`-pid`). Guarded: group kill legitimately
+   * fails with ESRCH (already exited) or on platforms without POSIX process groups
+   * (Windows), and either is fine — layer 1 (`proc.kill`) covers those hosts.
+   */
+  private killGroup(pid: number | undefined, signal: NodeJS.Signals): void {
+    if (!pid || pid <= 0) return
+    try {
+      process.kill(-pid, signal)
+    } catch {
+      /* group already gone, or no process-group support on this platform */
+    }
   }
 
   private resolveCwd(projectPath: string, cwd?: string): string {

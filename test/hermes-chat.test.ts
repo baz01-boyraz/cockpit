@@ -11,9 +11,11 @@ import { buildHermesArgs } from '@shared/hermes-run'
 import { hermesChatAskSchema, hermesChatClearSchema } from '@shared/schemas'
 import {
   HermesChatService,
+  HERMES_CHAT_TOOLS,
   type HermesChatRunner,
 } from '../electron/main/services/hermes/HermesChatService'
 import type { ProjectService } from '../electron/main/services/ProjectService'
+import { makeRecordingDb, type RecordingDb } from './helpers/fakeDb'
 
 // --------------------------------------------------------------------------
 // Pure history helpers
@@ -166,13 +168,16 @@ describe('buildHermesArgs imagePath option', () => {
 // HermesChatService
 // --------------------------------------------------------------------------
 
-function makeService(runnerImpl?: HermesChatRunner) {
+function makeService(runnerImpl?: HermesChatRunner, rec: RecordingDb = makeRecordingDb()) {
   const projects = {
     get: vi.fn(() => ({ id: 'prj_1', name: 'cockpiT', path: '/tmp/prj' })),
   } as unknown as ProjectService
   const runner = vi.fn(runnerImpl ?? (async () => ({ stdout: 'ok' })))
-  return { service: new HermesChatService(projects, runner), runner }
+  return { service: new HermesChatService(projects, rec.db, runner), runner, rec }
 }
+
+/** The prompt is the discrete argv entry right after --oneshot (execFile, no shell). */
+const promptOf = (args: string[]): string => args[args.indexOf('--oneshot') + 1]
 
 describe('HermesChatService.ask', () => {
   it('accumulates user + assistant turns across calls', async () => {
@@ -195,10 +200,21 @@ describe('HermesChatService.ask', () => {
     const secondArgs = runner.mock.calls[1][1]
     expect(secondArgs).not.toContain('--ignore-rules')
     expect(secondArgs[0]).toBe('--oneshot')
-    const prompt = secondArgs[secondArgs.length - 1]
+    const prompt = promptOf(secondArgs)
     expect(prompt).toContain('User: first')
     expect(prompt).toContain('Hermes: reply')
     expect(prompt).toContain('User: second')
+  })
+
+  it('applies the measured -t memory,skills latency flag on every turn (A7a)', async () => {
+    const { service, runner } = makeService(async () => ({ stdout: 'reply' }))
+    await service.ask('prj_1', 'hi')
+    const args = runner.mock.calls[0][1]
+    // The tools flag rides alongside the oneshot argv without displacing the
+    // prompt from its slot right after --oneshot.
+    expect(args).toEqual(expect.arrayContaining([...HERMES_CHAT_TOOLS]))
+    expect(args[args.indexOf('-t') + 1]).toBe('memory,skills')
+    expect(promptOf(args)).toContain('User: hi')
   })
 
   it('runs in the active project directory', async () => {
@@ -352,9 +368,9 @@ describe('HermesChatService.clear', () => {
     expect(service.history('prj_1')).toEqual([])
 
     await service.ask('prj_1', 'fresh')
-    const lastPrompt = runner.mock.calls[1][1].at(-1) as string
-    expect(lastPrompt).toContain('User: fresh')
-    expect(lastPrompt).not.toContain('User: first')
+    const freshPrompt = promptOf(runner.mock.calls[1][1])
+    expect(freshPrompt).toContain('User: fresh')
+    expect(freshPrompt).not.toContain('User: first')
   })
 
   it('keeps histories isolated per project', async () => {
@@ -364,5 +380,122 @@ describe('HermesChatService.clear', () => {
     service.clear('prj_a')
     expect(service.history('prj_a')).toEqual([])
     expect(service.history('prj_b')).toHaveLength(2)
+  })
+})
+
+// --------------------------------------------------------------------------
+// HermesChatService.killAll — orphan child cleanup (A2)
+// --------------------------------------------------------------------------
+
+describe('HermesChatService.killAll', () => {
+  it('SIGTERMs the in-flight child and forgets a child that already closed', async () => {
+    const killed: NodeJS.Signals[] = []
+    let closeCb: (() => void) | undefined
+    const child = {
+      kill: (sig: NodeJS.Signals) => {
+        killed.push(sig)
+        return true
+      },
+      once: (event: string, cb: () => void) => {
+        if (event === 'close') closeCb = cb
+      },
+    }
+    const runnerWithChild: HermesChatRunner = () => {
+      const p = Promise.resolve({ stdout: 'reply' }) as Promise<{ stdout: string }> & {
+        child: typeof child
+      }
+      p.child = child
+      return p
+    }
+    const { service } = makeService(runnerWithChild)
+
+    await service.ask('prj_1', 'hi')
+    closeCb?.()
+    service.killAll()
+    expect(killed).toEqual([])
+  })
+
+  it('is a safe no-op when no child is in flight', () => {
+    const { service } = makeService()
+    expect(() => service.killAll()).not.toThrow()
+  })
+})
+
+// --------------------------------------------------------------------------
+// HermesChatService persistence (A7b) — turns survive a restart
+// --------------------------------------------------------------------------
+
+describe('HermesChatService persistence', () => {
+  it('rewrites the project transcript to the DB after a successful turn', async () => {
+    const rec = makeRecordingDb()
+    const { service } = makeService(async () => ({ stdout: 'reply' }), rec)
+    await service.ask('prj_1', 'first')
+
+    // A capped rewrite: delete the project's rows, then insert the full history.
+    const deletes = rec.callsFor('run', 'DELETE FROM hermes_chat_turns')
+    expect(deletes).toHaveLength(1)
+    expect(deletes[0].args[0]).toBe('prj_1')
+    const inserts = rec.callsFor('run', 'INSERT INTO hermes_chat_turns')
+    expect(inserts).toHaveLength(2)
+    expect(inserts.map((c) => (c.args[0] as { role: string }).role)).toEqual(['user', 'assistant'])
+    expect(inserts[0].args[0]).toMatchObject({ projectId: 'prj_1', content: 'first' })
+    expect(inserts[1].args[0]).toMatchObject({ projectId: 'prj_1', content: 'reply' })
+  })
+
+  it('does not persist when the turn fails (no dangling half-transcript)', async () => {
+    const rec = makeRecordingDb()
+    const { service } = makeService(async () => {
+      throw Object.assign(new Error('boom'), { stderr: 'nope' })
+    }, rec)
+    await service.ask('prj_1', 'first')
+    expect(rec.callsFor('run', 'INSERT INTO hermes_chat_turns')).toHaveLength(0)
+  })
+
+  it('hydrates the in-memory history from persisted rows on construction', () => {
+    const rec = makeRecordingDb({
+      all: (sql) =>
+        sql.includes('FROM hermes_chat_turns')
+          ? [
+              { projectId: 'prj_1', role: 'user', content: 'earlier q' },
+              { projectId: 'prj_1', role: 'assistant', content: 'earlier a' },
+              { projectId: 'prj_2', role: 'user', content: 'other project' },
+            ]
+          : [],
+    })
+    const { service } = makeService(undefined, rec)
+    expect(service.history('prj_1')).toEqual([
+      { role: 'user', content: 'earlier q' },
+      { role: 'assistant', content: 'earlier a' },
+    ])
+    expect(service.history('prj_2')).toEqual([{ role: 'user', content: 'other project' }])
+  })
+
+  it('a hydrated conversation continues into the re-sent transcript', async () => {
+    const rec = makeRecordingDb({
+      all: (sql) =>
+        sql.includes('FROM hermes_chat_turns')
+          ? [
+              { projectId: 'prj_1', role: 'user', content: 'earlier q' },
+              { projectId: 'prj_1', role: 'assistant', content: 'earlier a' },
+            ]
+          : [],
+    })
+    const { service, runner } = makeService(async () => ({ stdout: 'reply' }), rec)
+    await service.ask('prj_1', 'follow up')
+    const prompt = promptOf(runner.mock.calls[0][1])
+    expect(prompt).toContain('User: earlier q')
+    expect(prompt).toContain('Hermes: earlier a')
+    expect(prompt).toContain('User: follow up')
+  })
+
+  it('clear() also purges the persisted rows for the project', async () => {
+    const rec = makeRecordingDb()
+    const { service } = makeService(async () => ({ stdout: 'reply' }), rec)
+    await service.ask('prj_1', 'first')
+    const before = rec.callsFor('run', 'DELETE FROM hermes_chat_turns').length
+    service.clear('prj_1')
+    const after = rec.callsFor('run', 'DELETE FROM hermes_chat_turns')
+    expect(after.length).toBe(before + 1)
+    expect(after.at(-1)?.args[0]).toBe('prj_1')
   })
 })

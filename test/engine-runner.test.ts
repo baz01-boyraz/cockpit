@@ -76,6 +76,60 @@ describe('EngineRunner — CLI branches', () => {
   })
 })
 
+describe('EngineRunner.killAll — orphan CLI child cleanup (A2)', () => {
+  it('tracks a spawned CLI child and SIGTERMs it on killAll, then forgets it', async () => {
+    // Model the real defaultCliRunner: a promisified execFile returns a Promise
+    // that carries a `.child` handle. We hand EngineRunner a runner that mimics
+    // that shape so killAll has something to kill without spawning a process.
+    const killed: NodeJS.Signals[] = []
+    let closeCb: (() => void) | undefined
+    const fakeChild = {
+      stdin: { end: () => undefined },
+      kill: (sig: NodeJS.Signals) => {
+        killed.push(sig)
+        return true
+      },
+      once: (event: string, cb: () => void) => {
+        if (event === 'close') closeCb = cb
+      },
+    }
+    const runner = ((_bin: string, _args: string[], _opts: EngineCallOpts) => {
+      const p = Promise.resolve({ stdout: 'ok' }) as Promise<{ stdout: string }> & {
+        child: typeof fakeChild
+      }
+      p.child = fakeChild
+      return p
+    }) as unknown as CliRunner
+
+    const service = new EngineRunner(fakeSecrets(null), runner)
+    await service.call({ engine: 'claude', model: 'opus' }, 'hi', OPTS)
+
+    // A child that has already emitted 'close' is no longer tracked.
+    closeCb?.()
+    service.killAll()
+    expect(killed).toEqual([])
+
+    // A still-live child is terminated on quit.
+    await service.call({ engine: 'claude', model: 'opus' }, 'again', OPTS)
+    service.killAll()
+    expect(killed).toEqual(['SIGTERM'])
+  })
+
+  it('killAll on a runner whose promise carries no child handle is a safe no-op', async () => {
+    const { runner } = recordingCli('reply')
+    const service = new EngineRunner(fakeSecrets(null), runner)
+    await service.call({ engine: 'codex', model: 'gpt-5-codex' }, 'hi', OPTS)
+    // The recording runner returns a plain promise (no `.child`); killAll never
+    // throws and there is nothing to kill.
+    expect(() => service.killAll()).not.toThrow()
+  })
+
+  it('killAll on a fresh runner with no calls is a no-op', () => {
+    const service = new EngineRunner(fakeSecrets(null))
+    expect(() => service.killAll()).not.toThrow()
+  })
+})
+
 describe('EngineRunner — openrouter branch', () => {
   const spec: EngineSpec = { engine: 'openrouter', model: 'deepseek/deepseek-chat' }
 

@@ -58,6 +58,41 @@ describe('HermesTriageService', () => {
     expect(args[promptIdx]).toContain('UNTRUSTED DATA')
   })
 
+  it('tracks the in-flight child and SIGTERMs it on killAll (A2)', async () => {
+    const killed: NodeJS.Signals[] = []
+    let closeCb: (() => void) | undefined
+    const child = {
+      kill: (sig: NodeJS.Signals) => {
+        killed.push(sig)
+        return true
+      },
+      once: (event: string, cb: () => void) => {
+        if (event === 'close') closeCb = cb
+      },
+    }
+    const ok = '{"reportWorthy": true, "headline": "h", "action": "a", "gotchaCandidate": false}'
+    const runner: HermesTriageRunner = () => {
+      const p = Promise.resolve({ stdout: ok }) as Promise<{ stdout: string }> & {
+        child: typeof child
+      }
+      p.child = child
+      return p
+    }
+    const svc = new HermesTriageService(runner, () => NOW)
+
+    await svc.triage(signal())
+    // The child closed after the call settled → no longer tracked.
+    closeCb?.()
+    svc.killAll()
+    expect(killed).toEqual([])
+  })
+
+  it('killAll with no in-flight triage is a safe no-op', () => {
+    const runner: HermesTriageRunner = vi.fn(async () => ({ stdout: '' }))
+    const svc = new HermesTriageService(runner, () => NOW)
+    expect(() => svc.killAll()).not.toThrow()
+  })
+
   it('returns null when the runner rejects (timeout / spawn failure) — no throw, no retry', async () => {
     const runner: HermesTriageRunner = vi.fn(async () => {
       const err = Object.assign(new Error('Command failed'), { killed: true })

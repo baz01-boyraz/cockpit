@@ -85,6 +85,8 @@ export class Services {
   readonly hermesTriage: HermesTriageService
   readonly review: ReviewService
   readonly council: CouncilService
+  /** Spawns the council's `claude`/`codex` seats; killed on quit (A2). */
+  private readonly engineRunner: EngineRunner
   readonly memory: MemoryHubService
   /** Cross-project Baz brain (Phase 6) — the same hub machinery, global root. */
   readonly globalMemory: MemoryHubService
@@ -154,7 +156,7 @@ export class Services {
     this.railway = new RailwayService(this.db, this.projects)
     this.claudeSessions = new ClaudeSessionsService()
     this.chat = new ChatService(this.projects)
-    this.hermesChat = new HermesChatService(this.projects)
+    this.hermesChat = new HermesChatService(this.projects, this.db)
     this.review = new ReviewService(this.projects, this.audit)
     // One session store, shared: the council writes runs to it, the swarm reads
     // a card's approved session back from it at spawn (Faz 2a).
@@ -164,10 +166,11 @@ export class Services {
     // memory-pointer block (file-blind OpenRouter seats have no other view of it).
     this.memory = new MemoryHubService(this.projects)
     this.globalMemory = new MemoryHubService(this.projects, join(opts.userDataDir, 'baz-memory'))
+    this.engineRunner = new EngineRunner(this.secrets)
     this.council = new CouncilService(
       this.projects,
       this.audit,
-      new EngineRunner(this.secrets),
+      this.engineRunner,
       councilSessions,
       this.sentinel,
       this.memory,
@@ -417,8 +420,15 @@ export class Services {
     this.cardOutput.clear()
     // Fire-and-forget: the process is quitting; closing the socket is best-effort.
     void this.hermesMcp.stop()
-    // Kill terminals first (flags TerminalManager so late pty events are ignored),
-    // then close the DB. Order + flags prevent "database connection is not open".
+    // Kill orphaned CLI children BEFORE closing the DB (roadmap A2). Council seats
+    // (claude/codex) and the two Hermes execFile paths (chat up to 5min, triage
+    // 45s) otherwise reparent on quit and keep burning CPU/API spend until their
+    // own timeouts. All three killAll()s are best-effort and never throw.
+    this.engineRunner.killAll()
+    this.hermesChat.killAll()
+    this.hermesTriage.killAll()
+    // Kill terminals (flags TerminalManager so late pty events are ignored), then
+    // close the DB. Order + flags prevent "database connection is not open".
     this.terminals.killAll()
     this.tuiState.clear()
     this.appUpdate.stopAutoCheck()
