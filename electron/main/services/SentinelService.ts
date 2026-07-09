@@ -6,6 +6,7 @@ import {
   type SentinelTriage,
 } from '@shared/sentinel'
 import { gateMemoryWrite } from '@shared/memory-gate'
+import { redactText } from '@shared/redaction'
 import { projectBrain } from '@shared/memory-ledger'
 import type { Db } from '../db/Database'
 import type { CockpitEvents } from '../events'
@@ -104,14 +105,18 @@ export class SentinelService {
   }): SentinelSignal | null {
     try {
       const now = nowIso()
+      // Central redaction (argos L1): sensor text persists, reaches the
+      // renderer, and — via triage — leaves the machine for OpenRouter. The
+      // log-intelligence sensor redacts at ingest, but scrubbing here covers
+      // every sensor (card titles, council questions) and every future one.
       const signal = buildSignal({
         id: newId('sig'),
         projectId: input.projectId,
         severity: input.severity,
         source: input.source,
-        title: input.title,
-        summary: input.summary,
-        context: input.context ?? null,
+        title: redactText(input.title),
+        summary: redactText(input.summary),
+        context: input.context ? redactText(input.context) : null,
         createdAt: now,
       })
 

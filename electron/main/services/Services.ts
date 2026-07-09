@@ -307,19 +307,32 @@ export class Services {
   private scheduleCurationSweeps(): void {
     try {
       const nowMs = Date.now()
+      // Collect the due projects, then sweep SEQUENTIALLY inside one
+      // fire-and-forget chain (argos H1): on this feature's first boot every
+      // project is due at once, and a parallel fan-out would mean one hermes
+      // spawn + one paid DeepSeek call PER PROJECT simultaneously. Awaiting
+      // each sweep bounds the fleet to a single spawn regardless of count.
+      const due: string[] = []
       for (const project of this.projects.list()) {
         try {
           const last = this.audit.lastAt(project.id, 'memory.curation_sweep')
           const lastMs = last ? Date.parse(last) : Number.NaN
-          const due = Number.isNaN(lastMs) || nowMs - lastMs > Services.CURATION_CADENCE_MS
-          if (!due) continue
-          void this.memoryCuration.sweep(project.id).catch(() => {
-            /* a missed sweep is invisible by design */
-          })
+          if (Number.isNaN(lastMs) || nowMs - lastMs > Services.CURATION_CADENCE_MS) {
+            due.push(project.id)
+          }
         } catch {
           // One project's failure never stops the others.
         }
       }
+      void (async () => {
+        for (const projectId of due) {
+          try {
+            await this.memoryCuration.sweep(projectId)
+          } catch {
+            /* a missed sweep is invisible by design */
+          }
+        }
+      })()
     } catch {
       // Enumeration failed — cadence is best-effort, never a boot blocker.
     }

@@ -8,7 +8,9 @@
  * and the owner decides.
  *
  * Runs in the browser mock and unit tests, so it stays free of node/crypto.
+ * (`redaction` is a sibling pure module, so that property holds.)
  */
+import { redactText } from './redaction'
 
 /** One note as the sweep sees it: its slug, its hook, and how stale it is. */
 export interface CurationNote {
@@ -38,9 +40,11 @@ export const MAX_CURATION_PROPOSALS = 8
 // eslint-disable-next-line no-control-regex -- matching control chars IS this sanitizer's job
 const CONTROL_CHARS = new RegExp('[\\u0000-\\u0008\\u000E-\\u001F\\u007F]', 'g')
 
-/** One clean line: strip control chars, fold whitespace runs. */
+/** One clean line: strip control chars, redact secret-shaped values (hooks can
+ *  come from pre-charter notes that never passed the write gate, and this text
+ *  leaves the machine via OpenRouter — argos M2), fold whitespace runs. */
 function cleanLine(s: string): string {
-  return s.replace(CONTROL_CHARS, ' ').replace(/\s+/g, ' ').trim()
+  return redactText(s).replace(CONTROL_CHARS, ' ').replace(/\s+/g, ' ').trim()
 }
 
 /**

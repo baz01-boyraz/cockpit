@@ -315,17 +315,23 @@ describe('SentinelService enrich (Faz B triage)', () => {
     expect(arg.reason).toContain('Rebuild @shared')
   })
 
-  it('drops a gotcha whose content is secret-shaped — never reaches the review queue', async () => {
+  it('a secret in sensor input is redacted before anything can reach the review queue', async () => {
     const verdict = triageVerdict({ gotchaCandidate: true })
     const triager: SentinelTriager = { triage: vi.fn(async () => verdict) }
     const { reviews, create } = makeReviews()
     const svc = new SentinelService(store.db, events, undefined, triager, reviews)
 
-    // An AWS-key-shaped token in the summary makes the built note look like a secret.
+    // An AWS-key-shaped token in the summary. report() now redacts centrally
+    // (argos L1): the secret never persists, never reaches OpenRouter via
+    // triage, and the gotcha proposal that lands in the queue carries the
+    // [REDACTED] mask — the memory gate stays as defense in depth behind it.
     svc.report({ projectId: 'p1', severity: 'alert', source: 'log-intelligence', title: 'Leaked key', summary: 'key AKIAIOSFODNN7EXAMPLE spotted' })
     await flush()
 
-    expect(create).not.toHaveBeenCalled()
+    expect(create).toHaveBeenCalledTimes(1)
+    const proposal = create.mock.calls[0][0] as { proposedContent: string }
+    expect(proposal.proposedContent).not.toContain('AKIAIOSFODNN7EXAMPLE')
+    expect(proposal.proposedContent).toContain('[REDACTED]')
   })
 
   it('a null verdict (Hermes missing/slow/wrong) changes nothing after the spine', async () => {

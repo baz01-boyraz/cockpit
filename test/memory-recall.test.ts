@@ -111,9 +111,12 @@ describe('composeMemoryPointerBlock', () => {
       name: `note-${i}`,
       hook: 'x'.repeat(100),
     }))
-    const block = composeMemoryPointerBlock('note', many, { maxNotes: 50, maxChars: 300 })
+    // 600 leaves room for the (deliberately long) never-instructions header
+    // plus a handful of 100-char hooks — the cap must still bite well below
+    // the 50 notes offered.
+    const block = composeMemoryPointerBlock('note', many, { maxNotes: 50, maxChars: 600 })
     expect(block).not.toBeNull()
-    expect((block ?? '').length).toBeLessThanOrEqual(300)
+    expect((block ?? '').length).toBeLessThanOrEqual(600)
   })
 
   it('strips control chars out of a hook before inlining it', () => {
