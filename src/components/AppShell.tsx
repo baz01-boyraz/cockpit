@@ -13,6 +13,7 @@ import { GitPanel } from '../panels/GitPanel'
 import { SwarmPanel } from '../panels/SwarmPanel'
 import { RailwayPanel } from '../panels/RailwayPanel'
 import { LogsPanel } from '../panels/LogsPanel'
+import { AuditPanel } from '../panels/AuditPanel'
 import { MemoryPanel } from '../panels/MemoryPanel'
 import { UsagePanel } from '../panels/UsagePanel'
 import { SettingsPanel } from '../panels/SettingsPanel'
@@ -53,6 +54,7 @@ export function AppShell() {
           {view === 'swarm' && <SwarmPanel />}
           {view === 'railway' && <RailwayPanel />}
           {view === 'logs' && <LogsPanel />}
+          {view === 'audit' && <AuditPanel />}
           {view === 'memory' && <MemoryPanel />}
           {view === 'usage' && <UsagePanel />}
           {view === 'settings' && <SettingsPanel />}

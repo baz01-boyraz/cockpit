@@ -35,6 +35,7 @@ export type View =
   | 'swarm'
   | 'railway'
   | 'logs'
+  | 'audit'
   | 'memory'
   | 'usage'
   | 'settings'
