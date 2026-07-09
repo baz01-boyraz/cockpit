@@ -13,6 +13,8 @@ export default tseslint.config(
       '.cockpit-worktrees/**',
       'node_modules/**',
       '**/*.nosync/**',
+      // test:coverage HTML report output — generated, never hand-written.
+      'coverage/**',
       'temporary screenshots/**',
       '*.mjs',
       '**/*.cjs',
