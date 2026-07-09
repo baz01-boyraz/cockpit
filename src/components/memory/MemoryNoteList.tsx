@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { MemoryNoteSummary } from '@shared/memory-hub'
 import { relativeTime } from '@shared/time'
 import { IconPlus, IconSearch, IconX } from '../icons'
@@ -11,16 +11,38 @@ interface MemoryNoteListProps {
   onCreate: (slug: string) => Promise<boolean>
 }
 
+/** Note cards vary in height → incremental render rather than fixed windowing. */
+const INITIAL = 80
+const STEP = 60
+const INCREMENTAL_THRESHOLD = 200
+
 /** Left zone: recency-ordered note list with filter-as-you-type + new note. */
 export function MemoryNoteList({ notes, selected, onSelect, onCreate }: MemoryNoteListProps) {
   const [query, setQuery] = useState('')
   const [creating, setCreating] = useState(false)
+  const [limit, setLimit] = useState(INITIAL)
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return notes
     return notes.filter((n) => n.title.toLowerCase().includes(q) || n.name.includes(q))
   }, [notes, query])
+
+  // Reset the render budget whenever the visible set changes (filter / new notes).
+  useEffect(() => setLimit(INITIAL), [query, notes])
+
+  const incremental = visible.length > INCREMENTAL_THRESHOLD
+  const shown = incremental ? visible.slice(0, limit) : visible
+  const hasMore = incremental && limit < visible.length
+
+  // Grow the budget as the list nears its bottom — DOM stays bounded until scrolled.
+  const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (!hasMore) return
+    const el = e.currentTarget
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) {
+      setLimit((l) => Math.min(visible.length, l + STEP))
+    }
+  }
 
   return (
     <section className="card memory__list">
@@ -60,14 +82,14 @@ export function MemoryNoteList({ notes, selected, onSelect, onCreate }: MemoryNo
         </div>
       )}
 
-      <div className="memlist__body scroll-y">
+      <div className="memlist__body scroll-y" onScroll={onScroll}>
         {visible.length === 0 ? (
           <div className="emptyline">
             {query ? `Nothing matches “${query}”.` : 'No notes yet.'}
           </div>
         ) : (
           <ul className="memlist">
-            {visible.map((n) => (
+            {shown.map((n) => (
               <li key={n.name}>
                 <button
                   className={`memnote ${n.name === selected ? 'memnote--active' : ''}`}

@@ -117,6 +117,13 @@ export function MemoryReader({
 
         {!renaming && (
           <div className="memreader__actions">
+            {/* A save switches to read mode, so the confirmation lives here — not
+                buried in the edit branch where it could never appear. */}
+            {savedFlash && (
+              <span className="memreader__saved">
+                <IconCheck width={12} height={12} /> saved
+              </span>
+            )}
             {mode === 'read' ? (
               <>
                 <button className="btn btn--sm" onClick={onEdit}>
@@ -145,11 +152,6 @@ export function MemoryReader({
               </>
             ) : (
               <>
-                {savedFlash && (
-                  <span className="memreader__saved">
-                    <IconCheck width={12} height={12} /> saved
-                  </span>
-                )}
                 <button className="btn btn--accent btn--sm" onClick={onSave} disabled={saving}>
                   {saving ? 'Saving…' : 'Save'}
                 </button>

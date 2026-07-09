@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import { CHAT_ENABLED } from '../lib/features'
+import { useWindowedList } from '../hooks/useWindowedList'
 import { IconBolt, IconSend, IconWarning, IconX } from '../components/icons'
 import { classifyInsightRecency, RECENCY_HINT, type InsightRecency } from '@shared/insights'
+import type { LogEvent } from '@shared/domain'
 import { relativeTime } from '@shared/time'
 
 const SEVERITY_CLASS: Record<string, string> = {
@@ -38,6 +40,16 @@ function seenLabel(lastSeenAt: string): string {
   return t === 'now' ? 'just now' : `${t} ago`
 }
 
+function LogLine({ log }: { log: LogEvent }) {
+  return (
+    <div className={`logline mono ${LEVEL_CLASS[log.level]}`}>
+      <span className="logline__level">{log.level}</span>
+      <span className="logline__src">{log.sourceType}</span>
+      <span className="logline__msg">{log.message}</span>
+    </div>
+  )
+}
+
 export function LogsPanel() {
   const insights = useStore((s) => s.insights)
   const logs = useStore((s) => s.logs)
@@ -47,6 +59,8 @@ export function LogsPanel() {
   const clearInsights = useStore((s) => s.clearInsights)
   const setAiDraft = useStore((s) => s.setAiDraft)
   const [probe, setProbe] = useState('')
+  // Log rows are uniform height → fixed-height windowing. No-op under 200 rows.
+  const stream = useWindowedList(logs.length, { rowHeight: 29 })
 
   const analyze = async () => {
     if (!probe.trim() || !activeProjectId) return
@@ -154,17 +168,19 @@ export function LogsPanel() {
             <div className="card__title">Log stream</div>
             <span className="chip mono">{logs.length} events</span>
           </div>
-          <div className="logstream scroll-y">
+          <div className="logstream scroll-y" ref={stream.scrollRef} onScroll={stream.onScroll}>
             {logs.length === 0 ? (
               <div className="emptyline">No log events captured yet.</div>
+            ) : stream.windowed ? (
+              <>
+                <div className="logstream__pad" style={{ height: stream.padTop }} aria-hidden />
+                {logs.slice(stream.start, stream.end).map((l) => (
+                  <LogLine key={l.id} log={l} />
+                ))}
+                <div className="logstream__pad" style={{ height: stream.padBottom }} aria-hidden />
+              </>
             ) : (
-              logs.map((l) => (
-                <div key={l.id} className={`logline mono ${LEVEL_CLASS[l.level]}`}>
-                  <span className="logline__level">{l.level}</span>
-                  <span className="logline__src">{l.sourceType}</span>
-                  <span className="logline__msg">{l.message}</span>
-                </div>
-              ))
+              logs.map((l) => <LogLine key={l.id} log={l} />)
             )}
           </div>
         </section>
