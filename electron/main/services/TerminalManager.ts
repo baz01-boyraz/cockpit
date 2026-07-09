@@ -15,6 +15,18 @@ interface LiveTerminal {
   command: string | null
 }
 
+/**
+ * A row this process reconciled from running/starting → exited at boot, captured
+ * BEFORE the flip so its `pid`/`lastActiveAt` still reflect the crashed previous
+ * process's last claim. The A4 zombie-liveness audit reads these; because pid
+ * reuse is real, the caller must still verify recency + liveness before acting.
+ */
+export interface ReconciledStaleSession {
+  id: string
+  pid: number | null
+  lastActiveAt: string
+}
+
 type OutputSink = (projectId: string, sessionId: string, data: string) => void
 
 const MAX_TERMINALS = 6
@@ -37,6 +49,9 @@ export class TerminalManager {
   private readonly live = new Map<string, LiveTerminal>()
   /** Set during shutdown so late async pty events never touch a closed DB. */
   private disposed = false
+  /** Rows flipped from running/starting → exited at THIS boot (A4 seam). Captured
+   *  before the reconcile UPDATE; read once by the zombie-liveness audit. */
+  private reconciledThisBoot: readonly ReconciledStaleSession[] = []
 
   constructor(
     private readonly db: Db,
@@ -60,6 +75,16 @@ export class TerminalManager {
    * exactly these rows back, relaunching from cwd/shell/command).
    */
   private reconcileStaleRows(): void {
+    // Capture the rows about to be flipped FIRST — their pid/last_active_at reflect
+    // the previous (crashed) process's last claim, which is the A4 audit's input.
+    this.reconciledThisBoot = (
+      this.db
+        .prepare(
+          `SELECT id, pid, last_active_at FROM terminal_sessions
+           WHERE status IN ('running', 'starting')`,
+        )
+        .all() as { id: string; pid: number | null; last_active_at: string }[]
+    ).map((r) => ({ id: r.id, pid: r.pid, lastActiveAt: r.last_active_at }))
     this.db
       .prepare(
         `UPDATE terminal_sessions
@@ -67,6 +92,16 @@ export class TerminalManager {
          WHERE status IN ('running', 'starting')`,
       )
       .run({ now: nowIso() })
+  }
+
+  /**
+   * The rows this process reconciled at boot (running/starting → exited),
+   * captured before the flip. The A4 zombie audit reads them once; pid reuse
+   * means every entry must still pass a recency + liveness check before it is
+   * treated as our own orphaned process.
+   */
+  get reconciledStaleSessions(): readonly ReconciledStaleSession[] {
+    return this.reconciledThisBoot
   }
 
   private defaultShell(): string {

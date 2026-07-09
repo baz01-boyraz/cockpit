@@ -6,6 +6,8 @@ import type { ProjectService } from '../electron/main/services/ProjectService'
 import {
   CouncilSessionStore,
   type CouncilSessionInput,
+  type CouncilSessionPending,
+  type CouncilSessionStatus,
 } from '../electron/main/db/CouncilSessionStore'
 import type { CouncilResult } from '../shared/council'
 import type { Db } from '../electron/main/db/Database'
@@ -44,35 +46,85 @@ function makeAudit(): AuditLogService {
   return { record: vi.fn() } as unknown as AuditLogService
 }
 
-/** In-memory session store standing in for the SQLite-backed one. */
+/**
+ * In-memory session store standing in for the SQLite-backed one, modelling the
+ * A6 pending→final lifecycle. `inserted` collects the COMPLETED runs (via
+ * finalize or the fallback insert) so the existing assertions on persisted runs
+ * still hold; `rows` exposes lifecycle state for the durable-marker tests.
+ */
+interface FakeRow {
+  id: string
+  projectId: string
+  cardId: string | null
+  mode: CouncilSessionInput['mode']
+  question: string | null
+  result: CouncilResult | null
+  status: CouncilSessionStatus
+}
+
 function makeStore() {
+  const rows: FakeRow[] = []
   const inserted: CouncilSessionInput[] = []
+  let seq = 0
   const store = {
+    insertPending: (input: CouncilSessionPending) => {
+      seq += 1
+      const id = `sess-${seq}`
+      rows.push({ ...input, id, result: null, status: 'pending' })
+      return id
+    },
+    finalize: (id: string, result: CouncilResult) => {
+      const row = rows.find((r) => r.id === id)
+      if (!row) return
+      row.result = result
+      row.status = 'final'
+      inserted.push({
+        projectId: row.projectId,
+        cardId: row.cardId,
+        mode: row.mode,
+        question: row.question,
+        result,
+      })
+    },
     insert: (input: CouncilSessionInput) => {
+      seq += 1
+      const id = `sess-${seq}`
+      rows.push({ ...input, id, status: 'final' })
       inserted.push(input)
-      return `sess-${inserted.length}`
+      return id
+    },
+    sweepStalePending: () => {
+      let n = 0
+      for (const row of rows) {
+        if (row.status === 'pending') {
+          row.status = 'failed'
+          n += 1
+        }
+      }
+      return n
     },
     listRecent: (projectId: string) =>
-      inserted
-        .filter((i) => i.projectId === projectId)
-        .map((i, idx) => ({
-          id: `sess-${idx + 1}`,
-          projectId: i.projectId,
-          cardId: i.cardId,
-          mode: i.mode,
-          question: i.question,
-          result: i.result,
-          verdictKind: i.result.specVerdict?.kind ?? null,
+      rows
+        .filter((r): r is FakeRow & { result: CouncilResult } => r.projectId === projectId && !!r.result)
+        .map((r) => ({
+          id: r.id,
+          projectId: r.projectId,
+          cardId: r.cardId,
+          mode: r.mode,
+          question: r.question,
+          result: r.result,
+          verdictKind: r.result.specVerdict?.kind ?? null,
+          status: r.status,
           createdAt: 'now',
         })),
     get: () => null,
   }
-  return { store: store as unknown as CouncilSessionStore, inserted }
+  return { store: store as unknown as CouncilSessionStore, inserted, rows }
 }
 
 function makeService(storeParts = makeStore()) {
   const service = new CouncilService(makeProjects(), makeAudit(), makeEngine(), storeParts.store)
-  return { service, inserted: storeParts.inserted }
+  return { service, inserted: storeParts.inserted, rows: storeParts.rows }
 }
 
 describe('CouncilService — spec mode orchestration', () => {
@@ -154,6 +206,70 @@ describe('CouncilService — spec mode orchestration', () => {
       expect(scorecard[i].averageRank).toBeGreaterThanOrEqual(scorecard[i - 1].averageRank)
     }
     expect(scorecard.every((e) => e.sessions === 2)).toBe(true)
+  })
+})
+
+describe('CouncilService — durable in-progress marker (A6)', () => {
+  it('reserves a pending row at run start and finalizes it to final on completion', async () => {
+    const parts = makeStore()
+    const { service } = makeService(parts)
+    await service.run('prj_1', { mode: 'spec', specText: 'Add caching to the gateway.' })
+    expect(parts.rows).toHaveLength(1)
+    expect(parts.rows[0].status).toBe('final')
+    expect(parts.rows[0].result).not.toBeNull()
+  })
+
+  it('a completed run leaves no pending rows behind', async () => {
+    const parts = makeStore()
+    const { service } = makeService(parts)
+    await service.run('prj_1', { mode: 'spec', specText: 'do the thing', cardId: 'c1' })
+    expect(parts.rows.every((r) => r.status !== 'pending')).toBe(true)
+  })
+
+  it('never reserves a pending row for an early-exit (missing spec)', async () => {
+    const parts = makeStore()
+    const { service } = makeService(parts)
+    const result = await service.run('prj_1', { mode: 'spec' })
+    expect(result.ok).toBe(false)
+    expect(parts.rows).toHaveLength(0)
+  })
+
+  it('sweeps a pending row left by a previous crashed run to failed at construction, auditing it', () => {
+    const parts = makeStore()
+    // Simulate a previous process that reserved a row but crashed before finalize.
+    const orphanId = (
+      parts.store as unknown as { insertPending: (i: CouncilSessionPending) => string }
+    ).insertPending({ projectId: 'prj_1', cardId: null, mode: 'spec', question: null })
+    expect(parts.rows.find((r) => r.id === orphanId)?.status).toBe('pending')
+
+    const audit = { record: vi.fn() } as unknown as AuditLogService
+    // Constructing the service runs the sweep.
+    new CouncilService(makeProjects(), audit, makeEngine(), parts.store)
+
+    expect(parts.rows.find((r) => r.id === orphanId)?.status).toBe('failed')
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ actionType: 'council.pending_swept', actor: 'system' }),
+    )
+  })
+
+  it('does not audit a sweep when there are no pending rows at construction', () => {
+    const parts = makeStore()
+    const audit = { record: vi.fn() } as unknown as AuditLogService
+    new CouncilService(makeProjects(), audit, makeEngine(), parts.store)
+    expect(audit.record).not.toHaveBeenCalledWith(
+      expect.objectContaining({ actionType: 'council.pending_swept' }),
+    )
+  })
+
+  it('never throws at construction when the store lacks the sweep method (fake store)', () => {
+    const bareStore = {
+      insertPending: () => 'x',
+      finalize: () => undefined,
+      insert: () => 'x',
+      listRecent: () => [],
+      get: () => null,
+    } as unknown as CouncilSessionStore
+    expect(() => new CouncilService(makeProjects(), makeAudit(), makeEngine(), bareStore)).not.toThrow()
   })
 })
 
@@ -273,14 +389,24 @@ interface StoredRow {
   question: string | null
   result_json: string
   verdict_kind: string | null
+  status: string
   created_at: string
 }
 
+/**
+ * A lifecycle-aware in-memory stand-in for the SQLite table (no better-sqlite3 in
+ * Node). It routes the store's four write statements — pending insert, final
+ * insert, finalize-by-id, pending→failed sweep — by SQL shape, and the two reads
+ * by their WHERE clause.
+ */
 function fakeDb() {
   const rows: StoredRow[] = []
   const db = {
     prepare(sql: string) {
       if (sql.includes('INSERT INTO council_sessions')) {
+        // insertPending stamps a `'pending'` literal + NULL verdict_kind; the
+        // completed insert stamps `'final'` and a real @verdictKind param.
+        const status = sql.includes("'pending'") ? 'pending' : 'final'
         return {
           run: (p: {
             id: string
@@ -289,7 +415,7 @@ function fakeDb() {
             mode: string
             question: string | null
             resultJson: string
-            verdictKind: string | null
+            verdictKind?: string | null
             createdAt: string
           }) => {
             rows.push({
@@ -299,9 +425,38 @@ function fakeDb() {
               mode: p.mode,
               question: p.question,
               result_json: p.resultJson,
-              verdict_kind: p.verdictKind,
+              verdict_kind: p.verdictKind ?? null,
+              status,
               created_at: p.createdAt,
             })
+            return { changes: 1 }
+          },
+        }
+      }
+      if (sql.includes('UPDATE council_sessions') && sql.includes("status = 'failed'")) {
+        return {
+          run: () => {
+            let changes = 0
+            for (const r of rows) {
+              if (r.status === 'pending') {
+                r.status = 'failed'
+                changes += 1
+              }
+            }
+            return { changes }
+          },
+        }
+      }
+      if (sql.includes('UPDATE council_sessions')) {
+        // finalize by id
+        return {
+          run: (p: { id: string; resultJson: string; verdictKind: string | null }) => {
+            const row = rows.find((r) => r.id === p.id)
+            if (!row) return { changes: 0 }
+            row.result_json = p.resultJson
+            row.verdict_kind = p.verdictKind
+            row.status = 'final'
+            return { changes: 1 }
           },
         }
       }
@@ -354,5 +509,59 @@ describe('CouncilSessionStore', () => {
     const recent = store.listRecent('prj_1')
     expect(recent).toHaveLength(1)
     expect(recent[0].result.specVerdict?.kind).toBe('needs_clarification')
+    // A row written by the completed-insert path reads back as final.
+    expect(recent[0].status).toBe('final')
+  })
+})
+
+describe('CouncilSessionStore — pending lifecycle (A6)', () => {
+  it('insertPending reserves a queryable pending row with a well-formed placeholder result', () => {
+    const { db, rows } = fakeDb()
+    const store = new CouncilSessionStore(db)
+    const id = store.insertPending({ projectId: 'prj_1', cardId: 'c1', mode: 'spec', question: 'q' })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].status).toBe('pending')
+    // The placeholder is a valid CouncilResult so read paths never throw on it.
+    const fetched = store.get(id)
+    expect(fetched?.status).toBe('pending')
+    expect(fetched?.result.ok).toBe(false)
+    expect(fetched?.result.aggregate).toEqual([])
+    expect(fetched?.result.sessionId).toBe(id)
+  })
+
+  it('finalize replaces the placeholder and flips the row to final', () => {
+    const { db } = fakeDb()
+    const store = new CouncilSessionStore(db)
+    const id = store.insertPending({ projectId: 'prj_1', cardId: null, mode: 'spec', question: null })
+    store.finalize(id, specResult())
+    const fetched = store.get(id)
+    expect(fetched?.status).toBe('final')
+    expect(fetched?.verdictKind).toBe('needs_clarification')
+    expect(fetched?.result.aggregate).toEqual([{ seatId: 'contrarian', averageRank: 1, count: 1 }])
+    expect(fetched?.result.sessionId).toBe(id)
+  })
+
+  it('sweepStalePending flips only pending rows to failed and returns the count; a repeat is a no-op', () => {
+    const { db, rows } = fakeDb()
+    const store = new CouncilSessionStore(db)
+    const p1 = store.insertPending({ projectId: 'prj_1', cardId: null, mode: 'spec', question: null })
+    store.insertPending({ projectId: 'prj_1', cardId: null, mode: 'diff', question: null })
+    store.finalize(p1, specResult()) // p1 completes; one pending remains
+    expect(store.sweepStalePending()).toBe(1)
+    expect(rows.find((r) => r.id === p1)?.status).toBe('final')
+    expect(rows.filter((r) => r.status === 'failed')).toHaveLength(1)
+    expect(store.sweepStalePending()).toBe(0)
+  })
+
+  it('listRecent surfaces a swept (failed) row without breaking on its placeholder', () => {
+    const { db } = fakeDb()
+    const store = new CouncilSessionStore(db)
+    store.insertPending({ projectId: 'prj_1', cardId: null, mode: 'spec', question: null })
+    store.sweepStalePending()
+    const recent = store.listRecent('prj_1')
+    expect(recent).toHaveLength(1)
+    expect(recent[0].status).toBe('failed')
+    // The defensive parse yields the empty placeholder, never a throw.
+    expect(recent[0].result.aggregate).toEqual([])
   })
 })

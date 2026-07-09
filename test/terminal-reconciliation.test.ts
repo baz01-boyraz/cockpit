@@ -81,13 +81,18 @@ afterAll(() => {
 })
 
 describe('boot reconciliation', () => {
-  it('runs a reconciliation UPDATE at construction, before anything else', () => {
+  it('runs the reconciliation at construction, before anything else', () => {
     const { rec } = makeManager()
-    expect(rec.calls.length).toBeGreaterThanOrEqual(1)
+    expect(rec.calls.length).toBeGreaterThanOrEqual(2)
+    // Reconciliation is now two steps: first CAPTURE the stale rows' pids (A4
+    // seam), then flip them to exited. Both must precede any other DB work.
     const first = rec.calls[0]
-    expect(first.method).toBe('run')
-    expect(first.sql).toContain('UPDATE terminal_sessions')
-    expect(first.sql).toContain('reconciled_at')
+    expect(first.method).toBe('all')
+    expect(first.sql).toContain('SELECT id, pid, last_active_at FROM terminal_sessions')
+    const second = rec.calls[1]
+    expect(second.method).toBe('run')
+    expect(second.sql).toContain('UPDATE terminal_sessions')
+    expect(second.sql).toContain('reconciled_at')
   })
 
   it('only targets stale running/starting rows and flips them to exited', () => {
@@ -114,6 +119,39 @@ describe('boot reconciliation', () => {
     const insertIdx = rec.calls.findIndex((c) => c.sql.includes('INSERT INTO terminal_sessions'))
     expect(reconcileIdx).toBeGreaterThanOrEqual(0)
     expect(insertIdx).toBeGreaterThan(reconcileIdx)
+  })
+})
+
+describe('zombie-audit seam (A4)', () => {
+  it('captures pid + lastActiveAt of the rows about to be reconciled, before the flip', () => {
+    const staleRows = [
+      { id: 't1', pid: 4242, last_active_at: '2026-07-09T00:00:00.000Z' },
+      { id: 't2', pid: null, last_active_at: '2026-07-09T00:00:00.000Z' },
+    ]
+    const rec = makeRecordingDb({
+      all: (sql) => (sql.includes('pid, last_active_at') ? staleRows : []),
+    })
+    const events = new CockpitEvents()
+    const projects = { get: vi.fn(() => ({ path: PROJECT_DIR })) } as unknown as ProjectService
+    const integrationDir = mkdtempSync(join(tmpdir(), 'cockpit-rec-test-'))
+    integrationDirs.push(integrationDir)
+    const mgr = new TerminalManager(rec.db, events, projects, vi.fn(), vi.fn(), integrationDir)
+
+    expect(mgr.reconciledStaleSessions).toEqual([
+      { id: 't1', pid: 4242, lastActiveAt: '2026-07-09T00:00:00.000Z' },
+      { id: 't2', pid: null, lastActiveAt: '2026-07-09T00:00:00.000Z' },
+    ])
+    // The capture SELECT must precede the reconcile UPDATE, so the pids reflect
+    // the previous process's claim (not the post-flip 'exited' state).
+    const selectIdx = rec.calls.findIndex((c) => c.method === 'all' && c.sql.includes('pid, last_active_at'))
+    const updateIdx = rec.calls.findIndex((c) => c.method === 'run' && c.sql.includes('reconciled_at'))
+    expect(selectIdx).toBeGreaterThanOrEqual(0)
+    expect(updateIdx).toBeGreaterThan(selectIdx)
+  })
+
+  it('exposes an empty list when there are no stale rows', () => {
+    const { mgr } = makeManager()
+    expect(mgr.reconciledStaleSessions).toEqual([])
   })
 })
 

@@ -206,6 +206,55 @@ describe('Services — composition root construction', () => {
   })
 })
 
+describe('Services — zombie liveness audit (A4)', () => {
+  /** A recording DB whose reconcile SELECT returns one scripted stale row. */
+  function dbWithStaleRow(row: { id: string; pid: number | null; last_active_at: string }) {
+    const rec = makeRecordingDb({
+      all: (sql) => (sql.includes('pid, last_active_at') ? [row] : []),
+    })
+    ;(rec.db as unknown as { close: () => void }).close = vi.fn()
+    return rec
+  }
+
+  it('probes then SIGTERMs a recent, still-alive orphan pid and audits the reap', () => {
+    const rec = dbWithStaleRow({ id: 't1', pid: 999999, last_active_at: new Date().toISOString() })
+    h.dbHolder.db = rec.db
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true)
+
+    services = new Services({ dbPath: ':memory:', userDataDir, events })
+
+    expect(killSpy).toHaveBeenCalledWith(999999, 0) // liveness probe
+    expect(killSpy).toHaveBeenCalledWith(999999, 'SIGTERM') // the reap
+    const auditRuns = rec.callsFor('run', 'INSERT INTO audit_log')
+    expect(auditRuns.some((c) => JSON.stringify(c.args[0]).includes('zombie_reaped'))).toBe(true)
+    killSpy.mockRestore()
+  })
+
+  it('skips a stale-dated orphan pid entirely — never signals it (pid reuse guard)', () => {
+    const rec = dbWithStaleRow({ id: 't1', pid: 999999, last_active_at: '2000-01-01T00:00:00.000Z' })
+    h.dbHolder.db = rec.db
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true)
+
+    services = new Services({ dbPath: ':memory:', userDataDir, events })
+
+    expect(killSpy).not.toHaveBeenCalledWith(999999, 0)
+    expect(killSpy).not.toHaveBeenCalledWith(999999, 'SIGTERM')
+    killSpy.mockRestore()
+  })
+
+  it('does not reap a null pid, and leaves boot unharmed', () => {
+    const rec = dbWithStaleRow({ id: 't1', pid: null, last_active_at: new Date().toISOString() })
+    h.dbHolder.db = rec.db
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true)
+
+    expect(() => {
+      services = new Services({ dbPath: ':memory:', userDataDir, events })
+    }).not.toThrow()
+    expect(killSpy).not.toHaveBeenCalledWith(null, 'SIGTERM')
+    killSpy.mockRestore()
+  })
+})
+
 describe('Services — shutdown', () => {
   it('completes cleanly and closes the DB last', () => {
     const { rec, close } = makeDbWithClose()

@@ -95,7 +95,33 @@ export class CouncilService {
      *  into the spec seats' memory-pointer block (recall telemetry). Best-effort;
      *  undefined in tests (no-op). `record` never throws by contract. */
     private readonly recalls?: Pick<MemoryRecallService, 'record'>,
-  ) {}
+  ) {
+    this.sweepStalePending()
+  }
+
+  /**
+   * A6: at construction, mark any council session still `pending` as `failed`.
+   * Such a row can only be residue of a previous process that crashed mid-run —
+   * this process has reserved none yet — so a stuck `pending` marker becomes an
+   * honest `failed` trace. Best-effort: a sweep failure (or a store fake without
+   * the method, in tests) must never block the DI root's construction.
+   */
+  private sweepStalePending(): void {
+    try {
+      const swept = this.sessions.sweepStalePending()
+      if (swept > 0) {
+        this.audit.record({
+          projectId: null,
+          actor: 'system',
+          actionType: 'council.pending_swept',
+          summary: `Marked ${swept} interrupted council run(s) as failed`,
+          payload: { swept },
+        })
+      }
+    } catch {
+      // A lingering `pending` marker is cosmetic, never a boot blocker.
+    }
+  }
 
   async run(projectId: string, opts: CouncilRunOpts = {}): Promise<CouncilResult> {
     const started = Date.now()
@@ -124,6 +150,13 @@ export class CouncilService {
       if ('earlyError' in prep) return this.earlyError('spec', prep.earlyError, started)
       specText = prep.specText
     }
+
+    // A6: the early-exit guards have passed, so the run is committed — reserve a
+    // durable `pending` row up front. A crash between here and the final
+    // finalize() leaves this marker, which the next boot sweeps to `failed`.
+    // Best-effort: if reserving fails, `pendingId` stays null and persistAndRecord
+    // falls back to a single insert of the completed result.
+    const pendingId = this.reservePending(projectId, cardId, mode, question)
 
     const callOpts = { cwd: project.path, timeout: CALL_TIMEOUT_MS, maxBuffer: CALL_MAX_BUFFER }
     const fenceTag = `====COCKPIT-UNTRUSTED-${mode.toUpperCase()}-${randomUUID()}====`
@@ -157,7 +190,7 @@ export class CouncilService {
         filesReviewed,
         started,
       })
-      return this.persistAndRecord(projectId, cardId, mode, question, result)
+      return this.persistAndRecord(projectId, pendingId, cardId, mode, question, result)
     }
 
     // Phase 2 — anonymized peer rankings (needs ≥2 responses to compare).
@@ -185,7 +218,22 @@ export class CouncilService {
       filesReviewed,
       started,
     })
-    return this.persistAndRecord(projectId, cardId, mode, question, result)
+    return this.persistAndRecord(projectId, pendingId, cardId, mode, question, result)
+  }
+
+  /** A6: reserve a durable `pending` marker; null if the store rejected it (the
+   *  completed result is then persisted by persistAndRecord's fallback insert). */
+  private reservePending(
+    projectId: string,
+    cardId: string | null,
+    mode: CouncilMode,
+    question: string | null,
+  ): string | null {
+    try {
+      return this.sessions.insertPending({ projectId, cardId, mode, question })
+    } catch {
+      return null
+    }
   }
 
   /**
@@ -385,20 +433,29 @@ export class CouncilService {
     return result
   }
 
-  /** Persist a completed run (even ok:false), then audit-log stats only. */
+  /** Persist a completed run (even ok:false), then audit-log stats only. A6: this
+   *  finalizes the `pending` row reserved at run start; only when that reservation
+   *  failed (pendingId null) does it fall back to a single insert. */
   private persistAndRecord(
     projectId: string,
+    pendingId: string | null,
     cardId: string | null,
     mode: CouncilMode,
     question: string | null,
     result: CouncilResult,
   ): CouncilResult {
-    let sessionId: string | null = null
+    let sessionId: string | null = pendingId
     try {
-      sessionId = this.sessions.insert({ projectId, cardId, mode, question, result })
+      if (pendingId) {
+        this.sessions.finalize(pendingId, result)
+      } else {
+        sessionId = this.sessions.insert({ projectId, cardId, mode, question, result })
+      }
     } catch {
-      // Persistence must not sink a verdict the user is waiting on; the result
-      // returns with sessionId null and the audit line records the run anyway.
+      // Persistence must not sink a verdict the user is waiting on. If finalize
+      // threw, the row stays `pending` and the next boot sweeps it to `failed`;
+      // sessionId still points at it. If the fallback insert threw, sessionId is
+      // null. Either way the audit line records the run.
     }
     const withId: CouncilResult = { ...result, sessionId }
     this.record(projectId, withId)

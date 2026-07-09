@@ -232,6 +232,11 @@ export class Services {
       },
       join(opts.userDataDir, 'shell-integration'),
     )
+    // A4: right after TerminalManager reconciled its own stale rows, audit the
+    // pids those rows carried for still-alive orphans (a previous process's pty
+    // children that reparented on crash) and reap only OUR recent ones. Fully
+    // isolated + guarded — a liveness audit can never block or crash startup.
+    this.reconcileZombies()
     // After terminals: the swarm spawns workers through the TerminalManager
     // and listens for their exits on the same bus.
     this.namedAgents = new NamedAgentsService(this.projects)
@@ -318,6 +323,93 @@ export class Services {
 
   /** Age threshold before a project's memory hub is re-swept (7 days). */
   private static readonly CURATION_CADENCE_MS = 7 * 24 * 60 * 60 * 1000
+
+  /** A4: how recent a reconciled terminal row must be before its pid is trusted
+   *  enough to signal. pid reuse is real — an old row's pid almost certainly
+   *  belongs to an unrelated process now, so anything staler is left untouched. */
+  private static readonly ZOMBIE_RECENCY_MS = 7 * 24 * 60 * 60 * 1000
+
+  /**
+   * A4: liveness-audit the pids of terminal rows this process just reconciled
+   * from running/starting → exited. Row-only reconciliation never checked whether
+   * the pty children actually died; on crash they reparent to launchd/init and
+   * keep burning CPU/API spend. We SIGTERM only OUR orphans, and only when the
+   * row is recent AND the pid is still alive — never a pid that was never ours.
+   *
+   * Conservative by construction: only rows from `terminal_sessions` are ever
+   * touched; a stale (>7d) row is skipped outright to dodge pid reuse; a foreign
+   * or already-dead pid is left alone. Every decision is audit-logged. Fully
+   * guarded — same contract as the worktree prune: a miss costs a leaked process,
+   * a throw here would cost the whole boot, so it can do neither.
+   */
+  private reconcileZombies(): void {
+    try {
+      const candidates = this.terminals.reconciledStaleSessions
+      if (candidates.length === 0) return
+      const nowMs = Date.now()
+      let reaped = 0
+      let alreadyDead = 0
+      let skippedStale = 0
+      for (const row of candidates) {
+        if (row.pid === null || row.pid <= 0) continue
+        // Recency guard first: an old row's pid is almost certainly reused now.
+        const lastMs = Date.parse(row.lastActiveAt)
+        if (Number.isNaN(lastMs) || nowMs - lastMs > Services.ZOMBIE_RECENCY_MS) {
+          skippedStale += 1
+          continue
+        }
+        if (!this.isProcessAlive(row.pid)) {
+          alreadyDead += 1
+          continue
+        }
+        // Our recent orphan is still alive — SIGTERM the pty pid. Guarded: it may
+        // die between probe and signal, and that race is not an error.
+        try {
+          process.kill(row.pid, 'SIGTERM')
+          reaped += 1
+          this.audit.record({
+            projectId: null,
+            actor: 'system',
+            actionType: 'system.zombie_reaped',
+            summary: `Reaped orphaned terminal pid ${row.pid} left running by a previous session`,
+            payload: { pid: row.pid, sessionId: row.id, lastActiveAt: row.lastActiveAt },
+          })
+        } catch {
+          // Vanished between probe and signal, or not ours to signal — either way
+          // it is no longer our concern.
+        }
+      }
+      // One summary line whenever the sweep did (or deliberately declined) work.
+      if (reaped > 0 || skippedStale > 0 || alreadyDead > 0) {
+        this.audit.record({
+          projectId: null,
+          actor: 'system',
+          actionType: 'system.zombie_sweep',
+          summary: `Zombie sweep: ${reaped} reaped, ${alreadyDead} already dead, ${skippedStale} skipped (stale pid)`,
+          payload: { candidates: candidates.length, reaped, alreadyDead, skippedStale },
+        })
+      }
+    } catch {
+      // A liveness-audit failure must never block boot — leaked pids are a
+      // resource nuisance, not a correctness hazard (mirrors the worktree prune).
+    }
+  }
+
+  /**
+   * Existence probe via the null signal: `process.kill(pid, 0)` delivers nothing
+   * but throws ESRCH when no such process exists and EPERM when it exists but is
+   * owned by another user. EPERM is treated as NOT reapable — a process we can't
+   * signal is not one we spawned, i.e. a reused pid — so only a clean success
+   * (our own live process) returns true.
+   */
+  private isProcessAlive(pid: number): boolean {
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch {
+      return false
+    }
+  }
 
   /**
    * Fire-and-forget a curation sweep for every project not swept in the last
