@@ -55,11 +55,13 @@ interface SwarmCardEditorProps {
 }
 
 /**
- * The in-place card editor. Identity is a ROLE PIPELINE (systematic taxonomy):
- * an ordered chain of role·spec steps the swarm runs sequentially. Leaving it
- * empty is first-class — the router auto-assigns from the task text at Start
- * (previewed live here). A Named Agent stays available as an advanced override;
- * picking one supersedes the pipeline, and adding a step clears the override.
+ * The in-place card editor. The default surface is deliberately minimal:
+ * title, body, and the council gate — the swarm auto-assigns agents from the
+ * task text at Start, so identity needs no attention on the happy path. The
+ * whole "who builds this" machinery (role·spec pipeline + Named Agent
+ * override) lives behind one collapsed Advanced section; it opens itself only
+ * when the card already carries an explicit pipeline or agent. Picking an
+ * agent supersedes the pipeline, and adding a step clears the override.
  */
 export function SwarmCardEditor({
   card,
@@ -75,7 +77,9 @@ export function SwarmCardEditor({
   const [agent, setAgent] = useState(card.agent ?? '')
   const [pendRole, setPendRole] = useState<Role>('builder')
   const [pendSpec, setPendSpec] = useState<Spec | ''>('')
-  const [advancedOpen, setAdvancedOpen] = useState(Boolean(card.agent))
+  const [advancedOpen, setAdvancedOpen] = useState(
+    Boolean(card.agent) || card.assignments.length > 0,
+  )
   const [deleteArmed, setDeleteArmed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [applied, setApplied] = useState(false)
@@ -287,86 +291,87 @@ export function SwarmCardEditor({
           )}
         </div>
 
-        {!agent && (
-          <div className="swarmEdit__pipeline">
-            <span className="swarmEdit__label">pipeline</span>
-            {assignments.length > 0 ? (
-              <div className="swarmPipeline" role="list" aria-label="Agent pipeline">
-                {assignments.map((a, i) => (
-                  <span key={`${a.role}-${a.spec ?? ''}-${i}`} className="swarmPipeline__step">
-                    {i > 0 && <span className="swarmPipeline__arrow" aria-hidden>›</span>}
-                    <span role="listitem" className="swarmTag swarmTag--step swarmTag--removable">
-                      {assignmentLabel(a)}
-                      <button
-                        type="button"
-                        className="swarmTag__x"
-                        onClick={() => removeStep(i)}
-                        aria-label={`Remove ${assignmentLabel(a)} step`}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="swarmEdit__hint">
-                {autoPreview
-                  ? `Unassigned — auto-assign at Start: ${autoPreview}`
-                  : 'Unassigned — the swarm picks agents from the task at Start.'}
-              </p>
-            )}
-
-            <div className="swarmEdit__addStep">
-              <select
-                className="swarmEdit__select"
-                value={pendRole}
-                onChange={(e) => setPendRole(e.target.value as Role)}
-                aria-label="Step role"
-              >
-                {ROLE_IDS.map((r) => (
-                  <option key={r} value={r}>
-                    {ROLES[r].label}
-                  </option>
-                ))}
-              </select>
-              <select
-                className={`swarmEdit__select${pendSpec ? '' : ' swarmEdit__select--empty'}`}
-                value={pendSpec}
-                onChange={(e) => setPendSpec(e.target.value as Spec | '')}
-                aria-label="Step domain (optional)"
-              >
-                <option value="">— domain (optional) —</option>
-                {SPEC_IDS.map((s) => (
-                  <option key={s} value={s}>
-                    {SPECS[s].label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
-                onClick={addStep}
-                disabled={assignments.length >= 6}
-              >
-                + Add step
-              </button>
-            </div>
-            <p className="swarmEdit__legend">
-              <strong>Role</strong> = what the agent does · <strong>Domain</strong> = which area
-              it focuses on (optional)
-            </p>
-          </div>
-        )}
-
         <details
           className="swarmEdit__advanced"
           open={advancedOpen}
           onToggle={(e) => setAdvancedOpen((e.target as HTMLDetailsElement).open)}
         >
           <summary className="swarmEdit__summary">
-            Advanced · assign a specific named agent instead
+            Advanced · who builds this (auto-assigned by default)
           </summary>
+
+          {!agent && (
+            <div className="swarmEdit__pipeline">
+              <span className="swarmEdit__label">pipeline</span>
+              {assignments.length > 0 ? (
+                <div className="swarmPipeline" role="list" aria-label="Agent pipeline">
+                  {assignments.map((a, i) => (
+                    <span key={`${a.role}-${a.spec ?? ''}-${i}`} className="swarmPipeline__step">
+                      {i > 0 && <span className="swarmPipeline__arrow" aria-hidden>›</span>}
+                      <span role="listitem" className="swarmTag swarmTag--step swarmTag--removable">
+                        {assignmentLabel(a)}
+                        <button
+                          type="button"
+                          className="swarmTag__x"
+                          onClick={() => removeStep(i)}
+                          aria-label={`Remove ${assignmentLabel(a)} step`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="swarmEdit__hint">
+                  {autoPreview
+                    ? `Unassigned — auto-assign at Start: ${autoPreview}`
+                    : 'Unassigned — the swarm picks agents from the task at Start.'}
+                </p>
+              )}
+
+              <div className="swarmEdit__addStep">
+                <select
+                  className="swarmEdit__select"
+                  value={pendRole}
+                  onChange={(e) => setPendRole(e.target.value as Role)}
+                  aria-label="Step role"
+                >
+                  {ROLE_IDS.map((r) => (
+                    <option key={r} value={r}>
+                      {ROLES[r].label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className={`swarmEdit__select${pendSpec ? '' : ' swarmEdit__select--empty'}`}
+                  value={pendSpec}
+                  onChange={(e) => setPendSpec(e.target.value as Spec | '')}
+                  aria-label="Step domain (optional)"
+                >
+                  <option value="">— domain (optional) —</option>
+                  {SPEC_IDS.map((s) => (
+                    <option key={s} value={s}>
+                      {SPECS[s].label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  onClick={addStep}
+                  disabled={assignments.length >= 6}
+                >
+                  + Add step
+                </button>
+              </div>
+              <p className="swarmEdit__legend">
+                <strong>Role</strong> = what the agent does · <strong>Domain</strong> = which area
+                it focuses on (optional)
+              </p>
+            </div>
+          )}
+
           <label className="swarmEdit__row">
             <span className="swarmEdit__label">agent</span>
             <select
@@ -375,7 +380,7 @@ export function SwarmCardEditor({
               onChange={(e) => pickAgent(e.target.value)}
               aria-label="Named agent override"
             >
-              <option value="">— none (use pipeline) —</option>
+              <option value="">— none (auto / pipeline) —</option>
               {agentMissing && <option value={agent}>{agent} (missing)</option>}
               {agents.map((a) => (
                 <option key={a.slug} value={a.slug}>

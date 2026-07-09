@@ -1074,13 +1074,15 @@
   background: var(--danger-wash);
   color: var(--danger);
 }
-/* Role pipeline builder — the systematic identity control. */
+/* Role pipeline builder — lives inside the collapsed Advanced section. */
 .swarmEdit__pipeline {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding-top: 6px;
-  border-top: 1px solid var(--border-subtle, var(--border));
+  padding-top: 2px;
+}
+.swarmEdit__advanced .swarmEdit__pipeline + .swarmEdit__row {
+  margin-top: 8px;
 }
 .swarmEdit__addStep {
   display: flex;
