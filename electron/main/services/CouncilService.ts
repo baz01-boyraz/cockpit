@@ -22,12 +22,14 @@ import {
   type ScorecardEntry,
 } from '@shared/council'
 import { buildChairmanPrompt, buildRankingPrompt, buildSeatPrompt, buildSpecChairmanPrompt } from '@shared/council-prompts'
-import { composeMemoryPointerBlock } from '@shared/memory-recall'
+import { composeMemoryPointerBlock, rankNotes, MEMORY_POINTER_MAX_NOTES } from '@shared/memory-recall'
+import { projectBrain } from '@shared/memory-ledger'
 import type { CouncilSessionStore } from '../db/CouncilSessionStore'
 import { collectDiffInputs } from './ReviewService'
 import type { AuditLogService } from './AuditLogService'
 import type { EngineRunner } from './EngineRunner'
 import type { MemoryHubService } from './MemoryHubService'
+import type { MemoryRecallService } from './MemoryRecallService'
 import type { ProjectService } from './ProjectService'
 import type { SentinelService } from './SentinelService'
 
@@ -89,6 +91,10 @@ export class CouncilService {
      *  file-blind OpenRouter seats still see the hub. Undefined → no block; tests
      *  pass nothing and are unaffected. */
     private readonly memory?: Pick<MemoryHubService, 'listHooks'>,
+    /** Optional Track G2 collaborator — records which hub notes were selected
+     *  into the spec seats' memory-pointer block (recall telemetry). Best-effort;
+     *  undefined in tests (no-op). `record` never throws by contract. */
+    private readonly recalls?: Pick<MemoryRecallService, 'record'>,
   ) {}
 
   async run(projectId: string, opts: CouncilRunOpts = {}): Promise<CouncilResult> {
@@ -206,6 +212,11 @@ export class CouncilService {
     try {
       const notes = this.memory.listHooks(projectId) // newest-first
       const query = `${question ?? ''}\n${specText ?? ''}`
+      // Track G2: the top-N ranked notes ARE the recall event — record them, then
+      // compose the block from the same deterministic ranking. Best-effort and
+      // structurally no-throw; recall telemetry never breaks a council run.
+      const selected = rankNotes(query, notes, MEMORY_POINTER_MAX_NOTES).map((n) => n.name)
+      void this.recalls?.record(projectBrain(projectId), selected, 'council_spec')
       return composeMemoryPointerBlock(query, notes)
     } catch {
       return null

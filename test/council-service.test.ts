@@ -227,6 +227,32 @@ describe('CouncilService — project memory pointers (Faz D)', () => {
     expect(seatPrompts[0]).toContain('gateway-caching')
   })
 
+  it('records the selected notes as a council_spec recall in spec mode (G2)', async () => {
+    const { engine } = makeCapturingEngine()
+    const memory = memoryWith([
+      { name: 'gateway-caching', hook: 'the gateway caches reads for 60s', updatedAt: 't2' },
+      { name: 'unrelated-note', hook: 'about the billing window', updatedAt: 't1' },
+    ])
+    const record = vi.fn()
+    const service = new CouncilService(
+      makeProjects(),
+      makeAudit(),
+      engine,
+      makeStore().store,
+      undefined,
+      memory,
+      { record },
+    )
+
+    await service.run('prj_1', { mode: 'spec', specText: 'Add caching to the gateway.' })
+
+    expect(record).toHaveBeenCalledWith(
+      'project:prj_1',
+      expect.arrayContaining(['gateway-caching']),
+      'council_spec',
+    )
+  })
+
   it('omits the memory block entirely when no memory collaborator is wired', async () => {
     const { engine, prompts } = makeCapturingEngine()
     const service = new CouncilService(makeProjects(), makeAudit(), engine, makeStore().store)

@@ -358,6 +358,29 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
     expect(relevantAt).toBeLessThan(irrelevantAt)
   })
 
+  it('records the selected hub notes as a swarm_worker recall when a worker spawns (G2)', async () => {
+    const record = vi.fn()
+    const svcWithRecall = new SwarmService(
+      store.db,
+      deps.terminals,
+      deps.memory,
+      deps.audit,
+      deps.events,
+      deps.projects,
+      deps.worktrees,
+      undefined,
+      undefined,
+      deps.doneSignal,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { record },
+    )
+    await svcWithRecall.startCard({ projectId: 'p1', cardId: 'a' })
+    expect(record).toHaveBeenCalledWith('project:p1', ['swarm-design'], 'swarm_worker')
+  })
+
   it('reuses an existing worktree on resume and never starts a done card', async () => {
     store.rows.find((r) => r.id === 'p')!.worktree_path = '/proj/.cockpit-worktrees/old'
     store.rows.find((r) => r.id === 'p')!.branch = 'swarm/old-1234'

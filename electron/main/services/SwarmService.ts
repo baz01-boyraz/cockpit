@@ -8,6 +8,7 @@ import {
 } from '@shared/kanban'
 import { buildWorkerCommand, HUB_POINTER_CAP } from '@shared/swarm-worker'
 import { rankNotes } from '@shared/memory-recall'
+import { projectBrain } from '@shared/memory-ledger'
 import { composeCouncilBrief, type CouncilResult } from '@shared/council'
 import {
   assignmentLabel,
@@ -31,12 +32,17 @@ import type { CockpitEvents } from '../events'
 import { newId, nowIso } from '../util/ids'
 import type { AuditLogService } from './AuditLogService'
 import type { MemoryHubService } from './MemoryHubService'
+import type { MemoryRecallService } from './MemoryRecallService'
 import type { SentinelService } from './SentinelService'
 import type { PruneSummary } from './SwarmWorktrees'
 
 /** The narrow sentinel slice the swarm feeds — structural so tests pass
  *  `undefined` (no-op). Sentinel never depends on SwarmService. */
 type SentinelReporter = Pick<SentinelService, 'report'>
+
+/** The narrow recall-telemetry slice the swarm feeds (Track G2) — structural so
+ *  tests pass `undefined` (no-op). `record` never throws by contract. */
+type RecallRecorder = Pick<MemoryRecallService, 'record'>
 
 /** The TerminalManager capabilities the swarm needs — injectable for tests. */
 export interface WorkerSpawner {
@@ -151,6 +157,9 @@ export class SwarmService {
     /** Optional Faz A collaborator — a nonzero worker exit raises a `notice`
      *  signal. Undefined in tests (no-op); sentinel never depends on the swarm. */
     private readonly sentinel?: SentinelReporter,
+    /** Optional Track G2 collaborator — records which hub notes reached a worker
+     *  prompt (recall telemetry). Best-effort; undefined in tests (no-op). */
+    private readonly recalls?: RecallRecorder,
   ) {
     // 6.4: any card still in_progress at construction is an orphan — its
     // worker died with the previous app instance (TerminalManager already
@@ -683,7 +692,11 @@ export class SwarmService {
     try {
       const notes = this.memory.listHooks(projectId) // newest-first
       const ranked = rankNotes(`${card.title}\n${card.body}`, notes, HUB_POINTER_CAP)
-      return ranked.map((n) => n.name)
+      const names = ranked.map((n) => n.name)
+      // Track G2: the selection IS the recall event. Best-effort and structurally
+      // no-throw; wrapped anyway so telemetry can never endanger a spawn.
+      void this.recalls?.record(projectBrain(projectId), names, 'swarm_worker')
+      return names
     } catch {
       return []
     }

@@ -459,3 +459,35 @@ CREATE TABLE IF NOT EXISTS hermes_chat_turns (
 );
 CREATE INDEX IF NOT EXISTS idx_hermes_chat_turns_project ON hermes_chat_turns(project_id, id);
 `
+
+/**
+ * V16 — Memory recall telemetry (Track G2, docs/plans/outcome-tracking-plan.md).
+ * `memory_ledger` (V7) records only WRITES; recalls — the selection of hub notes
+ * that reach a prompt — were invisible. This slim table records that selection at
+ * its two hooks (`SwarmService.hubNoteNames`, `CouncilService.memoryPointerBlock`)
+ * so the 7-day "earns its keep" test is a one-line query: notes recalled since
+ * now-7d vs the hub's list. Kept OUT of `memory_ledger` on purpose — the ledger is
+ * revertible write-provenance (before/after hashes), and mixing high-frequency
+ * recalls in would pollute its semantics and its `list()`.
+ *
+ * `brain` is 'project:<id>' | 'baz-global' with NO FK — brains address files/hubs,
+ * not rows, and the non-project global hub is a valid brain (mirrors V7/V8/V9).
+ * `note_slug` also has no FK (notes are files). `surface` is
+ * 'swarm_worker' | 'council_spec'. Two indexes: (brain, note_slug, created_at) for
+ * the per-note recency lookup, (brain, created_at) for the since-window scan.
+ *
+ * The plan reserved V15 for this table; V15 was independently taken by
+ * hermes_chat_turns on a parallel branch, so this lands as V16 (same renumber-on-
+ * integration rule as the V7→V10 memory-brain batch). Append-only.
+ */
+export const SCHEMA_V16 = /* sql */ `
+CREATE TABLE IF NOT EXISTS memory_recalls (
+  id         TEXT PRIMARY KEY,
+  brain      TEXT NOT NULL,
+  note_slug  TEXT NOT NULL,
+  surface    TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_memory_recalls_note ON memory_recalls(brain, note_slug, created_at);
+CREATE INDEX IF NOT EXISTS idx_memory_recalls_brain ON memory_recalls(brain, created_at);
+`
