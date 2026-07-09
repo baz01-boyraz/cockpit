@@ -1,4 +1,5 @@
-import { join } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { basename, join } from 'node:path'
 import { Notification } from 'electron'
 import type {
   DashboardSnapshot,
@@ -344,10 +345,14 @@ export class Services {
   /** Age threshold before a project's memory hub is re-swept (7 days). */
   private static readonly CURATION_CADENCE_MS = 7 * 24 * 60 * 60 * 1000
 
-  /** A4: how recent a reconciled terminal row must be before its pid is trusted
-   *  enough to signal. pid reuse is real — an old row's pid almost certainly
-   *  belongs to an unrelated process now, so anything staler is left untouched. */
-  private static readonly ZOMBIE_RECENCY_MS = 7 * 24 * 60 * 60 * 1000
+  /** A4: how recent a reconciled terminal row must be before its pid is even a
+   *  candidate to signal. Shrunk from 7d to 6h (argos HIGH): pid+recency is NOT
+   *  identity. On a busy single-user dev box (kern.maxproc≈4000, heavy process
+   *  churn) the kernel can recycle a freed pid onto the same user's unrelated
+   *  process within hours — a 7-day window is wide enough to SIGTERM a live,
+   *  reused pid. Recency only narrows the field; the ps-based identity check
+   *  below is what actually authorizes a kill. */
+  private static readonly ZOMBIE_RECENCY_MS = 6 * 60 * 60 * 1000
 
   /**
    * A4: liveness-audit the pids of terminal rows this process just reconciled
@@ -357,10 +362,12 @@ export class Services {
    * row is recent AND the pid is still alive — never a pid that was never ours.
    *
    * Conservative by construction: only rows from `terminal_sessions` are ever
-   * touched; a stale (>7d) row is skipped outright to dodge pid reuse; a foreign
-   * or already-dead pid is left alone. Every decision is audit-logged. Fully
-   * guarded — same contract as the worktree prune: a miss costs a leaked process,
-   * a throw here would cost the whole boot, so it can do neither.
+   * touched; a stale (>6h) row is skipped outright, a foreign/already-dead pid is
+   * left alone, and — the decisive gate — the live pid's command line must relate
+   * to the stored session (its shell binary or its startup command) before any
+   * signal is sent. Every decision is audit-logged. Fully guarded — same contract
+   * as the worktree prune: a miss costs a leaked process, a throw here would cost
+   * the whole boot, so it can do neither.
    */
   private reconcileZombies(): void {
     try {
@@ -370,6 +377,7 @@ export class Services {
       let reaped = 0
       let alreadyDead = 0
       let skippedStale = 0
+      let skippedUnverified = 0
       for (const row of candidates) {
         if (row.pid === null || row.pid <= 0) continue
         // Recency guard first: an old row's pid is almost certainly reused now.
@@ -382,8 +390,17 @@ export class Services {
           alreadyDead += 1
           continue
         }
-        // Our recent orphan is still alive — SIGTERM the pty pid. Guarded: it may
-        // die between probe and signal, and that race is not an error.
+        // Identity gate (argos HIGH): recency+liveness does not prove the live pid
+        // is OUR orphan — the kernel may have recycled it onto an unrelated
+        // process. Verify the pid's actual command line still matches the stored
+        // session before signalling. Fail-closed: any mismatch, missing identity,
+        // or ps failure declines the kill.
+        if (!this.pidMatchesSession(row.pid, row.id)) {
+          skippedUnverified += 1
+          continue
+        }
+        // Our recent, identity-verified orphan is still alive — SIGTERM the pty
+        // pid. Guarded: it may die between probe and signal, that race is fine.
         try {
           process.kill(row.pid, 'SIGTERM')
           reaped += 1
@@ -400,13 +417,19 @@ export class Services {
         }
       }
       // One summary line whenever the sweep did (or deliberately declined) work.
-      if (reaped > 0 || skippedStale > 0 || alreadyDead > 0) {
+      if (reaped > 0 || skippedStale > 0 || alreadyDead > 0 || skippedUnverified > 0) {
         this.audit.record({
           projectId: null,
           actor: 'system',
           actionType: 'system.zombie_sweep',
-          summary: `Zombie sweep: ${reaped} reaped, ${alreadyDead} already dead, ${skippedStale} skipped (stale pid)`,
-          payload: { candidates: candidates.length, reaped, alreadyDead, skippedStale },
+          summary: `Zombie sweep: ${reaped} reaped, ${alreadyDead} already dead, ${skippedStale} skipped (stale pid), ${skippedUnverified} skipped (identity unverified)`,
+          payload: {
+            candidates: candidates.length,
+            reaped,
+            alreadyDead,
+            skippedStale,
+            skippedUnverified,
+          },
         })
       }
     } catch {
@@ -428,6 +451,67 @@ export class Services {
       return true
     } catch {
       return false
+    }
+  }
+
+  /**
+   * Identity check that authorizes a zombie reap. Reads the stored session's
+   * `shell` (always present) and `command` (nullable) from `terminal_sessions`,
+   * asks the OS for the live pid's real command line (`ps -o command= -p <pid>`),
+   * and returns true only when that command line contains the session's startup
+   * command's first token OR its shell binary basename.
+   *
+   * Why this is sound-enough: a cockpit pane's pty pid is the shell it spawned
+   * (node-pty spawns `shell`), so a genuine orphan's command line carries that
+   * shell (e.g. `zsh`) and, when a startup command was launched, that token too
+   * (e.g. `claude`, `codex`, `npm`). A recycled pid running some unrelated
+   * program will contain neither. It is deliberately NOT perfect — a bare reused
+   * shell of the same kind could still match — but it fails closed on every
+   * ambiguity the caller can act on: missing row, empty ps output, or a ps error
+   * all return false, so uncertainty never kills.
+   */
+  private pidMatchesSession(pid: number, sessionId: string): boolean {
+    const row = this.sessionIdentity(sessionId)
+    if (!row) return false
+    const cmdline = this.processCommandLine(pid)
+    if (!cmdline) return false
+    const haystack = cmdline.toLowerCase()
+    const tokens: string[] = []
+    const shellName = row.shell ? basename(row.shell.trim()).toLowerCase() : ''
+    if (shellName) tokens.push(shellName)
+    if (row.command) {
+      const first = row.command.trim().split(/\s+/)[0] ?? ''
+      const commandToken = first ? basename(first).toLowerCase() : ''
+      if (commandToken) tokens.push(commandToken)
+    }
+    if (tokens.length === 0) return false
+    return tokens.some((t) => haystack.includes(t))
+  }
+
+  /** Stored shell + startup command for a terminal session, or null if the row
+   *  is gone. Fail-closed: any query error returns null (no identity → no kill). */
+  private sessionIdentity(sessionId: string): { shell: string; command: string | null } | null {
+    try {
+      const row = this.db
+        .prepare('SELECT shell, command FROM terminal_sessions WHERE id = ?')
+        .get(sessionId) as { shell: string; command: string | null } | undefined
+      return row ?? null
+    } catch {
+      return null
+    }
+  }
+
+  /** The live pid's command line via `ps -o command= -p <pid>`, or null when ps
+   *  fails or reports nothing — both treated as "cannot verify", i.e. no kill. */
+  private processCommandLine(pid: number): string | null {
+    try {
+      const out = execFileSync('ps', ['-o', 'command=', '-p', String(pid)], {
+        encoding: 'utf8',
+        timeout: 2000,
+      }).trim()
+      return out.length > 0 ? out : null
+    } catch {
+      return null
     }
   }
 

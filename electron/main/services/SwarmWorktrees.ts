@@ -1,9 +1,20 @@
-import { appendFileSync, existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
+import { appendFileSync, existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
 import { simpleGit, type SimpleGit } from 'simple-git'
 import { cardBranch } from '@shared/kanban'
 
 export const WORKTREES_DIR = '.cockpit-worktrees'
+
+/**
+ * Grace window a worktree directory must age past before the boot prune will
+ * even consider it an orphan. Race guard (argos MEDIUM): the live-set is read
+ * from card rows BEFORE `readdirSync`, so a worktree `startCard` created in that
+ * window is on disk (clean) but not yet in the DB — it would look orphaned and
+ * get removed. mtime is the portable, test-controllable freshness signal
+ * (`birthtime` cannot be backdated on macOS); anything touched within the window
+ * is left for the next sweep, by which time its card row has surely persisted.
+ */
+export const WORKTREE_PRUNE_GRACE_MS = 120_000
 
 /**
  * Outcome of a boot-time prune sweep (plan A1). Every enumerated worktree lands
@@ -12,6 +23,9 @@ export const WORKTREES_DIR = '.cockpit-worktrees'
  * - `keptDirty`  — orphans left in place (uncommitted work or un-removable): the
  *                  invariant that dirty work is NEVER force-deleted holds here.
  * - `keptLive`   — worktrees a still-live card owns, excluded from the sweep.
+ * - `keptYoung`  — orphan-looking dirs younger than {@link WORKTREE_PRUNE_GRACE_MS},
+ *                  left untouched so a just-created-but-not-yet-persisted worktree
+ *                  is never mistaken for a leak (see the const's doc).
  * - `branchesDeleted` — `swarm/<slug>` branches collected after their worktree
  *                  was clean-removed AND they had no unique/unmerged commits.
  * All paths are absolute (resolved).
@@ -20,6 +34,7 @@ export interface PruneSummary {
   pruned: string[]
   keptDirty: string[]
   keptLive: string[]
+  keptYoung: string[]
   branchesDeleted: string[]
 }
 
@@ -89,7 +104,13 @@ export class SwarmWorktrees {
    * rows) so this class stays free of the DB layer.
    */
   async prune(projectPath: string, liveWorktreePaths: readonly string[]): Promise<PruneSummary> {
-    const summary: PruneSummary = { pruned: [], keptDirty: [], keptLive: [], branchesDeleted: [] }
+    const summary: PruneSummary = {
+      pruned: [],
+      keptDirty: [],
+      keptLive: [],
+      keptYoung: [],
+      branchesDeleted: [],
+    }
     const git = simpleGit({ baseDir: projectPath })
     // Reclaim administrative entries for worktrees whose dirs already vanished.
     await git.raw(['worktree', 'prune'])
@@ -105,6 +126,14 @@ export class SwarmWorktrees {
       const target = resolve(root, entry.name)
       if (live.has(target)) {
         summary.keptLive.push(target)
+        continue
+      }
+      // Race guard: a worktree younger than the grace window may be one
+      // `startCard` just created but has not yet written its card row (the live
+      // set was snapshotted before this readdir). Leave it for the next sweep
+      // rather than delete work that is only momentarily "orphaned".
+      if (this.ageMs(target) < WORKTREE_PRUNE_GRACE_MS) {
+        summary.keptYoung.push(target)
         continue
       }
       // Resolve the branch BEFORE removal — the dir (and its git bookkeeping)
@@ -126,6 +155,22 @@ export class SwarmWorktrees {
       }
     }
     return summary
+  }
+
+  /**
+   * Milliseconds since the directory was last written (mtime). mtime is the
+   * portable freshness signal — `birthtime` is unreliable across filesystems and
+   * cannot be backdated in tests — and `git worktree add` writes the dir at
+   * creation, so a fresh worktree's mtime is effectively its creation time. On
+   * any stat failure the dir is treated as old (Infinity) so a vanished/unreadable
+   * entry falls through to the normal removal path rather than being kept forever.
+   */
+  private ageMs(path: string): number {
+    try {
+      return Date.now() - statSync(path).mtimeMs
+    } catch {
+      return Number.POSITIVE_INFINITY
+    }
   }
 
   /** Symlink-resolved absolute path, falling back to a plain resolve on error. */

@@ -6,7 +6,7 @@
  * and "Dismiss as noise" (records the G3 outcome). Read + act; the feed itself is
  * fetched on demand, the badge count stays in the store.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SentinelSeverity, SentinelSignal } from '@shared/sentinel'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
@@ -57,11 +57,18 @@ export function SentinelPanel() {
   }, [load])
 
   // A quiet, self-clearing confirmation line (card created / dismissed).
+  const flashTimer = useRef<number | null>(null)
   const announce = useCallback((text: string) => {
     setFlash(text)
-    const t = window.setTimeout(() => setFlash(null), 3200)
-    return () => window.clearTimeout(t)
+    if (flashTimer.current !== null) window.clearTimeout(flashTimer.current)
+    flashTimer.current = window.setTimeout(() => setFlash(null), 3200)
   }, [])
+  useEffect(
+    () => () => {
+      if (flashTimer.current !== null) window.clearTimeout(flashTimer.current)
+    },
+    [],
+  )
 
   const patch = (id: string, next: Partial<SentinelSignal>) =>
     setSignals((prev) => prev.map((s) => (s.id === id ? { ...s, ...next } : s)))

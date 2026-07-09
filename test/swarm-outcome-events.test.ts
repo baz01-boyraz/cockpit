@@ -118,7 +118,13 @@ const worktrees = {
   removeIfClean: async () => {},
   exists: () => true,
   restore: async (_p: string, path: string, branch: string) => ({ path, branch }),
-  prune: async (): Promise<PruneSummary> => ({ pruned: [], keptDirty: [], keptLive: [], branchesDeleted: [] }),
+  prune: async (): Promise<PruneSummary> => ({
+    pruned: [],
+    keptDirty: [],
+    keptLive: [],
+    keptYoung: [],
+    branchesDeleted: [],
+  }),
 }
 
 function build(store: ReturnType<typeof makeStore>, audit: AuditLogService) {

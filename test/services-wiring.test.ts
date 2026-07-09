@@ -1,3 +1,4 @@
+import type * as NodeChildProcess from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -47,7 +48,12 @@ const h = vi.hoisted(() => {
     encryptString: (s: string) => Buffer.from(s, 'utf8'),
     decryptString: (b: Buffer) => b.toString('utf8'),
   }
-  return { dbHolder, autoUpdater, app, safeStorage, Notification: FakeNotification }
+  // Scripts the `ps -o command= -p <pid>` result the zombie identity check reads:
+  //   `string`    → that command line is returned
+  //   `null`      → ps throws (probe failure → fail-closed skip)
+  //   `undefined` → delegate to the real ps (never reached in these tests)
+  const ps = { output: undefined as string | null | undefined }
+  return { dbHolder, autoUpdater, app, safeStorage, ps, Notification: FakeNotification }
 })
 
 vi.mock('../electron/main/db/Database', () => ({
@@ -62,6 +68,27 @@ vi.mock('electron-updater', () => ({ autoUpdater: h.autoUpdater }))
 // Construction never spawns a pty (only boot reconciliation runs), so a bare
 // spawn stub is enough to keep the native module out of the Node runner.
 vi.mock('node-pty', () => ({ spawn: vi.fn() }))
+// The zombie identity check shells out to `ps -o command= -p <pid>`; intercept
+// only that call so a test can script the reused/real command line. Every other
+// execFileSync consumer delegates to the real module unchanged.
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof NodeChildProcess>()
+  const passthrough = actual.execFileSync as (
+    file: string,
+    args?: readonly string[],
+    options?: object,
+  ) => Buffer | string
+  return {
+    ...actual,
+    execFileSync: (file: string, args?: readonly string[], options?: object) => {
+      if (file === 'ps') {
+        if (h.ps.output === null) throw new Error('ps: no such process')
+        if (typeof h.ps.output === 'string') return h.ps.output
+      }
+      return passthrough(file, args, options)
+    },
+  }
+})
 // HermesMcpServer.start() is fired forget-style in the constructor and binds a
 // loopback port. Stub node:http so the smoke test opens no real socket (and so
 // parallel/repeated constructions never collide on the fixed default port).
@@ -149,6 +176,8 @@ const EXPECTED_SERVICE_FIELDS = [
 beforeEach(() => {
   userDataDir = mkdtempSync(join(tmpdir(), 'cockpit-services-'))
   events = new CockpitEvents()
+  // Default: no scripted ps output (only the zombie tests opt in).
+  h.ps.output = undefined
 })
 
 afterEach(async () => {
@@ -207,18 +236,31 @@ describe('Services — composition root construction', () => {
 })
 
 describe('Services — zombie liveness audit (A4)', () => {
-  /** A recording DB whose reconcile SELECT returns one scripted stale row. */
-  function dbWithStaleRow(row: { id: string; pid: number | null; last_active_at: string }) {
+  /**
+   * A recording DB whose reconcile SELECT returns one scripted stale row and
+   * whose `SELECT shell, command` identity lookup returns `identity` (a cockpit
+   * pane's pid is its shell, launched with an optional startup command).
+   */
+  function dbWithStaleRow(
+    row: { id: string; pid: number | null; last_active_at: string },
+    identity: { shell: string; command: string | null } | null = {
+      shell: '/bin/zsh',
+      command: 'claude --resume abc123',
+    },
+  ) {
     const rec = makeRecordingDb({
       all: (sql) => (sql.includes('pid, last_active_at') ? [row] : []),
+      get: (sql) => (sql.includes('shell, command') ? (identity ?? undefined) : undefined),
     })
     ;(rec.db as unknown as { close: () => void }).close = vi.fn()
     return rec
   }
 
-  it('probes then SIGTERMs a recent, still-alive orphan pid and audits the reap', () => {
+  it('probes, verifies identity, then SIGTERMs a recent live orphan and audits the reap', () => {
     const rec = dbWithStaleRow({ id: 't1', pid: 999999, last_active_at: new Date().toISOString() })
     h.dbHolder.db = rec.db
+    // The live pid's command line still carries the session's startup command.
+    h.ps.output = 'node /usr/local/bin/claude --resume abc123'
     const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true)
 
     services = new Services({ dbPath: ':memory:', userDataDir, events })
@@ -230,7 +272,56 @@ describe('Services — zombie liveness audit (A4)', () => {
     killSpy.mockRestore()
   })
 
-  it('skips a stale-dated orphan pid entirely — never signals it (pid reuse guard)', () => {
+  it('reaps when only the shell binary (not the command) matches the live pid', () => {
+    const rec = dbWithStaleRow(
+      { id: 't1', pid: 999999, last_active_at: new Date().toISOString() },
+      { shell: '/bin/zsh', command: null },
+    )
+    h.dbHolder.db = rec.db
+    h.ps.output = '-zsh' // a login shell reparented after crash
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true)
+
+    services = new Services({ dbPath: ':memory:', userDataDir, events })
+
+    expect(killSpy).toHaveBeenCalledWith(999999, 'SIGTERM')
+    killSpy.mockRestore()
+  })
+
+  it('skips a live pid whose command line does not match the stored session (reuse)', () => {
+    const rec = dbWithStaleRow(
+      { id: 't1', pid: 999999, last_active_at: new Date().toISOString() },
+      { shell: '/bin/zsh', command: 'claude --resume abc123' },
+    )
+    h.dbHolder.db = rec.db
+    // pid recycled onto an unrelated program: neither `zsh` nor `claude` present.
+    h.ps.output = '/usr/bin/python3 /home/user/unrelated-script.py'
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true)
+
+    services = new Services({ dbPath: ':memory:', userDataDir, events })
+
+    expect(killSpy).toHaveBeenCalledWith(999999, 0) // still probed for liveness
+    expect(killSpy).not.toHaveBeenCalledWith(999999, 'SIGTERM') // but never signalled
+    const auditRuns = rec.callsFor('run', 'INSERT INTO audit_log')
+    expect(auditRuns.some((c) => JSON.stringify(c.args[0]).includes('identity unverified'))).toBe(
+      true,
+    )
+    killSpy.mockRestore()
+  })
+
+  it('skips a live pid when ps fails to report its command line (fail-closed)', () => {
+    const rec = dbWithStaleRow({ id: 't1', pid: 999999, last_active_at: new Date().toISOString() })
+    h.dbHolder.db = rec.db
+    h.ps.output = null // ps throws → identity cannot be established
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true)
+
+    services = new Services({ dbPath: ':memory:', userDataDir, events })
+
+    expect(killSpy).toHaveBeenCalledWith(999999, 0)
+    expect(killSpy).not.toHaveBeenCalledWith(999999, 'SIGTERM')
+    killSpy.mockRestore()
+  })
+
+  it('skips a stale-dated orphan pid entirely — never probes or signals it (recency guard)', () => {
     const rec = dbWithStaleRow({ id: 't1', pid: 999999, last_active_at: '2000-01-01T00:00:00.000Z' })
     h.dbHolder.db = rec.db
     const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true)

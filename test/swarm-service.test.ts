@@ -208,7 +208,13 @@ function makeDeps() {
     }),
     // A1: boot-time sweep — default is a clean no-op summary.
     prune: vi.fn(
-      async (): Promise<PruneSummary> => ({ pruned: [], keptDirty: [], keptLive: [], branchesDeleted: [] }),
+      async (): Promise<PruneSummary> => ({
+        pruned: [],
+        keptDirty: [],
+        keptLive: [],
+        keptYoung: [],
+        branchesDeleted: [],
+      }),
     ),
   }
   // Fake turn-finished channel: `signalled` stands in for the sentinel files.
@@ -843,6 +849,7 @@ describe('SwarmService boot worktree prune (A1)', () => {
       pruned: ['/proj/.cockpit-worktrees/gone'],
       keptDirty: [],
       keptLive: ['/proj/.cockpit-worktrees/live'],
+      keptYoung: [],
       branchesDeleted: ['swarm/gone-1234'],
     })
     build(store, deps)

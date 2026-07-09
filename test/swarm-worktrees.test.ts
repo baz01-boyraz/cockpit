@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -7,6 +7,17 @@ import { SwarmWorktrees, WORKTREES_DIR } from '../electron/main/services/SwarmWo
 
 const git = (cwd: string, ...args: string[]) =>
   execFileSync('git', args, { cwd, stdio: 'pipe' }).toString()
+
+/**
+ * Backdate a directory's mtime past the prune grace window so it reads as a
+ * genuine old orphan. Freshly-created worktrees are within the window (that is
+ * the race guard); a test that wants the classic remove/keep behaviour must age
+ * the dir first, exactly as the real world would after minutes have passed.
+ */
+const ageDir = (dir: string) => {
+  const past = new Date(Date.now() - 10 * 60 * 1000)
+  utimesSync(dir, past, past)
+}
 
 describe('SwarmWorktrees against a real scratch repo', () => {
   let repo: string
@@ -59,6 +70,7 @@ describe('SwarmWorktrees against a real scratch repo', () => {
   it('prune: removes an orphan worktree and deletes its fully-merged branch', async () => {
     const { path, branch } = await wt.create(repo, 'Orphan task', 'card_orph0001')
     // No commits → the branch sits at main's tip, so it is fully merged.
+    ageDir(path) // past the grace window: a real, settled orphan
     const summary = await wt.prune(repo, [])
     expect(summary.pruned).toContain(resolve(path))
     expect(summary.branchesDeleted).toContain(branch)
@@ -70,6 +82,7 @@ describe('SwarmWorktrees against a real scratch repo', () => {
   it('prune: keeps a dirty orphan worktree and never force-deletes it', async () => {
     const { path, branch } = await wt.create(repo, 'Dirty task', 'card_dirt0001')
     writeFileSync(join(path, 'wip.txt'), 'uncommitted\n')
+    ageDir(path) // age it AFTER writing, so it is an old dirty orphan, not a young one
     const summary = await wt.prune(repo, [])
     expect(summary.keptDirty).toContain(resolve(path))
     expect(summary.pruned).not.toContain(resolve(path))
@@ -86,11 +99,29 @@ describe('SwarmWorktrees against a real scratch repo', () => {
     expect(existsSync(path)).toBe(true)
   })
 
+  it('prune: spares a just-created (fresh mtime) orphan, then prunes it once aged', async () => {
+    // Race guard: startCard may have created this worktree in the window between
+    // the live-set snapshot and readdir, so it is on disk but not yet a card row.
+    const { path } = await wt.create(repo, 'Fresh task', 'card_fresh001')
+    const first = await wt.prune(repo, [])
+    expect(first.keptYoung).toContain(resolve(path))
+    expect(first.pruned).not.toContain(resolve(path))
+    expect(existsSync(path)).toBe(true)
+
+    // Once the dir ages past the grace window it is a genuine orphan and pruned.
+    ageDir(path)
+    const second = await wt.prune(repo, [])
+    expect(second.pruned).toContain(resolve(path))
+    expect(second.keptYoung).not.toContain(resolve(path))
+    expect(existsSync(path)).toBe(false)
+  })
+
   it('prune: removes a clean orphan but conservatively keeps its unmerged branch', async () => {
     const { path, branch } = await wt.create(repo, 'Unmerged task', 'card_unmg0001')
     writeFileSync(join(path, 'feature.txt'), 'shipped\n')
     git(path, 'add', '.')
     git(path, 'commit', '-m', 'feature work')
+    ageDir(path) // settled orphan, past the grace window
     const summary = await wt.prune(repo, [])
     // The working tree is clean, so the worktree is removed...
     expect(summary.pruned).toContain(resolve(path))
