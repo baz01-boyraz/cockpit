@@ -32,6 +32,7 @@ import { newId, nowIso } from '../util/ids'
 import type { AuditLogService } from './AuditLogService'
 import type { MemoryHubService } from './MemoryHubService'
 import type { SentinelService } from './SentinelService'
+import type { PruneSummary } from './SwarmWorktrees'
 
 /** The narrow sentinel slice the swarm feeds — structural so tests pass
  *  `undefined` (no-op). Sentinel never depends on SwarmService. */
@@ -53,6 +54,16 @@ export interface WorkerSpawner {
 export interface WorktreeOps {
   create(projectPath: string, title: string, cardId: string): Promise<{ path: string; branch: string }>
   removeIfClean(projectPath: string, worktreePath: string): Promise<void>
+  /** A3: is a persisted worktree directory still present on disk? */
+  exists(worktreePath: string): boolean
+  /** A3: re-attach a vanished worktree (reusing its branch when it survives). */
+  restore(
+    projectPath: string,
+    worktreePath: string,
+    branch: string,
+  ): Promise<{ path: string; branch: string }>
+  /** A1: boot-time sweep of orphaned worktrees; live cards' paths are excluded. */
+  prune(projectPath: string, liveWorktreePaths: readonly string[]): Promise<PruneSummary>
 }
 
 /** Turn-finished signalling (SwarmDoneSignal) — injectable for tests. */
@@ -160,6 +171,10 @@ export class SwarmService {
         payload: { cardId: o.id },
       })
     }
+    // A1: with orphans re-parked (so their worktrees still count as live above),
+    // reclaim the worktrees crashed/abandoned cards leaked. Fire-and-forget and
+    // fully self-contained — a prune failure can never break boot.
+    void this.pruneStaleWorktrees()
     // A worker's terminal exiting is the fact that ends a run: its card moves
     // to In review for the human. Killed and non-zero exits land there too —
     // partial work still deserves eyes, never silent disappearance.
@@ -171,6 +186,67 @@ export class SwarmService {
         // always be reconciled from rows (6.4).
       }
     })
+  }
+
+  /**
+   * A1: sweep every project that owns a worktree. A card is "live" (its worktree
+   * is spared) unless it has reached the terminal `done` state — a parked or
+   * in-review card still resumes/serves review in the same worktree. Each project
+   * is isolated so one bad repo can't stop the others; the whole method is wrapped
+   * so boot survives any failure (it is called fire-and-forget from the ctor).
+   */
+  private async pruneStaleWorktrees(): Promise<void> {
+    try {
+      const projectRows = this.db
+        .prepare(`SELECT DISTINCT project_id FROM kanban_cards WHERE worktree_path IS NOT NULL`)
+        .all() as { project_id: string }[]
+      for (const { project_id } of projectRows) {
+        await this.pruneProjectWorktrees(project_id)
+      }
+    } catch {
+      // Boot must never break on a prune failure — the leaked worktrees are a
+      // resource nuisance, not a correctness hazard.
+    }
+  }
+
+  /** Sweep one project's worktrees and audit any reclamation (A1). */
+  private async pruneProjectWorktrees(projectId: string): Promise<void> {
+    try {
+      const projectPath = this.projects.get(projectId).path
+      const liveRows = this.db
+        .prepare(
+          `SELECT worktree_path FROM kanban_cards
+           WHERE project_id = ? AND worktree_path IS NOT NULL AND status != 'done'`,
+        )
+        .all(projectId) as { worktree_path: string }[]
+      const summary = await this.worktrees.prune(
+        projectPath,
+        liveRows.map((r) => r.worktree_path),
+      )
+      // Only record when the sweep actually reclaimed or flagged something; a
+      // pure no-op (or all-live) sweep is not worth an audit line.
+      if (summary.pruned.length === 0 && summary.keptDirty.length === 0) return
+      const branchNote = summary.branchesDeleted.length
+        ? `, ${summary.branchesDeleted.length} branch(es)`
+        : ''
+      const dirtyNote = summary.keptDirty.length
+        ? `; kept ${summary.keptDirty.length} with uncommitted work`
+        : ''
+      this.audit.record({
+        projectId,
+        actor: 'system',
+        actionType: 'swarm.worktrees_pruned',
+        summary: `Pruned ${summary.pruned.length} stale worktree(s)${branchNote}${dirtyNote}`,
+        payload: {
+          pruned: summary.pruned,
+          keptDirty: summary.keptDirty,
+          keptLive: summary.keptLive,
+          branchesDeleted: summary.branchesDeleted,
+        },
+      })
+    } catch {
+      // One project's prune failure is isolated; the others still get swept.
+    }
   }
 
   board(projectId: string): BoardColumn[] {
@@ -281,8 +357,21 @@ export class SwarmService {
     await this.assertQuotaAllows()
 
     const projectPath = this.projects.get(input.projectId).path
-    let worktree: { path: string; branch: string } | null =
+    const persisted: { path: string; branch: string } | null =
       card.worktreePath && card.branch ? { path: card.worktreePath, branch: card.branch } : null
+    let worktree = persisted
+    // A3: a resumed card reuses its persisted worktree — but that directory may
+    // have been pruned (A1) or removed while the app was gone. Spawning a worker
+    // into a nonexistent cwd is a silent corruption, so verify the dir first and
+    // restore it (same branch when it survives, else fresh). If even that fails,
+    // park the card with an audit notice rather than start in a bad directory.
+    if (persisted && !this.worktrees.exists(persisted.path)) {
+      try {
+        worktree = await this.worktrees.restore(projectPath, persisted.path, persisted.branch)
+      } catch {
+        return this.parkMissingWorktree(input.projectId, card)
+      }
+    }
     if (!worktree) {
       try {
         worktree = await this.worktrees.create(projectPath, card.title, card.id)
@@ -423,6 +512,26 @@ export class SwarmService {
     if (assignments.length === 0) return ''
     const chain = assignments.map(assignmentLabel).join(' → ')
     return assignments.length > 1 ? ` · ${chain} (step ${step + 1}/${assignments.length})` : ` · ${chain}`
+  }
+
+  /**
+   * A3: a resumed card whose worktree is gone and cannot be recreated is parked
+   * rather than started — a worker must never spawn into a bad cwd. The card
+   * keeps its (now dangling) worktree/branch row so a human can investigate; the
+   * audit line makes the reason explicit.
+   */
+  private parkMissingWorktree(projectId: string, card: KanbanCard): BoardColumn[] {
+    const cards = this.cards(projectId)
+    const next = moveCardInList(cards, card.id, 'parked', 0, 'service', nowIso())
+    this.persistChanges(cards, next)
+    this.audit.record({
+      projectId,
+      actor: 'system',
+      actionType: 'swarm.card_worktree_missing',
+      summary: `Swarm card "${card.title}" — its worktree was gone and could not be recreated; parked instead of spawning into a bad directory`,
+      payload: { cardId: card.id, worktreePath: card.worktreePath, branch: card.branch },
+    })
+    return assembleBoard(next)
   }
 
   /**

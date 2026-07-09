@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SwarmService, type WorkerSpawner } from '../electron/main/services/SwarmService'
+import type { PruneSummary } from '../electron/main/services/SwarmWorktrees'
 import type { AuditLogService } from '../electron/main/services/AuditLogService'
 import { CockpitEvents } from '../electron/main/events'
 import { POSITION_GAP } from '../shared/kanban'
@@ -51,6 +52,18 @@ function makeStore(seed: Partial<Row>[] = []) {
 
   const { db } = makeRecordingDb({
     all: (sql, args) => {
+      // A1 boot prune: which projects own a worktree, and which of a project's
+      // worktrees belong to a still-live (non-terminal) card.
+      if (sql.includes('DISTINCT project_id')) {
+        const seen = new Set<string>()
+        for (const r of rows) if (r.worktree_path !== null) seen.add(r.project_id)
+        return [...seen].map((project_id) => ({ project_id }))
+      }
+      if (sql.includes(`status != 'done'`) && sql.includes('worktree_path')) {
+        return rows
+          .filter((r) => r.project_id === args[0] && r.worktree_path !== null && r.status !== 'done')
+          .map((r) => ({ worktree_path: r.worktree_path }))
+      }
       if (sql.includes(`status = 'in_progress'`) && !args.length) {
         return rows.filter((r) => r.status === 'in_progress').map((r) => ({ ...r }))
       }
@@ -186,6 +199,16 @@ function makeDeps() {
     removeIfClean: vi.fn(async (_p: string, path: string) => {
       wtCalls.push(`remove:${path}`)
     }),
+    // A3: a persisted worktree dir is assumed present unless a test says otherwise.
+    exists: vi.fn((_path: string) => true),
+    restore: vi.fn(async (_p: string, path: string, branch: string) => {
+      wtCalls.push(`restore:${path}`)
+      return { path, branch }
+    }),
+    // A1: boot-time sweep — default is a clean no-op summary.
+    prune: vi.fn(
+      async (): Promise<PruneSummary> => ({ pruned: [], keptDirty: [], keptLive: [], branchesDeleted: [] }),
+    ),
   }
   // Fake turn-finished channel: `signalled` stands in for the sentinel files.
   const signalled = new Set<string>()
@@ -782,6 +805,109 @@ describe('SwarmService boot orphan reconcile (6.4)', () => {
     expect(store.rows.find((r) => r.id === 'orphan')!.status).toBe('parked')
     expect(store.rows.find((r) => r.id === 'ok')!.status).toBe('todo')
     expect(deps.audits).toContain('swarm.card_orphaned')
+  })
+})
+
+describe('SwarmService boot worktree prune (A1)', () => {
+  it('sweeps each project that owns a worktree, excluding live cards from the sweep', async () => {
+    const store = makeStore([
+      { id: 'live', status: 'parked', position: POSITION_GAP, worktree_path: '/proj/.cockpit-worktrees/live', branch: 'swarm/live-1234' },
+      { id: 'gone', status: 'done', position: 2 * POSITION_GAP, worktree_path: '/proj/.cockpit-worktrees/gone', branch: 'swarm/gone-1234' },
+    ])
+    const deps = makeDeps()
+    deps.worktrees.prune.mockResolvedValueOnce({
+      pruned: ['/proj/.cockpit-worktrees/gone'],
+      keptDirty: [],
+      keptLive: ['/proj/.cockpit-worktrees/live'],
+      branchesDeleted: ['swarm/gone-1234'],
+    })
+    build(store, deps)
+    await vi.waitFor(() => expect(deps.worktrees.prune).toHaveBeenCalled())
+    // A terminal (done) card's worktree is prunable; the parked card's is live.
+    expect(deps.worktrees.prune).toHaveBeenCalledWith('/proj', ['/proj/.cockpit-worktrees/live'])
+    await vi.waitFor(() => expect(deps.audits).toContain('swarm.worktrees_pruned'))
+  })
+
+  it('records nothing when the sweep removes and keeps nothing', async () => {
+    const store = makeStore([
+      { id: 'live', status: 'parked', position: POSITION_GAP, worktree_path: '/proj/.cockpit-worktrees/live', branch: 'swarm/live-1234' },
+    ])
+    const deps = makeDeps()
+    // Default fake summary is all-empty.
+    build(store, deps)
+    await vi.waitFor(() => expect(deps.worktrees.prune).toHaveBeenCalled())
+    expect(deps.audits).not.toContain('swarm.worktrees_pruned')
+  })
+
+  it('a prune failure never breaks boot', async () => {
+    const store = makeStore([
+      { id: 'live', status: 'parked', position: POSITION_GAP, worktree_path: '/proj/.cockpit-worktrees/live', branch: 'swarm/live-1234' },
+    ])
+    const deps = makeDeps()
+    deps.worktrees.prune.mockRejectedValueOnce(new Error('git exploded'))
+    expect(() => build(store, deps)).not.toThrow()
+    await vi.waitFor(() => expect(deps.worktrees.prune).toHaveBeenCalled())
+  })
+
+  it('does not sweep at all when no card owns a worktree', async () => {
+    const store = makeStore([{ id: 'a', status: 'todo', position: POSITION_GAP }])
+    const deps = makeDeps()
+    build(store, deps)
+    // Give any stray microtask a chance to run, then assert prune never fired.
+    await Promise.resolve()
+    expect(deps.worktrees.prune).not.toHaveBeenCalled()
+  })
+})
+
+describe('SwarmService resumed-card missing worktree (A3)', () => {
+  const seedResumable = () =>
+    makeStore([
+      {
+        id: 'p',
+        status: 'parked',
+        position: POSITION_GAP,
+        title: 'Resume me',
+        worktree_path: '/proj/.cockpit-worktrees/gone',
+        branch: 'swarm/gone-1234',
+      },
+    ])
+
+  it('restores a missing persisted worktree instead of spawning into a dead cwd', async () => {
+    const store = seedResumable()
+    const deps = makeDeps()
+    deps.worktrees.exists.mockReturnValue(false)
+    deps.worktrees.restore.mockResolvedValueOnce({
+      path: '/proj/.cockpit-worktrees/gone',
+      branch: 'swarm/gone-1234',
+    })
+    const svc = build(store, deps)
+    await svc.startCard({ projectId: 'p1', cardId: 'p' })
+    expect(deps.worktrees.restore).toHaveBeenCalledWith('/proj', '/proj/.cockpit-worktrees/gone', 'swarm/gone-1234')
+    expect(deps.worktrees.create).not.toHaveBeenCalled()
+    expect(deps.spawned[0].cwd).toBe('/proj/.cockpit-worktrees/gone')
+    expect(store.rows.find((r) => r.id === 'p')!.status).toBe('in_progress')
+  })
+
+  it('parks the card with an audit entry when the worktree cannot be recreated', async () => {
+    const store = seedResumable()
+    const deps = makeDeps()
+    deps.worktrees.exists.mockReturnValue(false)
+    deps.worktrees.restore.mockRejectedValueOnce(new Error('branch checked out elsewhere'))
+    const svc = build(store, deps)
+    await svc.startCard({ projectId: 'p1', cardId: 'p' })
+    expect(deps.spawned).toHaveLength(0)
+    expect(store.rows.find((r) => r.id === 'p')!.status).toBe('parked')
+    expect(deps.audits).toContain('swarm.card_worktree_missing')
+  })
+
+  it('reuses the persisted worktree untouched when its dir still exists', async () => {
+    const store = seedResumable()
+    const deps = makeDeps() // exists() defaults to true
+    const svc = build(store, deps)
+    await svc.startCard({ projectId: 'p1', cardId: 'p' })
+    expect(deps.worktrees.restore).not.toHaveBeenCalled()
+    expect(deps.worktrees.create).not.toHaveBeenCalled()
+    expect(deps.spawned[0].cwd).toBe('/proj/.cockpit-worktrees/gone')
   })
 })
 
