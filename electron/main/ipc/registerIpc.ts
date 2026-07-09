@@ -43,6 +43,7 @@ import {
   secretSetSchema,
   sentinelListSchema,
   sentinelMarkSeenSchema,
+  sentinelRecordOutcomeSchema,
   sentinelUnseenCountSchema,
   type SecretKind,
   swarmCreateCardSchema,
@@ -355,6 +356,10 @@ export function registerIpc(services: Services): void {
   handle('sentinelUnseenCount', (p) =>
     services.sentinel.unseenCount(sentinelUnseenCountSchema.parse(p).projectId),
   )
+  handle('sentinelRecordOutcome', (p) => {
+    const { projectId, id, outcome } = sentinelRecordOutcomeSchema.parse(p)
+    return services.sentinel.recordOutcome(projectId, id, outcome)
+  })
 
   // --- chat (real answers via the local Claude Code CLI) ---
   handle('chatAsk', (p) => {

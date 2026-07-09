@@ -491,3 +491,42 @@ CREATE TABLE IF NOT EXISTS memory_recalls (
 CREATE INDEX IF NOT EXISTS idx_memory_recalls_note ON memory_recalls(brain, note_slug, created_at);
 CREATE INDEX IF NOT EXISTS idx_memory_recalls_brain ON memory_recalls(brain, created_at);
 `
+
+/**
+ * V17 — Sentinel triage accuracy (Track G3, docs/plans/outcome-tracking-plan.md).
+ * `status` ('new' | 'seen', V13) only tracks the badge; it cannot tell a signal
+ * dismissed as noise from one acted on. These two columns record the user's
+ * RESPONSE so triage precision is measurable: among `reportWorthy` signals, how
+ * many were acted on / became cards vs dismissed. `outcome` is
+ * 'dismissed' | 'acted' | 'card_created' | NULL (no response yet); `outcome_at`
+ * stamps when it was set. They sit ON the signal row — co-located with `triage`
+ * (V14) and durable under the row's `ON DELETE CASCADE`.
+ *
+ * The plan reserved V16 for this ALTER; V16 was independently taken by
+ * memory_recalls on a parallel branch, so this lands as V17 (same renumber-on-
+ * integration rule as V16 and the V7→V10 memory-brain batch). Append-only ALTER
+ * (SQLite has no ADD COLUMN IF NOT EXISTS, so it lives only here, never back-
+ * edited into V13).
+ */
+export const SCHEMA_V17 = /* sql */ `
+ALTER TABLE sentinel_signals ADD COLUMN outcome    TEXT;
+ALTER TABLE sentinel_signals ADD COLUMN outcome_at TEXT;
+`
+
+/**
+ * V18 — Council run lifecycle marker (roadmap A6). Until now a council session
+ * row appeared only at the FINAL persist, so a mid-run crash left no trace at
+ * all. `CouncilService.run()` now inserts a `pending` row up front and flips it
+ * to `final` on completion; a `failed` row is a run that never finished. This
+ * column makes that state explicit and queryable so the boot sweep can mark any
+ * orphaned `pending` row (residue of a crashed previous process) as `failed`.
+ *
+ * `status` is 'pending' | 'final' | 'failed'. DEFAULT 'final' so every row that
+ * predates this migration — all of which are completed runs written by the old
+ * single-insert path — reads back as `final` without a data migration. Append-
+ * only ALTER (SQLite has no ADD COLUMN IF NOT EXISTS, so it lives only here,
+ * never back-edited into V11).
+ */
+export const SCHEMA_V18 = /* sql */ `
+ALTER TABLE council_sessions ADD COLUMN status TEXT NOT NULL DEFAULT 'final';
+`

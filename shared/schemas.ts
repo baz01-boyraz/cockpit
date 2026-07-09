@@ -8,6 +8,7 @@
  */
 import { z } from 'zod'
 import { ROLE_IDS, SPEC_IDS, type Role, type Spec } from './agent-taxonomy'
+import { SENTINEL_OUTCOMES } from './sentinel'
 
 export const approvalActionTypeSchema = z.enum([
   'git_push',
@@ -277,6 +278,15 @@ export const sentinelMarkSeenSchema = z.object({
 
 export const sentinelUnseenCountSchema = z.object({
   projectId: z.string().min(1),
+})
+
+// The user's response to a signal (Track G3). `outcome` is the closed vocabulary
+// from shared/sentinel.ts — enum-validated so a renderer can never write a
+// non-vocabulary string onto the row. Project-scoped in the handler.
+export const sentinelRecordOutcomeSchema = z.object({
+  projectId: z.string().min(1),
+  id: z.string().min(1).max(200),
+  outcome: z.enum(SENTINEL_OUTCOMES),
 })
 
 // --- secret store (encrypted, OS-keychain backed) -------------------------

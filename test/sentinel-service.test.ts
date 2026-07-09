@@ -34,6 +34,8 @@ interface Row {
   status: string
   created_at: string
   triage: string | null
+  outcome: string | null
+  outcome_at: string | null
 }
 
 /**
@@ -64,8 +66,20 @@ function makeDb() {
               status: String(p.status),
               created_at: String(p.createdAt),
               triage: null,
+              outcome: null,
+              outcome_at: null,
             })
             return { changes: 1 }
+          }
+          if (sql.startsWith('UPDATE sentinel_signals SET outcome')) {
+            const p = arg as { outcome: string; outcomeAt: string; projectId: string; id: string }
+            const r = rows.find((x) => x.id === p.id && x.project_id === p.projectId)
+            if (r) {
+              r.outcome = p.outcome
+              r.outcome_at = p.outcomeAt
+              return { changes: 1 }
+            }
+            return { changes: 0 }
           }
           if (sql.startsWith('UPDATE sentinel_signals SET triage')) {
             const p = arg as { triage: string | null; id: string }
@@ -235,6 +249,9 @@ describe('SentinelService.markSeen / list / unseenCount', () => {
     svc.markSeen('p1', [a.id])
     expect(svc.unseenCount('p1')).toBe(1)
     expect(svc.list('p1')).toHaveLength(2)
+    // A fresh signal carries no user response yet (Track G3).
+    expect(svc.list('p1')[0].outcome).toBeNull()
+    expect(svc.list('p1')[0].outcomeAt).toBeNull()
     // p2 has nothing.
     expect(svc.unseenCount('p2')).toBe(0)
     expect(svc.list('p2')).toEqual([])

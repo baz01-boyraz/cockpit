@@ -22,7 +22,7 @@ import type { BoardColumn, CardStatus } from './kanban'
 import type { CompletionReport } from './completion-report'
 import type { Assignment } from './agent-taxonomy'
 import type { NamedAgentSummary } from './named-agents'
-import type { SentinelSignal } from './sentinel'
+import type { SentinelOutcome, SentinelSignal } from './sentinel'
 import type { SecretKind } from './schemas'
 import type {
   AgentType,
@@ -139,6 +139,7 @@ export const IPC = {
   sentinelList: 'sentinel:list',
   sentinelMarkSeen: 'sentinel:markSeen',
   sentinelUnseenCount: 'sentinel:unseenCount',
+  sentinelRecordOutcome: 'sentinel:recordOutcome',
 
   secretSet: 'secret:set',
   secretHas: 'secret:has',
@@ -489,6 +490,13 @@ export interface CockpitApi {
     /** How many of the project's signals are still unseen (the rail badge). */
     unseenCount(projectId: string): Promise<number>
     /**
+     * Record the user's response to a signal (Track G3): 'dismissed' (noise),
+     * 'acted' (a linked card shipped), or 'card_created'. Project-scoped in main;
+     * returns the count of rows updated (0 for an unknown/foreign id). Feeds the
+     * triage-precision scorecard — the machine never changes behavior from it.
+     */
+    recordOutcome(projectId: string, id: string, outcome: SentinelOutcome): Promise<number>
+    /**
      * Fires when a fresh signal is recorded, so the feed/badge update without
      * polling. `notice`/`alert` also drive a renderer toast; `alert` additionally
      * pops a macOS notification from main. The mock never emits it.
@@ -650,6 +658,7 @@ export interface IpcResultMap {
   sentinelList: R<CockpitApi['sentinel']['list']>
   sentinelMarkSeen: R<CockpitApi['sentinel']['markSeen']>
   sentinelUnseenCount: R<CockpitApi['sentinel']['unseenCount']>
+  sentinelRecordOutcome: R<CockpitApi['sentinel']['recordOutcome']>
   secretSet: R<CockpitApi['secrets']['set']>
   secretHas: R<CockpitApi['secrets']['has']>
   secretDelete: R<CockpitApi['secrets']['delete']>

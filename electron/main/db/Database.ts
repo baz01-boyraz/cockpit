@@ -16,6 +16,8 @@ import {
   SCHEMA_V14,
   SCHEMA_V15,
   SCHEMA_V16,
+  SCHEMA_V17,
+  SCHEMA_V18,
 } from './schema'
 
 export type Db = BetterSqlite3.Database
@@ -43,6 +45,8 @@ const MIGRATIONS: Migration[] = [
   { version: 14, name: 'sentinel_signal_triage', sql: SCHEMA_V14 },
   { version: 15, name: 'hermes_chat_turns', sql: SCHEMA_V15 },
   { version: 16, name: 'memory_recalls', sql: SCHEMA_V16 },
+  { version: 17, name: 'sentinel_signal_outcome', sql: SCHEMA_V17 },
+  { version: 18, name: 'council_session_status', sql: SCHEMA_V18 },
 ]
 
 /**

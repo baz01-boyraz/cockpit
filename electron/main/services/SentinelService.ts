@@ -2,6 +2,7 @@ import {
   SENTINEL_COOLDOWN_MS,
   buildSignal,
   shouldSuppress,
+  type SentinelOutcome,
   type SentinelSignal,
   type SentinelTriage,
 } from '@shared/sentinel'
@@ -45,6 +46,8 @@ interface SignalRow {
   status: string
   created_at: string
   triage: string | null
+  outcome: string | null
+  outcome_at: string | null
 }
 
 /** How far back the cooldown lookup scans same-fingerprint rows. Bounded so the
@@ -201,6 +204,31 @@ export class SentinelService {
     return changed
   }
 
+  /**
+   * Record the user's response to a signal (Track G3) so triage precision is
+   * measurable: 'dismissed' (noise), 'acted' (a linked card shipped), or
+   * 'card_created' (a signal became a card). Scoped by project in the WHERE
+   * clause so a caller can never touch another project's rows; a single UPDATE
+   * stamps `outcome` + `outcome_at`. Returns the number of rows changed (0 when
+   * the id is unknown or belongs to another project).
+   *
+   * NEVER throws: this rides UI paths (a bell "dismiss", a card-create hook) that
+   * must not be endangered by a write failure — a failure is logged and 0 returned.
+   */
+  recordOutcome(projectId: string, id: string, outcome: SentinelOutcome): number {
+    try {
+      return this.db
+        .prepare(
+          `UPDATE sentinel_signals SET outcome = @outcome, outcome_at = @outcomeAt
+           WHERE project_id = @projectId AND id = @id`,
+        )
+        .run({ outcome, outcomeAt: nowIso(), projectId, id }).changes
+    } catch (err) {
+      logFatal('sentinel:recordOutcome', err)
+      return 0
+    }
+  }
+
   /** How many of the project's signals are still unseen (the rail badge). */
   unseenCount(projectId: string): number {
     const row = this.db
@@ -326,8 +354,17 @@ export class SentinelService {
       // The column holds our own JSON; safeJson guards against a corrupt row
       // rather than trusting it blindly.
       triage: row.triage ? safeJson<SentinelTriage | null>(row.triage, null) : null,
+      // Track G3: the user's response, or null when unanswered. A legacy/garbage
+      // value degrades to null rather than leaking a non-vocabulary string.
+      outcome: isSentinelOutcome(row.outcome) ? row.outcome : null,
+      outcomeAt: row.outcome_at,
     }
   }
+}
+
+/** Narrow a stored column to the closed outcome vocabulary (Track G3). */
+function isSentinelOutcome(value: string | null): value is SentinelOutcome {
+  return value === 'dismissed' || value === 'acted' || value === 'card_created'
 }
 
 /** Kebab-case a title into a slug fragment for a `signal-…` note name. */

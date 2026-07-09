@@ -43,6 +43,19 @@ export interface SentinelTriage {
 /** Hard cap on triage free-text fields after control-char stripping. */
 export const TRIAGE_FIELD_CAP = 160
 
+/**
+ * The user's response to a signal (Track G3, docs/plans/outcome-tracking-plan.md).
+ * Distinct from `status` ('new' | 'seen'): clearing the badge is passive, this is
+ * the judgment on the signal itself, so triage precision can be measured.
+ *   - `dismissed`    → explicit "not useful / noise" from the bell.
+ *   - `acted`        → reserved: a linked card ships (a signal that mattered).
+ *   - `card_created` → Track H1's signal→card path sets this.
+ * NULL (no member here) means "no response yet" — the steady state.
+ */
+export const SENTINEL_OUTCOMES = ['dismissed', 'acted', 'card_created'] as const
+
+export type SentinelOutcome = (typeof SENTINEL_OUTCOMES)[number]
+
 export interface SentinelSignal {
   id: string
   projectId: string
@@ -66,6 +79,15 @@ export interface SentinelSignal {
    * spine never depends on it.
    */
   triage: SentinelTriage | null
+  /**
+   * The user's response to this signal (Track G3), or null when unanswered. Set
+   * via `recordOutcome`; co-located on the row so it survives with the signal
+   * (which is `ON DELETE CASCADE`). Null is the steady state — the signal layer
+   * never depends on it.
+   */
+  outcome: SentinelOutcome | null
+  /** ISO timestamp the outcome was recorded, or null when unanswered. */
+  outcomeAt: string | null
 }
 
 /** Default dedup window: a same-fingerprint signal inside this is suppressed. */
@@ -170,6 +192,9 @@ export function buildSignal(input: {
     createdAt: input.createdAt,
     // A freshly built signal is never triaged — enrichment happens later, async.
     triage: null,
+    // No user response yet — recordOutcome sets these (Track G3).
+    outcome: null,
+    outcomeAt: null,
   }
 }
 

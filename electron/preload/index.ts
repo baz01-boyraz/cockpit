@@ -137,6 +137,8 @@ const api: CockpitApi = {
     list: (projectId, opts) => invoke(IPC.sentinelList, { projectId, limit: opts?.limit }),
     markSeen: (projectId, ids) => invoke(IPC.sentinelMarkSeen, { projectId, ids }),
     unseenCount: (projectId) => invoke(IPC.sentinelUnseenCount, { projectId }),
+    recordOutcome: (projectId, id, outcome) =>
+      invoke(IPC.sentinelRecordOutcome, { projectId, id, outcome }),
     onAlert: (cb) => subscribe(IPC.evtSentinelAlert, cb),
   },
   chat: {

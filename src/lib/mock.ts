@@ -1057,6 +1057,16 @@ export function createMockApi(): CockpitApi {
       },
       unseenCount: async (projectId) =>
         sentinelFor(projectId).filter((s) => s.status === 'new').length,
+      recordOutcome: async (projectId, id, outcome) => {
+        let changed = 0
+        const next = sentinelFor(projectId).map((s) => {
+          if (s.id !== id) return s
+          changed += 1
+          return { ...s, outcome, outcomeAt: now() }
+        })
+        mockSentinel.set(projectId, next)
+        return changed
+      },
       // The mock never pushes signals (no backend sensors), so this is a no-op
       // subscription — matching how the other push events are mocked.
       onAlert: () => () => {},
