@@ -245,6 +245,10 @@ export function RightPanel() {
       setView('terminals')
     } else if (rec.agent === 'railway') {
       setView('railway')
+    } else if (rec.agent === 'local') {
+      // No local command runner exists (deleted in Phase 3) — hand the user a
+      // terminal instead of silently dumping them in Logs.
+      setView('terminals')
     } else {
       setView('logs')
     }
