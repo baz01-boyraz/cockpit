@@ -168,12 +168,16 @@ describe('buildHermesArgs imagePath option', () => {
 // HermesChatService
 // --------------------------------------------------------------------------
 
-function makeService(runnerImpl?: HermesChatRunner, rec: RecordingDb = makeRecordingDb()) {
+function makeService(
+  runnerImpl?: HermesChatRunner,
+  rec: RecordingDb = makeRecordingDb(),
+  mcpToken?: () => string | undefined,
+) {
   const projects = {
     get: vi.fn(() => ({ id: 'prj_1', name: 'cockpiT', path: '/tmp/prj' })),
   } as unknown as ProjectService
   const runner = vi.fn(runnerImpl ?? (async () => ({ stdout: 'ok' })))
-  return { service: new HermesChatService(projects, rec.db, runner), runner, rec }
+  return { service: new HermesChatService(projects, rec.db, runner, mcpToken), runner, rec }
 }
 
 /** The prompt is the discrete argv entry right after --oneshot (execFile, no shell). */
@@ -355,6 +359,102 @@ describe('HermesChatService.ask image attachment', () => {
     await service.ask('prj_1', 'hi', '/tmp/prj/.dev-cockpit/attachments-evil/x.png')
     const args = runner.mock.calls[0][1]
     expect(args).not.toContain('--image')
+  })
+})
+
+// --------------------------------------------------------------------------
+// HermesChatService.ask — D1 outbound redaction (secrets never leave the box)
+//
+// Design choice (documented here): redaction happens ONCE at intake. The user
+// message is scrubbed before it is added to the in-memory Map, persisted to
+// SQLite, OR composed into the re-sent transcript prompt — so a pasted secret
+// reaches none of the three (argv, DB row, memory). Assistant output is scrubbed
+// symmetrically before it is stored/returned, so a model echo can't leak either.
+// --------------------------------------------------------------------------
+
+describe('HermesChatService.ask redaction (D1)', () => {
+  const OPENROUTER_KEY = 'sk-or-v1-0123456789abcdef0123456789abcdef0123456789abcdef'
+
+  it('never puts a pasted key into the CLI argv/prompt', async () => {
+    const { service, runner } = makeService(async () => ({ stdout: 'reply' }))
+    await service.ask('prj_1', `here is my key ${OPENROUTER_KEY} use it`)
+    const prompt = promptOf(runner.mock.calls[0][1])
+    expect(prompt).not.toContain(OPENROUTER_KEY)
+    expect(prompt).toContain('[REDACTED]')
+  })
+
+  it('stores the redacted user turn in the in-memory history', async () => {
+    const { service } = makeService(async () => ({ stdout: 'reply' }))
+    await service.ask('prj_1', `token=${OPENROUTER_KEY}`)
+    const [userTurn] = service.history('prj_1')
+    expect(userTurn.content).not.toContain(OPENROUTER_KEY)
+    expect(userTurn.content).toContain('[REDACTED]')
+  })
+
+  it('persists only the redacted user turn to the DB row', async () => {
+    const rec = makeRecordingDb()
+    const { service } = makeService(async () => ({ stdout: 'reply' }), rec)
+    await service.ask('prj_1', `secret ${OPENROUTER_KEY}`)
+    const inserts = rec.callsFor('run', 'INSERT INTO hermes_chat_turns')
+    for (const call of inserts) {
+      const row = call.args[0] as { content: string }
+      expect(row.content).not.toContain(OPENROUTER_KEY)
+    }
+  })
+
+  it('redacts a secret echoed back in the assistant reply before storing/returning', async () => {
+    const { service } = makeService(async () => ({ stdout: `sure: ${OPENROUTER_KEY}` }))
+    const reply = await service.ask('prj_1', 'what is my key')
+    expect(reply.ok).toBe(true)
+    expect(reply.text).not.toContain(OPENROUTER_KEY)
+    expect(reply.text).toContain('[REDACTED]')
+    const assistantTurn = service.history('prj_1').at(-1)
+    expect(assistantTurn?.content).not.toContain(OPENROUTER_KEY)
+  })
+
+  it('leaves ordinary prose untouched', async () => {
+    const { service, runner } = makeService(async () => ({ stdout: 'reply' }))
+    await service.ask('prj_1', 'just a normal question about the build')
+    const prompt = promptOf(runner.mock.calls[0][1])
+    expect(prompt).toContain('just a normal question about the build')
+    expect(prompt).not.toContain('[REDACTED]')
+  })
+})
+
+// --------------------------------------------------------------------------
+// HermesChatService.ask — D3 MCP bearer token flows into the CLI env
+// --------------------------------------------------------------------------
+
+describe('HermesChatService.ask MCP token (D3)', () => {
+  it('injects the loopback MCP bearer token into the spawned CLI env', async () => {
+    const { service, runner } = makeService(
+      async () => ({ stdout: 'reply' }),
+      makeRecordingDb(),
+      () => 'tok_abc123',
+    )
+    await service.ask('prj_1', 'hi')
+    const opts = runner.mock.calls[0][2]
+    expect(opts.env?.COCKPIT_MCP_TOKEN).toBe('tok_abc123')
+    expect(opts.env?.COCKPIT_PROJECT_ID).toBe('prj_1')
+  })
+
+  it('omits the token env var when no provider is wired (backward compatible)', async () => {
+    const { service, runner } = makeService(async () => ({ stdout: 'reply' }))
+    await service.ask('prj_1', 'hi')
+    const opts = runner.mock.calls[0][2]
+    expect(opts.env && 'COCKPIT_MCP_TOKEN' in opts.env).toBe(false)
+    expect(opts.env?.COCKPIT_PROJECT_ID).toBe('prj_1')
+  })
+
+  it('omits the token env var when the provider returns undefined', async () => {
+    const { service, runner } = makeService(
+      async () => ({ stdout: 'reply' }),
+      makeRecordingDb(),
+      () => undefined,
+    )
+    await service.ask('prj_1', 'hi')
+    const opts = runner.mock.calls[0][2]
+    expect(opts.env && 'COCKPIT_MCP_TOKEN' in opts.env).toBe(false)
   })
 })
 

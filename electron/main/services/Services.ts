@@ -21,6 +21,7 @@ import { AppUpdateService } from './AppUpdateService'
 import { ChatService } from './ChatService'
 import { MemoryHubService } from './MemoryHubService'
 import { MemoryLedgerService } from './MemoryLedgerService'
+import { MemoryRecallService } from './MemoryRecallService'
 import { MemoryReviewService } from './MemoryReviewService'
 import { MemoryDistiller } from './MemoryDistiller'
 import { MemoryPipeline } from './MemoryPipeline'
@@ -91,6 +92,8 @@ export class Services {
   /** Cross-project Baz brain (Phase 6) — the same hub machinery, global root. */
   readonly globalMemory: MemoryHubService
   readonly memoryLedger: MemoryLedgerService
+  /** Track G2: recall telemetry — which hub notes reach worker/council prompts. */
+  readonly memoryRecalls: MemoryRecallService
   readonly memoryReviews: MemoryReviewService
   readonly memoryDistiller: MemoryDistiller
   readonly memoryPipeline: MemoryPipeline
@@ -156,7 +159,15 @@ export class Services {
     this.railway = new RailwayService(this.db, this.projects)
     this.claudeSessions = new ClaudeSessionsService()
     this.chat = new ChatService(this.projects)
-    this.hermesChat = new HermesChatService(this.projects, this.db)
+    // The MCP bearer token is minted by `hermesMcp` (constructed further down),
+    // so the token is read lazily at ask() time via a thunk — by then the server
+    // exists. This keeps the chat service decoupled from construction order.
+    this.hermesChat = new HermesChatService(
+      this.projects,
+      this.db,
+      undefined,
+      () => this.hermesMcp?.authToken,
+    )
     this.review = new ReviewService(this.projects, this.audit)
     // One session store, shared: the council writes runs to it, the swarm reads
     // a card's approved session back from it at spawn (Faz 2a).
@@ -167,6 +178,10 @@ export class Services {
     this.memory = new MemoryHubService(this.projects)
     this.globalMemory = new MemoryHubService(this.projects, join(opts.userDataDir, 'baz-memory'))
     this.engineRunner = new EngineRunner(this.secrets)
+    // Track G2: recall telemetry is built here so both the council (spec-mode
+    // memory-pointer block) and the swarm (worker brief) take it as a best-effort
+    // collaborator — recording a recall never endangers a spawn or a council run.
+    this.memoryRecalls = new MemoryRecallService(this.db)
     this.council = new CouncilService(
       this.projects,
       this.audit,
@@ -174,6 +189,7 @@ export class Services {
       councilSessions,
       this.sentinel,
       this.memory,
+      this.memoryRecalls,
     )
     this.memoryLedger = new MemoryLedgerService(this.db)
     // this.memoryReviews is constructed earlier (Faz B) so the sentinel can take
@@ -238,6 +254,8 @@ export class Services {
       notifier,
       // Faz A: a nonzero worker exit also raises a sentinel signal (optional).
       this.sentinel,
+      // Track G2: record which hub notes reach a worker's opening brief.
+      this.memoryRecalls,
     )
     // Forget a pane's TUI-mode state once it exits, so session ids never leak.
     opts.events.onTyped('terminal:exit', ({ sessionId }) => this.tuiState.delete(sessionId))

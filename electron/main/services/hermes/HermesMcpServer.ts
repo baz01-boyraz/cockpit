@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http'
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { ZodError } from 'zod'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
@@ -15,6 +15,15 @@ const SERVER_NAME = 'cockpit-hermes'
 const SERVER_VERSION = '0.1.0'
 /** Cap request bodies — a localhost client should never post megabytes at us. */
 const MAX_BODY_BYTES = 1 * 1024 * 1024
+
+/**
+ * The env var name the `hermes` CLI carries the per-session bearer token in.
+ * cockpiT injects it when it spawns the chat CLI; the CLI's `hermes mcp add`
+ * config references `${COCKPIT_MCP_TOKEN}` in its Authorization header, so the
+ * loopback token rotates every launch with zero user configuration. Exported so
+ * the spawner (HermesChatService) and the server agree on one string.
+ */
+export const MCP_TOKEN_ENV = 'COCKPIT_MCP_TOKEN'
 
 type LogError = (context: string, err: unknown) => void
 
@@ -40,6 +49,13 @@ export class HermesMcpServer {
   private http: HttpServer | null = null
   private readonly transports = new Map<string, StreamableHTTPServerTransport>()
   readonly port: number
+  /**
+   * Per-session bearer token. The server is loopback-only, but "local" is not a
+   * trust boundary — any process on the machine could otherwise drive the tool
+   * set. Every request must present `Authorization: Bearer <authToken>` or get a
+   * 401. Minted fresh each launch so a leaked token dies with the process.
+   */
+  readonly authToken: string
   private readonly logError: LogError
 
   constructor(
@@ -47,6 +63,7 @@ export class HermesMcpServer {
     opts?: { port?: number; logError?: LogError },
   ) {
     this.port = opts?.port ?? resolvePort()
+    this.authToken = randomBytes(32).toString('hex')
     this.logError = opts?.logError ?? defaultLogError
   }
 
@@ -141,6 +158,13 @@ export class HermesMcpServer {
         res.writeHead(404).end()
         return
       }
+      // Auth gate: enforced before session lookup, body reading, or any MCP
+      // transport work, so an unauthenticated caller can neither drive a tool
+      // nor probe session state.
+      if (!this.isAuthorized(req)) {
+        respondUnauthorized(res)
+        return
+      }
       const header = req.headers['mcp-session-id']
       const sessionId = typeof header === 'string' ? header : undefined
 
@@ -173,6 +197,21 @@ export class HermesMcpServer {
       this.logError('request handling failed', err)
       if (!res.headersSent) respondJsonRpcError(res, 500, 'Internal error')
     }
+  }
+
+  /**
+   * Constant-time check of the `Authorization: Bearer <token>` header against
+   * {@link authToken}. Length is guarded first (timingSafeEqual requires equal
+   * buffers); an equal-length mismatch is compared without early-out so a
+   * localhost attacker can't time-probe the token byte by byte.
+   */
+  private isAuthorized(req: IncomingMessage): boolean {
+    const header = req.headers['authorization']
+    if (typeof header !== 'string') return false
+    const presented = Buffer.from(header)
+    const expected = Buffer.from(`Bearer ${this.authToken}`)
+    if (presented.length !== expected.length) return false
+    return timingSafeEqual(presented, expected)
   }
 
   private async readBody(req: IncomingMessage): Promise<unknown> {
@@ -211,4 +250,13 @@ function respondJsonRpcError(res: ServerResponse, status: number, message: strin
   res.writeHead(status, { 'content-type': 'application/json' }).end(
     JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message }, id: null }),
   )
+}
+
+/** 401 for a missing/invalid bearer token; advertises the required scheme. */
+function respondUnauthorized(res: ServerResponse): void {
+  res
+    .writeHead(401, { 'content-type': 'application/json', 'www-authenticate': 'Bearer' })
+    .end(
+      JSON.stringify({ jsonrpc: '2.0', error: { code: -32001, message: 'Unauthorized' }, id: null }),
+    )
 }

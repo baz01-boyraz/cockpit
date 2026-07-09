@@ -5,11 +5,13 @@ import { promisify } from 'node:util'
 import { buildHermesArgs } from '@shared/hermes-run'
 import { buildTranscriptPrompt, capHistory, type ChatRole, type ChatTurn } from '@shared/hermes-chat'
 import type { HermesChatReply } from '@shared/ipc'
+import { redactText } from '@shared/redaction'
 import type { Db } from '../../db/Database'
 import { logFatal } from '../../logging'
 import { nowIso } from '../../util/ids'
 import type { ProjectService } from '../ProjectService'
 import { resolveBin } from '../resolveBin'
+import { MCP_TOKEN_ENV } from './HermesMcpServer'
 
 const execFileAsync = promisify(execFile)
 
@@ -73,13 +75,22 @@ export class HermesChatService {
    */
   private readonly children = new Set<ChildProcess>()
   private readonly runner: HermesChatRunner
+  /**
+   * Lazily resolves the loopback MCP server's per-session bearer token (D3). It
+   * is a thunk because the MCP server is constructed after this service, so the
+   * token doesn't exist yet at construction — it's read at spawn time. Undefined
+   * (no server, or not yet started) simply omits the env var.
+   */
+  private readonly mcpToken?: () => string | undefined
 
   constructor(
     private readonly projects: ProjectService,
     private readonly db: Db,
     runner?: HermesChatRunner,
+    mcpToken?: () => string | undefined,
   ) {
     this.runner = runner ?? this.spawnHermes.bind(this)
+    this.mcpToken = mcpToken
     this.hydrate()
   }
 
@@ -146,7 +157,13 @@ export class HermesChatService {
    */
   async ask(projectId: string, message: string, imagePath?: string): Promise<HermesChatReply> {
     const safeImagePath = imagePath ? this.resolveAttachment(projectId, imagePath) : undefined
-    const historyContent = safeImagePath ? `${message}\n\n[User attached an image]` : message
+    // D1 — redact at intake, ONCE. This message flows outbound to the `hermes`
+    // CLI (→ OpenRouter) as argv, is stored in the in-memory Map, is persisted
+    // to hermes_chat_turns, and is re-composed into every future transcript. A
+    // pasted secret must reach none of them, so we mask here before it touches
+    // any of those surfaces rather than at each boundary.
+    const safeMessage = redactText(message)
+    const historyContent = safeImagePath ? `${safeMessage}\n\n[User attached an image]` : safeMessage
 
     const prior = this.histories.get(projectId) ?? []
     const withUser = capHistory([...prior, { role: 'user', content: historyContent }])
@@ -158,6 +175,10 @@ export class HermesChatService {
       ...buildHermesArgs(prompt, { ignoreRules: false, imagePath: safeImagePath }),
       ...HERMES_CHAT_TOOLS,
     ]
+    // D3 — hand the CLI the loopback MCP bearer token so its tool calls back
+    // into cockpiT authenticate. Only injected when a token exists; the chat
+    // path is the one spawner that loads MCP tools (ignoreRules: false).
+    const token = this.mcpToken?.()
     try {
       const running = this.runner(cwd, args, {
         timeout: HERMES_CHAT_TIMEOUT_MS,
@@ -166,11 +187,17 @@ export class HermesChatService {
         // this" — AGENTS.md tells it to read this and pass it verbatim as
         // `projectId` on every Swarm/memory/git tool call. Without it the
         // model has to invent an id, which fails the kanban_cards FK check.
-        env: { COCKPIT_PROJECT_ID: projectId },
+        env: {
+          COCKPIT_PROJECT_ID: projectId,
+          ...(token ? { [MCP_TOKEN_ENV]: token } : {}),
+        },
       })
       this.track(running)
       const { stdout } = await running
-      const text = stdout.trim() || '(Hermes returned no message)'
+      // Redact outbound-then-stored assistant text too: a model that echoes a
+      // secret back must not re-leak it to the renderer, the DB, or the next
+      // transcript. Fallback before redaction so an empty reply still masks.
+      const text = redactText(stdout.trim() || '(Hermes returned no message)')
       const next = capHistory([...withUser, { role: 'assistant', content: text }])
       this.histories.set(projectId, next)
       this.persist(projectId, next)
