@@ -1,0 +1,804 @@
+/* ====================================================================
+   cockpiT — usage & engine bay
+   Engine bay (Claude/Codex power section), engine cores, logo+quota dial,
+   and the shared quota breakdown. Carved from components.css (pure move).
+   ==================================================================== */
+
+/* ---------- engine bay (Claude / Codex power section) ----------
+ * The cockpit's lower-left power section. No panel box: an "Engines" eyebrow
+ * over a row of engine cores, each provider's 3D logo doubling as its quota
+ * battery, seated on light (thruster halos), not chrome. `--bay` aggregates
+ * fleet health (lime → amber → red) for the live readout. */
+.engineBay {
+  --bay: var(--signal);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  width: 100%;
+  padding: 2px;
+  -webkit-app-region: no-drag;
+}
+.engineBay--warning {
+  --bay: var(--warning);
+}
+.engineBay--critical {
+  --bay: var(--danger);
+}
+.engineBay--off {
+  --bay: var(--text-faint);
+}
+/* eyebrow header: "Engines" label, a hairline reaching across, a live readout */
+.engineBay__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+}
+.engineBay__title {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+/* the hairline that turns the label into a sectioning rule (no box edge) */
+.engineBay__rule {
+  flex: 1 1 auto;
+  height: 1px;
+  min-width: 8px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--border-strong) 90%, transparent),
+    transparent
+  );
+}
+.engineBay__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+/* fleet pulse — gentle breathing dot toned by aggregate engine health */
+.engineBay__liveDot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--bay);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--bay) 75%, transparent);
+  animation: engine-breathe 3.2s var(--ease-out) infinite;
+}
+@keyframes engine-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.engineBay__cores {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* ---------- engine core (one provider's logo-battery + telemetry) ----------
+ * No box. The 3D logo sits on a soft thruster halo; identity color (ember /
+ * teal) holds, while a health dot escalates amber → red as quota runs low.
+ * Animate only transform / opacity. */
+.engineCore {
+  --provider: var(--accent);
+  --provider-hi: var(--accent-hi);
+  --tone: var(--provider);
+  --tone-hi: var(--provider-hi);
+  /* status dot is a health traffic-light (lime → amber → red), kept separate
+   * from identity color so "online / low / critical" reads at a glance while
+   * the logo, halo and percent carry the provider's ember / teal identity. */
+  --health: var(--signal);
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 4px 7px;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  text-align: center;
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+.engineCore--claude {
+  /* Claude's own warm coral/copper — vivid but premium, no neon. */
+  --provider: #ec7f48;
+  --provider-hi: #ffac79;
+  /* Claude's mark fills ~91% of its canvas; Codex's only ~62%. Normalize the
+   * rendered artwork so both engines read at the same size, not the raw PNGs. */
+  --logo-scale: 1;
+}
+.engineCore--codex {
+  /* Codex carries the brand's glacier cool — the counterweight to Claude's ember. */
+  --provider: var(--glacier-400);
+  --provider-hi: var(--glacier-300);
+  --logo-scale: 1.45;
+}
+.engineCore--hermes {
+  /* A premium platinum/white glow — deliberately outside the ember/glacier
+   * pair, since Hermes isn't a coding engine but the orchestrator + its own
+   * OpenRouter credit line. */
+  --provider: #dde1e8;
+  --provider-hi: #ffffff;
+  --logo-scale: 1;
+}
+/* health escalation lives on the status dot — identity color stays put */
+.engineCore--warning {
+  --health: var(--warning);
+}
+.engineCore--critical {
+  --tone: var(--danger);
+  --tone-hi: #f4836b;
+  --health: var(--danger);
+}
+.engineCore--off {
+  opacity: 0.5;
+}
+.engineCore:hover {
+  transform: translateY(-2px);
+}
+.engineCore:active {
+  transform: translateY(-1px) scale(0.992);
+}
+.engineCore:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone) 70%, transparent);
+  outline-offset: 4px;
+  border-radius: 12px;
+}
+/* the stage the engine sits on — a soft containment halo (light, no edge) and a
+ * tighter thruster glow pooled at the base. Both trace light, never a box. */
+.engineCore__stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  padding: 4px 0 6px;
+}
+.engineCore__stage::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 58px;
+  height: 58px;
+  transform: translate(-50%, -50%);
+  border-radius: var(--r-pill);
+  background: radial-gradient(
+    circle at 50% 42%,
+    color-mix(in srgb, var(--tone) 16%, transparent),
+    transparent 68%
+  );
+  opacity: 0.7;
+  pointer-events: none;
+  transition: opacity var(--dur) var(--ease-out);
+}
+.engineCore__stage::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 76%;
+  height: 11px;
+  transform: translateX(-50%);
+  border-radius: var(--r-pill);
+  /* the pedestal: a soft tone glow pooled under the logo, seated on a darker
+   * contact shadow — reads as depth, "floating on light", never a box. */
+  background:
+    radial-gradient(
+      58% 100% at 50% 100%,
+      color-mix(in srgb, var(--tone-hi) 46%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(50% 100% at 50% 100%, rgba(0, 0, 0, 0.5), transparent 78%);
+  opacity: 0.62;
+  filter: blur(0.3px);
+  pointer-events: none;
+  transition: opacity var(--dur) var(--ease-out);
+}
+.engineCore:hover .engineCore__stage::before {
+  opacity: 1;
+}
+.engineCore:hover .engineCore__stage::after {
+  opacity: 0.9;
+}
+.engineCore__meta {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.engineCore__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+}
+.engineCore__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--r-pill);
+  background: var(--health);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--health) 80%, transparent);
+}
+.engineCore--critical .engineCore__dot {
+  animation: engine-breathe 1.5s var(--ease-out) infinite;
+}
+.engineCore--off .engineCore__dot {
+  background: var(--text-faint);
+  box-shadow: none;
+}
+.engineCore__pct {
+  /* Saturated provider hue, lifted with a hint of white — vivid but not washed. */
+  color: color-mix(in srgb, var(--tone-hi) 90%, #ffffff 10%);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  text-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.55),
+    0 0 10px color-mix(in srgb, var(--tone) 34%, transparent);
+}
+.engineCore__offline {
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* ---------- logo + quota dial ----------
+ * The provider's 3D logo stays pristine and full-color, seated inside a real
+ * instrument dial: one fixed 56px SVG geometry shared by all three engines
+ * (RING_SIZE/STROKE in UsageStrip.tsx) so Claude / Codex / Hermes always read
+ * as a matched set — same size, same bezel weight — no matter how full each
+ * one is or whether the engine is offline. Per-provider `--logo-scale`
+ * normalizes the two logo marks to one visual size within the dial.
+ * Animate only transform / opacity. */
+.logoMeter {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+}
+.logoMeter__logo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform: scale(var(--logo-scale, 1));
+  /* Depth + a soft tone glow trace the logo's silhouette. */
+  filter: saturate(1.04) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.55))
+    drop-shadow(0 1px 9px color-mix(in srgb, var(--tone) 32%, transparent));
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* Hermes's mark is a face portrait, not a centered logo on transparent — crop
+ * it round and zoom past its white margin instead of the contain/scale pair
+ * the logo marks use. */
+.logoMeter__logo--avatar {
+  object-fit: cover;
+  object-position: 38% 32%;
+  border-radius: var(--r-pill);
+  transform: scale(1.08);
+}
+/* the halo: fixed 56px SVG, centered over the 40px logo box (-8px inset on
+ * every side, overflow visible) so the wide glow blur has room to bloom
+ * outward without being clipped by the logo box. */
+.logoMeter__ring {
+  position: absolute;
+  inset: -8px;
+  overflow: visible;
+  pointer-events: none;
+}
+/* Every stroke in this dial shares one hue per engine (`--tone`/`--tone-hi`)
+ * — only brightness/blur separate "resting" from "filled". That's what
+ * reads as one continuous light source instead of a colored arc sitting on
+ * a dead neutral track. */
+
+/* resting glow: a soft, wide bloom behind the full circle, always on — the
+ * ring has ambient presence even before any fill is drawn. */
+.logoMeter__trackGlow {
+  stroke: var(--tone);
+  stroke-width: 6;
+  opacity: 0.12;
+  filter: blur(4px);
+}
+/* resting line: the hairline itself, dim, drawn as a complete circle so an
+ * 11%-full engine still reads as the same ring as an 81%-full one — only
+ * the fill's brightness communicates the value, never the ring's presence. */
+.logoMeter__track {
+  stroke: var(--tone);
+  stroke-width: 1.6;
+  opacity: 0.34;
+}
+/* fill glow: the same wide bloom, brighter and tighter, only over the arc
+ * that's actually full — this is the "premium subtle glow" the resting
+ * ring doesn't have. */
+.logoMeter__fillGlow {
+  stroke: var(--tone-hi);
+  stroke-width: 7.5;
+  opacity: 0.4;
+  filter: blur(5.5px);
+  animation: logo-ring-draw 750ms var(--ease-out) 150ms backwards;
+}
+/* fill line: the bright hairline carrying the actual value, crisp against
+ * its own soft glow. */
+.logoMeter__fill {
+  stroke: var(--tone-hi);
+  stroke-width: 1.6;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--tone-hi) 55%, transparent));
+  animation: logo-ring-draw 750ms var(--ease-out) 150ms backwards;
+}
+@keyframes logo-ring-draw {
+  from {
+    stroke-dashoffset: var(--ring-circ);
+  }
+}
+.engineCore:hover .logoMeter__fillGlow {
+  opacity: 0.56;
+}
+.engineCore--off .logoMeter__trackGlow {
+  opacity: 0.05;
+}
+.engineCore--off .logoMeter__track {
+  opacity: 0.16;
+}
+@media (prefers-reduced-motion: reduce) {
+  .topbar__approvals--active::after {
+    animation: none;
+  }
+  .logoMeter__fillGlow,
+  .logoMeter__fill {
+    animation: none;
+  }
+  .engineCore {
+    transition: none;
+  }
+  .engineBay__liveDot,
+  .engineCore--critical .engineCore__dot {
+    animation: none;
+  }
+}
+
+/* ---------- shared quota breakdown (Usage panel) ---------- */
+.quotaBody {
+  --tone: var(--signal);
+  --provider: var(--accent);
+  --provider-2: var(--accent-hi);
+  --provider-wash: var(--accent-wash);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  isolation: isolate;
+}
+.quotaBody__wash {
+  display: none;
+}
+.quotaBody--warning {
+  --tone: var(--warning);
+}
+.quotaBody--critical {
+  --tone: var(--danger);
+}
+.quotaBody--off {
+  --tone: var(--text-faint);
+}
+.quotaBody--healthy {
+  --tone: var(--provider);
+}
+.quotaBody--claude {
+  --provider: var(--accent);
+  --provider-2: var(--accent-hi);
+}
+.quotaBody--codex {
+  --provider: var(--glacier-400);
+  --provider-2: var(--glacier-300);
+}
+.quotaBody--radial {
+  gap: 13px;
+}
+.quotaBody__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.quotaBody__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--provider);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--provider) 14%, transparent);
+  flex-shrink: 0;
+}
+.quotaBody__name {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.quotaBody__plan {
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.quotaBody__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 2px 8px 2px 7px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-muted);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.quotaBody__liveDot {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--tone) 45%, transparent);
+}
+/* Pulse via an opacity-animated glow overlay — never animate box-shadow. */
+.quotaBody__liveDot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    0 0 11px color-mix(in srgb, var(--tone) 80%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--tone) 16%, transparent);
+  opacity: 0;
+  animation: glow-breathe 2.4s var(--ease-out) infinite;
+}
+.quotaBody__windows {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.quotaBody__reason {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+
+.quotaBody__radial {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+}
+.quotaRadial {
+  --tone: var(--signal);
+  position: relative;
+  width: 168px;
+  min-height: 136px;
+  margin: -3px auto 0;
+  color: var(--text);
+}
+.quotaRadial--warning {
+  --tone: var(--warning);
+}
+.quotaRadial--critical {
+  --tone: var(--danger);
+}
+.quotaRadial svg {
+  display: block;
+  width: 168px;
+  height: 116px;
+  overflow: visible;
+}
+.quotaRadial__inner {
+  stroke: rgba(236, 230, 218, 0.18);
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+.quotaRadial__track {
+  stroke-linecap: round;
+  opacity: 0.9;
+}
+.quotaRadial__progress {
+  stroke-linecap: round;
+  stroke-dasharray: var(--quota-radial-circ);
+  stroke-dashoffset: var(--quota-radial-offset);
+}
+.quotaRadial__needle {
+  stroke: color-mix(in srgb, var(--text) 70%, var(--provider) 30%);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  opacity: 0.72;
+}
+.quotaRadial__value {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 61px;
+  text-align: center;
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: 0;
+  color: transparent;
+  background: linear-gradient(90deg, #fff7e8, color-mix(in srgb, var(--tone) 78%, #fff 16%));
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--tone) 18%, transparent));
+}
+.quotaRadial__value span {
+  font-size: 17px;
+  font-weight: 750;
+}
+.quotaRadial__labels {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 96px;
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.quotaRadial__caption {
+  display: flex;
+  justify-content: center;
+  gap: 7px;
+  margin-top: -2px;
+  color: var(--text-muted);
+  font-size: var(--fs-micro);
+  font-weight: 650;
+  letter-spacing: 0;
+}
+.quotaRadial__caption .mono {
+  color: var(--text-faint);
+}
+.quotaRadialStats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+.quotaRadialStat {
+  --tone: var(--signal);
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: 8px;
+  row-gap: 5px;
+  min-width: 0;
+  padding: 8px 9px 8px 11px;
+  border-radius: var(--r-md);
+  border: 1px solid color-mix(in srgb, var(--tone) 24%, var(--border));
+  background:
+    radial-gradient(120% 130% at 0% 0%, color-mix(in srgb, var(--tone) 11%, transparent), transparent 58%),
+    linear-gradient(180deg, rgba(13, 15, 19, 0.92), rgba(9, 10, 13, 0.95));
+  overflow: hidden;
+}
+.quotaRadialStat--warning {
+  --tone: var(--warning);
+}
+.quotaRadialStat--critical {
+  --tone: var(--danger);
+}
+.quotaRadialStat__rail {
+  position: absolute;
+  inset: 8px auto 8px 0;
+  width: 2px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tone) 72%, #fff 8%), var(--tone));
+  opacity: 0.86;
+}
+.quotaRadialStat__title {
+  display: block;
+  color: var(--text);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.quotaRadialStat__reset {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-faint);
+  font-size: 9px;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.quotaRadialStat__value {
+  color: var(--tone);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0;
+  text-align: left;
+}
+.quotaRadialStat__value span {
+  color: var(--text-faint);
+  font-size: 9px;
+  font-weight: 700;
+}
+.quotaRadialStat__track {
+  grid-column: 1 / -1;
+  position: relative;
+  height: 3px;
+  border-radius: var(--r-pill);
+  background: rgba(236, 230, 218, 0.1);
+  overflow: hidden;
+}
+.quotaRadialStat__fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--tone) 74%, #fff 12%), var(--tone));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--tone) 48%, transparent);
+  transform: scaleX(var(--scale, 0));
+  transform-origin: left center;
+  transition: transform 760ms var(--ease-spring);
+}
+.quotaRadialStat__used {
+  grid-column: 1 / -1;
+  color: var(--text-faint);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-align: right;
+}
+@keyframes quota-radial-draw {
+  from {
+    stroke-dashoffset: var(--quota-radial-circ);
+  }
+  to {
+    stroke-dashoffset: var(--quota-radial-offset);
+  }
+}
+
+.quotaWindow {
+  --tone: var(--provider);
+  position: relative;
+  padding: 11px 12px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  overflow: hidden;
+}
+.quotaWindow__glow {
+  display: none;
+}
+.quotaWindow--warning {
+  --tone: var(--warning);
+}
+.quotaWindow--critical {
+  --tone: var(--danger);
+}
+.quotaWindow__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.quotaWindow__title {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 550;
+}
+.quotaWindow__value {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.quotaWindow__valueHint {
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+}
+.quotaWindow__track {
+  position: relative;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: rgba(236, 230, 218, 0.07);
+  overflow: hidden;
+}
+.quotaWindow__fill {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-pill);
+  /* gradient fill with a lit leading edge + a soft glow bloom beneath it */
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--tone) 82%, #000 8%),
+    color-mix(in srgb, var(--tone) 72%, #fff 16%)
+  );
+  box-shadow: 0 0 10px color-mix(in srgb, var(--tone) 42%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  transform: scaleX(var(--scale, 0));
+  transform-origin: left center;
+  transition: transform 900ms var(--ease-spring);
+}
+.quotaWindow__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 7px;
+}
+.quotaWindow__reset {
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  letter-spacing: 0;
+}
+.quotaWindow__used {
+  flex-shrink: 0;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* Usage panel quota section */
+.usage__quota {
+  margin-top: 14px;
+}
+.quotaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quotaWindow__fill {
+    transition: none;
+  }
+  .quotaRadialStat__fill {
+    transition: none;
+  }
+  .quotaBody__liveDot {
+    animation: none;
+  }
+}

@@ -1,0 +1,1034 @@
+/* ====================================================================
+   cockpiT — memory hub
+   Per-project markdown knowledge hub: note list, reader/editor, connections,
+   empty hub, the living-brain strip, trust dial and the neural graph.
+   Carved from components.css (pure move).
+   ==================================================================== */
+
+/* --- memory --- */
+/* Per-project markdown knowledge hub (VISION 5.4): three zones — note list ·
+   reader/editor · connections. Files are the truth; the UI renders content as
+   text with wikilinks decorated by parsing (never innerHTML). */
+
+.memory__cols {
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr) 264px;
+  gap: var(--sp-3);
+  align-items: stretch;
+  min-height: 560px;
+}
+
+/* graph mode gets the whole floor — no cramped middle column */
+.memory__graphstage {
+  display: flex;
+  min-height: 620px;
+  height: calc(100vh - 320px);
+}
+.memory__graphstage > .memgraph { flex: 1; min-width: 0; }
+
+/* calm busy state — one breathing dot, same language as review */
+.memory__busy {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.memory__busy--bare {
+  background: transparent;
+  border: 0;
+  justify-content: center;
+}
+.memory__pulse {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+/* write-error notice */
+.memnotice {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--danger-wash);
+  border: 1px solid rgba(237, 100, 80, 0.3);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  animation: fade-rise var(--dur) var(--ease-out) both;
+}
+.memnotice svg { flex-shrink: 0; }
+.memnotice__text { flex: 1; min-width: 0; }
+.memnotice__dismiss {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  transition: background-color var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+}
+.memnotice__dismiss:hover { background: rgba(237, 100, 80, 0.18); }
+.memnotice__dismiss:active { transform: scale(0.92); }
+
+/* ----- left zone: note list ----- */
+.memory__list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+.memlist__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--border);
+}
+.memlist__search {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.memlist__searchIcon {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-faint);
+  pointer-events: none;
+}
+.memlist__searchInput {
+  width: 100%;
+  padding: 6px 9px 6px 28px;
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  outline: none;
+}
+.memlist__searchInput:focus { border-color: var(--border-accent); }
+.memlist__new {
+  flex-shrink: 0;
+  padding: 5px 7px;
+}
+.memlist__create {
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-inset);
+  animation: fade-rise var(--dur) var(--ease-out) both;
+}
+.memlist__body {
+  flex: 1;
+  min-height: 0;
+  padding: var(--sp-2);
+}
+.memlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.memnote {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  padding: 7px var(--sp-2);
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  transition:
+    background-color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-spring);
+}
+.memnote:hover { background: var(--surface-1); transform: translateX(2px); }
+.memnote:active { transform: translateX(2px) scale(0.99); }
+.memnote--active {
+  background: var(--surface-2);
+  border-color: var(--border-accent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.memnote__top {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.memnote__title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.memnote__time {
+  flex-shrink: 0;
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.memnote__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.memnote__name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.memnote__count {
+  flex-shrink: 0;
+  font-size: var(--fs-micro);
+  line-height: 15px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.memnote__count--zero { opacity: 0.45; }
+
+/* ----- shared note-name capture (list create + empty state) ----- */
+.memname {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.memname__row {
+  display: flex;
+  gap: 6px;
+}
+.memname__input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 9px;
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  outline: none;
+}
+.memname__input:focus { border-color: var(--border-accent); }
+.memname__hint {
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.memname__hint--invalid { color: var(--warning); }
+
+/* ----- center zone: reader / editor ----- */
+.memory__reader {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+.memory__reader--idle {
+  align-items: center;
+  justify-content: center;
+}
+.memreader__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+.memreader__headText {
+  flex: 1;
+  min-width: 0;
+}
+.memreader__title {
+  margin: 0 0 3px;
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  letter-spacing: var(--tracking-snug);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.memreader__sub {
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.memreader__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+/* the one lime moment: a save confirmed, then quiet again */
+.memreader__saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--signal);
+  font-size: var(--fs-xs);
+  font-weight: 550;
+  animation: fade-rise var(--dur) var(--ease-out) both;
+}
+.memreader__trashConfirm {
+  border-color: rgba(237, 100, 80, 0.45);
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+.memreader__trashNote {
+  padding: 5px var(--sp-4);
+  font-size: var(--fs-micro);
+  color: var(--danger);
+  background: var(--danger-wash);
+  border-bottom: 1px solid var(--border);
+  animation: fade-rise var(--dur) var(--ease-out) both;
+}
+.memreader__rename {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.memreader__renameInput {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 9px;
+  border-radius: var(--r-sm);
+  background: var(--surface-inset);
+  border: 1px solid var(--border-accent);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  outline: none;
+}
+.memreader__renameHint {
+  margin-top: 5px;
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+}
+.memreader__body {
+  flex: 1;
+  min-height: 0;
+  padding: var(--sp-4) var(--sp-5);
+}
+.wikitext {
+  max-width: 640px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--fs-body);
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+/* wikilinks: ember owns interaction — resolved links are the reader's accent */
+.wikilink {
+  display: inline;
+  margin: 0 -1px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font: inherit;
+  color: var(--accent-hi);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color var(--dur) var(--ease-out), background-color var(--dur) var(--ease-out);
+}
+.wikilink:hover {
+  color: var(--ember-100);
+  background: var(--accent-wash);
+  text-decoration-color: var(--accent);
+}
+.wikilink:active { color: var(--ember-200); }
+/* unresolved: quiet dashed invitation, a small + marks "will create" */
+.wikilink--unresolved {
+  color: var(--text-muted);
+  text-decoration-style: dashed;
+  text-decoration-color: var(--text-faint);
+}
+.wikilink--unresolved::after {
+  content: '+';
+  margin-left: 1px;
+  font-size: 0.78em;
+  vertical-align: super;
+  color: var(--text-faint);
+}
+.wikilink--unresolved:hover {
+  color: var(--text);
+  background: var(--surface-2);
+  text-decoration-color: var(--text-muted);
+}
+/* unresolved-link offer bar (create is always explicit, never implicit) */
+.memoffer {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: var(--sp-3) var(--sp-4) 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  border: 1px dashed var(--border-strong);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  animation: fade-rise var(--dur) var(--ease-out) both;
+}
+.memoffer__text {
+  flex: 1;
+  min-width: 0;
+}
+.memreader__editWrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+}
+.memedit {
+  flex: 1;
+  width: 100%;
+  min-height: 320px;
+  resize: none;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+  outline: none;
+}
+.memedit:focus { border-color: var(--border-accent); }
+.memedit__hint {
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+}
+/* idle center: quiet, composed — no glow (the glow budget stays on empty hub) */
+.memidle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-6);
+  text-align: center;
+}
+.memidle__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-md);
+  display: grid;
+  place-items: center;
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  box-shadow: var(--bevel);
+}
+.memidle__title {
+  font-size: var(--fs-h2);
+  font-weight: 600;
+}
+.memidle__sub {
+  margin: 0;
+  max-width: 300px;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+
+/* ----- right zone: connections ----- */
+.memory__conns {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--sp-3);
+  overflow-y: auto;
+}
+.memconn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0 var(--sp-3);
+}
+.memconn + .memconn { border-top: 1px solid var(--border); padding-top: var(--sp-3); }
+.memconn__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-1);
+}
+.memconn__badge {
+  font-size: var(--fs-micro);
+  line-height: 15px;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.memconn__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.memconn__row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  text-align: left;
+  padding: 6px var(--sp-2);
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  transition:
+    background-color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-spring);
+}
+.memconn__row:hover { background: var(--surface-1); transform: translateX(2px); }
+.memconn__row:active { transform: translateX(2px) scale(0.99); }
+.memconn__rowTitle {
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.memconn__rowName {
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.memconn__empty {
+  padding: 2px var(--sp-1) 0;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  line-height: 1.55;
+  word-break: break-word;
+}
+.memconn__missing {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 5px var(--sp-2);
+  border-radius: var(--r-sm);
+  border: 1px dashed var(--border);
+  background: var(--surface-inset);
+}
+.memconn__missingBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.memconn__missingName {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.memconn__missingBody .memconn__missingName { flex: none; }
+.memconn__wantedBy {
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+}
+.memconn__create {
+  flex-shrink: 0;
+  padding: 2px 7px;
+}
+
+/* ----- empty hub: composed invitation (termEmpty pattern) ----- */
+.memEmpty {
+  padding: var(--sp-7) var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  text-align: center;
+}
+.memEmpty__icon {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--r-lg);
+  display: grid;
+  place-items: center;
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  box-shadow: var(--bevel);
+}
+/* pooled ambient light — the view's one resting glow */
+.memEmpty__icon::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -26px;
+  width: 300%;
+  height: 44px;
+  transform: translateX(-50%);
+  border-radius: var(--r-pill);
+  background: radial-gradient(50% 100% at 50% 0%, var(--accent-glow), transparent 72%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.memEmpty__title {
+  font-size: var(--fs-h1);
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+}
+.memEmpty__sub {
+  margin: 0;
+  max-width: 470px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.65;
+}
+.memEmpty__sub .mono {
+  color: var(--text);
+  font-size: 0.92em;
+}
+.memEmpty__create {
+  width: min(380px, 100%);
+  margin-top: var(--sp-2);
+  text-align: left;
+}
+.memEmpty__create .memname__hint { text-align: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .memory__pulse { animation: none; }
+}
+
+/* --- memory graph --- */
+/* Force-directed canvas view of the hub (VISION 5.5). The canvas animates
+   positions itself (allowed — physics settle, then stop); CSS only styles the
+   frame, the layout toggle, and the hint line. */
+
+.memtoggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface-inset);
+}
+.memtoggle__btn {
+  padding: 3px 12px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--dur-fast, 120ms) ease;
+}
+.memtoggle__btn:hover { color: var(--text); }
+.memtoggle__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.memtoggle__btn:active { transform: translateY(0.5px); }
+.memtoggle__btn--active {
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.memgraph {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.memgraph__stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  /* recessed instrument well: a deep obsidian floor the neural field glows over */
+  background:
+    radial-gradient(80% 66% at 50% 44%, rgba(224, 112, 58, 0.05), transparent 74%),
+    radial-gradient(120% 100% at 50% 120%, rgba(98, 190, 221, 0.03), transparent 70%),
+    var(--bg-deep);
+  /* pressed-in depth + a light-from-above hairline lip along the top edge */
+  box-shadow:
+    inset 0 1px 0 var(--edge-highlight),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.4),
+    inset 0 18px 48px rgba(0, 0, 0, 0.55),
+    inset 0 -12px 40px rgba(0, 0, 0, 0.5);
+}
+.memgraph__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+/* floating camera cluster — top-right of the instrument well */
+.memgraph__zoom {
+  position: absolute;
+  top: var(--sp-3);
+  right: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 2;
+}
+.memgraph__zoombtn {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 17px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: color-mix(in oklab, var(--surface-3) 78%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  box-shadow:
+    inset 0 1px 0 var(--edge-highlight),
+    0 4px 14px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+.memgraph__zoombtn:hover {
+  color: var(--ember-200);
+  border-color: color-mix(in oklab, var(--ember-400) 55%, var(--border));
+  background: color-mix(in oklab, var(--surface-3) 92%, transparent);
+}
+.memgraph__zoombtn:focus-visible {
+  outline: 2px solid var(--ember-400);
+  outline-offset: 2px;
+  color: var(--text);
+}
+.memgraph__zoombtn:active {
+  transform: translateY(1px);
+}
+.memgraph__zoombtn--fit {
+  margin-top: 2px;
+}
+.memgraph__status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.memgraph__hint {
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+/* ============================================================================
+ * Memory living-brain strip (docs/memory-imp.md Phases 2–3)
+ * Brain health · one-tap capture · the review queue. Layered on the panel, an
+ * ember hairline sets it apart from the note zones below.
+ * ==========================================================================*/
+.brainbar {
+  margin: var(--sp-3) 0 var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--ember-400) 6%, transparent), transparent 60%),
+    var(--surface-raised, var(--surface-inset));
+  box-shadow: inset 0 1px 0 color-mix(in oklab, #fff 4%, transparent);
+}
+.brainbar__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.brainbar__lead { display: flex; align-items: center; gap: var(--sp-2); }
+.brainbar__icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-md);
+  color: var(--ember-300);
+  background: color-mix(in oklab, var(--ember-400) 14%, transparent);
+}
+.brainbar__title { font-weight: 600; font-size: var(--fs-sm); letter-spacing: 0.01em; }
+.brainbar__stats { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.brainstat {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  padding: 3px 8px;
+  border-radius: var(--r-pill, 999px);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+}
+.brainstat b { color: var(--text); font-variant-numeric: tabular-nums; }
+.brainstat--warn { color: var(--text); border-color: color-mix(in oklab, var(--ember-400) 40%, var(--border)); }
+.brainstat--ask {
+  color: var(--ember-200);
+  border-color: color-mix(in oklab, var(--ember-400) 55%, var(--border));
+  background: color-mix(in oklab, var(--ember-400) 12%, transparent);
+}
+.brainbar__cta { margin-left: auto; display: flex; gap: var(--sp-2); align-items: center; }
+
+.brainbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text);
+  cursor: pointer;
+  transition: transform 120ms ease, opacity 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+.brainbtn:hover:not(:disabled) { transform: translateY(-1px); border-color: var(--border-strong, var(--border)); }
+.brainbtn:active:not(:disabled) { transform: translateY(0); }
+.brainbtn:focus-visible { outline: 2px solid var(--ember-400); outline-offset: 2px; }
+.brainbtn:disabled { opacity: 0.55; cursor: default; }
+.brainbtn--sm { padding: 5px 10px; font-size: var(--fs-xs); }
+.brainbtn--accent {
+  border-color: transparent;
+  color: #1a0f08;
+  background: linear-gradient(180deg, var(--ember-300), var(--ember-400));
+}
+.brainbtn--accent:hover:not(:disabled) { background: linear-gradient(180deg, var(--ember-200), var(--ember-400)); }
+.brainbtn--ghost { background: transparent; }
+.reviewcard__discard:hover:not(:disabled) { color: var(--danger, #e0703a); }
+
+.brainbar__flash {
+  margin-top: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  padding: 6px 10px;
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+}
+.brainbar__flash--error {
+  color: var(--text);
+  border: 1px solid color-mix(in oklab, var(--ember-400) 45%, var(--border));
+}
+
+.reviewlist {
+  list-style: none;
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.reviewcard {
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-left: 2px solid color-mix(in oklab, var(--ember-400) 60%, var(--border));
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+}
+.reviewcard--conflict { border-left-color: var(--ember-400); }
+.reviewcard__head { display: flex; align-items: center; gap: var(--sp-2); justify-content: space-between; }
+.reviewcard__title { font-weight: 600; font-size: var(--fs-sm); }
+.reviewcard__kind { text-transform: uppercase; letter-spacing: 0.04em; font-size: 10px; }
+.reviewcard__reason { margin: 6px 0 8px; font-size: var(--fs-xs); color: var(--text-muted); }
+.reviewcard__preview summary {
+  cursor: pointer;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  user-select: none;
+}
+.reviewcard__preview summary:hover { color: var(--accent); }
+.reviewcard__pre {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--surface-base, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  max-height: 220px;
+  overflow: auto;
+}
+.reviewcard__editor {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--surface-base, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  resize: vertical;
+}
+.reviewcard__editor:focus-visible { outline: 2px solid var(--ember-400); outline-offset: 1px; }
+.reviewcard__actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-2); flex-wrap: wrap; }
+
+/* Baz brain — the cross-project view (docs/memory-imp.md Phase 6). */
+.brainbtn--on { border-color: var(--ember-400); color: var(--ember-200); background: color-mix(in oklab, var(--ember-400) 12%, transparent); }
+.bazbrain { margin-top: var(--sp-3); padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-inset); }
+.bazbrain__head { display: flex; align-items: center; gap: var(--sp-2); justify-content: space-between; margin-bottom: var(--sp-2); }
+.bazbrain__title { font-weight: 600; font-size: var(--fs-sm); }
+.bazbrain__empty { font-size: var(--fs-xs); color: var(--text-muted); margin: 4px 0 0; }
+.bazbrain__grid { display: grid; grid-template-columns: minmax(160px, 220px) 1fr; gap: var(--sp-3); align-items: start; }
+.bazbrain__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.bazbrain__item {
+  width: 100%; text-align: left; padding: 6px 9px; font-size: var(--fs-xs); color: var(--text-muted);
+  background: transparent; border: 1px solid transparent; border-radius: var(--r-sm); cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.bazbrain__item:hover { color: var(--text); background: var(--surface-base, var(--bg)); }
+.bazbrain__item--active { color: var(--ember-200); border-color: color-mix(in oklab, var(--ember-400) 40%, var(--border)); }
+.bazbrain__reader { margin: 0; max-height: 260px; }
+
+/* ============================================================================
+ * Trust dial · capture report · batch review actions
+ * The brain earns autonomy (Autopilot/Assisted/Manual), tells you plainly what
+ * a capture saved, and lets you clear the queue in one move instead of save-
+ * save-save. Renderer policy over the pipeline gate.
+ * ==========================================================================*/
+.trustseg {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+}
+.trustseg__btn {
+  padding: 4px 10px;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text-faint);
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--r-md) - 3px);
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease;
+}
+.trustseg__btn:hover { color: var(--text-muted); }
+.trustseg__btn:focus-visible { outline: 2px solid var(--ember-400); outline-offset: 2px; }
+.trustseg__btn--active {
+  color: var(--ember-100);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--ember-400) 26%, transparent), color-mix(in oklab, var(--ember-500) 20%, transparent));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ember-400) 40%, transparent);
+}
+
+.brainbar__mode {
+  margin: 6px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  letter-spacing: 0.01em;
+}
+
+/* capture report — the answer to "what did it capture?" */
+.capreport {
+  margin-top: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid color-mix(in oklab, var(--ember-400) 22%, var(--border));
+  border-radius: var(--r-md);
+  background:
+    radial-gradient(120% 100% at 0% 0%, color-mix(in oklab, var(--ember-500) 8%, transparent), transparent 60%),
+    var(--surface-inset);
+}
+.capreport__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.capreport__title { font-size: var(--fs-sm); font-weight: 600; color: var(--text); }
+.capreport__session { color: var(--ember-200); font-weight: 500; }
+.capreport__dismiss {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; flex-shrink: 0;
+  color: var(--text-faint); background: transparent; border: 0; border-radius: var(--r-sm); cursor: pointer;
+  transition: color 120ms ease, background 120ms ease;
+}
+.capreport__dismiss:hover { color: var(--text); background: var(--surface-base, var(--bg)); }
+.capreport__empty { margin: 8px 0 0; font-size: var(--fs-xs); color: var(--text-muted); }
+.capreport__groups { display: flex; flex-wrap: wrap; gap: var(--sp-4); margin-top: var(--sp-2); }
+.capgroup { min-width: 200px; flex: 1; }
+.capgroup__label {
+  display: flex; align-items: center; gap: 5px;
+  font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.01em; margin-bottom: 4px;
+}
+.capgroup__label--saved { color: var(--success); }
+.capgroup__label--review { color: var(--ember-200); }
+.capgroup__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.capgroup__list li {
+  font-size: var(--fs-xs); color: var(--text-muted);
+  padding-left: 12px; position: relative; line-height: 1.4;
+}
+.capgroup__list li::before {
+  content: ''; position: absolute; left: 2px; top: 0.62em;
+  width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: 0.5;
+}
+.capreport__foot { margin: 10px 0 0; font-size: var(--fs-micro); color: var(--text-faint); }
+
+/* batch review actions — clear the queue without save-save-save */
+.reviewbatch {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-top: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+}
+.reviewbatch__count { font-size: var(--fs-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.reviewbatch__actions { display: flex; gap: var(--sp-2); }

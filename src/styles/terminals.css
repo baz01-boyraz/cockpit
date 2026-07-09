@@ -1,0 +1,933 @@
+/* ====================================================================
+   cockpiT — terminals
+   Terminal panes, Warp-style command blocks (OSC 133) and the foldable
+   blocks view. Carved from components.css (pure move).
+   ==================================================================== */
+
+/* ---------- terminals ---------- */
+.termEmpty {
+  padding: var(--sp-7) var(--sp-6);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.termEmpty__icon {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--r-lg);
+  display: grid;
+  place-items: center;
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  box-shadow: var(--bevel);
+}
+/* pooled ambient light under the icon — composed emptiness, not dead air */
+.termEmpty__icon::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -26px;
+  width: 300%;
+  height: 44px;
+  transform: translateX(-50%);
+  border-radius: var(--r-pill);
+  background: radial-gradient(50% 100% at 50% 0%, var(--accent-glow), transparent 72%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.termEmpty__title { font-size: var(--fs-h1); }
+.termEmpty__sub {
+  color: var(--text-muted);
+  max-width: 420px;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+.termEmpty__actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: var(--sp-2);
+}
+.termbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-deep);
+  min-width: 0;
+}
+.termbar__tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease-out), color var(--dur) var(--ease-out);
+}
+.tab:hover { background: var(--surface-1); color: var(--text); }
+.tab--active {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+.tab--dead { opacity: 0.5; }
+.tab__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.tab__dot--live {
+  background: var(--signal);
+  box-shadow: 0 0 8px rgba(196, 227, 90, 0.6);
+}
+.tab__role {
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  padding: 1px 5px;
+  border-radius: var(--r-pill);
+  background: var(--surface-inset);
+}
+.tab__close {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+}
+.tab__close:hover { background: var(--danger-wash); color: var(--danger); }
+.tab__rename {
+  background: var(--surface-inset);
+  border: 1px solid var(--border-accent);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  padding: 1px 5px;
+  width: 110px;
+  outline: none;
+}
+
+/* Per-terminal task label: ember pill when set, ghost "+ label" when empty. */
+.tab__alias,
+.termpane__alias {
+  display: inline-flex;
+  align-items: center;
+  max-width: 130px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(224, 123, 69, 0.22);
+  background: rgba(224, 123, 69, 0.12);
+  color: var(--accent);
+  font-family: inherit;
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+  transition: background var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);
+}
+.tab__alias:hover,
+.termpane__alias:hover {
+  background: rgba(224, 123, 69, 0.18);
+  border-color: rgba(224, 123, 69, 0.34);
+}
+.tab__aliasAdd,
+.termpane__aliasAdd {
+  display: none;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--text-faint);
+  font-family: inherit;
+  font-size: var(--fs-micro);
+  line-height: 1.5;
+  cursor: pointer;
+  transition: color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);
+}
+.tab:hover .tab__aliasAdd,
+.termpane__head:hover .termpane__aliasAdd {
+  display: inline-flex;
+}
+.tab__aliasAdd:hover,
+.termpane__aliasAdd:hover {
+  color: var(--accent);
+  border-color: var(--border-accent);
+}
+.termbar__add {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+.termbar__add:hover:not(:disabled) { border-color: var(--border-accent); color: var(--accent); }
+.termbar__add:disabled { opacity: 0.4; cursor: not-allowed; }
+.termbar__tools {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: 0 0 auto;
+}
+.termbar__count { color: var(--text-faint); font-size: var(--fs-xs); }
+.termstage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  padding: var(--sp-3);
+  background: var(--bg-deep);
+  isolation: isolate;
+}
+.termstage--grid {
+  display: grid;
+  gap: 8px;
+  overflow: hidden;
+}
+.termstage--focus {
+  overflow: hidden;
+}
+.termstage--resizing,
+.termstage--resizing * {
+  user-select: none;
+}
+.termpane {
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  box-shadow: inset 0 1px 0 rgba(236, 230, 218, 0.025);
+}
+.termstage--focus .termpane {
+  position: absolute;
+  inset: var(--sp-3);
+}
+.termpane--hidden { display: none; }
+.termpane--tile {
+  min-height: 0;
+  position: relative;
+}
+.termpane--active {
+  border-color: rgba(224, 123, 69, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(236, 230, 218, 0.035),
+    0 0 0 1px rgba(224, 123, 69, 0.05);
+}
+.termpane__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 31px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(26, 29, 37, 0.82), rgba(14, 15, 19, 0.88));
+  font-size: var(--fs-xs);
+  min-width: 0;
+}
+.termpane__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 550;
+}
+.termpane__role {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+}
+.termpane__headTools { margin-left: auto; display: flex; gap: 4px; }
+.iconbtn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-faint);
+}
+.iconbtn:hover { background: var(--surface-2); color: var(--text); }
+.termsplitLayer {
+  position: absolute;
+  inset: var(--sp-3);
+  z-index: 7;
+  pointer-events: none;
+}
+.termsplit {
+  position: absolute;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease-out);
+}
+.termsplit::before {
+  content: '';
+  position: absolute;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  box-shadow: 0 0 14px rgba(224, 123, 69, 0.32);
+  opacity: 0.62;
+}
+.termsplit--col {
+  top: 0;
+  bottom: 0;
+  width: 13px;
+  transform: translateX(-50%);
+  cursor: col-resize;
+}
+.termsplit--col::before {
+  top: 10px;
+  bottom: 10px;
+  left: 6px;
+  width: 1px;
+}
+.termsplit--row {
+  left: 0;
+  right: 0;
+  height: 13px;
+  transform: translateY(-50%);
+  cursor: row-resize;
+}
+.termsplit--row::before {
+  left: 10px;
+  right: 10px;
+  top: 6px;
+  height: 1px;
+}
+.termstage--grid:hover .termsplit,
+.termstage--resizing .termsplit {
+  opacity: 1;
+}
+.termview {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  padding: 7px 8px;
+}
+.termview::before {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  z-index: 2;
+  pointer-events: none;
+  border: 1px solid var(--border-accent);
+  border-radius: calc(var(--r-md) - 2px);
+  opacity: 0;
+  transform: scale(0.985);
+  transition:
+    opacity var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-out);
+}
+.termview--dragging::before {
+  opacity: 1;
+  transform: scale(1);
+  animation: termDropPulse 1.4s var(--ease-out) infinite;
+}
+.termview__host {
+  height: 100%;
+  min-height: 0;
+}
+.termview .xterm { height: 100%; }
+
+/* --- Command blocks (Warp-style OSC 133 decorations) ------------------------ */
+/* A status dot in the left gutter of each command's first output line, plus a
+   hairline separator at every prompt. Colours track the ember/lime/red tokens. */
+.cmdblock-dot {
+  pointer-events: none;
+  z-index: 3;
+}
+.cmdblock-dot::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -13px;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  box-shadow: 0 0 0 1px rgba(8, 9, 11, 0.55);
+  transition:
+    background var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
+}
+.cmdblock-dot--running::before {
+  background: var(--accent);
+  box-shadow: 0 0 0 1px rgba(8, 9, 11, 0.55), 0 0 10px var(--accent-glow);
+  animation: cmdblockPulse 1.15s var(--ease-out) infinite;
+}
+.cmdblock-dot--success::before {
+  background: var(--success);
+  box-shadow: 0 0 0 1px rgba(8, 9, 11, 0.55), 0 0 9px var(--success-wash);
+}
+.cmdblock-dot--error::before {
+  background: var(--danger);
+  box-shadow: 0 0 0 1px rgba(8, 9, 11, 0.55), 0 0 10px var(--danger-wash);
+}
+.cmdblock-dot--aborted::before {
+  background: var(--text-faint);
+  opacity: 0.6;
+}
+.cmdblock-sep {
+  pointer-events: none;
+  z-index: 1;
+}
+.cmdblock-sep::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 0;
+  width: 3000px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    var(--border-accent),
+    var(--border) 46%,
+    transparent 92%
+  );
+  opacity: 0.55;
+}
+@keyframes cmdblockPulse {
+  0%, 100% { transform: translateY(-50%) scale(1); opacity: 1; }
+  50% { transform: translateY(-50%) scale(0.66); opacity: 0.4; }
+}
+
+.termview__file { display: none; }
+
+/* Floating top-right controls: the Stream/Blocks toggle plus the screenshot
+   button. The toggle stays visible for discoverability; the attach button is
+   subtle until the pane is hovered. */
+.termview__toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.termview__viewtoggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: rgba(14, 15, 19, 0.82);
+  box-shadow: var(--shadow-1);
+  backdrop-filter: blur(6px);
+}
+.termview__seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    color var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out);
+}
+.termview__seg:hover { color: var(--text-muted); }
+.termview__seg--on {
+  color: var(--text-on-accent);
+  background: var(--accent);
+}
+.termview__seg--on:hover { color: var(--text-on-accent); }
+.termview__seg:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 1px;
+}
+.termview__segcount {
+  display: inline-grid;
+  place-items: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(14, 15, 19, 0.28);
+  color: inherit;
+  font-size: 10px;
+  line-height: 1;
+}
+.termview__seg:not(.termview__seg--on) .termview__segcount {
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+
+/* Command navigation — jump between commands / to the live tail. Subtle until
+   the pane is hovered, like the screenshot button. */
+.termview__nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: rgba(14, 15, 19, 0.82);
+  box-shadow: var(--shadow-1);
+  backdrop-filter: blur(6px);
+  opacity: 0.28;
+  transition: opacity var(--dur) var(--ease-out);
+}
+.termview:hover .termview__nav { opacity: 1; }
+.termview__navbtn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+}
+.termview__navbtn:hover { color: var(--accent-hi); background: var(--surface-3); }
+.termview__navbtn:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 1px;
+}
+.termview__navup { transform: rotate(-90deg); }
+.termview__navdown { transform: rotate(90deg); }
+/* A thin baseline under the chevron reads as "jump to the bottom / latest". */
+.termview__navbtn--latest { position: relative; }
+.termview__navbtn--latest::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 4px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.7;
+}
+.termview__navbtn--latest .termview__navdown { transform: rotate(90deg) translateX(-1px); }
+.termview__attach {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: rgba(20, 22, 28, 0.84);
+  color: var(--text-muted);
+  box-shadow: var(--shadow-1);
+  opacity: 0.28;
+  transition:
+    opacity var(--dur) var(--ease-out),
+    color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out);
+}
+.termview:hover .termview__attach,
+.termview--dragging .termview__attach,
+.termview--saving .termview__attach {
+  opacity: 1;
+}
+.termview__attach:hover:not(:disabled) {
+  color: var(--accent-hi);
+  border-color: var(--border-accent);
+  background: rgba(34, 38, 49, 0.94);
+}
+.termview__attach:disabled {
+  cursor: progress;
+  color: var(--text-faint);
+}
+.termview--saving .termview__attach svg {
+  animation: termAttachFloat 0.9s var(--ease-spring) infinite alternate;
+}
+
+/* --- Foldable Blocks view (Warp-style command cards) ------------------------ */
+/* Overlays the live xterm when the pane is toggled to Blocks. The terminal keeps
+   receiving data underneath; this surface renders the captured command history. */
+.termblocks {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow-y: auto;
+  /* Extra top padding so the first card clears the floating Stream/Blocks toggle. */
+  padding: 46px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(238, 124, 66, 0.05), transparent 60%),
+    var(--surface-inset);
+  scrollbar-width: thin;
+}
+.termblocks--empty {
+  align-items: center;
+  justify-content: center;
+}
+.termblocks__hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-faint);
+  text-align: center;
+}
+.termblocks__hint svg { margin-bottom: 4px; color: var(--text-muted); }
+.termblocks__hintTitle { color: var(--text-muted); font-size: 13px; font-weight: 600; }
+.termblocks__hintSub { font-size: 11.5px; }
+
+.cmdcard {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  overflow: hidden;
+  transition: border-color var(--dur) var(--ease-out);
+}
+.cmdcard:hover { border-color: var(--border-strong, rgba(255, 255, 255, 0.12)); }
+.cmdcard--running { border-color: var(--border-accent); }
+/* A thin status rail down the left edge encodes outcome at a glance. */
+.cmdcard__head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px 7px 12px;
+  cursor: default;
+}
+.cmdcard__head::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--text-faint);
+}
+.cmdcard--success .cmdcard__head::before { background: var(--success); }
+.cmdcard--error .cmdcard__head::before { background: var(--danger); }
+.cmdcard--running .cmdcard__head::before { background: var(--accent); }
+.cmdcard--aborted .cmdcard__head::before { background: var(--text-faint); }
+.cmdcard__fold {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+}
+.cmdcard__fold:hover { color: var(--text); background: var(--surface-3); }
+.cmdcard__chevron { transition: transform var(--dur) var(--ease-out); }
+.cmdcard__chevron--open { transform: rotate(90deg); }
+.cmdcard__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.cmdcard__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.cmdcard__status--success { color: var(--success); border-color: var(--success-wash); }
+.cmdcard__status--success .cmdcard__dot { background: var(--success); }
+.cmdcard__status--error { color: var(--danger); border-color: var(--danger-wash); }
+.cmdcard__status--error .cmdcard__dot { background: var(--danger); }
+.cmdcard__status--running { color: var(--accent-hi); border-color: var(--border-accent); }
+.cmdcard__status--running .cmdcard__dot {
+  background: var(--accent);
+  animation: cmdblockPulse 1.15s var(--ease-out) infinite;
+}
+.cmdcard__status--aborted { color: var(--text-faint); }
+.cmdcard__command {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+}
+.cmdcard__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+.cmdcard__dur { color: var(--text-muted); }
+.cmdcard__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease-out);
+}
+.cmdcard:hover .cmdcard__actions { opacity: 1; }
+.cmdcard__body {
+  border-top: 1px solid var(--border);
+  background: var(--surface-inset);
+  max-height: 340px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.cmdcard__output {
+  margin: 0;
+  padding: 8px 12px 10px 15px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.cmdcard__pending,
+.cmdcard__empty {
+  padding: 8px 15px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.cmdcard__pending { color: var(--accent-hi); }
+
+.termview__drop {
+  position: absolute;
+  inset: 9px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  overflow: hidden;
+  border: 1px dashed var(--border-accent);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(224, 123, 69, 0.1), rgba(95, 179, 179, 0.06)),
+    rgba(8, 9, 11, 0.76);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(236, 230, 218, 0.04), var(--shadow-float);
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+  animation: termDropIn 180ms var(--ease-out);
+}
+.termview__drop::before {
+  content: '';
+  position: absolute;
+  inset: -40% -10%;
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.11) 50%, transparent 62%);
+  transform: translateX(-45%);
+  animation: termDropScan 1.55s var(--ease-out) infinite;
+}
+.termview__dropIcon {
+  position: relative;
+  z-index: 1;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-md);
+  color: var(--accent-hi);
+  background: rgba(224, 123, 69, 0.12);
+  border: 1px solid var(--border-accent);
+}
+.termview__dropTitle {
+  position: relative;
+  z-index: 1;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+.termview__dropSub {
+  position: relative;
+  z-index: 1;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+.termattach {
+  position: absolute;
+  left: 9px;
+  bottom: 9px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: min(360px, calc(100% - 18px));
+  min-height: 48px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: rgba(20, 22, 28, 0.92);
+  box-shadow: var(--shadow-float);
+  backdrop-filter: blur(14px);
+  animation: termAttachIn 220ms var(--ease-spring);
+}
+.termattach--ready {
+  border-color: rgba(224, 123, 69, 0.28);
+}
+.termattach__thumb {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 34px;
+  border-radius: var(--r-sm);
+  object-fit: cover;
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+}
+.termattach__body {
+  min-width: 0;
+  flex: 1;
+}
+.termattach__name {
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.termattach__path {
+  margin-top: 1px;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.termattach__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: 2px;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+}
+.termattach__ok {
+  color: var(--signal);
+}
+.termattach__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.termattach__send {
+  color: var(--accent-hi);
+  background: var(--accent-wash);
+  border-color: rgba(224, 123, 69, 0.22);
+}
+.termattach__loader {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid rgba(236, 230, 218, 0.12);
+  border-top-color: var(--accent-hi);
+  animation: termAttachSpin 760ms linear infinite;
+}
+.termpane__dead {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+}
+
+@keyframes termDropIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes termDropPulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(224, 123, 69, 0); }
+  50% { box-shadow: 0 0 24px rgba(224, 123, 69, 0.22); }
+}
+
+@keyframes termDropScan {
+  from { transform: translateX(-50%); }
+  to { transform: translateX(50%); }
+}
+
+@keyframes termAttachIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes termAttachFloat {
+  from { transform: translateY(1px); }
+  to { transform: translateY(-2px); }
+}
+
+@keyframes termAttachSpin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .termview--dragging::before,
+  .termview__drop,
+  .termview__drop::before,
+  .termview--saving .termview__attach svg,
+  .termattach,
+  .termattach__loader {
+    animation: none;
+  }
+}
+

@@ -1,0 +1,405 @@
+/* ====================================================================
+   cockpiT — git panel
+   Git overview, status/diff surfaces and the local command run row.
+   Carved from components.css (pure move).
+   ==================================================================== */
+
+/* ---------- git ---------- */
+.gitcounts { display: flex; gap: var(--sp-2); }
+.git__overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+.git__statusCard {
+  padding: var(--sp-4);
+  min-width: 0;
+}
+.git__statusHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+.git__repoName {
+  margin-top: 4px;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.git__metaGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+.git__metaGrid div {
+  padding: var(--sp-2);
+  border-radius: var(--r-sm);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  min-width: 0;
+}
+.git__metaGrid span {
+  display: block;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 3px;
+}
+.git__metaGrid strong {
+  display: block;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.git__notice {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  padding: var(--sp-2);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-xs);
+}
+.git__notice--warning {
+  background: var(--warning-wash);
+  color: var(--warning);
+}
+.git__wideAction {
+  width: 100%;
+  justify-content: center;
+  margin-top: var(--sp-3);
+}
+.git__bootstrap {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+}
+.git__bootstrapHint {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.git__bootstrapRow {
+  display: flex;
+  gap: var(--sp-2);
+}
+.git__bootstrapInput {
+  flex: 1;
+  min-width: 0;
+  padding: 7px var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  outline: none;
+}
+.git__bootstrapInput:focus {
+  border-color: var(--border-accent);
+}
+.git__bootstrapToggle {
+  display: flex;
+  gap: 4px;
+}
+.git__updateCopy {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  min-height: 36px;
+}
+.git__progress {
+  height: 7px;
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  margin-top: var(--sp-3);
+}
+.git__progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--signal));
+  transition: width var(--dur) var(--ease-out);
+}
+.git__cols {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: var(--sp-3);
+  align-items: stretch;
+  min-height: 440px;
+}
+.git__files { padding: var(--sp-2); max-height: 560px; }
+.gitgroup { margin-bottom: var(--sp-2); }
+.gitgroup__title { padding: var(--sp-2) var(--sp-2) 4px; }
+.gitfile {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  text-align: left;
+  padding: 6px var(--sp-2);
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  transition:
+    background-color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    color var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-spring);
+}
+.gitfile:hover { background: var(--surface-1); color: var(--text); transform: translateX(2px); }
+.gitfile--active {
+  background: var(--surface-2);
+  border-color: var(--border-accent);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.gitfile__badge {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+.gitfile__badge--staged { background: var(--success-wash); color: var(--success); }
+.gitfile__badge--unstaged { background: var(--warning-wash); color: var(--warning); }
+.gitfile__badge--untracked { background: var(--surface-3); color: var(--text-muted); }
+.gitfile__badge--conflict { background: var(--danger-wash); color: var(--danger); }
+.gitfile__path {
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.git__diff { display: flex; flex-direction: column; min-width: 0; }
+.git__diffHead {
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.git__diffBody { flex: 1; min-height: 0; max-height: 460px; }
+.diff {
+  margin: 0;
+  padding: var(--sp-3) 0;
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+}
+.diff__line {
+  display: block;
+  padding: 0 var(--sp-4);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.diff__line--add { background: rgba(147, 196, 106, 0.1); color: var(--success); }
+.diff__line--del { background: rgba(226, 86, 61, 0.1); color: var(--danger); }
+.diff__line--hunk { color: var(--info); background: var(--surface-inset); }
+.diff__line--meta { color: var(--text-faint); }
+/* ---------- git local run ---------- */
+.git__diff--solo {
+  min-height: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 120% at 100% 0%, var(--accent-wash) 0%, transparent 42%),
+    var(--bg);
+}
+.git__run {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-5);
+  min-height: 0;
+}
+.git__runHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+.git__runIcon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.git__runTitle { font-size: var(--fs-h1); margin: 2px 0 4px; }
+.git__runSub {
+  margin: 0;
+  max-width: 560px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+}
+.git__runProcs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-top: auto;
+}
+/* solo (clean tree): keep the hero copy + run rows compact at the top and
+   let the action bar anchor the bottom, instead of floating the rows into a
+   dead vertical gap */
+.git__diff--solo .git__run { flex: 0 0 auto; gap: var(--sp-4); }
+.git__diff--solo .git__runProcs { margin-top: var(--sp-4); }
+.git__diff--solo .git__runBar { margin-top: auto; }
+.runproc {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  transition:
+    border-color var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-spring);
+}
+/* premium hover: lift + tone-matched glow, never a flat grey fill */
+.runproc:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
+  box-shadow: 0 12px 30px -16px rgba(0, 0, 0, 0.72);
+}
+.runproc--dev:hover {
+  border-color: var(--border-accent);
+  box-shadow: 0 14px 34px -16px var(--accent-glow);
+}
+.runproc--test:hover {
+  border-color: color-mix(in srgb, var(--signal) 42%, var(--border));
+  box-shadow: 0 14px 34px -16px rgba(205, 232, 95, 0.3);
+}
+.runproc--live {
+  border-color: color-mix(in srgb, var(--success) 38%, var(--border));
+  background:
+    linear-gradient(90deg, rgba(147, 196, 106, 0.06), transparent 60%),
+    var(--surface-1);
+}
+.runproc__icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  transition: color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);
+}
+/* neutral until running — the live state (green) is the only resting light */
+.runproc__icon--dev { color: var(--text-muted); }
+.runproc__icon--test { color: var(--text-muted); }
+.runproc--dev:hover .runproc__icon { color: var(--accent); border-color: var(--border-accent); background: var(--accent-wash); }
+.runproc--test:hover .runproc__icon { color: var(--signal); border-color: var(--signal-dim); background: var(--signal-dim); }
+.runproc--live .runproc__icon { color: var(--success); border-color: color-mix(in srgb, var(--success) 45%, var(--border)); }
+/* live indicator only — hidden when idle so the icon tile stays clean */
+.runproc__pulse {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-spring);
+}
+.runproc__pulse--live {
+  opacity: 1;
+  transform: scale(1);
+  box-shadow: 0 0 0 3px rgba(147, 196, 106, 0.22);
+}
+.runproc__body { flex: 1; min-width: 0; }
+.runproc__nameRow { display: flex; align-items: center; gap: var(--sp-2); }
+.runproc__name { font-size: var(--fs-body); font-weight: 600; color: var(--text); }
+.runproc__sub {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: 3px;
+  min-width: 0;
+}
+.runproc__cmd {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.runproc__hint {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.runproc__right { display: flex; align-items: center; gap: var(--sp-2); flex-shrink: 0; }
+.btn--run {
+  border-color: var(--border-accent);
+  color: var(--accent-hi);
+  background: var(--accent-wash);
+  font-weight: 600;
+}
+.btn--run:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: 0 8px 22px -10px var(--accent-glow);
+  transform: translateY(-1px);
+}
+.git__runBar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--border);
+}
+.git__runBarStatus {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.git__runBarSpacer { flex: 1; }
+.runproc__dot {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--text-faint);
+  transition: background-color var(--dur) var(--ease-out);
+}
+.runproc__dot--live {
+  background: var(--success);
+  box-shadow: 0 0 0 3px rgba(147, 196, 106, 0.18);
+}
+
