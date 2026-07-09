@@ -51,7 +51,7 @@ name-collision gap — `shared/memory-pipeline.ts` still has no direct suite
 (`test/memory-pipeline.test.ts` covers the *service*). Fold into B2.
 **Effort:** S (residual)
 
-### 0.3 [ ] Council review of THIS roadmap — dogfood drill (Baz's idea)
+### 0.3 [~] Council review of THIS roadmap — dogfood drill (Baz's idea)
 Two birds: (1) the roadmap gets adversarial review from independent engines before
 we commit weeks to it; (2) the council itself gets a real end-to-end live run —
 multi-engine seats, per-seat fallback, `council_sessions` persistence, the
@@ -71,7 +71,7 @@ Track A/B finding.
 > leak resources with no cleanup owner. Highest net-risk track; mostly independent
 > S/M tasks — good parallel swarm cards.
 
-### A1 [ ] Prune stale `.cockpit-worktrees/` at boot — top-ranked gap
+### A1 [x] Prune stale `.cockpit-worktrees/` at boot — top-ranked gap
 `SwarmWorktrees` has only `create`/`removeIfClean`; nothing enumerates or prunes.
 Every crash/park/abandon leaks a git worktree + `swarm/<slug>` branch, unbounded.
 **Do:** `SwarmWorktrees.prune(projectPath)` (`git worktree prune` + enumerate,
@@ -81,7 +81,7 @@ orphan-parking loop (`SwarmService.ts:162`).
 **Verify:** unit test; live drill: crash mid-card, relaunch → orphan pruned, dirty
 worktree preserved + reported. **Effort:** M
 
-### A2 [ ] Kill orphaned CLI children on quit
+### A2 [x] Kill orphaned CLI children on quit
 Council seats (`EngineRunner.ts:48-52`, 360s timeout) and Hermes chat (5 min) spawn
 `execFile` children that `Services.shutdown()` never tracks — on quit they reparent
 and burn CPU/API spend until self-timeout.
@@ -89,26 +89,26 @@ and burn CPU/API spend until self-timeout.
 children; call from `Services.shutdown()` (`Services.ts:409`) before `db.close()`.
 **Verify:** quit during a council run → `pgrep` finds no `claude`/`codex`. **Effort:** M
 
-### A3 [ ] Guard resumed cards against a missing worktree
+### A3 [x] Guard resumed cards against a missing worktree
 `startCard` reuses persisted `worktree_path` (`SwarmService.ts:284`) without
 `existsSync`. On miss: recreate or park with a sentinel notice. **Effort:** S
 
-### A4 [ ] Boot-time process-liveness audit (zombie PIDs)
+### A4 [x] Boot-time process-liveness audit (zombie PIDs)
 Reconciliation is DB-row-only; stored `terminal_sessions.pid`s are never
 liveness-checked. `reconcileZombies()` step in the `Services` constructor.
 **Effort:** M · after A1/A2.
 
-### A5 [ ] PTY `killAll`: process-group kill + SIGKILL escalation
+### A5 [x] PTY `killAll`: process-group kill + SIGKILL escalation
 `TerminalManager.killAll` (`:284-296`) sends SIGTERM and doesn't wait; a child
 ignoring SIGTERM survives quit. **Effort:** S
 
-### A6 [ ] Council run: durable "in-progress" marker
+### A6 [x] Council run: durable "in-progress" marker
 `CouncilService.run()` persists nothing until the last line (`:94-183`); a mid-run
 crash is silently lost. Insert a `pending` row at start (`:95`), finalize or mark
 `failed`; boot sweep flips stale `pending` → `failed`. **Effort:** S–M · low damage,
 do last in track.
 
-### A7 [ ] Hermes quick wins
+### A7 [x] Hermes quick wins
 - [ ] **Apply the measured `-t memory,skills` flag** — live-tested ~20–25% per-turn
   latency cut, validated, never applied. Zero design work; do day one. (S)
 - [ ] Persist `HermesChatService.histories` (in-memory Map, `:43`) per-project so
@@ -122,7 +122,7 @@ tests + one scripted live drill.
 
 ## Track B — Contract, tests & CI (~1 week, parallelizable)
 
-### B1 [ ] Mock parity test — close the contract's weak leg
+### B1 [x] Mock parity test — close the contract's weak leg
 `test/ipc-contract.test.ts` scans main + preload but **not** `src/lib/mock.ts`
 (1251 ln). The mock is only compile-bound to `CockpitApi` (method shape) — behavior
 drifts silently, and the whole localhost screenshot workflow rides on it.
@@ -130,7 +130,7 @@ drifts silently, and the whole localhost screenshot workflow rides on it.
 `handle(...)` set in `registerIpc.ts`; where cheap, assert mock returns parse under
 the same Zod schemas as real handlers. **Effort:** M
 
-### B2 [ ] Suites for untested side-effecting services (ranked)
+### B2 [~] Suites for untested side-effecting services (ranked)
 1. `Services.ts` (418 ln) — DI-root wiring smoke test: construct on fake DB, assert
    every service exists, `shutdown()` runs clean.
 2. `AppUpdateService.ts` (278) — update state machine (mock electron-updater; the
@@ -140,7 +140,7 @@ the same Zod schemas as real handlers. **Effort:** M
 5. `RailwayService.ts` + `railwayCli.ts` (236) — spawn seams behind a fake exec.
 **Effort:** L total (each item S–M, independent — good swarm cards)
 
-### B3 [ ] Enforce coverage + lint in CI
+### B3 [x] Enforce coverage + lint in CI
 - vitest coverage is configured but `npm test` never runs it — add `test:coverage`
   with thresholds (start from the first measured floor, ratchet up; don't invent
   80% on day one).
@@ -155,12 +155,12 @@ service above 150 lines; coverage + lint measured on every release.
 
 ## Track C — E2E smoke layer (~1 week)
 
-### C1 [ ] Localhost E2E against the mock build (Playwright)
+### C1 [x] Localhost E2E against the mock build (Playwright)
 3–5 journeys, no more: boot → dashboard · terminal renders + blocks fold · swarm
 card create → editor round-trip · memory note open/edit · sentinel toast + bell.
 Headless off `npm run build && node serve.mjs`. **Effort:** M
 
-### C2 [ ] Packaged-app smoke — the real gap
+### C2 [!] Packaged-app smoke — the real gap
 One scripted drill against the built `.app`: launches, window appears, a real pty
 spawns. Closes the **Command Blocks live verification** rider carried since Gate 3
 (bash + packaged-app OSC 133). **Effort:** M · manual-scripted first.
@@ -174,7 +174,7 @@ spawns. Closes the **Command Blocks live verification** rider carried since Gate
 > Survey verdict: the architecture holds (gate is sound, secrets clean, no
 > renderer/MCP path to arbitrary exec). These are the ranked residual findings.
 
-### D1 [ ] Redact Hermes chat outbound — highest security finding (low-med)
+### D1 [x] Redact Hermes chat outbound — highest security finding (low-med)
 `HermesChatService.ask()` sends the user message + full accumulated transcript to
 the `hermes` CLI (→ OpenRouter) with **no `redactText`** (`HermesChatService.ts:83-104`).
 A pasted secret goes out verbatim. Run message + history through `redactText`
@@ -185,25 +185,25 @@ boundary — document that limit in CLAUDE.md's security section. **Effort:** S
 `SentinelService.report` now redacts title/summary/context centrally, covering
 every sensor before a signal persists, reaches the renderer, or leaves via triage.
 
-### D3 [ ] Auth token for the loopback MCP server (low)
+### D3 [x] Auth token for the loopback MCP server (low)
 `HermesMcpServer` is loopback-only + DNS-rebinding-protected but **unauthenticated**
 — any local process can drive the (no-shell) tool set. Add a per-session bearer
 token generated in main, passed to the hermes CLI env. **Effort:** S–M
 
-### D4 [ ] `guarded()` rule as executable policy (informational, load-bearing)
+### D4 [x] `guarded()` rule as executable policy (informational, load-bearing)
 The gate has exactly one live call site (`git_force_push`, `registerIpc.ts:185`)
 — safe today only because deploy/env/db handlers don't exist. Add a test that
 fails when a handler whose channel name matches gated-action patterns is
 registered without `guarded()` — so the CLAUDE.md rule survives the day Railway
 mutations land. **Effort:** S
 
-### D5 [ ] Electron major upgrade
+### D5 [!] Electron major upgrade
 `electron ^33` is a full major behind — trailing Chromium/V8 security patches.
 Upgrade + `npm run rebuild` (better-sqlite3 ABI) + a full app:refresh live pass.
 **Effort:** M (mostly re-verification) · schedule after Track C exists to catch
 regressions.
 
-### D6 [ ] CSP polish (minor)
+### D6 [x] CSP polish (minor)
 `img-src … https:` allows arbitrary remote images; tighten if nothing depends on
 it. **Effort:** S
 
@@ -217,7 +217,7 @@ exception); MCP server authenticated; gate-bypass regression impossible by test.
 > Survey verdict: backend >> UI. These have data + IPC + mock already; they are
 > mostly renderer-only work (safe to swarm in parallel with A/B).
 
-### E1 [ ] Unified AI-spend view — highest user-visible impact
+### E1 [x] Unified AI-spend view — highest user-visible impact
 Usage panel shows only Claude/Codex quota rings; **OpenRouter/Hermes spend is
 absent** (`UsagePanel.tsx` has zero openRouter references; it lives only in the
 rail footer `UsageStrip.tsx:120-122`). `AgentUsageService.getReport()` returns
@@ -225,22 +225,22 @@ only `[claude, codex]` (`:59`). One screen: claude + codex + openrouter, per
 project and total. Data + mock (`openRouterUsageSnapshot`) already exist.
 **Effort:** M
 
-### E2 [ ] Approvals history + a real Audit view
+### E2 [x] Approvals history + a real Audit view
 `api.approvals.list` returns all statuses but the UI renders only `pending`
 (`DashboardPanel.tsx:140,249-263`); the audit log is a capped dashboard strip
 (`:126-131,342-372`). One panel: filterable audit trail + past approval decisions
 (`ApprovalCard.tsx:42-58` already renders approved/denied states). **Effort:** M
 
-### E3 [ ] Sentinel full feed view
+### E3 [x] Sentinel full feed view
 Only a 20-item bell popover exists (`SentinelBell.tsx:35`); `sentinel:list`
 supports full filterable history. Small panel or a Logs-tab section. **Effort:** S–M
 
-### E4 [ ] Council standalone surface
+### E4 [x] Council standalone surface
 Council is reachable only as a swarm-card gate. Add a minimal "convene council"
 entry point outside cards (project-level question mode) — this also makes the
 Track 0.3 dogfood repeatable. **Effort:** M
 
-### E5 [ ] Chat-path decision: revive or excise
+### E5 [x] Chat-path decision: revive or excise
 `CHAT_ENABLED=false` keeps 600+ lines dormant (`RightPanel.tsx` 562,
 launcher, Logs "Send to AI"). The router "local" recommendation is a dead-end
 even when enabled (`RightPanel.tsx:230-251` has no `local`/`chat` case — silently
@@ -249,7 +249,7 @@ now the chat — either fold the router surface into Hermes and delete the dorma
 path, or fix and re-enable. Don't carry both. **Effort:** S (decision) + M (either
 branch)
 
-### E6 [ ] Micro-polish batch (S total)
+### E6 [x] Micro-polish batch (S total)
 - `RailwayPanel` `EnvTable` empty state (renders a bare `<table>`, `:124-161`).
 - `:active` rules for `sentinelRow` / `sentinelPopover__markAll` (DESIGN.md
   requires all three states).
@@ -263,16 +263,16 @@ in one glance; no dormant/dead UI code paths left undecided.
 
 ## Track F — Performance & code health (background track, fill slack)
 
-- [ ] **F1** Split `MemoryGraph.tsx` — 930 ln, the only file over the 800 cap;
+- [x] **F1** Split `MemoryGraph.tsx` — 930 ln, the only file over the 800 cap;
   also hoist per-frame `Map` rebuilds (`:488,696,707`) out of the rAF loop. (M)
-- [ ] **F2** Split `src/styles/components.css` — **7035 lines**, a catch-all
+- [x] **F2** Split `src/styles/components.css` — **7035 lines**, a catch-all
   monolith; carve per-feature files (swarm.css already models this). (M, mechanical)
 - [ ] **F3** Watch-list: `GitPanel.tsx` 784 · `HermesWidget.tsx` 649 ·
   `TerminalsPanel.tsx` 617 — split at next substantive touch, not before. (—)
-- [ ] **F4** Virtualize the two lists that will actually grow: log stream
+- [x] **F4** Virtualize the two lists that will actually grow: log stream
   (`LogsPanel.tsx:161`) and memory notes (`MemoryNoteList.tsx:70`). Kanban/blocks
   are naturally bounded — skip. (M)
-- [ ] **F5** Delete dead code found by survey: `RouteCard.tsx` (folds into E5). (S)
+- [x] **F5** Delete dead code found by survey: `RouteCard.tsx` (folds into E5). (S)
 
 ---
 
@@ -282,15 +282,15 @@ in one glance; no dormant/dead UI code paths left undecided.
 > memory distiller all *emit judgments*; nothing records whether they were right.
 > Requires `docs/plans/outcome-tracking-plan.md` first (0.1 rule).
 
-- [ ] **G1** Outcome events on card + council lifecycle: spec-gate verdict → card
+- [x] **G1** Outcome events on card + council lifecycle: spec-gate verdict → card
   fate (shipped / reworked / abandoned); review "ship it" → post-merge
   reverts/fix-commits touching the same files.
-- [ ] **G2** Memory recall telemetry: ledger logs writes; log *reads/recalls* so
+- [x] **G2** Memory recall telemetry: ledger logs writes; log *reads/recalls* so
   the 7-day test becomes measurable per note. Feeds the curation feature landing
   in this release.
-- [ ] **G3** Sentinel triage accuracy: verdict vs. what the user did (dismissed /
+- [x] **G3** Sentinel triage accuracy: verdict vs. what the user did (dismissed /
   acted / became a card).
-- [ ] **G4** A read-only "judgment scorecard" surface (Usage-style, no knobs).
+- [x] **G4** A read-only "judgment scorecard" surface (Usage-style, no knobs).
 
 **Gate G:** after ~2 weeks of dogfood we answer with numbers: do spec-gated cards
 fail less? does review catch real bugs? which memory notes earn their keep?
@@ -299,13 +299,13 @@ fail less? does review catch real bugs? which memory notes earn their keep?
 
 ## Track H — Close the Sentinel fix loop (~1 week, after G1 events exist)
 
-- [ ] **H1** Signal → one-click Swarm card (Hermes can already create cards; put
+- [x] **H1** Signal → one-click Swarm card (Hermes can already create cards; put
   the affordance on the signal, carrying its context into the spec).
-- [ ] **H2** Fix verification: when a signal-linked card ships and the signal's
+- [x] **H2** Fix verification: when a signal-linked card ships and the signal's
   dedup key goes quiet, mark it `resolved` (vs. merely `seen`).
-- [ ] **H3** Recurring signal → memory gotcha through the write-gate (verbatim
+- [x] **H3** Recurring signal → memory gotcha through the write-gate (verbatim
   symptom text, per charter).
-- [ ] **H4** Boot re-triage sweep for `triage IS NULL` rows (in-flight triage is
+- [x] **H4** Boot re-triage sweep for `triage IS NULL` rows (in-flight triage is
   volatile — `SentinelService.ts:159` fire-and-forget; nothing retries). Attach in
   the constructor (`:68`), throttled by `MAX_IN_FLIGHT`.
 
@@ -368,4 +368,6 @@ entry here; plan doc before any Track G/I feature (0.1 rule).
 
 | Date | Item | Note |
 |---|---|---|
+| 2026-07-09 | Tracks A–H executed | 22 commits in one multi-agent session (5 waves, 15 subagents). Tests 974→1110 (+136) + 5 Playwright E2E journeys (~4s, 0 flakes). All gates green: typecheck 0, lint 0 warnings, unit 1110/1110, e2e 5/5. Coverage floor enforced (70/80 ratchet, baseline 73.75%); lint added to CI. Migrations V15–V18 appended (hermes_chat_turns, memory_recalls, sentinel outcome, council status). |
+| 2026-07-09 | Deliberately open | **B2 residual**: AgentUsage, LogIntelligence, AppScreenshotService, Railway pair + shared/memory-pipeline sliver still untested. **C2** packaged-app smoke: needs app:refresh consent (Baz). **D5** Electron major upgrade: needs live verification + consent. **0.3** in-app council live run: needs the running app (an argos panel review of the batch stood in). **Gate A live drill** (kill mid-run, relaunch): needs the real app. **Track I**: untouched by design (each item needs a plan doc + Baz decision). E4's cross-session council browser renderer (channel exists, UI pending). |
 | 2026-07-08 | doc | Written from 4 surveys (tests, resilience, UI/UX, security/release/product). Supersedes quality-roadmap draft. Awaiting release intake (Track 0). |
