@@ -137,6 +137,9 @@ function EnvTable() {
         </div>
         <span className="chip chip--warning">masked by default</span>
       </div>
+      {vars.length === 0 ? (
+        <div className="emptyline">No environment variables reported for this service yet.</div>
+      ) : (
       <table className="envtable">
         <tbody>
           {vars.map((v) => (
@@ -154,6 +157,7 @@ function EnvTable() {
           ))}
         </tbody>
       </table>
+      )}
       <div className="railway__envNote">
         Secret values never leave the main process — the renderer only ever receives masked text.
       </div>

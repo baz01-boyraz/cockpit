@@ -126,9 +126,12 @@ export function DashboardPanel() {
   const [activity, setActivity] = useState<AuditEntry[]>([])
   const [showAllActivity, setShowAllActivity] = useState(false)
 
+  // Refetch when a decision lands (pending count changes), not on every
+  // approvals array identity change — each refetch is a full audit IPC.
+  const approvalsCount = approvals.length
   useEffect(() => {
     if (activeProjectId) void cockpit().audit.list(activeProjectId).then(setActivity)
-  }, [activeProjectId, approvals])
+  }, [activeProjectId, approvalsCount])
 
   const errorGroups = useMemo(
     () => (dashboard ? groupErrors(dashboard.recentErrors) : []),
