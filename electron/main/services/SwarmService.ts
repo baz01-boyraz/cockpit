@@ -28,6 +28,7 @@ import {
   type CompletionReport,
 } from '@shared/completion-report'
 import type { DiffStat } from '@shared/review'
+import { composeSignalCardSpec, extractSignalRef } from '@shared/sentinel'
 import type { Db } from '../db/Database'
 import type { CockpitEvents } from '../events'
 import { newId, nowIso } from '../util/ids'
@@ -37,9 +38,17 @@ import type { MemoryRecallService } from './MemoryRecallService'
 import type { SentinelService } from './SentinelService'
 import type { PruneSummary } from './SwarmWorktrees'
 
-/** The narrow sentinel slice the swarm feeds — structural so tests pass
- *  `undefined` (no-op). Sentinel never depends on SwarmService. */
-type SentinelReporter = Pick<SentinelService, 'report'>
+/**
+ * The narrow sentinel slice the swarm uses — structural so tests pass `undefined`
+ * (no-op). `report` raises worker-exit signals (Faz A); `get`/`recordOutcome`
+ * back the H1 signal→card path; `resolveShippedSignal` closes the H2 fix loop when
+ * a signal-linked card ships. Sentinel never depends on SwarmService (the
+ * dependency points one way — Services.ts builds the sentinel first).
+ */
+type SentinelReporter = Pick<
+  SentinelService,
+  'report' | 'get' | 'recordOutcome' | 'resolveShippedSignal'
+>
 
 /** The narrow recall-telemetry slice the swarm feeds (Track G2) — structural so
  *  tests pass `undefined` (no-op). `record` never throws by contract. */
@@ -743,6 +752,34 @@ export class SwarmService {
     return this.board(input.projectId)
   }
 
+  /**
+   * Track H1 — turn a sentinel signal into a Swarm card in one call. Reads the
+   * origin signal (project-scoped), composes a card spec whose body frames the
+   * signal as DATA and carries a hidden provenance marker (so H2 can match the
+   * shipped card back to it), creates the card, then stamps the signal outcome
+   * `card_created` via the existing recordOutcome. The sentinel collaborator is
+   * required for this path (it is always wired in production); an unknown signal
+   * id throws a clear, human-actionable error.
+   */
+  createCardFromSignal(input: { projectId: string; signalId: string }): BoardColumn[] {
+    if (!this.sentinel) {
+      throw new Error('Signal→card is unavailable — the sentinel service is not wired.')
+    }
+    const signal = this.sentinel.get(input.projectId, input.signalId)
+    if (!signal) {
+      throw new Error(
+        `Signal ${input.signalId} was not found in this project — it may have been pruned.`,
+      )
+    }
+    const { title, body } = composeSignalCardSpec(signal)
+    const board = this.createCard({ projectId: input.projectId, title, body })
+    // Provenance on the signal side: mark it as having become a card so the
+    // triage-precision scorecard (Track G3) can tell it mattered. recordOutcome
+    // never throws, so a stamp failure can never unwind the created card.
+    this.sentinel.recordOutcome(input.projectId, signal.id, 'card_created')
+    return board
+  }
+
   updateCard(input: {
     projectId: string
     cardId: string
@@ -825,6 +862,19 @@ export class SwarmService {
           specVerdictKind: this.specVerdictKind(card),
         },
       })
+      // Track H2 — fix verification. If this card was born from a sentinel signal
+      // (its body carries the provenance marker) and that signal's dedup key has
+      // gone quiet since the card was opened, the sentinel resolves it (outcome
+      // 'acted' + seen). resolveShippedSignal never throws, and a card with no
+      // provenance marker is simply skipped — so this can never unwind the ship.
+      const signalId = extractSignalRef(card.body)
+      if (signalId) {
+        this.sentinel?.resolveShippedSignal({
+          projectId,
+          signalId,
+          cardCreatedAt: card.createdAt,
+        })
+      }
       return
     }
     if (

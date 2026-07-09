@@ -1,14 +1,75 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   SentinelService,
+  type SentinelMemorySink,
   type SentinelReviewSink,
   type SentinelTriager,
 } from '../electron/main/services/SentinelService'
 import { CockpitEvents } from '../electron/main/events'
-import { type SentinelSignal, type SentinelTriage } from '../shared/sentinel'
+import {
+  signalFingerprint,
+  type SentinelSignal,
+  type SentinelSource,
+  type SentinelTriage,
+} from '../shared/sentinel'
 import type { Db } from '../electron/main/db/Database'
 import type { CreateReviewInput } from '../electron/main/services/MemoryReviewService'
 import type { ReviewItem } from '../shared/memory-review'
+import type { MemoryHubSnapshot, MemoryNote } from '../shared/memory-hub'
+
+const iso = (msFromNow: number) => new Date(Date.now() + msFromNow).toISOString()
+
+/** Seed a persisted row straight into the fake store (bypassing the cooldown), so
+ *  a test can set up prior same-fingerprint history at chosen timestamps. */
+function seedRow(
+  rows: Row[],
+  over: {
+    projectId: string
+    source: SentinelSource
+    title: string
+    createdAt: string
+    severity?: string
+    summary?: string
+    triage?: string | null
+    status?: string
+  },
+): string {
+  const fingerprint = signalFingerprint({
+    projectId: over.projectId,
+    source: over.source,
+    title: over.title,
+  })
+  rows.push({
+    id: `sig_seed_${rows.length}`,
+    project_id: over.projectId,
+    severity: over.severity ?? 'notice',
+    source: over.source,
+    title: over.title,
+    summary: over.summary ?? 'a recurring problem',
+    context: null,
+    fingerprint,
+    status: over.status ?? 'new',
+    created_at: over.createdAt,
+    triage: over.triage ?? null,
+    outcome: null,
+    outcome_at: null,
+  })
+  return fingerprint
+}
+
+/** A hub write sink whose `list` reports the given existing note slugs (twin check). */
+function makeMemory(existing: string[] = []) {
+  const write = vi.fn((_p: string, _n: string, _c: string) => ({}) as MemoryNote)
+  const list = vi.fn(
+    (_p: string) => ({ notes: existing.map((name) => ({ name })) }) as unknown as MemoryHubSnapshot,
+  )
+  return { memory: { write, list } as unknown as SentinelMemorySink, write, list }
+}
+
+function makeReviewSink() {
+  const create = vi.fn((_input: CreateReviewInput): ReviewItem => ({}) as ReviewItem)
+  return { reviews: { create } as SentinelReviewSink, create }
+}
 
 /** Drain the microtask + macrotask queue so a fire-and-forget `void enrich()` settles. */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -106,13 +167,36 @@ function makeDb() {
             const projectId = args[0] as string
             return { n: rows.filter((r) => r.project_id === projectId && r.status === 'new').length }
           }
+          // get(projectId, id): SELECT * WHERE id = ? AND project_id = ?
+          if (sql.includes('WHERE id = ? AND project_id = ?')) {
+            const [id, projectId] = args as [string, string]
+            const r = rows.find((x) => x.id === id && x.project_id === projectId)
+            return r ? { ...r } : undefined
+          }
           return undefined
         },
         all: (...args: unknown[]) => {
+          // H4 retriage sweep: untriaged recent notice/alert rows.
+          if (sql.includes('triage IS NULL')) {
+            const [cutoff, limit] = args as [string, number]
+            return rows
+              .filter(
+                (r) =>
+                  r.triage === null &&
+                  (r.severity === 'notice' || r.severity === 'alert') &&
+                  r.created_at >= cutoff,
+              )
+              .slice()
+              .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+              .slice(0, limit)
+              .map((r) => ({ ...r }))
+          }
           if (sql.includes('AND fingerprint = ?')) {
             const [projectId, fingerprint] = args as [string, string]
             return rows
               .filter((r) => r.project_id === projectId && r.fingerprint === fingerprint)
+              .slice()
+              .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
               .map((r) => ({ fingerprint: r.fingerprint, createdAt: r.created_at }))
           }
           // list: SELECT * WHERE project_id = ? ORDER BY created_at DESC LIMIT ?
@@ -393,5 +477,143 @@ describe('SentinelService enrich (Faz B triage)', () => {
     expect(alerts).toHaveLength(1)
     expect(store.rows).toHaveLength(1)
     expect(store.rows[0].status).toBe('new')
+  })
+})
+
+describe('SentinelService.get (Track H1 read path)', () => {
+  it('returns a project-scoped signal and null for an unknown/foreign id', () => {
+    const store = makeDb()
+    const svc = new SentinelService(store.db, new CockpitEvents())
+    const sig = svc.report({ projectId: 'p1', severity: 'notice', source: 'approval', title: 'A', summary: 's' })!
+    expect(svc.get('p1', sig.id)?.id).toBe(sig.id)
+    // Foreign project can't read it; a missing id is null.
+    expect(svc.get('p2', sig.id)).toBeNull()
+    expect(svc.get('p1', 'sig_missing')).toBeNull()
+  })
+})
+
+describe('SentinelService.resolveShippedSignal (Track H2)', () => {
+  it('resolves quiet — outcome acted + seen — when the key stayed quiet since the card opened', () => {
+    const store = makeDb()
+    const svc = new SentinelService(store.db, new CockpitEvents())
+    const sig = svc.report({ projectId: 'p1', severity: 'notice', source: 'worker-exit', title: 'Worker crashed', summary: 's' })!
+    const cardCreatedAt = iso(1000) // after the signal
+    expect(svc.resolveShippedSignal({ projectId: 'p1', signalId: sig.id, cardCreatedAt })).toBe(true)
+    const row = store.rows.find((r) => r.id === sig.id)!
+    expect(row.outcome).toBe('acted')
+    expect(row.status).toBe('seen')
+  })
+
+  it('does NOT resolve when the dedup key re-fired after the card was created (fix did not hold)', () => {
+    const store = makeDb()
+    const svc = new SentinelService(store.db, new CockpitEvents())
+    const sig = svc.report({ projectId: 'p1', severity: 'notice', source: 'worker-exit', title: 'Worker crashed', summary: 's' })!
+    const cardCreatedAt = iso(1000)
+    // A newer same-fingerprint occurrence AFTER the card — the bug came back.
+    seedRow(store.rows, { projectId: 'p1', source: 'worker-exit', title: 'Worker crashed', createdAt: iso(6000) })
+    expect(svc.resolveShippedSignal({ projectId: 'p1', signalId: sig.id, cardCreatedAt })).toBe(false)
+    expect(store.rows.find((r) => r.id === sig.id)!.outcome).toBeNull()
+  })
+
+  it('returns false for an unknown signal id and never throws', () => {
+    const store = makeDb()
+    const svc = new SentinelService(store.db, new CockpitEvents())
+    expect(() =>
+      expect(svc.resolveShippedSignal({ projectId: 'p1', signalId: 'sig_nope', cardCreatedAt: iso(0) })).toBe(false),
+    ).not.toThrow()
+  })
+})
+
+describe('SentinelService recurrence gotcha (Track H3)', () => {
+  it('routes a charter gotcha on the Nth occurrence — accept lands straight in the hub with verbatim symptom', () => {
+    const store = makeDb()
+    // Two prior persisted occurrences, both older than the cooldown window.
+    seedRow(store.rows, { projectId: 'p1', source: 'log-intelligence', title: 'Build failed on alias', createdAt: '2020-01-01T00:00:00.000Z' })
+    seedRow(store.rows, { projectId: 'p1', source: 'log-intelligence', title: 'Build failed on alias', createdAt: '2020-01-02T00:00:00.000Z' })
+    const { memory, write } = makeMemory([])
+    const { reviews, create } = makeReviewSink()
+    const svc = new SentinelService(store.db, new CockpitEvents(), undefined, undefined, reviews, memory)
+
+    // The 3rd occurrence persists (the old ones expired) → occurrences reaches the threshold.
+    const sig = svc.report({ projectId: 'p1', severity: 'notice', source: 'log-intelligence', title: 'Build failed on alias', summary: 'cannot find module @shared/x' })
+    expect(sig).not.toBeNull()
+    // accept: justified, deduped, secret-free → written directly, not queued.
+    expect(write).toHaveBeenCalledTimes(1)
+    expect(create).not.toHaveBeenCalled()
+    const [, slug, content] = write.mock.calls[0]
+    expect(slug).toBe('signal-build-failed-on-alias')
+    expect(content).toContain('cannot find module @shared/x') // verbatim symptom text
+  })
+
+  it('routes to the review queue when a twin note already exists (gate → review, not direct)', () => {
+    const store = makeDb()
+    seedRow(store.rows, { projectId: 'p1', source: 'approval', title: 'Approval keeps timing out', createdAt: '2020-01-01T00:00:00.000Z' })
+    seedRow(store.rows, { projectId: 'p1', source: 'approval', title: 'Approval keeps timing out', createdAt: '2020-01-02T00:00:00.000Z' })
+    const { memory, write } = makeMemory(['signal-approval-keeps-timing-out']) // twin in hub
+    const { reviews, create } = makeReviewSink()
+    const svc = new SentinelService(store.db, new CockpitEvents(), undefined, undefined, reviews, memory)
+
+    svc.report({ projectId: 'p1', severity: 'notice', source: 'approval', title: 'Approval keeps timing out', summary: 's' })
+    expect(write).not.toHaveBeenCalled()
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(create.mock.calls[0][0].slug).toBe('signal-approval-keeps-timing-out')
+  })
+
+  it('does NOT route below the threshold (a second occurrence is not yet a pattern)', () => {
+    const store = makeDb()
+    seedRow(store.rows, { projectId: 'p1', source: 'council', title: 'Council seat fell back', createdAt: '2020-01-01T00:00:00.000Z' })
+    const { memory, write } = makeMemory([])
+    const { reviews, create } = makeReviewSink()
+    const svc = new SentinelService(store.db, new CockpitEvents(), undefined, undefined, reviews, memory)
+
+    svc.report({ projectId: 'p1', severity: 'notice', source: 'council', title: 'Council seat fell back', summary: 's' })
+    expect(write).not.toHaveBeenCalled()
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('fires at most once per key per process (a suppressed repeat routes nothing more)', () => {
+    const store = makeDb()
+    seedRow(store.rows, { projectId: 'p1', source: 'log-intelligence', title: 'Recurring boom', createdAt: '2020-01-01T00:00:00.000Z' })
+    seedRow(store.rows, { projectId: 'p1', source: 'log-intelligence', title: 'Recurring boom', createdAt: '2020-01-02T00:00:00.000Z' })
+    const { memory, write } = makeMemory([])
+    const svc = new SentinelService(store.db, new CockpitEvents(), undefined, undefined, undefined, memory)
+
+    svc.report({ projectId: 'p1', severity: 'notice', source: 'log-intelligence', title: 'Recurring boom', summary: 's' })
+    // A same-fingerprint repeat inside the cooldown is suppressed and routes nothing.
+    svc.report({ projectId: 'p1', severity: 'notice', source: 'log-intelligence', title: 'Recurring boom', summary: 's' })
+    expect(write).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('SentinelService boot re-triage sweep (Track H4)', () => {
+  it('re-enqueues a recent untriaged notice row and persists the verdict', async () => {
+    const store = makeDb()
+    seedRow(store.rows, { projectId: 'p1', source: 'worker-exit', title: 'Stranded notice', createdAt: iso(-60_000), severity: 'notice', triage: null })
+    const verdict = triageVerdict()
+    const triage = vi.fn(async () => verdict)
+    // Construction alone kicks off the fire-and-forget sweep.
+    new SentinelService(store.db, new CockpitEvents(), undefined, { triage })
+    await flush()
+    expect(triage).toHaveBeenCalledTimes(1)
+    expect(store.rows.find((r) => r.title === 'Stranded notice')!.triage).toBe(JSON.stringify(verdict))
+  })
+
+  it('skips rows older than the 48h window and skips info severity', async () => {
+    const store = makeDb()
+    seedRow(store.rows, { projectId: 'p1', source: 'worker-exit', title: 'Old notice', createdAt: iso(-72 * 3600_000), severity: 'notice' })
+    seedRow(store.rows, { projectId: 'p1', source: 'council', title: 'Recent info', createdAt: iso(-60_000), severity: 'info' })
+    const triage = vi.fn(async () => triageVerdict())
+    new SentinelService(store.db, new CockpitEvents(), undefined, { triage })
+    await flush()
+    expect(triage).not.toHaveBeenCalled()
+  })
+
+  it('is an immediate no-op with no triager (spine-only build)', async () => {
+    const store = makeDb()
+    seedRow(store.rows, { projectId: 'p1', source: 'worker-exit', title: 'Untriaged', createdAt: iso(-60_000), severity: 'alert', triage: null })
+    // No triager → the sweep returns early; the row stays untriaged.
+    new SentinelService(store.db, new CockpitEvents())
+    await flush()
+    expect(store.rows.find((r) => r.title === 'Untriaged')!.triage).toBeNull()
   })
 })

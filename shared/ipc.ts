@@ -11,7 +11,8 @@
  */
 import type { ClaudeRunOptions } from './claude-run'
 import type { DiffStat, ReviewResult } from './review'
-import type { CouncilResult, ScorecardEntry } from './council'
+import type { CouncilResult, CouncilSessionSummary, ScorecardEntry } from './council'
+import type { OutcomeScorecard } from './outcomes'
 import type { MemoryHubSnapshot, MemoryNote } from './memory-hub'
 import type { MemoryHealth } from './memory-health'
 import type { CaptureResult } from './memory-pipeline'
@@ -111,6 +112,9 @@ export const IPC = {
   reviewDiffStat: 'review:diffStat',
   councilRun: 'council:run',
   councilScorecard: 'council:scorecard',
+  councilSessions: 'council:sessions',
+
+  outcomesScorecard: 'outcomes:scorecard',
 
   memoryList: 'memory:list',
   memoryRead: 'memory:read',
@@ -140,6 +144,7 @@ export const IPC = {
   sentinelMarkSeen: 'sentinel:markSeen',
   sentinelUnseenCount: 'sentinel:unseenCount',
   sentinelRecordOutcome: 'sentinel:recordOutcome',
+  sentinelCreateCard: 'sentinel:createCard',
 
   secretSet: 'secret:set',
   secretHas: 'secret:has',
@@ -379,6 +384,23 @@ export interface CockpitApi {
      * rank) first. Read-only; the merge math is the pure `computeScorecard`.
      */
     scorecard(projectId: string): Promise<ScorecardEntry[]>
+    /**
+     * Recent persisted council sessions for a project as content-free headers
+     * (ids, mode, verdict kind, run status, the redacted question) — the read
+     * side of the `council_sessions` history. Read-only; no seat prose or
+     * diff/spec text crosses the bridge.
+     */
+    sessions(projectId: string): Promise<CouncilSessionSummary[]>
+  }
+  outcomes: {
+    /**
+     * The read-only judgment scorecard (Track G4): card-fate mix + gate
+     * calibration, spec-gate ship-rate leverage, sentinel triage precision,
+     * memory earned-keep, and the best council seat — all per-project, all
+     * derived from the append-only audit trail + existing read models. These are
+     * correlations, never proofs; the surface must not present them as causal.
+     */
+    scorecard(projectId: string): Promise<OutcomeScorecard>
   }
   memory: {
     /**
@@ -496,6 +518,14 @@ export interface CockpitApi {
      * triage-precision scorecard — the machine never changes behavior from it.
      */
     recordOutcome(projectId: string, id: string, outcome: SentinelOutcome): Promise<number>
+    /**
+     * Track H1 — turn a signal into a Swarm card in one call. Main reads the origin
+     * signal, composes a card spec framing the signal as data (with hidden
+     * provenance so a shipped card can be matched back to it), creates the card,
+     * and stamps the signal outcome `card_created`. Returns the updated Swarm board;
+     * an unknown/foreign signal id rejects.
+     */
+    createCard(projectId: string, signalId: string): Promise<BoardColumn[]>
     /**
      * Fires when a fresh signal is recorded, so the feed/badge update without
      * polling. `notice`/`alert` also drive a renderer toast; `alert` additionally
@@ -633,6 +663,8 @@ export interface IpcResultMap {
   reviewDiffStat: R<CockpitApi['review']['diffStat']>
   councilRun: R<CockpitApi['council']['run']>
   councilScorecard: R<CockpitApi['council']['scorecard']>
+  councilSessions: R<CockpitApi['council']['sessions']>
+  outcomesScorecard: R<CockpitApi['outcomes']['scorecard']>
   memoryList: R<CockpitApi['memory']['list']>
   memoryRead: R<CockpitApi['memory']['read']>
   memoryWrite: R<CockpitApi['memory']['write']>
@@ -659,6 +691,7 @@ export interface IpcResultMap {
   sentinelMarkSeen: R<CockpitApi['sentinel']['markSeen']>
   sentinelUnseenCount: R<CockpitApi['sentinel']['unseenCount']>
   sentinelRecordOutcome: R<CockpitApi['sentinel']['recordOutcome']>
+  sentinelCreateCard: R<CockpitApi['sentinel']['createCard']>
   secretSet: R<CockpitApi['secrets']['set']>
   secretHas: R<CockpitApi['secrets']['has']>
   secretDelete: R<CockpitApi['secrets']['delete']>

@@ -13,6 +13,7 @@ import type { Db } from '../db/Database'
 import type { CockpitEvents } from '../events'
 import { logFatal } from '../logging'
 import { newId, nowIso, safeJson } from '../util/ids'
+import type { MemoryHubService } from './MemoryHubService'
 import type { MemoryReviewService } from './MemoryReviewService'
 
 /**
@@ -25,6 +26,14 @@ export interface SentinelTriager {
 
 /** The review-queue write path the gotcha route reuses (the Faz C queue). */
 export type SentinelReviewSink = Pick<MemoryReviewService, 'create'>
+
+/**
+ * The hub write path the H3 recurrence gotcha reuses when the charter gate votes
+ * `accept` (a justified, deduped, secret-free note lands directly). `list` feeds
+ * the gate's twin check with the hub's existing note names. Structural + optional
+ * so tests pass `undefined` and the spine never hard-depends on the hub.
+ */
+export type SentinelMemorySink = Pick<MemoryHubService, 'write' | 'list'>
 
 /**
  * Best-effort OS notification sink — the SAME shape the swarm's Faz 2.5 notifier
@@ -55,6 +64,24 @@ interface SignalRow {
 const RECENT_FINGERPRINT_LIMIT = 20
 
 /**
+ * Track H3 — how many times a dedup key must fire before a recurrence is worth a
+ * memory gotcha. Each persisted occurrence is already >1 cooldown window apart
+ * (within-window repeats are suppressed), so three PERSISTED rows means the same
+ * fact has genuinely recurred across three separate windows — a real pattern, not
+ * a burst. Constant by design (no per-project knob).
+ */
+export const GOTCHA_RECURRENCE_THRESHOLD = 3
+
+/** Track H4 — the boot re-triage sweep only revisits rows younger than this. An
+ *  older untriaged signal is stale news; retriaging it would spend a model call
+ *  on something the owner has long moved past. */
+const RETRIAGE_SWEEP_WINDOW_MS = 48 * 60 * 60_000
+
+/** Track H4 — hard cap on how many untriaged rows one boot sweep re-enqueues, so
+ *  a large backlog can never turn into an unbounded run of paid triage calls. */
+const RETRIAGE_SWEEP_LIMIT = 50
+
+/**
  * The sentinel: an always-on, LLM-FREE signal layer (Faz A). Sensors call
  * {@link report} fire-and-forget; the service dedups against a per-fingerprint
  * cooldown, persists the survivor, emits `sentinel:alert` to the renderer, and
@@ -68,17 +95,32 @@ const RECENT_FINGERPRINT_LIMIT = 20
 export class SentinelService {
   private readonly insertStmt: ReturnType<Db['prepare']>
   private readonly triageStmt: ReturnType<Db['prepare']>
+  /**
+   * Track H3 — fingerprints that have already produced a recurrence gotcha this
+   * PROCESS. In-memory by design: it dedupes the common case (many repeats in one
+   * session route exactly one proposal). It is NOT persisted, so after a restart a
+   * still-recurring key can route one further proposal — acceptable, because the
+   * charter gate's twin check + the human review queue are the durable backstop
+   * against a duplicate note ever landing.
+   */
+  private readonly gotchaFired = new Set<string>()
 
   constructor(
     private readonly db: Db,
     private readonly events: CockpitEvents,
     private readonly notifier?: SentinelNotifier,
     /**
-     * Faz B collaborators — both optional. Absent, {@link report} behaves exactly
+     * Faz B collaborators — all optional. Absent, {@link report} behaves exactly
      * as the Faz A spine (persist → emit → notify) and never runs enrichment.
      */
     private readonly triager?: SentinelTriager,
     private readonly reviews?: SentinelReviewSink,
+    /**
+     * Track H3 — the hub write path for a `accept`-verdict recurrence gotcha.
+     * Optional: absent, a would-be-accepted gotcha degrades to the review queue
+     * (or is dropped if there is no queue either), never a bypass of the gate.
+     */
+    private readonly memory?: SentinelMemorySink,
   ) {
     this.insertStmt = this.db.prepare(
       `INSERT INTO sentinel_signals
@@ -88,6 +130,12 @@ export class SentinelService {
     this.triageStmt = this.db.prepare(
       'UPDATE sentinel_signals SET triage = @triage WHERE id = @id',
     )
+    // Track H4: in-flight triage is volatile (a fire-and-forget child on a hot
+    // path), so a signal recorded just before a crash/quit can be left with a
+    // null verdict forever. Re-enqueue recent untriaged notice/alert rows now.
+    // Fire-and-forget and fully self-contained — a sweep failure can never break
+    // boot, and it is serialized (never N parallel paid calls) inside.
+    void this.retriageSweep()
   }
 
   /**
@@ -150,6 +198,18 @@ export class SentinelService {
 
       this.events.emitTyped('sentinel:alert', signal)
 
+      // Track H3: this persisted row is the Nth occurrence of its dedup key
+      // (recent holds the prior same-fingerprint rows). At the threshold, the
+      // fact has recurred across enough separate cooldown windows to be a real
+      // pattern — route a charter-gated gotcha. `gotchaFired` keeps it once per
+      // key per process; the whole call is isolated so a routing failure never
+      // touches the persisted/emitted signal above.
+      const occurrences = recent.length + 1
+      if (occurrences >= GOTCHA_RECURRENCE_THRESHOLD && !this.gotchaFired.has(signal.fingerprint)) {
+        this.gotchaFired.add(signal.fingerprint)
+        this.routeRecurrenceGotcha(signal, occurrences)
+      }
+
       if (signal.severity === 'alert') {
         try {
           this.notifier?.({ title: signal.title, body: signal.summary })
@@ -184,6 +244,19 @@ export class SentinelService {
       )
       .all(projectId, limit) as SignalRow[]
     return rows.map((r) => this.toSignal(r))
+  }
+
+  /**
+   * One signal by id, scoped to its project (Track H1 — the signal→card path
+   * reads the origin signal to compose the card spec). Project-scoped in the
+   * WHERE clause so a caller can never read another project's row. Returns null
+   * for an unknown/foreign id.
+   */
+  get(projectId: string, id: string): SentinelSignal | null {
+    const row = this.db
+      .prepare(`SELECT * FROM sentinel_signals WHERE id = ? AND project_id = ?`)
+      .get(id, projectId) as SignalRow | undefined
+    return row ? this.toSignal(row) : null
   }
 
   /**
@@ -226,6 +299,48 @@ export class SentinelService {
     } catch (err) {
       logFatal('sentinel:recordOutcome', err)
       return 0
+    }
+  }
+
+  /**
+   * Track H2 — fix verification. A signal-linked Swarm card just shipped. If the
+   * origin signal's dedup key has NOT re-fired since the card was created (the fix
+   * held), stamp outcome 'acted' and mark the signal seen — "resolved-quiet": the
+   * bug is closed and the badge stops pressing. A same-fingerprint signal recorded
+   * AFTER `cardCreatedAt` means the bug came back, so the card did not fix it;
+   * leave the signal untouched. Returns true only when it resolved a signal.
+   *
+   * NEVER throws: this rides the swarm's card-shipped path (a user drag to Done)
+   * that must not be endangered by a resolve failure — a failure logs and false.
+   */
+  resolveShippedSignal(input: { projectId: string; signalId: string; cardCreatedAt: string }): boolean {
+    try {
+      const origin = this.get(input.projectId, input.signalId)
+      if (!origin) return false
+      // Any newer same-fingerprint occurrence after the card was opened is a
+      // re-fire — the fix did not hold, so this is not a resolution.
+      const sameKey = this.db
+        .prepare(
+          `SELECT created_at AS createdAt FROM sentinel_signals
+           WHERE project_id = ? AND fingerprint = ?
+           ORDER BY created_at DESC LIMIT ?`,
+        )
+        .all(input.projectId, origin.fingerprint, RECENT_FINGERPRINT_LIMIT) as {
+        createdAt: string
+      }[]
+      const refired = sameKey.some((r) => r.createdAt > input.cardCreatedAt)
+      if (refired) return false
+      const tx = this.db.transaction(() => {
+        this.recordOutcome(input.projectId, input.signalId, 'acted')
+        // Quiet the badge: a resolved signal should not keep pressing. markSeen is
+        // a no-op when the row is already seen, so this is safe either way.
+        this.markSeen(input.projectId, [input.signalId])
+      })
+      tx()
+      return true
+    } catch (err) {
+      logFatal('sentinel:resolveShippedSignal', err)
+      return false
     }
   }
 
@@ -336,6 +451,116 @@ export class SentinelService {
       })
     } catch (err) {
       logFatal('sentinel:enrich:gotcha', err)
+    }
+  }
+
+  /**
+   * Track H3 — a dedup key has recurred {@link GOTCHA_RECURRENCE_THRESHOLD} times;
+   * turn it into a charter-compliant gotcha through the SAME write-gate the Hermes
+   * memory tool uses, and let the gate decide queue-vs-direct:
+   *   - `reject` (secret-shaped) → dropped, never written;
+   *   - `accept` (justified, deduped, secret-free) → written straight to the hub;
+   *   - `review` (weak/twin/oversize, or no hub write path) → the review queue.
+   * The note carries the VERBATIM symptom text (title + summary), per the charter
+   * — a gotcha you cannot find by its error message is a dead memory. The signal
+   * fields are already centrally redacted; the gate is defense in depth behind it.
+   * Never throws — a routing failure must not disturb the persisted signal.
+   */
+  private routeRecurrenceGotcha(signal: SentinelSignal, occurrences: number): void {
+    try {
+      const slug = `signal-${kebab(signal.title)}`
+      const content = [
+        `# ${signal.title}`,
+        '',
+        'Symptom (verbatim):',
+        signal.title,
+        signal.summary,
+        '',
+        `Recurred ${occurrences}× as a \`${signal.source}\` sentinel signal — a repeat-offender pattern worth remembering.`,
+        '',
+        `captured from recurring sentinel signal ${signal.id}`,
+      ].join('\n')
+
+      const existingNames = this.hubNoteNames(signal.projectId)
+      const gate = gateMemoryWrite({
+        name: slug,
+        content,
+        justification: {
+          sevenDayScenario: `This signal has recurred ${occurrences} times — the next time this exact symptom appears, this note names the known repeat pattern.`,
+          dedupChecked: 'no-overlap',
+          evidence: `sentinel signal ${signal.id} (${signal.source}) recurred ${occurrences} times`,
+        },
+        existingNames,
+      })
+
+      // Secret-shaped content never lands anywhere (the redaction floor already
+      // masked the fields; this is the last-line refusal).
+      if (gate.verdict === 'reject') return
+
+      // Accept → a justified, deduped, secret-free note goes straight to disk,
+      // but only when a hub write path exists; otherwise fall through to review.
+      if (gate.verdict === 'accept' && this.memory) {
+        this.memory.write(signal.projectId, slug, content)
+        return
+      }
+
+      // Review (or accept with no hub write path) → the human review queue, the
+      // same queue the distiller/Hermes feed. Nothing to do without a sink.
+      if (!this.reviews) return
+      this.reviews.create({
+        brain: projectBrain(signal.projectId),
+        kind: 'new',
+        slug,
+        title: signal.title,
+        proposedContent: content,
+        reason: `recurring sentinel signal (${occurrences}×) — ${gate.reasons.join('; ') || 'charter-gated gotcha'}`,
+        sourceId: signal.id,
+      })
+    } catch (err) {
+      logFatal('sentinel:recurrenceGotcha', err)
+    }
+  }
+
+  /** The hub's existing note names for the gate's twin check — empty on any
+   *  failure (or no hub), so a lookup problem degrades to no dedup, never a throw. */
+  private hubNoteNames(projectId: string): string[] {
+    try {
+      return this.memory?.list(projectId).notes.map((n) => n.name) ?? []
+    } catch {
+      return []
+    }
+  }
+
+  /**
+   * Track H4 — boot re-triage sweep. In-flight triage is fire-and-forget on a hot
+   * path, so a notice/alert recorded just before the app died can be stranded with
+   * a null verdict. This re-enqueues recent (< 48h) untriaged notice/alert rows,
+   * newest first and hard-capped, running them ONE AT A TIME (never N parallel
+   * paid calls — the argos lesson) so combined with any live triage the process
+   * stays within HermesTriageService's own MAX_IN_FLIGHT ceiling. Fully guarded
+   * and fire-and-forget: it can never block or break boot, and a missing triager
+   * makes it an immediate no-op.
+   */
+  private async retriageSweep(): Promise<void> {
+    try {
+      if (!this.triager) return
+      const cutoff = new Date(Date.now() - RETRIAGE_SWEEP_WINDOW_MS).toISOString()
+      const rows = this.db
+        .prepare(
+          `SELECT * FROM sentinel_signals
+           WHERE triage IS NULL AND (severity = 'notice' OR severity = 'alert')
+             AND created_at >= ?
+           ORDER BY created_at DESC LIMIT ?`,
+        )
+        .all(cutoff, RETRIAGE_SWEEP_LIMIT) as SignalRow[]
+      for (const row of rows) {
+        // Serialized on purpose: await each enrich before the next so the sweep
+        // adds at most one in-flight triage at a time (no parallel fan-out of
+        // paid model calls). enrich() owns all its own error handling.
+        await this.enrich(this.toSignal(row))
+      }
+    } catch (err) {
+      logFatal('sentinel:retriageSweep', err)
     }
   }
 

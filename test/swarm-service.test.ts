@@ -5,6 +5,7 @@ import type { AuditLogService } from '../electron/main/services/AuditLogService'
 import { CockpitEvents } from '../electron/main/events'
 import { POSITION_GAP } from '../shared/kanban'
 import type { TerminalSession } from '../shared/domain'
+import type { SentinelSignal } from '../shared/sentinel'
 import { makeRecordingDb } from './helpers/fakeDb'
 
 interface Row {
@@ -938,7 +939,12 @@ describe('SwarmService worker-exit sentinel signal (Faz A)', () => {
   const buildWithSentinel = (
     store: ReturnType<typeof makeStore>,
     deps: ReturnType<typeof makeDeps>,
-    sentinel: { report: ReturnType<typeof vi.fn> },
+    sentinel: {
+      report: ReturnType<typeof vi.fn>
+      get?: ReturnType<typeof vi.fn>
+      recordOutcome?: ReturnType<typeof vi.fn>
+      resolveShippedSignal?: ReturnType<typeof vi.fn>
+    },
   ) =>
     new SwarmService(
       store.db,
@@ -954,7 +960,12 @@ describe('SwarmService worker-exit sentinel signal (Faz A)', () => {
       undefined,
       undefined,
       undefined,
-      sentinel,
+      {
+        get: vi.fn(),
+        recordOutcome: vi.fn(),
+        resolveShippedSignal: vi.fn(),
+        ...sentinel,
+      } as unknown as ConstructorParameters<typeof SwarmService>[13],
     )
 
   it('raises a notice on a nonzero worker exit; a clean (0) exit stays silent', async () => {
@@ -980,5 +991,122 @@ describe('SwarmService worker-exit sentinel signal (Faz A)', () => {
     await svc2.startCard({ projectId: 'p1', cardId: 'b' })
     deps2.events.emitTyped('terminal:exit', { sessionId: 'term_1', projectId: 'p1', role: 'claude', exitCode: 0, signal: null })
     expect(sentinel2.report).not.toHaveBeenCalled()
+  })
+})
+
+describe('SwarmService signal → card (Track H1) and fix verification (Track H2)', () => {
+  const fullSignal = (over: Partial<SentinelSignal> = {}): SentinelSignal => ({
+    id: 'sig_abc123',
+    projectId: 'p1',
+    severity: 'notice',
+    source: 'worker-exit',
+    title: 'Worker exited with code 2',
+    summary: 'Card "Do the thing" moved to In review after a nonzero exit.',
+    context: 'card=Do the thing',
+    fingerprint: 'p1::worker-exit::worker exited with code 2',
+    status: 'new',
+    createdAt: 't0',
+    triage: null,
+    outcome: null,
+    outcomeAt: null,
+    ...over,
+  })
+
+  const makeSentinel = (signal: SentinelSignal | null) => ({
+    report: vi.fn(),
+    get: vi.fn(() => signal),
+    recordOutcome: vi.fn(() => 1),
+    resolveShippedSignal: vi.fn(() => true),
+  })
+
+  const buildWithSentinel = (
+    store: ReturnType<typeof makeStore>,
+    deps: ReturnType<typeof makeDeps>,
+    sentinel: ReturnType<typeof makeSentinel>,
+  ) =>
+    new SwarmService(
+      store.db,
+      deps.terminals,
+      deps.memory,
+      deps.audit,
+      deps.events,
+      deps.projects,
+      deps.worktrees,
+      undefined,
+      undefined,
+      deps.doneSignal,
+      undefined,
+      undefined,
+      undefined,
+      sentinel as unknown as ConstructorParameters<typeof SwarmService>[13],
+    )
+
+  it('H1: composes a card from the signal, embeds provenance, and stamps card_created', () => {
+    const store = makeStore([])
+    const deps = makeDeps()
+    const signal = fullSignal()
+    const sentinel = makeSentinel(signal)
+    const svc = buildWithSentinel(store, deps, sentinel)
+
+    const board = svc.createCardFromSignal({ projectId: 'p1', signalId: 'sig_abc123' })
+
+    const todo = board.find((c) => c.status === 'todo')!
+    expect(todo.cards).toHaveLength(1)
+    const card = todo.cards[0]
+    expect(card.title).toBe('Fix: Worker exited with code 2')
+    // The signal rides the body as DATA, with the hidden provenance marker.
+    expect(card.body).toContain('nonzero exit')
+    expect(card.body).toContain('<!-- sentinel-signal: sig_abc123 -->')
+    // The origin signal is stamped card_created.
+    expect(sentinel.recordOutcome).toHaveBeenCalledWith('p1', 'sig_abc123', 'card_created')
+  })
+
+  it('H1: throws a clear error for an unknown signal id (nothing created)', () => {
+    const store = makeStore([])
+    const deps = makeDeps()
+    const sentinel = makeSentinel(null)
+    const svc = buildWithSentinel(store, deps, sentinel)
+
+    expect(() => svc.createCardFromSignal({ projectId: 'p1', signalId: 'sig_nope' })).toThrow(/was not found/)
+    expect(store.rows).toHaveLength(0)
+    expect(sentinel.recordOutcome).not.toHaveBeenCalled()
+  })
+
+  it('H2: shipping a signal-linked card asks the sentinel to resolve it', () => {
+    const store = makeStore([
+      {
+        id: 'c1',
+        status: 'in_review',
+        position: POSITION_GAP,
+        title: 'Fix: Worker exited with code 2',
+        body: 'diagnose\n\n<!-- sentinel-signal: sig_abc123 -->',
+        created_at: 'tCard',
+      },
+    ])
+    const deps = makeDeps()
+    const sentinel = makeSentinel(fullSignal())
+    const svc = buildWithSentinel(store, deps, sentinel)
+
+    svc.moveCard({ projectId: 'p1', cardId: 'c1', to: 'done', index: 0 })
+
+    expect(sentinel.resolveShippedSignal).toHaveBeenCalledTimes(1)
+    expect(sentinel.resolveShippedSignal).toHaveBeenCalledWith({
+      projectId: 'p1',
+      signalId: 'sig_abc123',
+      cardCreatedAt: 'tCard',
+    })
+  })
+
+  it('H2: shipping a card with no provenance marker resolves nothing', () => {
+    const store = makeStore([
+      { id: 'c2', status: 'in_review', position: POSITION_GAP, title: 'Plain card', body: 'no marker here' },
+    ])
+    const deps = makeDeps()
+    const sentinel = makeSentinel(fullSignal())
+    const svc = buildWithSentinel(store, deps, sentinel)
+
+    svc.moveCard({ projectId: 'p1', cardId: 'c2', to: 'done', index: 0 })
+
+    expect(sentinel.resolveShippedSignal).not.toHaveBeenCalled()
   })
 })

@@ -23,8 +23,9 @@ import type {
   TerminalSession,
 } from '@shared/domain'
 import type { CockpitApi, SystemInfo, Unsubscribe } from '@shared/ipc'
-import type { CouncilResult, ScorecardEntry } from '@shared/council'
-import { buildSignal, type SentinelSignal } from '@shared/sentinel'
+import type { CouncilResult, CouncilSessionSummary, ScorecardEntry } from '@shared/council'
+import type { OutcomeScorecard } from '@shared/outcomes'
+import { buildSignal, composeSignalCardSpec, type SentinelSignal } from '@shared/sentinel'
 import { resolveChatModel } from '@shared/chat-models'
 import { assembleDashboard, countActiveAgents } from '@shared/dashboard-assembly'
 import { aggregateInsights, insightFromMatch } from '@shared/insight-aggregation'
@@ -1067,6 +1068,47 @@ export function createMockApi(): CockpitApi {
         mockSentinel.set(projectId, next)
         return changed
       },
+      // Track H1 (mock parity): create a real mock Swarm card from the signal —
+      // same spec composition as main — and flip the signal outcome to
+      // 'card_created', so the localhost preview exercises the full signal→card path.
+      createCard: async (projectId, signalId) => {
+        const signal = sentinelFor(projectId).find((s) => s.id === signalId)
+        if (!signal) {
+          throw new Error(`Signal ${signalId} was not found in this project.`)
+        }
+        const { title, body } = composeSignalCardSpec(signal)
+        const cards = kanbanFor(projectId)
+        const nextCards: KanbanCard[] = [
+          ...cards,
+          {
+            id: id('card'),
+            projectId,
+            title,
+            body,
+            status: 'todo',
+            position: appendPosition(cards, 'todo'),
+            role: null,
+            persona: null,
+            agent: null,
+            assignments: [],
+            pipelineStep: 0,
+            councilSessionId: null,
+            terminalSessionId: null,
+            worktreePath: null,
+            branch: null,
+            createdAt: now(),
+            updatedAt: now(),
+          },
+        ]
+        kanbanSeed.set(projectId, nextCards)
+        mockSentinel.set(
+          projectId,
+          sentinelFor(projectId).map((s) =>
+            s.id === signalId ? { ...s, outcome: 'card_created' as const, outcomeAt: now() } : s,
+          ),
+        )
+        return assembleBoard(nextCards)
+      },
       // The mock never pushes signals (no backend sensors), so this is a no-op
       // subscription — matching how the other push events are mocked.
       onAlert: () => () => {},
@@ -1164,6 +1206,82 @@ export function createMockApi(): CockpitApi {
         { seatId: 'outsider', averageRank: 3.4, sessions: 7 },
         { seatId: 'expansionist', averageRank: 4.2, sessions: 6 },
       ],
+      // Recent persisted sessions as content-free headers — a mix of gate
+      // outcomes + run statuses so a later consumer has something plausible.
+      sessions: async (): Promise<CouncilSessionSummary[]> => [
+        {
+          id: 'mock-council-spec-approved',
+          cardId: 'card_cache',
+          mode: 'spec',
+          question: 'Cache the gateway read responses to cut repeat latency',
+          verdictKind: 'approved',
+          status: 'final',
+          ok: true,
+          seatsRun: 5,
+          createdAt: now(),
+        },
+        {
+          id: 'mock-council-spec',
+          cardId: 'card_intake',
+          mode: 'spec',
+          question: 'Validate the intake form at the submit boundary',
+          verdictKind: 'needs_clarification',
+          status: 'final',
+          ok: true,
+          seatsRun: 5,
+          createdAt: now(),
+        },
+        {
+          id: 'mock-council-diff',
+          cardId: null,
+          mode: 'diff',
+          question: null,
+          verdictKind: null,
+          status: 'final',
+          ok: true,
+          seatsRun: 5,
+          createdAt: now(),
+        },
+        {
+          id: 'mock-council-interrupted',
+          cardId: 'card_ratelimit',
+          mode: 'spec',
+          question: 'Add per-route rate limiting to the API gateway',
+          verdictKind: null,
+          status: 'failed',
+          ok: false,
+          seatsRun: 0,
+          createdAt: now(),
+        },
+      ],
+    },
+    outcomes: {
+      // Static judgment scorecard for the browser preview — plausible numbers
+      // across every sub-metric so the read-only Usage section renders in full.
+      scorecard: async (): Promise<OutcomeScorecard> => ({
+        generatedAt: now(),
+        cardWindowDays: 30,
+        memoryWindowDays: 7,
+        cards: {
+          total: 14,
+          fateMix: { shipped: 9, reworked: 3, abandoned: 2 },
+          shipRate: { gated: 0.75, ungated: 0.5, delta: 0.25 },
+          gateCalibration: { approvedShipRate: 0.83, needsClarificationShipRate: 0.4 },
+        },
+        triage: { precision: 0.7, resolved: 10, misses: 1 },
+        memory: {
+          totalNotes: 24,
+          recalledNotes: 15,
+          earnedKeepRate: 15 / 24,
+          neverRecalled: 9,
+          topRecalled: [
+            { note: 'llm-council-build', count: 12 },
+            { note: 'swarm-auto-assign', count: 8 },
+            { note: 'memory-charter', count: 5 },
+          ],
+        },
+        bestSeat: { seatId: 'first-principles', averageRank: 1.6, sessions: 8 },
+      }),
     },
     chat: {
       ask: async (_projectId, prompt, opts) => ({

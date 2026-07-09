@@ -289,6 +289,14 @@ export const sentinelRecordOutcomeSchema = z.object({
   outcome: z.enum(SENTINEL_OUTCOMES),
 })
 
+// Track H1: turn a signal into a Swarm card. Only the ids cross the boundary —
+// main reads the signal's own (already-redacted) fields to compose the card, so
+// the renderer never supplies card text here. Project-scoped in the handler.
+export const sentinelCreateCardSchema = z.object({
+  projectId: z.string().min(1),
+  signalId: z.string().min(1).max(200),
+})
+
 // --- secret store (encrypted, OS-keychain backed) -------------------------
 //
 // The kind is a closed enum, not a bare string: it is a trust boundary. Each
@@ -347,6 +355,21 @@ export const swarmUpdateCardSchema = z.object({
 // council history. Input is just the project id; the merge math is the pure
 // `computeScorecard` in shared/council.
 export const councilScorecardSchema = z.object({
+  projectId: z.string().min(1),
+})
+
+// Recent persisted sessions for a project — the read side of council history
+// (E4). Input is just the project id; the store's defensive parse + the
+// service's content-free projection do the rest.
+export const councilSessionsSchema = z.object({
+  projectId: z.string().min(1),
+})
+
+// --- outcome scorecard (Track G4) -----------------------------------------
+//
+// The read-only judgment scorecard. Input is just the project id; the aggregation
+// is pure (`shared/outcomes`) over the append-only audit trail + read models.
+export const outcomesScorecardSchema = z.object({
   projectId: z.string().min(1),
 })
 

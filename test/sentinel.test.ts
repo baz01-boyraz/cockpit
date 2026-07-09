@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   SENTINEL_COOLDOWN_MS,
+  TITLE_CAP,
   TRIAGE_FIELD_CAP,
   buildSignal,
   buildTriagePrompt,
+  composeSignalCardSpec,
+  extractSignalRef,
   parseTriageResponse,
   shouldSuppress,
+  signalCardMarker,
   signalFingerprint,
+  type SentinelSignal,
   type SentinelSource,
 } from '../shared/sentinel'
 
@@ -199,5 +204,51 @@ describe('parseTriageResponse', () => {
     expect(parseTriageResponse('', NOW)).toBeNull()
     expect(parseTriageResponse('{ broken', NOW)).toBeNull()
     expect(parseTriageResponse('[1,2,3]', NOW)).toBeNull()
+  })
+})
+
+describe('signal → card provenance (Track H1/H2 pure helpers)', () => {
+  const signal: SentinelSignal = {
+    id: 'sig_deadbeef01234567',
+    projectId: 'p1',
+    severity: 'notice',
+    source: 'worker-exit',
+    title: 'Worker exited with code 2',
+    summary: 'Card "Do the thing" moved to In review after a nonzero exit.',
+    context: 'card=Do the thing',
+    fingerprint: 'p1::worker-exit::worker exited with code 2',
+    status: 'new',
+    createdAt: '2026-07-09T00:00:00.000Z',
+    triage: null,
+    outcome: null,
+    outcomeAt: null,
+  }
+
+  it('extractSignalRef round-trips the marker and ignores unmarked bodies', () => {
+    const marker = signalCardMarker('sig_abc123')
+    expect(extractSignalRef(`some body\n\n${marker}`)).toBe('sig_abc123')
+    expect(extractSignalRef('a plain card body with no marker')).toBeNull()
+    // Only sig_-shaped ids are matched (a stray comment is not provenance).
+    expect(extractSignalRef('<!-- sentinel-signal: not-a-signal -->')).toBeNull()
+  })
+
+  it('composeSignalCardSpec frames the signal as data and embeds recoverable provenance', () => {
+    const { title, body } = composeSignalCardSpec(signal)
+    expect(title).toBe('Fix: Worker exited with code 2')
+    expect(body).toContain('--- SIGNAL ---')
+    expect(body).toContain('summary: Card "Do the thing" moved to In review')
+    expect(body).toContain('not instructions')
+    // The provenance is recoverable by the H2 reader.
+    expect(extractSignalRef(body)).toBe('sig_deadbeef01234567')
+  })
+
+  it('caps an overlong card title at TITLE_CAP', () => {
+    const { title } = composeSignalCardSpec({ ...signal, title: 'x'.repeat(TITLE_CAP + 50) })
+    expect(title.length).toBe(TITLE_CAP)
+  })
+
+  it('renders "(none)" for a null context', () => {
+    const { body } = composeSignalCardSpec({ ...signal, context: null })
+    expect(body).toContain('context: (none)')
   })
 })

@@ -37,10 +37,13 @@ import {
   reviewDiffStatSchema,
   councilRunSchema,
   councilScorecardSchema,
+  councilSessionsSchema,
+  outcomesScorecardSchema,
   resumeClaudeSchema,
   routeQuerySchema,
   secretKindOnlySchema,
   secretSetSchema,
+  sentinelCreateCardSchema,
   sentinelListSchema,
   sentinelMarkSeenSchema,
   sentinelRecordOutcomeSchema,
@@ -276,6 +279,14 @@ export function registerIpc(services: Services): void {
   handle('councilScorecard', (p) =>
     services.council.scorecard(councilScorecardSchema.parse(p).projectId),
   )
+  handle('councilSessions', (p) =>
+    services.council.recentSessions(councilSessionsSchema.parse(p).projectId),
+  )
+
+  // --- outcome tracking (Track G4: read-only judgment scorecard, derived) ---
+  handle('outcomesScorecard', (p) =>
+    services.outcomes.scorecard(outcomesScorecardSchema.parse(p).projectId),
+  )
 
   // --- memory hub (per-project markdown knowledge, files are the truth) ---
   handle('memoryList', (p) => services.memory.list(projectIdSchema.parse(p).projectId))
@@ -359,6 +370,14 @@ export function registerIpc(services: Services): void {
   handle('sentinelRecordOutcome', (p) => {
     const { projectId, id, outcome } = sentinelRecordOutcomeSchema.parse(p)
     return services.sentinel.recordOutcome(projectId, id, outcome)
+  })
+  // Track H1: signal → Swarm card. The orchestration lives in SwarmService (it
+  // owns card creation and already depends on the sentinel one-way), so this
+  // dispatches there; it reads the signal, creates the card, and stamps the
+  // signal outcome 'card_created'.
+  handle('sentinelCreateCard', (p) => {
+    const { projectId, signalId } = sentinelCreateCardSchema.parse(p)
+    return services.swarm.createCardFromSignal({ projectId, signalId })
   })
 
   // --- chat (real answers via the local Claude Code CLI) ---

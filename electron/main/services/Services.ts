@@ -44,6 +44,7 @@ import { SwarmWorktrees } from './SwarmWorktrees'
 import { SwarmDoneSignal } from './SwarmDoneSignal'
 import { ReviewService } from './ReviewService'
 import { CouncilService } from './CouncilService'
+import { OutcomeService } from './OutcomeService'
 import { EngineRunner } from './EngineRunner'
 import { CouncilSessionStore } from '../db/CouncilSessionStore'
 import { ClaudeSessionsService } from './ClaudeSessionsService'
@@ -86,6 +87,9 @@ export class Services {
   readonly hermesTriage: HermesTriageService
   readonly review: ReviewService
   readonly council: CouncilService
+  /** Track G4: the read-only judgment scorecard — derives outcomes from the
+   *  audit trail + council/recall/signal read models, never a new judgment. */
+  readonly outcomes: OutcomeService
   /** Spawns the council's `claude`/`codex` seats; killed on quit (A2). */
   private readonly engineRunner: EngineRunner
   readonly memory: MemoryHubService
@@ -143,15 +147,21 @@ export class Services {
     // construction; both are optional — absent, the spine behaves identically.
     this.hermesTriage = new HermesTriageService()
     this.memoryReviews = new MemoryReviewService(this.db)
+    // ProjectService + the memory hub are built BEFORE the sentinel so the
+    // sentinel can take the hub as its Track H3 write path: a recurrence gotcha
+    // the charter gate votes `accept` lands straight in the hub, while a `review`
+    // verdict still routes to the queue (the hub only serves the direct branch).
+    this.projects = new ProjectService(this.db)
+    this.memory = new MemoryHubService(this.projects)
     this.sentinel = new SentinelService(
       this.db,
       opts.events,
       notifier,
       this.hermesTriage,
       this.memoryReviews,
+      this.memory,
     )
     this.logs = new LogIntelligenceService(this.db, opts.events, this.sentinel)
-    this.projects = new ProjectService(this.db)
     this.attachments = new AttachmentService(this.projects)
     this.approvals = new ApprovalService(this.db, this.audit, opts.events, this.sentinel)
     this.git = new GitService(this.db, this.projects)
@@ -172,10 +182,10 @@ export class Services {
     // One session store, shared: the council writes runs to it, the swarm reads
     // a card's approved session back from it at spawn (Faz 2a).
     const councilSessions = new CouncilSessionStore(this.db)
-    // Memory hub is built BEFORE the council so the council can take it as its
-    // Faz D collaborator — in spec mode the seats gain an inline, relevance-ranked
-    // memory-pointer block (file-blind OpenRouter seats have no other view of it).
-    this.memory = new MemoryHubService(this.projects)
+    // The memory hub is constructed above (before the sentinel) so the council
+    // can take it as its Faz D collaborator too — in spec mode the seats gain an
+    // inline, relevance-ranked memory-pointer block (file-blind OpenRouter seats
+    // have no other view of it).
     this.globalMemory = new MemoryHubService(this.projects, join(opts.userDataDir, 'baz-memory'))
     this.engineRunner = new EngineRunner(this.secrets)
     // Track G2: recall telemetry is built here so both the council (spec-mode
@@ -191,6 +201,16 @@ export class Services {
       this.memory,
       this.memoryRecalls,
     )
+    // Track G4: the judgment scorecard read model. It DERIVES outcomes — card
+    // fates from the append-only audit trail, verdicts from the shared session
+    // store, recall/triage from their read models — and composes the council's
+    // own scorecard; it stores nothing and never changes a judgment.
+    this.outcomes = new OutcomeService(this.db, councilSessions, {
+      recalls: this.memoryRecalls,
+      hub: this.memory,
+      signals: this.sentinel,
+      councilScore: this.council,
+    })
     this.memoryLedger = new MemoryLedgerService(this.db)
     // this.memoryReviews is constructed earlier (Faz B) so the sentinel can take
     // it as its gotcha-route review sink.

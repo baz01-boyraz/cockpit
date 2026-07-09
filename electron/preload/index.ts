@@ -102,6 +102,10 @@ const api: CockpitApi = {
         question: opts?.question,
       }),
     scorecard: (projectId) => invoke(IPC.councilScorecard, { projectId }),
+    sessions: (projectId) => invoke(IPC.councilSessions, { projectId }),
+  },
+  outcomes: {
+    scorecard: (projectId) => invoke(IPC.outcomesScorecard, { projectId }),
   },
   memory: {
     list: (projectId) => invoke(IPC.memoryList, { projectId }),
@@ -139,6 +143,8 @@ const api: CockpitApi = {
     unseenCount: (projectId) => invoke(IPC.sentinelUnseenCount, { projectId }),
     recordOutcome: (projectId, id, outcome) =>
       invoke(IPC.sentinelRecordOutcome, { projectId, id, outcome }),
+    createCard: (projectId, signalId) =>
+      invoke(IPC.sentinelCreateCard, { projectId, signalId }),
     onAlert: (cb) => subscribe(IPC.evtSentinelAlert, cb),
   },
   chat: {
