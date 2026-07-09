@@ -1,6 +1,7 @@
 import {
   appendPosition,
   assembleBoard,
+  COLUMN_ORDER,
   moveCardInList,
   type BoardColumn,
   type CardStatus,
@@ -787,11 +788,74 @@ export class SwarmService {
     to: CardStatus
     index: number
   }): BoardColumn[] {
-    this.cardOrThrow(input.projectId, input.cardId)
+    const card = this.cardOrThrow(input.projectId, input.cardId)
     const cards = this.cards(input.projectId)
     const next = moveCardInList(cards, input.cardId, input.to, input.index, 'user', nowIso())
     this.persistChanges(cards, next)
+    // The move is now durable; record its terminal-fate meaning (Track G1). The
+    // pre-move `card.status` vs `input.to` is the only signal we need — a drag
+    // into Done is a ship, a drag out of In review toward an earlier column is a
+    // rework. Emitting after persist keeps a failed move from logging a fate.
+    this.recordCardFate(input.projectId, card, input.to)
     return assembleBoard(next)
+  }
+
+  /**
+   * Track G1: durable, content-free terminal-fate events on the append-only
+   * audit trail (which outlives card-row deletion). Two fates originate from a
+   * user drag:
+   *  - entering `done` from anywhere else → `swarm.card_shipped`;
+   *  - leaving `in_review` toward an *earlier* column (todo/in_progress) →
+   *    `swarm.card_reworked`. The COLUMN_ORDER index guard is what keeps
+   *    In review → Done (a ship, later in the order) from misfiring as a rework.
+   * `wasCouncilGated` and `specVerdictKind` are read from the linked council
+   * session at emit time and tolerate a dangling `council_session_id`.
+   */
+  private recordCardFate(projectId: string, card: KanbanCard, to: CardStatus): void {
+    if (to === 'done' && card.status !== 'done') {
+      this.audit.record({
+        projectId,
+        actor: 'system',
+        actionType: 'swarm.card_shipped',
+        summary: `Swarm card "${card.title}" shipped — moved to Done`,
+        payload: {
+          cardId: card.id,
+          councilSessionId: card.councilSessionId,
+          wasCouncilGated: card.councilSessionId !== null,
+          specVerdictKind: this.specVerdictKind(card),
+        },
+      })
+      return
+    }
+    if (
+      card.status === 'in_review' &&
+      COLUMN_ORDER.indexOf(to) < COLUMN_ORDER.indexOf('in_review')
+    ) {
+      this.audit.record({
+        projectId,
+        actor: 'system',
+        actionType: 'swarm.card_reworked',
+        summary: `Swarm card "${card.title}" sent back from In review for rework`,
+        payload: { cardId: card.id, councilSessionId: card.councilSessionId },
+      })
+    }
+  }
+
+  /**
+   * The spec-gate verdict on a card's linked council session, or null. The
+   * session is HISTORY (V12 has no FK): a missing store, an unset/dangling id, a
+   * cross-project id, or a verdict-less result all degrade to null — reading a
+   * fate must never crash on a vanished meeting.
+   */
+  private specVerdictKind(card: KanbanCard): 'approved' | 'needs_clarification' | null {
+    if (!card.councilSessionId || !this.councilSessions) return null
+    try {
+      const session = this.councilSessions.get(card.councilSessionId)
+      if (!session || session.projectId !== card.projectId) return null
+      return session.result.specVerdict?.kind ?? null
+    } catch {
+      return null
+    }
   }
 
   async removeCard(input: { projectId: string; cardId: string }): Promise<BoardColumn[]> {
@@ -805,6 +869,23 @@ export class SwarmService {
       await this.worktrees.removeIfClean(this.projects.get(input.projectId).path, card.worktreePath)
     }
     this.db.prepare('DELETE FROM kanban_cards WHERE id = ?').run(card.id)
+    // Track G1: a card removed before it ever shipped is an abandonment. The
+    // event lands on the audit trail (no card FK) so it survives this DELETE —
+    // a shipped-then-removed card is NOT an abandonment and stays silent.
+    if (card.status !== 'done') {
+      this.audit.record({
+        projectId: input.projectId,
+        actor: 'system',
+        actionType: 'swarm.card_abandoned',
+        summary: `Swarm card "${card.title}" removed before shipping (was ${card.status})`,
+        payload: {
+          cardId: card.id,
+          councilSessionId: card.councilSessionId,
+          wasCouncilGated: card.councilSessionId !== null,
+          priorStatus: card.status,
+        },
+      })
+    }
     return this.board(input.projectId)
   }
 
