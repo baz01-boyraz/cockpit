@@ -135,6 +135,30 @@ export interface ScorecardEntry {
   sessions: number
 }
 
+/** Run lifecycle status carried on each persisted session row (store V-column
+ *  `status`). `final` is the honest read for any legacy/NULL row. */
+export type CouncilSessionStatus = 'pending' | 'final' | 'failed'
+
+/**
+ * A persisted council session reduced to its header facts for a project's
+ * session list (the `council:sessions` channel). Deliberately content-free — no
+ * seat prose or diff/spec text crosses the bridge, only ids, enums, and the
+ * already-redacted `question` — so the list is cheap to ship and safe to log.
+ */
+export interface CouncilSessionSummary {
+  id: string
+  cardId: string | null
+  mode: CouncilMode
+  /** The card title/body that grounded the run, already redacted at persist. */
+  question: string | null
+  verdictKind: 'approved' | 'needs_clarification' | null
+  status: CouncilSessionStatus
+  ok: boolean
+  /** Seats that answered — a quick "how convened was this run" glance. */
+  seatsRun: number
+  createdAt: string
+}
+
 export interface CouncilStats {
   seatsRun: number
   seatsFailed: number

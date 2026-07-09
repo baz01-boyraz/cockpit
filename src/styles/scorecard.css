@@ -1,0 +1,152 @@
+/*
+ * Judgment scorecard (Track G4) — a calm, read-only tile grid in the Usage
+ * panel. Layered on the same card surface as the AI-spend overview above it;
+ * every metric is a quiet instrument readout, not an actionable control.
+ */
+
+.scorecard__note {
+  margin: 0 0 var(--sp-4);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  max-width: 62ch;
+}
+
+.scorecard__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+}
+
+.scoreMetric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  min-height: 84px;
+  justify-content: center;
+}
+
+.scoreMetric--wide {
+  grid-column: 1 / -1;
+}
+
+.scoreMetric__label {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.scoreMetric__value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.scoreMetric__sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+/* Identity tones: the two headline metrics carry the ember + signal accents so
+ * the grid has a focal point without shouting. */
+.scoreMetric--accent {
+  border-color: var(--border-accent);
+}
+.scoreMetric--accent .scoreMetric__value {
+  color: var(--accent-hi);
+}
+
+.scoreMetric--signal {
+  border-color: rgba(205, 232, 95, 0.28);
+}
+.scoreMetric--signal .scoreMetric__value {
+  color: var(--signal);
+}
+
+/* An honest empty state: dimmed, no accent, plain "No data yet" copy. */
+.scoreMetric--empty {
+  border-color: var(--border);
+  opacity: 0.72;
+}
+.scoreMetric--empty .scoreMetric__value {
+  color: var(--text-faint);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* Top-recalled notes list — the one non-scalar metric, a compact rank list. */
+.scoreTop {
+  list-style: none;
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--sp-1) var(--sp-4);
+}
+
+.scoreTop__item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.scoreTop__name {
+  color: var(--text);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scoreTop__count {
+  color: var(--accent-hi);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+/* Loading + error placeholders sized to the grid so the card doesn't jump. */
+.scorecard__skeleton {
+  height: 180px;
+  border-radius: var(--r-md);
+  background: linear-gradient(
+    100deg,
+    var(--surface-inset) 30%,
+    var(--surface-2) 50%,
+    var(--surface-inset) 70%
+  );
+  background-size: 220% 100%;
+  animation: scorecardShimmer 1.5s ease-in-out infinite;
+}
+
+.scorecard__empty {
+  padding: var(--sp-5);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+@keyframes scorecardShimmer {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -20% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scorecard__skeleton {
+    animation: none;
+  }
+}

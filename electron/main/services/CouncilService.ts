@@ -18,6 +18,7 @@ import {
   type CouncilResult,
   type CouncilSeat,
   type CouncilSeatOutput,
+  type CouncilSessionSummary,
   type CouncilTone,
   type ScorecardEntry,
 } from '@shared/council'
@@ -243,6 +244,27 @@ export class CouncilService {
   scorecard(projectId: string, limit = 30): ScorecardEntry[] {
     const rows = this.sessions.listRecent(projectId, limit).map((s) => ({ aggregate: s.result.aggregate }))
     return computeScorecard(rows)
+  }
+
+  /**
+   * Recent persisted sessions for a project as content-free headers (E4's
+   * reported gap). Delegates to the store's defensive `listRecent` (a corrupt
+   * row is already dropped there) and projects each session down to ids/enums +
+   * the already-redacted question — no seat prose or diff/spec text leaves main.
+   * Read-only; a later card renders it.
+   */
+  recentSessions(projectId: string, limit = 30): CouncilSessionSummary[] {
+    return this.sessions.listRecent(projectId, limit).map((s) => ({
+      id: s.id,
+      cardId: s.cardId,
+      mode: s.mode,
+      question: s.question,
+      verdictKind: normalizeVerdictKind(s.verdictKind),
+      status: s.status,
+      ok: s.result.ok,
+      seatsRun: s.result.stats.seatsRun,
+      createdAt: s.createdAt,
+    }))
   }
 
   /**
@@ -497,6 +519,12 @@ export class CouncilService {
       },
     })
   }
+}
+
+/** Narrow a stored `verdict_kind` string to the known gate kinds; anything else
+ *  (null, legacy, garbage) reads as "no gate" rather than leaking a raw value. */
+function normalizeVerdictKind(kind: string | null): 'approved' | 'needs_clarification' | null {
+  return kind === 'approved' || kind === 'needs_clarification' ? kind : null
 }
 
 /** Coerce a parsed spec verdict into the result's non-null shape (null kind →

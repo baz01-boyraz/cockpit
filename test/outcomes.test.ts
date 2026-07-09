@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { computeCardOutcomeStats, type CardOutcome } from '../shared/outcomes'
+import {
+  computeCardOutcomeStats,
+  computeMemoryEarnedKeep,
+  computeTriageAccuracy,
+  type CardOutcome,
+  type TriageSignalOutcome,
+} from '../shared/outcomes'
 
 /** Terse fixture builder — every field defaulted so a case names only what matters. */
 const outcome = (over: Partial<CardOutcome> & Pick<CardOutcome, 'fate'>): CardOutcome => ({
@@ -82,5 +88,90 @@ describe('computeCardOutcomeStats', () => {
     // Only the one approved card is in the calibration denominator.
     expect(stats.gateCalibration.approvedShipRate).toBeCloseTo(1)
     expect(stats.gateCalibration.needsClarificationShipRate).toBeNull()
+  })
+})
+
+const sig = (over: Partial<TriageSignalOutcome>): TriageSignalOutcome => ({
+  reportWorthy: null,
+  outcome: null,
+  ...over,
+})
+
+describe('computeTriageAccuracy', () => {
+  it('returns a null precision floor when nothing has been answered yet', () => {
+    const acc = computeTriageAccuracy([
+      sig({ reportWorthy: true }),
+      sig({ reportWorthy: false }),
+      sig({ reportWorthy: null }),
+    ])
+    expect(acc).toEqual({ precision: null, resolved: 0, misses: 0 })
+  })
+
+  it('scores precision as (card_created+acted) over the answered reportWorthy set', () => {
+    const acc = computeTriageAccuracy([
+      sig({ reportWorthy: true, outcome: 'card_created' }),
+      sig({ reportWorthy: true, outcome: 'acted' }),
+      sig({ reportWorthy: true, outcome: 'dismissed' }),
+      // Un-triaged / unanswered rows never touch the denominator.
+      sig({ reportWorthy: true, outcome: null }),
+      sig({ reportWorthy: null, outcome: 'card_created' }),
+    ])
+    expect(acc.resolved).toBe(3)
+    expect(acc.precision).toBeCloseTo(2 / 3)
+  })
+
+  it('counts not-reportWorthy signals that became cards as misses only', () => {
+    const acc = computeTriageAccuracy([
+      sig({ reportWorthy: false, outcome: 'card_created' }),
+      sig({ reportWorthy: false, outcome: 'card_created' }),
+      sig({ reportWorthy: false, outcome: 'dismissed' }),
+    ])
+    expect(acc.misses).toBe(2)
+    // No reportWorthy signal has a response, so precision stays a null floor.
+    expect(acc.precision).toBeNull()
+    expect(acc.resolved).toBe(0)
+  })
+})
+
+describe('computeMemoryEarnedKeep', () => {
+  it('reports a null rate and zero counts for an empty hub (empty-set floor)', () => {
+    const keep = computeMemoryEarnedKeep([], new Map())
+    expect(keep).toEqual({
+      totalNotes: 0,
+      recalledNotes: 0,
+      earnedKeepRate: null,
+      neverRecalled: 0,
+      topRecalled: [],
+    })
+  })
+
+  it('splits recalled vs never-recalled and ranks the busiest three', () => {
+    const keep = computeMemoryEarnedKeep(
+      ['a', 'b', 'c', 'd', 'e'],
+      new Map([
+        ['a', 5],
+        ['b', 9],
+        ['c', 2],
+        // d, e never recalled; a phantom slug not in the hub is ignored.
+        ['ghost', 40],
+      ]),
+    )
+    expect(keep.totalNotes).toBe(5)
+    expect(keep.recalledNotes).toBe(3)
+    expect(keep.neverRecalled).toBe(2)
+    expect(keep.earnedKeepRate).toBeCloseTo(3 / 5)
+    expect(keep.topRecalled).toEqual([
+      { note: 'b', count: 9 },
+      { note: 'a', count: 5 },
+      { note: 'c', count: 2 },
+    ])
+  })
+
+  it('collapses duplicate note names and treats a zero-count recall as never-recalled', () => {
+    const keep = computeMemoryEarnedKeep(['x', 'x', 'y'], new Map([['y', 0]]))
+    expect(keep.totalNotes).toBe(2)
+    expect(keep.recalledNotes).toBe(0)
+    expect(keep.earnedKeepRate).toBe(0)
+    expect(keep.topRecalled).toEqual([])
   })
 })
