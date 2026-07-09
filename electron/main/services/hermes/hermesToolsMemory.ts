@@ -129,6 +129,30 @@ export function createMemoryTools(ctx: HermesToolContext): HermesTool[] {
       },
     },
     {
+      name: 'run_memory_sweep',
+      description:
+        "Weekly memory curation — propose archive/merge for stale or duplicate notes per the charter's lifecycle rule (docs/MEMORY-CHARTER.md). Proposals go to the owner's review queue (get_pending_memory_reviews), never act directly on files. Run it about weekly, not every session: it costs one cheap model pass over the note inventory. Returns how many proposals were queued.",
+      inputShape: projectIdSchema.shape,
+      run: async (raw) => {
+        const { projectId } = projectIdSchema.parse(raw)
+        const result = await ctx.memoryCuration.sweep(projectId)
+        if (!result) {
+          return {
+            proposals: 0,
+            message:
+              'No sweep result — the hub is empty or the curation model was unavailable. Nothing was changed.',
+          }
+        }
+        return {
+          proposals: result.proposals,
+          message:
+            result.proposals > 0
+              ? `${result.proposals} archive/merge proposal(s) queued to the owner's review queue. Review them with get_pending_memory_reviews; nothing was changed on disk.`
+              : 'The sweep ran and proposed no changes — the hub looks healthy.',
+        }
+      },
+    },
+    {
       name: 'resolve_memory_review',
       description:
         "Resolve one queued memory review. `decision` is 'accept' (write as proposed), 'edit' (write `editedContent` instead), or 'discard' (drop it). Returns this project's remaining pending queue after the decision is applied.",

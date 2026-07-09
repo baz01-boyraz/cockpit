@@ -190,6 +190,53 @@ describe('CouncilService — sentinel signal (Faz A)', () => {
   })
 })
 
+describe('CouncilService — project memory pointers (Faz D)', () => {
+  /** An engine that records every prompt it is handed, so a test can inspect the
+   *  seat prompts. Claude answers; OpenRouter/Codex throw (fall back to claude). */
+  function makeCapturingEngine() {
+    const prompts: string[] = []
+    const call = vi.fn(async (spec: { engine: string }, prompt: string) => {
+      prompts.push(prompt)
+      if (spec.engine === 'openrouter') throw new Error('no key')
+      if (spec.engine === 'codex') throw new Error('no cli')
+      if (prompt.includes('Refined Spec')) return '### 🎯 Verdict\nAPPROVED\nfine'
+      if (prompt.includes('FINAL RANKING')) return 'FINAL RANKING:\n1. Response A\n2. Response B'
+      return `seat reply via ${spec.engine}`
+    })
+    return { engine: { call } as unknown as EngineRunner, prompts }
+  }
+
+  const memoryWith = (notes: { name: string; hook: string | null; updatedAt: string }[]) => ({
+    listHooks: () => notes,
+  })
+
+  it('includes an inline memory-pointer block in the spec seats when the collaborator is present', async () => {
+    const { engine, prompts } = makeCapturingEngine()
+    const memory = memoryWith([
+      { name: 'gateway-caching', hook: 'the gateway caches reads for 60s', updatedAt: 't2' },
+      { name: 'unrelated-note', hook: 'about the billing window', updatedAt: 't1' },
+    ])
+    const service = new CouncilService(makeProjects(), makeAudit(), engine, makeStore().store, undefined, memory)
+
+    await service.run('prj_1', { mode: 'spec', specText: 'Add caching to the gateway.' })
+
+    const seatPrompts = prompts.filter((p) => !p.includes('FINAL RANKING') && !p.includes('Refined Spec'))
+    expect(seatPrompts.length).toBeGreaterThan(0)
+    expect(seatPrompts.every((p) => p.includes('Project memory pointers'))).toBe(true)
+    // The relevant note surfaces in the block.
+    expect(seatPrompts[0]).toContain('gateway-caching')
+  })
+
+  it('omits the memory block entirely when no memory collaborator is wired', async () => {
+    const { engine, prompts } = makeCapturingEngine()
+    const service = new CouncilService(makeProjects(), makeAudit(), engine, makeStore().store)
+
+    await service.run('prj_1', { mode: 'spec', specText: 'Add caching to the gateway.' })
+
+    expect(prompts.every((p) => !p.includes('Project memory pointers'))).toBe(true)
+  })
+})
+
 // ---- CouncilSessionStore against a tiny fake Db (no better-sqlite3 in Node) ----
 
 interface StoredRow {

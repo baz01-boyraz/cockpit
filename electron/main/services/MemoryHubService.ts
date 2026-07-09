@@ -14,6 +14,7 @@ import { normalizeNoteName, renameLinkTargets } from '@shared/wikilink'
 import {
   assembleHubSnapshot,
   assembleNote,
+  extractHook,
   type MemoryDoc,
   type MemoryHubSnapshot,
   type MemoryNote,
@@ -101,6 +102,19 @@ export class MemoryHubService {
   /** Raw docs (name + content + mtime) — for the pipeline's reconciliation. */
   listDocs(projectId: string): MemoryDoc[] {
     return this.readDocs(projectId)
+  }
+
+  /**
+   * Notes as `{ name, hook, updatedAt }`, newest-first (Faz D). The hook is the
+   * charter's one-line body head — enough for relevance ranking and the curation
+   * inventory without inlining full note bodies. Reads the same docs `list()`
+   * already reads, so it is no more expensive; kept separate from the renderer's
+   * `list()` snapshot so adding a hook here never perturbs that UI shape.
+   */
+  listHooks(projectId: string): { name: string; hook: string | null; updatedAt: string }[] {
+    return this.readDocs(projectId)
+      .map((d) => ({ name: d.name, hook: extractHook(d.content), updatedAt: d.updatedAt }))
+      .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
   }
 
   read(projectId: string, name: string): MemoryNote | null {

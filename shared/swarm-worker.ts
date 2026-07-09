@@ -4,7 +4,7 @@
 // can reach the shell's line editor.
 
 /** Pointers only — the worker reads notes itself; contents are never inlined. */
-const HUB_POINTER_CAP = 20
+export const HUB_POINTER_CAP = 20
 
 /**
  * Strip C0 control characters (plus DEL). On a pty they act at the line-editor

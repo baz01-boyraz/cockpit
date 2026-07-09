@@ -27,6 +27,7 @@ import { MemoryPipeline } from './MemoryPipeline'
 import { MemoryCaptureQueue } from './MemoryCaptureQueue'
 import { MemoryAutoCapture } from './MemoryAutoCapture'
 import { MemoryConsolidator } from './MemoryConsolidator'
+import { MemoryCurationService } from './MemoryCurationService'
 import { registerMemoryExitCapture } from './memoryExitTrigger'
 import { SwarmService } from './SwarmService'
 import { SentinelService, type SentinelNotifier } from './SentinelService'
@@ -94,6 +95,8 @@ export class Services {
   readonly memoryCaptureQueue: MemoryCaptureQueue
   readonly memoryAutoCapture: MemoryAutoCapture
   readonly memoryConsolidator: MemoryConsolidator
+  /** Faz D: the weekly curation sweep — proposes archive/merge for stale notes. */
+  readonly memoryCuration: MemoryCurationService
   readonly swarm: SwarmService
   /** Always-on, LLM-free signal layer (Faz A): sensors → dedup → feed + notify. */
   readonly sentinel: SentinelService
@@ -156,15 +159,19 @@ export class Services {
     // One session store, shared: the council writes runs to it, the swarm reads
     // a card's approved session back from it at spawn (Faz 2a).
     const councilSessions = new CouncilSessionStore(this.db)
+    // Memory hub is built BEFORE the council so the council can take it as its
+    // Faz D collaborator — in spec mode the seats gain an inline, relevance-ranked
+    // memory-pointer block (file-blind OpenRouter seats have no other view of it).
+    this.memory = new MemoryHubService(this.projects)
+    this.globalMemory = new MemoryHubService(this.projects, join(opts.userDataDir, 'baz-memory'))
     this.council = new CouncilService(
       this.projects,
       this.audit,
       new EngineRunner(this.secrets),
       councilSessions,
       this.sentinel,
+      this.memory,
     )
-    this.memory = new MemoryHubService(this.projects)
-    this.globalMemory = new MemoryHubService(this.projects, join(opts.userDataDir, 'baz-memory'))
     this.memoryLedger = new MemoryLedgerService(this.db)
     // this.memoryReviews is constructed earlier (Faz B) so the sentinel can take
     // it as its gotcha-route review sink.
@@ -179,6 +186,9 @@ export class Services {
       this.audit,
     )
     this.memoryConsolidator = new MemoryConsolidator(this.memory, this.memoryReviews)
+    // Faz D: the weekly curation sweep. Reuses the triage runner pattern (a cheap
+    // Hermes oneshot); proposals route into the review queue, never a file op.
+    this.memoryCuration = new MemoryCurationService(this.memory, this.memoryReviews, this.audit)
     this.memoryCaptureQueue = new MemoryCaptureQueue(this.db)
     this.memoryAutoCapture = new MemoryAutoCapture(
       this.memoryCaptureQueue,
@@ -248,6 +258,7 @@ export class Services {
       memory: this.memory,
       memoryReviews: this.memoryReviews,
       memoryPipeline: this.memoryPipeline,
+      memoryCuration: this.memoryCuration,
       logs: this.logs,
       approvals: this.approvals,
       // Faz C: gate outcomes (accept/review/reject counts, no content) land here.
@@ -276,6 +287,42 @@ export class Services {
     // idle-poll. Non-claude terminals never trigger a capture. The idle-poll
     // above remains the fallback for panes that never emit a clean exit.
     registerMemoryExitCapture(opts.events, this.memoryAutoCapture)
+
+    // Faz D: weekly memory curation cadence — no new table. Each project's last
+    // sweep is read from the append-only audit trail; anything not swept in >7
+    // days (or never) gets a fire-and-forget sweep. Fully isolated so it can
+    // never block or crash startup.
+    this.scheduleCurationSweeps()
+  }
+
+  /** Age threshold before a project's memory hub is re-swept (7 days). */
+  private static readonly CURATION_CADENCE_MS = 7 * 24 * 60 * 60 * 1000
+
+  /**
+   * Fire-and-forget a curation sweep for every project not swept in the last
+   * {@link CURATION_CADENCE_MS} (or never). Best-effort: each project is isolated,
+   * the whole pass is try/caught, and the sweep itself never throws — a curation
+   * miss costs nothing, but a boot failure would cost everything.
+   */
+  private scheduleCurationSweeps(): void {
+    try {
+      const nowMs = Date.now()
+      for (const project of this.projects.list()) {
+        try {
+          const last = this.audit.lastAt(project.id, 'memory.curation_sweep')
+          const lastMs = last ? Date.parse(last) : Number.NaN
+          const due = Number.isNaN(lastMs) || nowMs - lastMs > Services.CURATION_CADENCE_MS
+          if (!due) continue
+          void this.memoryCuration.sweep(project.id).catch(() => {
+            /* a missed sweep is invisible by design */
+          })
+        } catch {
+          // One project's failure never stops the others.
+        }
+      }
+    } catch {
+      // Enumeration failed — cadence is best-effort, never a boot blocker.
+    }
   }
 
   /**

@@ -28,7 +28,7 @@ instead of making one up.
 ## Your tools (MCP server `cockpit`, connected via `hermes mcp add`)
 
 All of these call the exact same validated logic the cockpiT UI itself uses — there is no raw
-shell/file access to the app, only this fixed list of 17 tools:
+shell/file access to the app, only this fixed list of 18 tools:
 
 - `council_refine_spec` — run a draft task spec through the LLM council's spec gate BEFORE you
   create/propose a card. Returns APPROVED (with a refined spec + `sessionId`), NEEDS_CLARIFICATION
@@ -44,6 +44,8 @@ shell/file access to the app, only this fixed list of 17 tools:
 - `read_memory_recent`, `write_memory_summary` — this project's memory hub (charter-gated; see
   "Memory — the charter" below).
 - `get_pending_memory_reviews`, `resolve_memory_review` — the conflict-resolution queue.
+- `run_memory_sweep` — weekly memory curation: propose archive/merge for stale or duplicate
+  notes. Proposals go to the review queue, never act directly. See "Memory — the charter" below.
 - `propose_swarm_card` — propose (do NOT open) a card for something you noticed yourself; it goes
   to the human's Dashboard for approval. See "Two ways a card gets opened" below.
 
@@ -105,6 +107,12 @@ write-gate enforces it, so a lazy write is not saved, it is bounced to the revie
 - **Never write secrets.** Secret-shaped content is refused outright, citing the charter.
 - **Attach a `justification`** (7-day scenario, dedup check, evidence) to every write. A justified,
   deduped, secret-free note is saved directly; a weak one is queued for review (nothing is lost).
+- **Lifecycle — the weekly sweep.** Notes decay. `run_memory_sweep` runs one cheap pass over the
+  hub and proposes archive/merge for stale or duplicate notes; the proposals land in the review
+  queue for the owner to approve — the sweep never edits or deletes a note itself. The cockpit
+  also fires this automatically about weekly, so you rarely need to call it by hand; when you do
+  (e.g. the human asks you to tidy memory), relay the proposal count and point them at
+  `get_pending_memory_reviews`. `delete` is not an action — archive (soft-delete) covers removal.
 
 ## Two ways a card gets opened — never confuse them
 

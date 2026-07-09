@@ -43,6 +43,36 @@ export function titleOf(content: string, name: string): string {
   return m ? m[1].trim() : name
 }
 
+/** Hard cap on the one-line hook extracted for list previews / relevance recall. */
+export const HOOK_CAP = 120
+
+/**
+ * The charter's "one-line hook": the first real prose line at the body head. Skips
+ * a leading `--- … ---` frontmatter block, then any heading (`#…`) and blank
+ * lines, and strips a leading blockquote marker (`>`), returning the first content
+ * line capped at {@link HOOK_CAP} chars — or null when the note is all
+ * frontmatter/headings/blank. Pure and cheap; used to preview a note without
+ * inlining its whole body.
+ */
+export function extractHook(content: string): string | null {
+  const lines = content.split('\n')
+  let i = 0
+  // Skip a leading frontmatter block (opens with a line that is exactly `---`).
+  if (lines[0]?.trim() === '---') {
+    i = 1
+    while (i < lines.length && lines[i].trim() !== '---') i += 1
+    i += 1 // step past the closing `---`
+  }
+  for (; i < lines.length; i += 1) {
+    const line = lines[i].trim()
+    if (line.length === 0 || line.startsWith('#')) continue
+    const stripped = line.startsWith('>') ? line.replace(/^>+\s?/, '').trim() : line
+    if (stripped.length === 0) continue
+    return stripped.slice(0, HOOK_CAP)
+  }
+  return null
+}
+
 export function assembleHubSnapshot(docs: MemoryDoc[]): MemoryHubSnapshot {
   const idx = buildLinkIndex(docs)
   const notes = docs

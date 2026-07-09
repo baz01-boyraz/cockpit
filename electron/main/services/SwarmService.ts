@@ -6,7 +6,8 @@ import {
   type CardStatus,
   type KanbanCard,
 } from '@shared/kanban'
-import { buildWorkerCommand } from '@shared/swarm-worker'
+import { buildWorkerCommand, HUB_POINTER_CAP } from '@shared/swarm-worker'
+import { rankNotes } from '@shared/memory-recall'
 import { composeCouncilBrief, type CouncilResult } from '@shared/council'
 import {
   assignmentLabel,
@@ -125,7 +126,7 @@ export class SwarmService {
   constructor(
     private readonly db: Db,
     private readonly terminals: WorkerSpawner,
-    private readonly memory: Pick<MemoryHubService, 'list'>,
+    private readonly memory: Pick<MemoryHubService, 'list' | 'listHooks'>,
     private readonly audit: AuditLogService,
     private readonly events: CockpitEvents,
     private readonly projects: { get(projectId: string): { path: string } },
@@ -382,7 +383,7 @@ export class SwarmService {
     step: number,
     councilBrief: string | null = null,
   ): TerminalSession {
-    const hubNames = this.hubNoteNames(projectId)
+    const hubNames = this.hubNoteNames(projectId, card)
     // Identity precedence: a Named Agent speaks with its authored voice; else
     // the pipeline step's role/spec prompt; else the legacy manual role/persona.
     const named = card.agent ? (this.namedAgents?.find(projectId, card.agent) ?? null) : null
@@ -561,10 +562,19 @@ export class SwarmService {
     }
   }
 
-  /** Read-only hub pointers for the worker prompt; a missing hub is fine. */
-  private hubNoteNames(projectId: string): string[] {
+  /**
+   * Read-only hub pointers for the worker prompt (Faz D: relevance-ranked). The
+   * pointers are still NAMES only and capped at HUB_POINTER_CAP — the prompt
+   * format is unchanged — but they are now ordered by relevance to THIS card's
+   * text (name/hook overlap), with recency as the floor, so a worker on a large
+   * hub sees the notes that actually matter for its task first. A missing hub is
+   * fine; any failure degrades to no pointers, never a refused spawn.
+   */
+  private hubNoteNames(projectId: string, card: { title: string; body: string }): string[] {
     try {
-      return this.memory.list(projectId).notes.map((n) => n.name)
+      const notes = this.memory.listHooks(projectId) // newest-first
+      const ranked = rankNotes(`${card.title}\n${card.body}`, notes, HUB_POINTER_CAP)
+      return ranked.map((n) => n.name)
     } catch {
       return []
     }

@@ -149,6 +149,7 @@ interface Calls {
   auditRecord: unknown[]
   listPending: string[]
   resolveReview: unknown[]
+  curationSweep: string[]
   logsList: string[]
   insightsList: string[]
   approvalsRequest: unknown[]
@@ -173,6 +174,7 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
     auditRecord: [],
     listPending: [],
     resolveReview: [],
+    curationSweep: [],
     logsList: [],
     insightsList: [],
     approvalsRequest: [],
@@ -273,6 +275,12 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
     memoryPipeline: {
       resolveReview: (projectId, reviewId, decision, editedContent) => {
         calls.resolveReview.push({ projectId, reviewId, decision, editedContent })
+      },
+    },
+    memoryCuration: {
+      sweep: async (projectId) => {
+        calls.curationSweep.push(projectId)
+        return { proposals: 2 }
       },
     },
     logs: {
@@ -384,12 +392,36 @@ describe('Hermes MCP tools — the scoped tool set', () => {
       'read_memory_recent',
       'resolve_memory_review',
       'run_checks',
+      'run_memory_sweep',
       'start_swarm_card',
       'subscribe_card_output',
       'take_app_screenshot',
       'update_swarm_card',
       'write_memory_summary',
     ])
+  })
+
+  describe('run_memory_sweep', () => {
+    it('triggers the curation sweep and returns a compact proposal count + message', async () => {
+      const { ctx, calls } = makeContext()
+      const out = (await toolNamed(ctx, 'run_memory_sweep').run({ projectId: 'p1' })) as {
+        proposals: number
+        message: string
+      }
+      expect(calls.curationSweep).toEqual(['p1'])
+      expect(out.proposals).toBe(2)
+      expect(out.message).toMatch(/review queue/i)
+    })
+
+    it('reports a no-op cleanly when the sweep returns null (empty hub / model down)', async () => {
+      const { ctx } = makeContext({ memoryCuration: { sweep: async () => null } })
+      const out = (await toolNamed(ctx, 'run_memory_sweep').run({ projectId: 'p1' })) as {
+        proposals: number
+        message: string
+      }
+      expect(out.proposals).toBe(0)
+      expect(out.message).toMatch(/nothing was changed/i)
+    })
   })
 
   describe('get_log_intelligence', () => {

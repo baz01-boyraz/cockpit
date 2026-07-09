@@ -53,6 +53,22 @@ export class AuditLogService {
     return entry
   }
 
+  /**
+   * ISO timestamp of the most recent entry of a given action type for a project,
+   * or null when there is none. A cheap, index-friendly cadence probe — lets a
+   * time-based job (the weekly memory curation sweep) decide "due / not due"
+   * without a new table, reading its own last run from the append-only trail.
+   */
+  lastAt(projectId: string, actionType: string): string | null {
+    const row = this.db
+      .prepare(
+        `SELECT created_at FROM audit_log WHERE project_id = ? AND action_type = ?
+         ORDER BY created_at DESC LIMIT 1`,
+      )
+      .get(projectId, actionType) as { created_at: string } | undefined
+    return row?.created_at ?? null
+  }
+
   list(projectId: string, limit = 100): AuditEntry[] {
     const rows = this.db
       .prepare(

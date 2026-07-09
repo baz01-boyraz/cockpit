@@ -22,10 +22,12 @@ import {
   type ScorecardEntry,
 } from '@shared/council'
 import { buildChairmanPrompt, buildRankingPrompt, buildSeatPrompt, buildSpecChairmanPrompt } from '@shared/council-prompts'
+import { composeMemoryPointerBlock } from '@shared/memory-recall'
 import type { CouncilSessionStore } from '../db/CouncilSessionStore'
 import { collectDiffInputs } from './ReviewService'
 import type { AuditLogService } from './AuditLogService'
 import type { EngineRunner } from './EngineRunner'
+import type { MemoryHubService } from './MemoryHubService'
 import type { ProjectService } from './ProjectService'
 import type { SentinelService } from './SentinelService'
 
@@ -82,6 +84,11 @@ export class CouncilService {
      *  needs_clarification raises a `notice` signal. Undefined in tests (no-op);
      *  sentinel never depends on this service. */
     private readonly sentinel?: SentinelReporter,
+    /** Optional Faz D collaborator — the project memory hub. In `spec` mode the
+     *  seats gain an inline, relevance-ranked "Project memory pointers" block so
+     *  file-blind OpenRouter seats still see the hub. Undefined → no block; tests
+     *  pass nothing and are unaffected. */
+    private readonly memory?: Pick<MemoryHubService, 'listHooks'>,
   ) {}
 
   async run(projectId: string, opts: CouncilRunOpts = {}): Promise<CouncilResult> {
@@ -116,8 +123,13 @@ export class CouncilService {
     const fenceTag = `====COCKPIT-UNTRUSTED-${mode.toUpperCase()}-${randomUUID()}====`
     const claudeOverride = opts.model ? resolveChatModel(opts.model).id : null
 
+    // Spec mode only: an inline, relevance-ranked memory-pointer block for the
+    // seats (file-blind OpenRouter seats have no other view of the hub). Ranked
+    // against the spec + the author's summary; any failure degrades to no block.
+    const memoryBlock = mode === 'spec' ? this.memoryPointerBlock(projectId, question, specText) : null
+
     const seatPrompt = (seat: CouncilSeat): string =>
-      buildSeatPrompt(seat, { mode, fenceTag, projectName: project.name, question, sanitized, specText })
+      buildSeatPrompt(seat, { mode, fenceTag, projectName: project.name, question, sanitized, specText, memoryBlock })
 
     // Phase 1 — every seat, in parallel, blind to the others (with fallback).
     const seats: CouncilSeatOutput[] = await Promise.all(
@@ -177,6 +189,27 @@ export class CouncilService {
   scorecard(projectId: string, limit = 30): ScorecardEntry[] {
     const rows = this.sessions.listRecent(projectId, limit).map((s) => ({ aggregate: s.result.aggregate }))
     return computeScorecard(rows)
+  }
+
+  /**
+   * The inline "Project memory pointers" block for the spec seats, or null. Ranks
+   * the hub notes against the spec (plus the author's already-redacted summary)
+   * and renders the top few as `name — hook`, TOTAL-capped. A missing collaborator,
+   * an empty hub, or any read error yields null — the council runs unchanged.
+   */
+  private memoryPointerBlock(
+    projectId: string,
+    question: string | null,
+    specText: string | undefined,
+  ): string | null {
+    if (!this.memory) return null
+    try {
+      const notes = this.memory.listHooks(projectId) // newest-first
+      const query = `${question ?? ''}\n${specText ?? ''}`
+      return composeMemoryPointerBlock(query, notes)
+    } catch {
+      return null
+    }
   }
 
   private async prepareDiff(

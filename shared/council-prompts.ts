@@ -87,6 +87,13 @@ export interface SeatPromptOpts {
   question: string | null
   sanitized?: SanitizedDiff
   specText?: string
+  /**
+   * Faz D: an inline "Project memory pointers" block (spec mode). It sits OUTSIDE
+   * the untrusted-data fence — it is our OWN hub content, trusted context, not the
+   * spec under review. Rationale: OpenRouter seats cannot read files, so the hooks
+   * must be inlined for them; CLI seats may additionally open the files themselves.
+   */
+  memoryBlock?: string | null
 }
 
 /**
@@ -111,6 +118,13 @@ export function buildSeatPrompt(seat: CouncilSeat, opts: SeatPromptOpts): string
     'If you cannot find a real issue, say so plainly. Prose only — no JSON, no preamble.',
   )
   if (seat.id === 'builder') parts.push('', ...builderRequirements())
+
+  // Spec mode: inline the relevant project-memory pointers BEFORE the fenced spec,
+  // clearly labeled and outside the fence — trusted context that helps a seat judge
+  // buildability (an OpenRouter seat has no other way to see the hub).
+  if (mode === 'spec' && opts.memoryBlock && opts.memoryBlock.trim().length > 0) {
+    parts.push('', opts.memoryBlock.trim())
+  }
   parts.push('')
 
   if (mode === 'diff') {

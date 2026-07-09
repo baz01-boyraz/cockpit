@@ -170,7 +170,11 @@ function makeDeps() {
       return {} as never
     }),
   } as unknown as AuditLogService
-  const memory = { list: () => ({ notes: [{ name: 'swarm-design' }], unresolved: [] }) }
+  const memory = {
+    list: () => ({ notes: [{ name: 'swarm-design' }], unresolved: [] }),
+    // Faz D: worker pointers are relevance-ranked over listHooks (newest-first).
+    listHooks: () => [{ name: 'swarm-design', hook: null, updatedAt: 't1' }],
+  }
   const events = new CockpitEvents()
   const projects = { get: () => ({ path: '/proj' }) }
   const wtCalls: string[] = []
@@ -306,6 +310,29 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
     // Auto-assignment is persisted so the board and any resume see the pipeline.
     expect(JSON.parse(row.assignments)).toEqual([{ role: 'fixer', spec: 'frontend' }])
     expect(deps.audits).toContain('swarm.start_card')
+  })
+
+  it('ranks hub pointers by relevance to the card — a matching note outranks a newer irrelevant one', async () => {
+    const localStore = makeStore([{ id: 'a', status: 'todo', position: POSITION_GAP, title: 'Fix the login form' }])
+    const localDeps = makeDeps()
+    // newest-first: the newest note is irrelevant; an older note matches the card.
+    localDeps.memory = {
+      list: () => ({ notes: [], unresolved: [] }),
+      listHooks: () => [
+        { name: 'unrelated-newer', hook: 'about deployment pipelines', updatedAt: 't5' },
+        { name: 'login-form-validation', hook: 'how the login form validates input', updatedAt: 't1' },
+      ],
+    } as never
+    const localSvc = build(localStore, localDeps)
+
+    await localSvc.startCard({ projectId: 'p1', cardId: 'a' })
+    const command = localDeps.spawned[0].command ?? ''
+    const relevantAt = command.indexOf('.cockpit-memory/login-form-validation.md')
+    const irrelevantAt = command.indexOf('.cockpit-memory/unrelated-newer.md')
+    expect(relevantAt).toBeGreaterThanOrEqual(0)
+    expect(irrelevantAt).toBeGreaterThanOrEqual(0)
+    // The relevant note appears first despite being older than the irrelevant one.
+    expect(relevantAt).toBeLessThan(irrelevantAt)
   })
 
   it('reuses an existing worktree on resume and never starts a done card', async () => {

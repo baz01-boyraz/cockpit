@@ -7,6 +7,7 @@ import type { ReviewService } from '../ReviewService'
 import type { MemoryHubService } from '../MemoryHubService'
 import type { MemoryReviewService } from '../MemoryReviewService'
 import type { MemoryPipeline } from '../MemoryPipeline'
+import type { MemoryCurationService } from '../MemoryCurationService'
 import type { ApprovalService } from '../ApprovalService'
 import type { AuditLogService } from '../AuditLogService'
 import type { LogIntelligenceService } from '../LogIntelligenceService'
@@ -38,6 +39,9 @@ export interface HermesToolContext {
   // into the SAME review queue the distiller uses, instead of persisting it.
   memoryReviews: Pick<MemoryReviewService, 'listPending' | 'create'>
   memoryPipeline: Pick<MemoryPipeline, 'resolveReview'>
+  // Faz D — the weekly memory curation sweep. `run_memory_sweep` triggers it;
+  // proposals land in the review queue above, never a direct file operation.
+  memoryCuration: Pick<MemoryCurationService, 'sweep'>
   // Optional: gate outcomes (accept/review/reject counts, no content) are
   // recorded here for the junk-rate metric when an audit sink is wired.
   audit?: Pick<AuditLogService, 'record'>
