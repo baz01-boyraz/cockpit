@@ -9,6 +9,7 @@ import {
 } from '../components/icons'
 import { useAgentUsage } from '../lib/useAgentUsage'
 import { UsageQuotaRings } from '../components/UsageQuotaRings'
+import { AiSpendOverview } from '../components/AiSpendOverview'
 import { CountUp } from '../components/CountUp'
 
 /* Claude reads ember, Codex reads glacier; every other provider stays a
@@ -78,6 +79,8 @@ export function UsagePanel() {
           </div>
         ))}
       </div>
+
+      <AiSpendOverview />
 
       {agentUsage && agentUsage.length > 0 ? (
         <div className="card usage__quota">
