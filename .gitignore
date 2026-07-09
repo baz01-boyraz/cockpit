@@ -43,3 +43,7 @@ Thumbs.db
 # coverage
 coverage/
 coverage/
+
+# E2E (Playwright) run artifacts
+playwright-report/
+test-results/

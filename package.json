@@ -20,6 +20,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "postinstall": "node scripts/fix-native.mjs",
     "serve": "node serve.mjs",
@@ -88,6 +89,7 @@
   "devDependencies": {
     "@electron/rebuild": "^3.7.1",
     "@eslint/js": "^9.18.0",
+    "@playwright/test": "^1.61.1",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.5",
     "@types/react": "^18.3.18",
