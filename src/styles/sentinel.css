@@ -1,0 +1,267 @@
+/**
+ * Sentinel signal feed (Track E3) — scoped styles for the full-history rail view
+ * (`src/panels/SentinelPanel.tsx`). The top-bar bell popover keeps its compact
+ * styles in components.css; the shared `.sigbadge` outcome pill lives here since
+ * both surfaces render it. Molten Obsidian: layered surfaces, ember reserved for
+ * the few attention points (unseen wash, alert edge, "card created"), motion only
+ * on transform/opacity.
+ */
+
+/* ---------- severity filter chips ---------- */
+.sentinel__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.sigchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 550;
+  cursor: pointer;
+  transition: color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out),
+    background-color var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.sigchip:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+.sigchip:active { transform: translateY(0); }
+.sigchip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sigchip--on {
+  color: var(--text);
+  border-color: var(--border-accent);
+  background: var(--accent-wash);
+}
+.sigchip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-pill);
+  background: var(--text-faint);
+  flex: none;
+}
+.sigchip--alert .sigchip__dot { background: var(--ember-300); box-shadow: 0 0 6px var(--accent-glow); }
+.sigchip--notice .sigchip__dot { background: var(--ember-400); }
+.sigchip--info .sigchip__dot { background: var(--glacier-500); }
+.sigchip__count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.sigchip--on .sigchip__count { color: var(--accent-hi); }
+
+.sentinel__markCount {
+  margin-left: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- confirmation / error lines ---------- */
+.sentinel__flash,
+.sentinel__error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  font-size: var(--fs-xs);
+  animation: fade-rise var(--dur) var(--ease-out) both;
+}
+.sentinel__flash {
+  color: var(--signal);
+  border-color: color-mix(in srgb, var(--signal) 34%, var(--border));
+  background: color-mix(in srgb, var(--signal) 8%, transparent);
+}
+.sentinel__error {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+/* ---------- feed card + rows ---------- */
+.sentinel__card { padding: 0; overflow: hidden; }
+.sentinel__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-7) var(--sp-5);
+  color: var(--text-faint);
+  text-align: center;
+  max-width: 420px;
+  margin: 0 auto;
+}
+.sentinel__empty svg { color: var(--text-faint); opacity: 0.7; }
+
+.siglist {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sigrow {
+  position: relative;
+  padding: var(--sp-4) var(--sp-5) var(--sp-4) calc(var(--sp-5) + 8px);
+  border-bottom: 1px solid var(--border);
+  transition: background-color var(--dur) var(--ease-out);
+}
+.sigrow:last-child { border-bottom: none; }
+.sigrow:hover { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+.sigrow__edge {
+  position: absolute;
+  left: var(--sp-4);
+  top: var(--sp-4);
+  bottom: var(--sp-4);
+  width: 3px;
+  border-radius: var(--r-pill);
+  background: var(--text-faint);
+}
+.sigrow--notice .sigrow__edge { background: var(--ember-400); }
+.sigrow--alert .sigrow__edge { background: var(--ember-300); box-shadow: 0 0 9px var(--accent-glow); }
+.sigrow--info .sigrow__edge { background: var(--glacier-500); }
+.sigrow--new { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+.sigrow--new .sigrow__source { color: var(--accent-hi); }
+
+.sigrow__body { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.sigrow__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.sigrow__source {
+  font-size: var(--fs-micro);
+  font-weight: 650;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.sigrow__meta { display: flex; align-items: center; gap: 7px; flex: none; }
+.sigrow__time {
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.sigrow__title {
+  font-size: var(--fs-sm);
+  font-weight: 620;
+  color: var(--text);
+  line-height: 1.35;
+}
+.sigrow__summary {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.sigrow__context {
+  margin-top: 2px;
+  padding: 7px 9px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  font-size: var(--fs-micro);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  max-height: 5.4em;
+  overflow: hidden;
+}
+
+/* ---------- Hermes triage enrichment ---------- */
+.sigtriage {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 3px;
+  padding: 9px 11px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--glacier-400);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
+}
+.sigtriage__head { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.sigtriage__eyebrow {
+  font-size: var(--fs-micro);
+  font-weight: 650;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--glacier-400);
+}
+.sigtriage__headline {
+  font-size: var(--fs-xs);
+  font-weight: 550;
+  color: var(--text);
+  line-height: 1.45;
+}
+.sigtriage__action {
+  display: flex;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.sigtriage__arrow { color: var(--accent-hi); flex: none; font-weight: 700; }
+
+/* ---------- outcome / status badges (shared with the bell popover) ---------- */
+.sigbadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  flex: none;
+}
+.sigbadge--new {
+  color: var(--accent-hi);
+  border-color: var(--border-accent);
+  background: var(--accent-wash);
+}
+.sigbadge--accent {
+  color: var(--accent-hi);
+  border-color: var(--border-accent);
+  background: var(--accent-wash);
+}
+.sigbadge--signal {
+  color: var(--signal);
+  border-color: color-mix(in srgb, var(--signal) 36%, var(--border));
+  background: color-mix(in srgb, var(--signal) 10%, transparent);
+}
+.sigbadge--muted { color: var(--text-faint); }
+
+/* ---------- row actions ---------- */
+.sigrow__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.sigrow__dismiss:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sigchip:hover { transform: none; }
+  .sentinel__flash,
+  .sentinel__error { animation: none; }
+}

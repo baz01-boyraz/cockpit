@@ -10,8 +10,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import { relativeTime } from '@shared/time'
-import { sourceLabel, toHermesOpener } from '../lib/sentinelView'
-import { IconBell } from './icons'
+import { OUTCOME_META, sourceLabel, toHermesOpener } from '../lib/sentinelView'
+import { IconBell, IconCheck, IconPlus, IconX } from './icons'
 import type { SentinelSignal } from '@shared/sentinel'
 
 export function SentinelBell() {
@@ -69,6 +69,33 @@ export function SentinelBell() {
     setOpen(false)
   }
 
+  const patch = (id: string, next: Partial<SentinelSignal>) =>
+    setSignals((prev) => prev.map((s) => (s.id === id ? { ...s, ...next } : s)))
+
+  // Track H affordances, compact: record an outcome without leaving the popover.
+  // Both also clear the signal from the badge (an answered signal isn't unseen).
+  const dismiss = async (signal: SentinelSignal) => {
+    if (!activeProjectId) return
+    patch(signal.id, { outcome: 'dismissed', status: 'seen' })
+    void markSignalsSeen([signal.id])
+    try {
+      await cockpit().sentinel.recordOutcome(activeProjectId, signal.id, 'dismissed')
+    } catch {
+      patch(signal.id, { outcome: signal.outcome })
+    }
+  }
+
+  const createCard = async (signal: SentinelSignal) => {
+    if (!activeProjectId) return
+    patch(signal.id, { outcome: 'card_created', status: 'seen' })
+    void markSignalsSeen([signal.id])
+    try {
+      await cockpit().sentinel.createCard(activeProjectId, signal.id)
+    } catch {
+      patch(signal.id, { outcome: signal.outcome })
+    }
+  }
+
   const markAll = () => {
     const newIds = signals.filter((s) => s.status === 'new').map((s) => s.id)
     if (newIds.length === 0) return
@@ -121,28 +148,65 @@ export function SentinelBell() {
                 </span>
               </div>
             ) : (
-              signals.map((signal) => (
-                <button
-                  key={signal.id}
-                  type="button"
-                  className={`sentinelRow sentinelRow--${signal.severity} ${
-                    signal.status === 'new' ? 'sentinelRow--new' : ''
-                  }`}
-                  onClick={() => pick(signal)}
-                >
-                  <span className="sentinelRow__edge" aria-hidden="true" />
-                  <span className="sentinelRow__body">
-                    <span className="sentinelRow__top">
-                      <span className="sentinelRow__source">{sourceLabel(signal.source)}</span>
-                      <span className="sentinelRow__time mono">
-                        {relativeTime(signal.createdAt) || 'now'}
+              signals.map((signal) => {
+                const outcomeMeta = signal.outcome ? OUTCOME_META[signal.outcome] : null
+                return (
+                  <div
+                    key={signal.id}
+                    className={`sentinelRow sentinelRow--${signal.severity} ${
+                      signal.status === 'new' ? 'sentinelRow--new' : ''
+                    }`}
+                  >
+                    <span className="sentinelRow__edge" aria-hidden="true" />
+                    <button
+                      type="button"
+                      className="sentinelRow__main"
+                      onClick={() => pick(signal)}
+                      title="Continue in Hermes"
+                    >
+                      <span className="sentinelRow__top">
+                        <span className="sentinelRow__source">{sourceLabel(signal.source)}</span>
+                        <span className="sentinelRow__time mono">
+                          {relativeTime(signal.createdAt) || 'now'}
+                        </span>
                       </span>
-                    </span>
-                    <span className="sentinelRow__title">{signal.title}</span>
-                    <span className="sentinelRow__summary">{signal.summary}</span>
-                  </span>
-                </button>
-              ))
+                      <span className="sentinelRow__title">{signal.title}</span>
+                      <span className="sentinelRow__summary">{signal.summary}</span>
+                    </button>
+                    <div className="sentinelRow__acts">
+                      {outcomeMeta && (
+                        <span className={`sigbadge sigbadge--${outcomeMeta.tone}`}>
+                          {outcomeMeta.label}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        className="sentinelRow__act"
+                        onClick={() => void createCard(signal)}
+                        disabled={signal.outcome === 'card_created'}
+                        aria-label="Create Swarm card from this signal"
+                        title="Create card"
+                      >
+                        {signal.outcome === 'card_created' ? (
+                          <IconCheck width={13} height={13} />
+                        ) : (
+                          <IconPlus width={13} height={13} />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className="sentinelRow__act sentinelRow__act--dismiss"
+                        onClick={() => void dismiss(signal)}
+                        disabled={signal.outcome === 'dismissed'}
+                        aria-label="Dismiss this signal as noise"
+                        title="Dismiss as noise"
+                      >
+                        <IconX width={13} height={13} />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })
             )}
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { useStore, type View } from '../store/useStore'
 import {
+  IconBell,
   IconBranch,
   IconChevron,
   IconCouncil,
@@ -34,6 +35,7 @@ const NAV: NavItem[] = [
   { view: 'railway', label: 'Railway', Icon: IconRailway },
   { view: 'logs', label: 'Logs & Errors', Icon: IconLogs },
   { view: 'audit', label: 'Audit', Icon: IconShieldSearch },
+  { view: 'sentinel', label: 'Sentinel', Icon: IconBell },
   { view: 'memory', label: 'Memory', Icon: IconMemory },
   { view: 'usage', label: 'Usage', Icon: IconUsage },
   { view: 'settings', label: 'Settings', Icon: IconSettings },
@@ -44,6 +46,7 @@ export function LeftRail() {
   const setView = useStore((s) => s.setView)
   const dashboard = useStore((s) => s.dashboard)
   const terminals = useStore((s) => s.terminals)
+  const sentinelUnseen = useStore((s) => s.sentinelUnseen)
   const toggleSwitcher = useStore((s) => s.toggleSwitcher)
   const project = dashboard?.project
 
@@ -51,6 +54,7 @@ export function LeftRail() {
     if (v === 'terminals' && terminals.length) return String(terminals.length)
     if (v === 'git' && dashboard?.changedFiles) return String(dashboard.changedFiles)
     if (v === 'logs' && dashboard?.recentErrors.length) return String(dashboard.recentErrors.length)
+    if (v === 'sentinel' && sentinelUnseen) return sentinelUnseen > 9 ? '9+' : String(sentinelUnseen)
     return null
   }
 

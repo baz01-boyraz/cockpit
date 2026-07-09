@@ -736,18 +736,68 @@
 .sentinelRow {
   position: relative;
   display: flex;
-  gap: var(--sp-3);
+  align-items: stretch;
+  gap: var(--sp-2);
   width: 100%;
-  padding: 9px 10px 9px 19px;
+  padding: 9px 8px 9px 19px;
   border: 1px solid transparent;
   border-radius: var(--r-md);
   background: transparent;
-  text-align: left;
-  cursor: pointer;
   transition: background-color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);
 }
 .sentinelRow:hover { background: var(--surface-3); border-color: var(--border); }
-.sentinelRow:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.sentinelRow:focus-within { background: var(--surface-3); border-color: var(--border); }
+.sentinelRow__main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sentinelRow__main:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+.sentinelRow__acts {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  align-self: flex-start;
+  margin-top: 1px;
+}
+.sentinelRow__act {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out),
+    background-color var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.sentinelRow__act:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+.sentinelRow__act:active { transform: translateY(0); }
+.sentinelRow__act:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sentinelRow__act:disabled { opacity: 0.5; cursor: default; transform: none; }
+.sentinelRow__act--dismiss:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border));
+}
 .sentinelRow__edge {
   position: absolute;
   left: 6px;
@@ -763,13 +813,6 @@
   box-shadow: 0 0 8px var(--accent-glow);
 }
 .sentinelRow--info .sentinelRow__edge { background: var(--glacier-500); }
-.sentinelRow__body {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-  flex: 1;
-}
 .sentinelRow__top {
   display: flex;
   align-items: baseline;
@@ -1539,6 +1582,8 @@
 .insight--card .insight__row { padding-right: 28px; }
 
 .logstream { padding: var(--sp-2); max-height: 560px; display: flex; flex-direction: column; gap: 1px; }
+/* windowing spacers stand in for off-screen rows — never shrink, never draw */
+.logstream__pad { flex-shrink: 0; }
 .logline {
   position: relative;
   display: flex;

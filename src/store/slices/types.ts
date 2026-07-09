@@ -37,6 +37,7 @@ export type View =
   | 'railway'
   | 'logs'
   | 'audit'
+  | 'sentinel'
   | 'memory'
   | 'usage'
   | 'settings'

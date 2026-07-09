@@ -15,6 +15,7 @@ import './styles/swarm.css'
 import './styles/council-view.css'
 import './styles/hermes.css'
 import './styles/audit.css'
+import './styles/sentinel.css'
 import { App } from './App'
 
 createRoot(document.getElementById('root')!).render(
