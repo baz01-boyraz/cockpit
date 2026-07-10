@@ -11,6 +11,7 @@ export const NAV = {
   terminals: '[data-nav="terminals"]',
   swarm: '[data-nav="swarm"]',
   memory: '[data-nav="memory"]',
+  usage: '[data-nav="usage"]',
 } as const
 
 /**
