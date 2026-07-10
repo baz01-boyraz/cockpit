@@ -52,6 +52,11 @@ const THEME = {
   brightWhite: '#ffffff',
 }
 
+export function agentPromptPlaceholder(agent: 'claude' | 'codex'): string {
+  const label = agent === 'claude' ? 'Claude Code' : 'Codex'
+  return `Write here with normal editing, then send it into ${label}…`
+}
+
 export function TerminalView({ session, active }: { session: TerminalSession; active: boolean }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -596,7 +601,7 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
                 id={`codex-prompt-${session.id}`}
                 className="codexdock__input"
                 aria-label="Compose Codex prompt"
-                placeholder="Write here with normal editing, then send it into Codex…"
+                placeholder={agentPromptPlaceholder(isCodex ? 'codex' : 'claude')}
                 value={promptDraft}
                 onChange={(event) => setPromptDraft(event.target.value)}
                 onKeyDown={(event) => {
