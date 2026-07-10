@@ -15,6 +15,7 @@
  * pure logic and runs identically in the browser mock.
  */
 import type { EngineSpec } from './engines'
+import type { MemoryContextReceipt } from './memory-context'
 
 /** The five seat lenses. Tone drives the render hue; id crosses IPC. `builder`
  *  replaces v1's `executor` — the seat that will actually implement the work. */
@@ -207,6 +208,8 @@ export interface CouncilResult {
   stats: CouncilStats
   /** The persisted session's id, or null when persistence itself failed. */
   sessionId: string | null
+  /** Automatic project-memory delivery receipt for this council run. */
+  memoryContext?: MemoryContextReceipt
 }
 
 /**

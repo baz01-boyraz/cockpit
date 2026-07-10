@@ -32,6 +32,7 @@ export function buildWorkerPrompt(
   hubNoteNames: readonly string[],
   roleText = '',
   councilBrief: string | null = null,
+  memoryContext: string | null = null,
 ): string {
   const lines = [
     `You are a swarm worker in the cockpiT Kanban board, started for one card.`,
@@ -45,6 +46,9 @@ export function buildWorkerPrompt(
   // It is authored by our own chairman but arrives via model output, so it goes
   // through the same stripPtyControls hygiene as everything else below.
   if (councilBrief && councilBrief.trim().length > 0) lines.push(``, councilBrief.trim())
+  if (memoryContext && memoryContext.trim().length > 0) {
+    lines.push(``, memoryContext.trim())
+  }
   if (hubNoteNames.length > 0) {
     const pointers = hubNoteNames
       .slice(0, HUB_POINTER_CAP)
@@ -76,9 +80,10 @@ export function buildWorkerCommand(
   roleText = '',
   model: string | null = null,
   councilBrief: string | null = null,
+  memoryContext: string | null = null,
 ): string {
   // The model id reaches a shell line, so it is allowlisted by shape — an
   // agent definition file with a hostile model value gets ignored, not run.
   const flag = model && MODEL_RE.test(model) ? `--model ${model} ` : ''
-  return `claude ${flag}${shellQuote(buildWorkerPrompt(card, hubNoteNames, roleText, councilBrief))}; exit`
+  return `claude ${flag}${shellQuote(buildWorkerPrompt(card, hubNoteNames, roleText, councilBrief, memoryContext))}; exit`
 }

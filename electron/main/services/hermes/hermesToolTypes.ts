@@ -34,7 +34,7 @@ export interface HermesToolContext {
   review: Pick<ReviewService, 'diffStat'>
   checks: Pick<HermesChecksService, 'run'>
   screenshot: Pick<AppScreenshotService, 'capture'>
-  memory: Pick<MemoryHubService, 'list' | 'write'>
+  memory: Pick<MemoryHubService, 'list' | 'listDocs' | 'write'>
   // `create` lets the charter write-gate (Faz C) route a junk/unjustified write
   // into the SAME review queue the distiller uses, instead of persisting it.
   memoryReviews: Pick<MemoryReviewService, 'listPending' | 'create'>

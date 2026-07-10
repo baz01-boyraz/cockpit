@@ -1,5 +1,6 @@
 import { createReadStream } from 'node:fs'
 import { redactText } from '@shared/redaction'
+import { stripAutomaticMemoryContext } from '@shared/memory-context'
 import { type TranscriptTurn, parseTranscriptLine } from '@shared/transcript'
 
 export interface TranscriptRead {
@@ -37,7 +38,9 @@ export class TranscriptReader {
         consumed += Buffer.byteLength(line, 'utf8') + 1
         const turn = parseTranscriptLine(line)
         if (!turn) return
-        turns.push(redact ? { ...turn, text: redactText(turn.text) } : turn)
+        const text = turn.role === 'user' ? stripAutomaticMemoryContext(turn.text) : turn.text
+        if (!text) return
+        turns.push(redact ? { ...turn, text: redactText(text) } : { ...turn, text })
       }
 
       stream.on('data', (chunk: string | Buffer) => {

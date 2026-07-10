@@ -59,6 +59,7 @@ import {
   swarmCompletionReportSchema,
   swarmUpdateCardSchema,
   terminalAttachmentInputSchema,
+  terminalAgentPromptSchema,
   terminalIdSchema,
   terminalInputSchema,
   terminalRenameSchema,
@@ -173,6 +174,10 @@ export function registerIpc(services: Services): void {
   handle('terminalsAttachImage', (p) =>
     services.attachments.saveTerminalImage(terminalAttachmentInputSchema.parse(p)),
   )
+  handle('terminalsPrepareAgentPrompt', (p) => {
+    const { sessionId, prompt } = terminalAgentPromptSchema.parse(p)
+    return services.agentPrompts.prepare(sessionId, prompt)
+  })
 
   // --- git ---
   handle('gitStatus', (p) => services.git.status(projectIdSchema.parse(p).projectId))

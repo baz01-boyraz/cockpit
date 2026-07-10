@@ -28,7 +28,7 @@ const readyContext = {
 describe('AgentPromptService', () => {
   it('routes a Codex terminal task through project memory before submission', () => {
     const terminals = {
-      get: vi.fn(() => ({ id: 'term_1', projectId: 'prj_1', role: 'codex' })),
+      get: vi.fn(() => ({ id: 'term_1', projectId: 'prj_1', role: 'codex' as const })),
     }
     const memory = { forTask: vi.fn(() => readyContext) }
     const service = new AgentPromptService(terminals, memory)
@@ -47,7 +47,7 @@ describe('AgentPromptService', () => {
 
   it('rejects ordinary shell panes because they are not agent task surfaces', () => {
     const terminals = {
-      get: vi.fn(() => ({ id: 'term_2', projectId: 'prj_1', role: 'general' })),
+      get: vi.fn(() => ({ id: 'term_2', projectId: 'prj_1', role: 'general' as const })),
     }
     const service = new AgentPromptService(terminals, { forTask: vi.fn() })
 

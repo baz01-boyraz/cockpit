@@ -74,6 +74,18 @@ gotchas carry the verbatim symptom text, never write secrets. Agent writes pass 
 (`shared/memory-gate.ts`): justified/deduped/secret-free lands directly, weak ones route to the
 review queue, secrets are refused. Direct human writes from the Memory UI stay ungated.
 
+### Automatic read contract
+
+Every app-owned task ingress passes through `MemoryContextService` before an engine sees the
+task: Claude chat, Hermes chat, Council spec + diff (all seats, rankings, and chairman), Swarm
+workers, pre-ship review, and the Claude/Codex terminal prompt dock. The gateway relevance-ranks
+the hub, injects bounded/redacted **note bodies** with source paths, and records a context receipt.
+Filename pointers alone do not count as memory delivery. If the hub cannot be read, the prompt
+contains an explicit `status: unavailable` warning; callers must never pretend memory loaded.
+Interactive Claude transcripts strip the injected block before auto-capture so memory cannot
+distill and duplicate itself. Raw terminal keystrokes are an escape hatch; use the prompt dock for
+the guaranteed memory-backed task path.
+
 ## Frontend work — always do first
 
 1. **Apply frontend-design thinking before writing UI.** If a project-local `frontend-design`

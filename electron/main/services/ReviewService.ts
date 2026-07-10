@@ -20,6 +20,7 @@ import {
 } from '@shared/review'
 import { SPECS, isSpec } from '@shared/agent-taxonomy'
 import { buildHermesArgs } from '@shared/hermes-run'
+import type { MemoryContextProvider, MemoryContextSurface } from '@shared/memory-context'
 import type { AuditLogService } from './AuditLogService'
 import type { ProjectService } from './ProjectService'
 import { resolveBin } from './resolveBin'
@@ -119,6 +120,7 @@ export class ReviewService {
     private readonly projects: ProjectService,
     private readonly audit: AuditLogService,
     private readonly runner: CliRunner = defaultRunner,
+    private readonly memoryContexts?: MemoryContextProvider,
   ) {}
 
   async run(
@@ -138,7 +140,15 @@ export class ReviewService {
       base = target
     }
     const inputs = await collectDiffInputs(base)
-    return this.review(projectId, project, inputs, opts, started)
+    return this.review(
+      projectId,
+      project,
+      inputs,
+      opts,
+      started,
+      'review_diff',
+      inputs.map((input) => input.path).join('\n'),
+    )
   }
 
   /**
@@ -210,7 +220,15 @@ export class ReviewService {
   ): Promise<ReviewResult> {
     const started = Date.now()
     const project = this.projects.get(projectId)
-    return this.review(projectId, project, [{ path: input.label, diff: input.content }], opts, started)
+    return this.review(
+      projectId,
+      project,
+      [{ path: input.label, diff: input.content }],
+      opts,
+      started,
+      'review_text',
+      `${input.label}\n${input.content}`,
+    )
   }
 
   private async review(
@@ -219,9 +237,16 @@ export class ReviewService {
     inputs: DiffFileInput[],
     opts: { model?: string; lens?: string },
     started: number,
+    memorySurface: MemoryContextSurface,
+    memoryQuery: string,
   ): Promise<ReviewResult> {
     const sanitized = sanitizeDiff(inputs)
     const modelLabel = opts.model?.trim() || 'Hermes'
+    const memoryContext = this.memoryContexts?.forTask({
+      projectId,
+      surface: memorySurface,
+      query: memoryQuery,
+    })
 
     // Sanitizer verdicts surface as findings regardless of the model's answer.
     const suspectFindings: ReviewFinding[] = sanitized.injectionSuspects.map((s) => ({
@@ -260,7 +285,10 @@ export class ReviewService {
     const lensSpec = opts.lens && isSpec(opts.lens) ? opts.lens : null
     if (opts.lens && !lensSpec) throw new Error('Unknown review lens.')
     const basePrompt = buildReviewPrompt(sanitized, { fenceTag, projectName: project.name })
-    const prompt = lensSpec ? `${SPECS[lensSpec].prompt}\n\n${basePrompt}` : basePrompt
+    const reviewedPrompt = lensSpec ? `${SPECS[lensSpec].prompt}\n\n${basePrompt}` : basePrompt
+    const prompt = memoryContext
+      ? `${memoryContext.block}\n\n${reviewedPrompt}`
+      : reviewedPrompt
 
     try {
       // `ignoreRules: true` — a review pass is a narrow analytical task, not a

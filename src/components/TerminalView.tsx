@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import type { TerminalAttachment, TerminalSession } from '@shared/domain'
+import type { MemoryContextReceipt } from '@shared/memory-context'
 import { OSC_COMMAND } from '@shared/command-blocks'
 import { isTerminalCopyShortcut, normalizePromptDraft } from '@shared/terminal-ux'
 import { cockpit } from '../lib/cockpit'
@@ -69,7 +70,11 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
   const [copyNotice, setCopyNotice] = useState<string | null>(null)
   const [promptOpen, setPromptOpen] = useState(false)
   const [promptDraft, setPromptDraft] = useState('')
+  const [preparingPrompt, setPreparingPrompt] = useState(false)
+  const [memoryReceipt, setMemoryReceipt] = useState<MemoryContextReceipt | null>(null)
   const isCodex = session.role === 'codex'
+  const isAgent = isCodex || session.role === 'claude'
+  const agentLabel = isCodex ? 'Codex' : 'Claude Code'
   // Block capture lives app-level in blockStore (survives pane unmounts);
   // this pane only renders its session's published snapshots.
   const blocks = useSessionBlocks(session.id)
@@ -258,16 +263,27 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
     termRef.current?.focus()
   }
 
-  const submitPromptDraft = () => {
+  const submitPromptDraft = async () => {
     const prompt = normalizePromptDraft(promptDraft)
     const term = termRef.current
     if (!prompt || !term) return
-    // xterm wraps this in bracketed-paste markers when Codex asks for them,
-    // preserving a multi-line draft as one composer payload.
-    term.paste(prompt)
-    void cockpit().terminals.write(session.id, '\r')
-    setPromptDraft('')
-    term.focus()
+    setPreparingPrompt(true)
+    setError(null)
+    try {
+      // Main reads/ranks the project hub and returns one bounded prompt whose
+      // receipt proves which note bodies were delivered. xterm then wraps it in
+      // bracketed-paste markers for either agent TUI.
+      const prepared = await cockpit().terminals.prepareAgentPrompt(session.id, prompt)
+      term.paste(prepared.prompt)
+      await cockpit().terminals.write(session.id, '\r')
+      setMemoryReceipt(prepared.memory)
+      setPromptDraft('')
+      term.focus()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not prepare the memory-backed task.')
+    } finally {
+      setPreparingPrompt(false)
+    }
   }
 
   const sendAttachmentPath = async (target: TerminalAttachment) => {
@@ -546,15 +562,23 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
         }}
       />
 
-      {isCodex && (
-        <section className={`codexdock ${promptOpen ? 'codexdock--open' : ''}`} aria-label="Codex prompt dock">
+      {isAgent && (
+        <section
+          className={`codexdock ${promptOpen ? 'codexdock--open' : ''}`}
+          aria-label={`${agentLabel} prompt dock`}
+        >
           {promptOpen ? (
             <>
               <div className="codexdock__head">
                 <span className="codexdock__title">
                   <IconSend width={12} height={12} /> Prompt dock
                 </span>
-                <span className="codexdock__headHint">edit normally · paste freely · multi-line</span>
+                <span className="codexdock__headHint">
+                  Memory auto-check
+                  {memoryReceipt
+                    ? ` · ${memoryReceipt.notes.length} note${memoryReceipt.notes.length === 1 ? '' : 's'}`
+                    : ' · every task'}
+                </span>
                 <button
                   type="button"
                   className="codexdock__close"
@@ -578,7 +602,7 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
                 onKeyDown={(event) => {
                   if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
                     event.preventDefault()
-                    submitPromptDraft()
+                    void submitPromptDraft()
                   } else if (event.key === 'Escape') {
                     event.preventDefault()
                     setPromptOpen(false)
@@ -605,10 +629,11 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
                 <button
                   type="button"
                   className="codexdock__send"
-                  disabled={!canSubmitPrompt}
-                  onClick={submitPromptDraft}
+                  disabled={!canSubmitPrompt || preparingPrompt}
+                  onClick={() => void submitPromptDraft()}
                 >
-                  <IconSend width={12} height={12} /> Send to Codex
+                  <IconSend width={12} height={12} />
+                  {preparingPrompt ? 'Checking memory…' : `Send to ${agentLabel}`}
                 </button>
               </div>
             </>
@@ -622,7 +647,7 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
             >
               <IconSend width={12} height={12} />
               <span>Draft a prompt</span>
-              <small>normal edit · paste · undo · multi-line</small>
+              <small>Memory auto-check · normal edit · paste · undo · multi-line</small>
             </button>
           )}
         </section>

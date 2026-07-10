@@ -119,10 +119,10 @@ export function buildSeatPrompt(seat: CouncilSeat, opts: SeatPromptOpts): string
   )
   if (seat.id === 'builder') parts.push('', ...builderRequirements())
 
-  // Spec mode: inline the relevant project-memory pointers BEFORE the fenced spec,
-  // clearly labeled and outside the fence — trusted context that helps a seat judge
-  // buildability (an OpenRouter seat has no other way to see the hub).
-  if (mode === 'spec' && opts.memoryBlock && opts.memoryBlock.trim().length > 0) {
+  // Every council mode gets the same automatic project-memory context BEFORE
+  // the fenced material. OpenRouter seats cannot read local files; inline note
+  // excerpts are therefore the only enforceable cross-engine delivery path.
+  if (opts.memoryBlock && opts.memoryBlock.trim().length > 0) {
     parts.push('', opts.memoryBlock.trim())
   }
   parts.push('')
@@ -144,6 +144,7 @@ export function buildSeatPrompt(seat: CouncilSeat, opts: SeatPromptOpts): string
 export function buildRankingPrompt(
   anonymized: readonly { label: string; text: string }[],
   mode: CouncilMode,
+  memoryBlock?: string | null,
 ): string {
   const subject = mode === 'diff' ? 'code change' : 'task spec'
   const parts: string[] = [
@@ -164,6 +165,9 @@ export function buildRankingPrompt(
     '(continue for every response, best first)',
     '',
   ]
+  if (memoryBlock && memoryBlock.trim().length > 0) {
+    parts.push(memoryBlock.trim(), '')
+  }
   for (const r of anonymized) {
     parts.push(`### ${r.label}`, r.text, '')
   }
@@ -192,14 +196,16 @@ export function buildChairmanPrompt(opts: {
   question: string | null
   seats: readonly CouncilSeatOutput[]
   rankings: readonly CouncilRanking[]
+  memoryBlock?: string | null
 }): string {
-  const { question, seats, rankings } = opts
+  const { question, seats, rankings, memoryBlock } = opts
   const parts: string[] = [
     'You are the Chairman of an LLM Council. Synthesize the members’ perspectives',
     'and their peer rankings below into ONE clear verdict on this code change.',
     '',
   ]
   if (question && question.trim()) parts.push(`Task under review: "${question.trim()}"`, '')
+  if (memoryBlock && memoryBlock.trim().length > 0) parts.push(memoryBlock.trim(), '')
   parts.push(...seatsAndRankings(seats, rankings))
   parts.push(
     'Respond in GitHub-flavored markdown with exactly these sections:',
@@ -230,8 +236,9 @@ export function buildSpecChairmanPrompt(opts: {
   rankings: readonly CouncilRanking[]
   fenceTag: string
   specText: string
+  memoryBlock?: string | null
 }): string {
-  const { question, seats, rankings, fenceTag, specText } = opts
+  const { question, seats, rankings, fenceTag, specText, memoryBlock } = opts
   const parts: string[] = [
     'You are the Chairman of an LLM Council. A task spec is about to be handed to',
     'an autonomous builder. Synthesize the members’ judgements and peer rankings',
@@ -240,6 +247,7 @@ export function buildSpecChairmanPrompt(opts: {
     '',
   ]
   if (question && question.trim()) parts.push(`The author summarized the task as: "${question.trim()}"`, '')
+  if (memoryBlock && memoryBlock.trim().length > 0) parts.push(memoryBlock.trim(), '')
   parts.push(...seatsAndRankings(seats, rankings))
   parts.push('', ...fencedSpec(specText, fenceTag), '')
   parts.push(

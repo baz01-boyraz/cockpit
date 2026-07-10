@@ -36,6 +36,7 @@ import { newId, nowIso } from '../util/ids'
 import type { AuditLogService } from './AuditLogService'
 import type { MemoryHubService } from './MemoryHubService'
 import type { MemoryRecallService } from './MemoryRecallService'
+import type { MemoryContextProvider } from '@shared/memory-context'
 import type { SentinelService } from './SentinelService'
 import type { PruneSummary } from './SwarmWorktrees'
 
@@ -171,6 +172,9 @@ export class SwarmService {
     /** Optional Track G2 collaborator — records which hub notes reached a worker
      *  prompt (recall telemetry). Best-effort; undefined in tests (no-op). */
     private readonly recalls?: RecallRecorder,
+    /** Automatic project-memory gateway. Production always wires this; the
+     * filename-only hub path remains a compatibility fallback for tests. */
+    private readonly memoryContexts?: MemoryContextProvider,
   ) {
     // 6.4: any card still in_progress at construction is an orphan — its
     // worker died with the previous app instance (TerminalManager already
@@ -518,7 +522,14 @@ export class SwarmService {
     step: number,
     councilBrief: string | null = null,
   ): TerminalSession {
-    const hubNames = this.hubNoteNames(projectId, card)
+    const automaticMemory = this.memoryContexts?.forTask({
+      projectId,
+      surface: 'swarm_worker',
+      query: `${card.title}\n${card.body}`,
+    })
+    const hubNames = automaticMemory
+      ? automaticMemory.receipt.notes.map((note) => note.name)
+      : this.hubNoteNames(projectId, card)
     // Identity precedence: a Named Agent speaks with its authored voice; else
     // the pipeline step's role/spec prompt; else the legacy manual role/persona.
     const named = card.agent ? (this.namedAgents?.find(projectId, card.agent) ?? null) : null
@@ -549,6 +560,7 @@ export class SwarmService {
         identityText,
         named?.model ?? null,
         councilBrief,
+        automaticMemory?.block ?? null,
       ),
     })
   }

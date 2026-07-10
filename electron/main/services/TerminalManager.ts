@@ -122,6 +122,12 @@ export class TerminalManager {
       .map((t) => t.session)
   }
 
+  /** Read one live session for scoped collaborators such as AgentPromptService. */
+  get(sessionId: string): TerminalSession | null {
+    const session = this.live.get(sessionId)?.session
+    return session ? { ...session } : null
+  }
+
   count(projectId: string): number {
     return this.list(projectId).length
   }

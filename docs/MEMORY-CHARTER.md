@@ -10,6 +10,26 @@ Memory is **per-project** and durable. A note you write today is read by a
 different engine, on a different day, with none of today's context. Write for
 that stranger, or do not write.
 
+## Automatic read contract
+
+Memory is load-bearing only when it reaches work automatically. Every task the
+cockpit owns must call the central `MemoryContextService` before invoking an
+engine. The service selects task-relevant notes, sends bounded/redacted note
+content (not only filenames), names each `.cockpit-memory/<slug>.md` source, and
+emits a receipt identifying the delivery surface and notes.
+
+- Covered surfaces: Claude chat, Hermes chat, Council spec/diff, Swarm workers,
+  reviews, and the Claude/Codex terminal prompt dock.
+- `ready` means note content reached the prompt; `empty` means the hub was
+  checked but had no deliverable context; `unavailable` must be surfaced and
+  must never be described as a successful read.
+- A selection counter is not proof of model cognition. The receipt proves
+  delivery; source citations in the engine answer are the evidence of use.
+- Injected context is stripped from Claude transcripts before auto-capture so
+  the brain cannot re-ingest its own notes.
+- Raw terminal keystrokes remain an explicit escape hatch. The prompt dock is
+  the guaranteed memory-backed task path for interactive Claude/Codex sessions.
+
 ## The 7-day test (the core rule)
 
 Before **any** write, answer one question out loud:

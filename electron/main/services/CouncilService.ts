@@ -25,6 +25,7 @@ import {
 import { buildChairmanPrompt, buildRankingPrompt, buildSeatPrompt, buildSpecChairmanPrompt } from '@shared/council-prompts'
 import { composeMemoryPointerBlock, rankNotes, MEMORY_POINTER_MAX_NOTES } from '@shared/memory-recall'
 import { projectBrain } from '@shared/memory-ledger'
+import type { MemoryContextEnvelope, MemoryContextProvider } from '@shared/memory-context'
 import type { CouncilSessionStore } from '../db/CouncilSessionStore'
 import { collectDiffInputs } from './ReviewService'
 import type { AuditLogService } from './AuditLogService'
@@ -97,6 +98,9 @@ export class CouncilService {
      *  into the spec seats' memory-pointer block (recall telemetry). Best-effort;
      *  undefined in tests (no-op). `record` never throws by contract. */
     private readonly recalls?: Pick<MemoryRecallService, 'record'>,
+    /** Automatic task-memory gateway. Production always wires this; the legacy
+     *  listHooks collaborator remains as a backwards-compatible test fallback. */
+    private readonly memoryContexts?: MemoryContextProvider,
   ) {
     this.sweepStalePending()
   }
@@ -164,10 +168,20 @@ export class CouncilService {
     const fenceTag = `====COCKPIT-UNTRUSTED-${mode.toUpperCase()}-${randomUUID()}====`
     const claudeOverride = opts.model ? resolveChatModel(opts.model).id : null
 
-    // Spec mode only: an inline, relevance-ranked memory-pointer block for the
-    // seats (file-blind OpenRouter seats have no other view of the hub). Ranked
-    // against the spec + the author's summary; any failure degrades to no block.
-    const memoryBlock = mode === 'spec' ? this.memoryPointerBlock(projectId, question, specText) : null
+    // Memory is a task prerequisite, not an optional seat decoration. The
+    // central gateway injects real bounded note content for BOTH spec and diff
+    // modes. The old hook-only block remains solely for isolated legacy tests.
+    const memoryQuery = this.memoryQuery(mode, question, specText, sanitized)
+    const automaticMemory: MemoryContextEnvelope | null = this.memoryContexts
+      ? this.memoryContexts.forTask({
+          projectId,
+          surface: mode === 'spec' ? 'council_spec' : 'council_diff',
+          query: memoryQuery,
+        })
+      : null
+    const memoryBlock =
+      automaticMemory?.block ??
+      (mode === 'spec' ? this.memoryPointerBlock(projectId, question, specText) : null)
 
     const seatPrompt = (seat: CouncilSeat): string =>
       buildSeatPrompt(seat, { mode, fenceTag, projectName: project.name, question, sanitized, specText, memoryBlock })
@@ -191,18 +205,32 @@ export class CouncilService {
         error: 'Every council seat failed to respond.',
         filesReviewed,
         started,
+        memoryContext: automaticMemory,
       })
       return this.persistAndRecord(projectId, pendingId, cardId, mode, question, result)
     }
 
     // Phase 2 — anonymized peer rankings (needs ≥2 responses to compare).
-    const { rankings, aggregate, labelToSeat } = await this.runRankings(seats, okSeats, mode, callOpts)
+    const { rankings, aggregate, labelToSeat } = await this.runRankings(
+      seats,
+      okSeats,
+      mode,
+      callOpts,
+      memoryBlock,
+    )
 
     // Phase 3 — chairman synthesis (with fallback retry).
     const chairmanPrompt =
       mode === 'diff'
-        ? buildChairmanPrompt({ question, seats, rankings })
-        : buildSpecChairmanPrompt({ question, seats, rankings, fenceTag, specText: specText ?? '' })
+        ? buildChairmanPrompt({ question, seats, rankings, memoryBlock })
+        : buildSpecChairmanPrompt({
+            question,
+            seats,
+            rankings,
+            fenceTag,
+            specText: specText ?? '',
+            memoryBlock,
+          })
     const verdict = await this.runChairman(chairmanPrompt, callOpts)
 
     const specVerdict = mode === 'spec' && verdict ? normalizeSpecVerdict(verdict) : null
@@ -219,6 +247,7 @@ export class CouncilService {
       error: null,
       filesReviewed,
       started,
+      memoryContext: automaticMemory,
     })
     return this.persistAndRecord(projectId, pendingId, cardId, mode, question, result)
   }
@@ -308,6 +337,20 @@ export class CouncilService {
     }
   }
 
+  private memoryQuery(
+    mode: CouncilMode,
+    question: string | null,
+    specText: string | undefined,
+    sanitized: SanitizedDiff | undefined,
+  ): string {
+    if (mode === 'spec') return `${question ?? ''}\n${specText ?? ''}`.trim()
+    const paths = [
+      ...(sanitized?.files.map((file) => file.path) ?? []),
+      ...(sanitized?.summarizedFiles.map((file) => file.path) ?? []),
+    ]
+    return `${question ?? ''}\n${paths.join('\n')}`.trim()
+  }
+
   private async prepareDiff(
     project: { name: string; path: string },
     opts: CouncilRunOpts,
@@ -377,11 +420,12 @@ export class CouncilService {
     okSeats: readonly CouncilSeatOutput[],
     mode: CouncilMode,
     callOpts: { cwd: string; timeout: number; maxBuffer: number },
+    memoryBlock?: string | null,
   ): Promise<{ rankings: CouncilRanking[]; aggregate: AggregateRank[]; labelToSeat: Record<string, CouncilTone> }> {
     if (okSeats.length < 2) return { rankings: [], aggregate: [], labelToSeat: {} }
 
     const { anonymized, labelToSeat } = anonymizeSeats(seats, shuffledOrder(okSeats.length))
-    const rankingPrompt = buildRankingPrompt(anonymized, mode)
+    const rankingPrompt = buildRankingPrompt(anonymized, mode, memoryBlock)
     const settled = await Promise.all(
       okSeats.map(async (s): Promise<CouncilRanking | null> => {
         try {
@@ -425,6 +469,7 @@ export class CouncilService {
     error: string | null
     filesReviewed: number
     started: number
+    memoryContext?: MemoryContextEnvelope | null
   }): CouncilResult {
     const seatsRun = input.seats.filter((s) => s.ok).length
     return {
@@ -444,6 +489,7 @@ export class CouncilService {
         durationMs: Date.now() - input.started,
       },
       sessionId: null,
+      memoryContext: input.memoryContext?.receipt,
     }
   }
 

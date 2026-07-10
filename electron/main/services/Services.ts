@@ -23,6 +23,7 @@ import { ChatService } from './ChatService'
 import { MemoryHubService } from './MemoryHubService'
 import { MemoryLedgerService } from './MemoryLedgerService'
 import { MemoryRecallService } from './MemoryRecallService'
+import { MemoryContextService } from './MemoryContextService'
 import { MemoryReviewService } from './MemoryReviewService'
 import { MemoryDistiller } from './MemoryDistiller'
 import { MemoryPipeline } from './MemoryPipeline'
@@ -57,6 +58,7 @@ import { ProjectService } from './ProjectService'
 import { RailwayService } from './RailwayService'
 import { SecretStore } from './SecretStore'
 import { TerminalManager } from './TerminalManager'
+import { AgentPromptService } from './AgentPromptService'
 import { UsageService } from './UsageService'
 import { hasCli } from './cliDetect'
 
@@ -81,6 +83,8 @@ export class Services {
   readonly railway: RailwayService
   readonly secrets: SecretStore
   readonly terminals: TerminalManager
+  /** Official Claude/Codex task composer — always routes through memory. */
+  readonly agentPrompts: AgentPromptService
   readonly claudeSessions: ClaudeSessionsService
   readonly agentSessions: AgentSessionsService
   readonly chat: ChatService
@@ -101,6 +105,8 @@ export class Services {
   readonly memoryLedger: MemoryLedgerService
   /** Track G2: recall telemetry — which hub notes reach worker/council prompts. */
   readonly memoryRecalls: MemoryRecallService
+  /** Single automatic memory-read gateway shared by every task surface. */
+  readonly memoryContexts: MemoryContextService
   readonly memoryReviews: MemoryReviewService
   readonly memoryDistiller: MemoryDistiller
   readonly memoryPipeline: MemoryPipeline
@@ -156,6 +162,12 @@ export class Services {
     // verdict still routes to the queue (the hub only serves the direct branch).
     this.projects = new ProjectService(this.db)
     this.memory = new MemoryHubService(this.projects)
+    this.memoryRecalls = new MemoryRecallService(this.db)
+    this.memoryContexts = new MemoryContextService(
+      this.memory,
+      this.memoryRecalls,
+      this.audit,
+    )
     this.sentinel = new SentinelService(
       this.db,
       opts.events,
@@ -172,7 +184,7 @@ export class Services {
     this.railway = new RailwayService(this.db, this.projects)
     this.claudeSessions = new ClaudeSessionsService()
     this.agentSessions = new AgentSessionsService(this.claudeSessions)
-    this.chat = new ChatService(this.projects)
+    this.chat = new ChatService(this.projects, this.memoryContexts)
     // The MCP bearer token is minted by `hermesMcp` (constructed further down),
     // so the token is read lazily at ask() time via a thunk — by then the server
     // exists. This keeps the chat service decoupled from construction order.
@@ -181,8 +193,9 @@ export class Services {
       this.db,
       undefined,
       () => this.hermesMcp?.authToken,
+      this.memoryContexts,
     )
-    this.review = new ReviewService(this.projects, this.audit)
+    this.review = new ReviewService(this.projects, this.audit, undefined, this.memoryContexts)
     // One session store, shared: the council writes runs to it, the swarm reads
     // a card's approved session back from it at spawn (Faz 2a).
     const councilSessions = new CouncilSessionStore(this.db)
@@ -192,10 +205,6 @@ export class Services {
     // have no other view of it).
     this.globalMemory = new MemoryHubService(this.projects, join(opts.userDataDir, 'baz-memory'))
     this.engineRunner = new EngineRunner(this.secrets)
-    // Track G2: recall telemetry is built here so both the council (spec-mode
-    // memory-pointer block) and the swarm (worker brief) take it as a best-effort
-    // collaborator — recording a recall never endangers a spawn or a council run.
-    this.memoryRecalls = new MemoryRecallService(this.db)
     this.council = new CouncilService(
       this.projects,
       this.audit,
@@ -204,6 +213,7 @@ export class Services {
       this.sentinel,
       this.memory,
       this.memoryRecalls,
+      this.memoryContexts,
     )
     // Track G4: the judgment scorecard read model. It DERIVES outcomes — card
     // fates from the append-only audit trail, verdicts from the shared session
@@ -256,6 +266,7 @@ export class Services {
       },
       join(opts.userDataDir, 'shell-integration'),
     )
+    this.agentPrompts = new AgentPromptService(this.terminals, this.memoryContexts)
     // A4: right after TerminalManager reconciled its own stale rows, audit the
     // pids those rows carried for still-alive orphans (a previous process's pty
     // children that reparented on crash) and reap only OUR recent ones. Fully
@@ -285,6 +296,8 @@ export class Services {
       this.sentinel,
       // Track G2: record which hub notes reach a worker's opening brief.
       this.memoryRecalls,
+      // Real bounded note content reaches every worker prompt.
+      this.memoryContexts,
     )
     // Forget a pane's TUI-mode state once it exits, so session ids never leak.
     opts.events.onTyped('terminal:exit', ({ sessionId }) => this.tuiState.delete(sessionId))

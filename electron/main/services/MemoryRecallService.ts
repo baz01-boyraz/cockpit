@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { HUB_POINTER_CAP } from '@shared/swarm-worker'
+import type { MemoryContextSurface } from '@shared/memory-context'
 import type { Db } from '../db/Database'
 
 /**
@@ -7,13 +8,14 @@ import type { Db } from '../db/Database'
  * notes reaching a prompt: the swarm worker's opening brief and the council's
  * spec-mode memory-pointer block.
  */
-export type RecallSurface = 'swarm_worker' | 'council_spec'
+export type RecallSurface = MemoryContextSurface
 
 /**
  * Recall telemetry (Track G2, docs/plans/outcome-tracking-plan.md). The
- * `memory_ledger` (V7) records WRITES; this records RECALLS — the fact that a
- * note was selected into a prompt. That selection *is* the recall event, so the
- * two ranking hooks feed this best-effort.
+ * `memory_ledger` (V7) records WRITES; this records DELIVERIES — the fact that a
+ * note's bounded content was selected into an engine prompt. Older rows from
+ * before the automatic context gateway may represent filename-only pointers;
+ * new task surfaces all feed this after inline context composition.
  *
  * The overriding contract: **recording a recall must never endanger a spawn or a
  * council run.** Every method is fully wrapped and can never throw — a bad input,

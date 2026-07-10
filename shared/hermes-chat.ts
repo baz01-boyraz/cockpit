@@ -53,7 +53,7 @@ export function capHistory(
 const PREAMBLE =
   'You are Hermes, continuing an ongoing conversation with Baz inside the cockpiT app. ' +
   'The transcript so far is below. Reply only with your next message as Hermes, ' +
-  'responding to the most recent "User:" line.'
+  'responding to the most recent user-labelled transcript turn.'
 
 /**
  * Render turns as a labelled transcript prompt for a single `hermes --oneshot`
@@ -63,7 +63,7 @@ const PREAMBLE =
  */
 export function buildTranscriptPrompt(
   turns: readonly ChatTurn[],
-  runtime?: { projectId: string },
+  runtime?: { projectId: string; memoryBlock?: string | null },
 ): string {
   const lines = turns.map(
     (turn) => `${turn.role === 'user' ? 'User' : 'Hermes'}: ${turn.content}`,
@@ -75,5 +75,8 @@ export function buildTranscriptPrompt(
         `- For cockpit MCP tool calls, pass \`${runtime.projectId}\` verbatim as projectId. Never infer it from the project name or path.`,
       ].join('\n')
     : null
-  return [PREAMBLE, projectContext, lines.join('\n\n')].filter(Boolean).join('\n\n')
+  const memoryContext = runtime?.memoryBlock?.trim() || null
+  return [PREAMBLE, projectContext, memoryContext, lines.join('\n\n')]
+    .filter(Boolean)
+    .join('\n\n')
 }

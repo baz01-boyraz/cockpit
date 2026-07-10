@@ -6,6 +6,7 @@ import { buildHermesArgs } from '@shared/hermes-run'
 import { buildTranscriptPrompt, capHistory, type ChatRole, type ChatTurn } from '@shared/hermes-chat'
 import type { HermesChatReply } from '@shared/ipc'
 import { redactText } from '@shared/redaction'
+import type { MemoryContextProvider } from '@shared/memory-context'
 import type { Db } from '../../db/Database'
 import { logFatal } from '../../logging'
 import { nowIso } from '../../util/ids'
@@ -91,6 +92,7 @@ export class HermesChatService {
     private readonly db: Db,
     runner?: HermesChatRunner,
     mcpToken?: () => string | undefined,
+    private readonly memoryContexts?: MemoryContextProvider,
   ) {
     this.runner = runner ?? this.spawnHermes.bind(this)
     this.mcpToken = mcpToken
@@ -170,12 +172,20 @@ export class HermesChatService {
 
     const prior = this.histories.get(projectId) ?? []
     const withUser = capHistory([...prior, { role: 'user', content: historyContent }])
+    const memoryContext = this.memoryContexts?.forTask({
+      projectId,
+      surface: 'hermes_chat',
+      query: safeMessage,
+    })
     // The model cannot read process.env directly. `COCKPIT_PROJECT_ID` still
     // rides in the child env for tools/plugins that can, but Hermes itself must
     // see the exact opaque database id in its trusted prompt context. Without
     // this it guessed the display name ("baz-cockpit"), producing ordinary
     // domain errors instead of real git/memory results.
-    const prompt = buildTranscriptPrompt(withUser, { projectId })
+    const prompt = buildTranscriptPrompt(withUser, {
+      projectId,
+      memoryBlock: memoryContext?.block ?? null,
+    })
     const cwd = this.cwdFor(projectId)
     // The tools flag rides after the oneshot/chat argv so the prompt keeps its
     // slot right after --oneshot (or -q for the image path).
@@ -210,7 +220,7 @@ export class HermesChatService {
       this.histories.set(projectId, next)
       this.persist(projectId, next)
       this.consecutiveTimeouts.delete(projectId)
-      return { ok: true, text }
+      return { ok: true, text, memoryContext: memoryContext?.receipt }
     } catch (err) {
       // A failed turn must NOT leave a dangling user message in history — that
       // would desync the transcript on the next turn — so we never commit

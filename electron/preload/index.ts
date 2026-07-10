@@ -42,6 +42,8 @@ const api: CockpitApi = {
     resumeAgent: (projectId, provider, sessionId) =>
       invoke(IPC.terminalsResumeAgent, { projectId, provider, sessionId }),
     attachImage: (input) => invoke(IPC.terminalsAttachImage, input),
+    prepareAgentPrompt: (sessionId, prompt) =>
+      invoke(IPC.terminalsPrepareAgentPrompt, { sessionId, prompt }),
     onData: (cb) => subscribe(IPC.evtTerminalData, cb),
     onExit: (cb) => subscribe(IPC.evtTerminalExit, cb),
   },

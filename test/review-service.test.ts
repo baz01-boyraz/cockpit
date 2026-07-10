@@ -147,7 +147,7 @@ describe('ReviewService.run', () => {
 
     await service.run('prj_1')
 
-    const args = runner.mock.calls[0][1]
+    const args = (runner.mock.calls[0] as unknown[])[1] as string[]
     const prompt = args.at(-1) ?? ''
     expect(memoryContexts.forTask).toHaveBeenCalledWith({
       projectId: 'prj_1',

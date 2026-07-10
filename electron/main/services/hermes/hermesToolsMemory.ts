@@ -46,9 +46,15 @@ export function createMemoryTools(ctx: HermesToolContext): HermesTool[] {
     {
       name: 'read_memory_recent',
       description:
-        "Read the project's memory hub — all durable knowledge notes (name, content, updatedAt) plus the assembled graph. Read-only. ALWAYS call this before write_memory_summary: the charter is dedup-first, so you must build on what's already known and UPDATE an existing note rather than create a near-duplicate sibling.",
+        "Read the project's memory hub — all durable knowledge notes with their ACTUAL content plus the assembled graph. Read-only. Task prompts already receive relevant memory automatically; call this when you need the complete hub or before write_memory_summary. The charter is dedup-first, so you must build on what's already known and UPDATE an existing note rather than create a near-duplicate sibling.",
       inputShape: projectIdSchema.shape,
-      run: async (raw) => ctx.memory.list(projectIdSchema.parse(raw).projectId),
+      run: async (raw) => {
+        const { projectId } = projectIdSchema.parse(raw)
+        return {
+          notes: ctx.memory.listDocs(projectId),
+          graph: ctx.memory.list(projectId),
+        }
+      },
     },
     {
       name: 'write_memory_summary',
