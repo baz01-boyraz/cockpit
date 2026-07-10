@@ -927,6 +927,36 @@
   font-size: var(--fs-sm);
 }
 
+/* Hermes dock leaves the command center narrow at a 1280px app window. Keep
+ * all three engines comparable without sacrificing names or forcing 2 + 1. */
+@container (max-width: 700px) {
+  .capEngine__head {
+    gap: 5px;
+  }
+  .capEngine__glyph {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    font-size: var(--fs-sm);
+  }
+  .capEngine__name {
+    font-size: var(--fs-sm);
+  }
+  .capEngine__status {
+    padding: 2px 5px;
+    font-size: 8px;
+    letter-spacing: 0.035em;
+  }
+  .capEngine__spendLabel {
+    font-size: 7.5px;
+    letter-spacing: 0.045em;
+    white-space: nowrap;
+  }
+  .capEngine__spendSub {
+    font-size: 8.5px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .capRing__progress {
     animation: none;
