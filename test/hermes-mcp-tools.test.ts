@@ -75,6 +75,12 @@ const GIT_SNAPSHOT: GitSnapshot = {
   createdAt: 't0',
 }
 
+const GIT_HEAD = {
+  hash: '10243f539d8055d542834ecd576e2134b4679501',
+  shortHash: '10243f5',
+  subject: 'chore(release): bump version to 0.2.2',
+}
+
 const DIFF_STAT: DiffStat = { files: 2, insertions: 10, deletions: 3 }
 
 const MEMORY_SNAPSHOT: MemoryHubSnapshot = { notes: [], unresolved: [] }
@@ -140,6 +146,7 @@ interface Calls {
   completionReport: unknown[]
   councilRun: unknown[]
   gitStatus: string[]
+  gitHead: string[]
   diffStat: unknown[]
   checks: unknown[]
   screenshot: unknown[]
@@ -165,6 +172,7 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
     completionReport: [],
     councilRun: [],
     gitStatus: [],
+    gitHead: [],
     diffStat: [],
     checks: [],
     screenshot: [],
@@ -224,6 +232,10 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
       status: async (projectId) => {
         calls.gitStatus.push(projectId)
         return GIT_SNAPSHOT
+      },
+      headCommit: async (projectId) => {
+        calls.gitHead.push(projectId)
+        return GIT_HEAD
       },
     },
     review: {
@@ -832,17 +844,19 @@ describe('Hermes MCP tools — the scoped tool set', () => {
   // --- Faz 3b: git tools ---------------------------------------------------
 
   describe('get_git_status', () => {
-    it('validates and forwards to git.status', async () => {
+    it('returns live status and exact HEAD evidence from the same project', async () => {
       const { ctx, calls } = makeContext()
       const result = await toolNamed(ctx, 'get_git_status').run({ projectId: 'p1' })
       expect(calls.gitStatus).toEqual(['p1'])
-      expect(result).toEqual(GIT_SNAPSHOT)
+      expect(calls.gitHead).toEqual(['p1'])
+      expect(result).toEqual({ ...GIT_SNAPSHOT, headCommit: GIT_HEAD })
     })
 
     it('rejects invalid input (missing projectId)', async () => {
       const { ctx, calls } = makeContext()
       await expect(toolNamed(ctx, 'get_git_status').run({})).rejects.toThrow()
       expect(calls.gitStatus).toEqual([])
+      expect(calls.gitHead).toEqual([])
     })
   })
 

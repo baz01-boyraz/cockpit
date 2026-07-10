@@ -142,6 +142,32 @@ describe('GitService.status', () => {
   })
 })
 
+describe('GitService.headCommit', () => {
+  it('returns the exact current HEAD hash and subject as machine-readable evidence', async () => {
+    const { service, git } = makeService({
+      rawImpl: async (args) =>
+        args[0] === 'log'
+          ? '10243f539d8055d542834ecd576e2134b4679501\u000010243f5\u0000chore(release): bump version to 0.2.2\n'
+          : '',
+    })
+
+    await expect(service.headCommit('prj_1')).resolves.toEqual({
+      hash: '10243f539d8055d542834ecd576e2134b4679501',
+      shortHash: '10243f5',
+      subject: 'chore(release): bump version to 0.2.2',
+    })
+    expect(git.raw).toHaveBeenCalledWith(['log', '-1', '--format=%H%x00%h%x00%s'])
+  })
+
+  it('returns null when the repository has no commit yet', async () => {
+    const { service } = makeService({
+      rawImpl: () => Promise.reject(new Error('fatal: your current branch has no commits yet')),
+    })
+
+    await expect(service.headCommit('prj_1')).resolves.toBeNull()
+  })
+})
+
 describe('GitService.initRepo', () => {
   it('initializes a fresh folder on main and returns the resulting status', async () => {
     const { service, git } = makeService({
