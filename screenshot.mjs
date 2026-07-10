@@ -5,6 +5,8 @@
  *   node screenshot.mjs                         -> shoots http://localhost:3000
  *   node screenshot.mjs http://localhost:3000 dashboard
  *   node screenshot.mjs http://localhost:3000 git --click=[data-nav=git]
+ *   node screenshot.mjs http://localhost:3000 usage --width=1280 --height=945 --click=[data-nav=usage]
+ * Multiple --click flags run in order, which makes docked/detail states reviewable.
  *
  * Screenshots auto-increment into ./temporary screenshots/ and are never
  * overwritten. Paths are project-local (adapted from the Windows-specific
@@ -21,8 +23,12 @@ const outDir = join(root, 'temporary screenshots')
 const args = process.argv.slice(2)
 const url = args.find((a) => a.startsWith('http')) ?? 'http://localhost:3000'
 const label = args.find((a) => !a.startsWith('http') && !a.startsWith('--')) ?? ''
-const clickArg = args.find((a) => a.startsWith('--click='))?.slice('--click='.length)
+const clickArgs = args
+  .filter((a) => a.startsWith('--click='))
+  .map((a) => a.slice('--click='.length))
 const waitArg = Number(args.find((a) => a.startsWith('--wait='))?.slice('--wait='.length) ?? 1400)
+const widthArg = Number(args.find((a) => a.startsWith('--width='))?.slice('--width='.length) ?? 1512)
+const heightArg = Number(args.find((a) => a.startsWith('--height='))?.slice('--height='.length) ?? 945)
 
 async function nextIndex() {
   await mkdir(outDir, { recursive: true })
@@ -41,12 +47,14 @@ const run = async () => {
   })
   try {
     const page = await browser.newPage()
-    await page.setViewport({ width: 1512, height: 945, deviceScaleFactor: 2 })
+    await page.setViewport({ width: widthArg, height: heightArg, deviceScaleFactor: 2 })
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 })
     await new Promise((r) => setTimeout(r, waitArg))
 
-    if (clickArg) {
-      await page.click(clickArg).catch((e) => console.warn(`click(${clickArg}) failed: ${e.message}`))
+    for (const clickArg of clickArgs) {
+      await page
+        .click(clickArg)
+        .catch((e) => console.warn(`click(${clickArg}) failed: ${e.message}`))
       await new Promise((r) => setTimeout(r, 900))
     }
 
