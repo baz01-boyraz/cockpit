@@ -8,6 +8,7 @@ import { SwarmPage } from '../pages/swarm.page'
  * the To-do column's inline composer, and see it land on the board.
  */
 test('creates a card through the composer and sees it on the board', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
   await gotoApp(page)
   await openView(page, 'swarm')
 
@@ -20,16 +21,6 @@ test('creates a card through the composer and sees it on the board', async ({ pa
   await swarm.createCard(title)
 
   await expect(swarm.cardByTitle(title)).toBeVisible()
-})
-
-test('keeps the council gate action readable inside the narrow To do card', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 })
-  await gotoApp(page)
-  await openView(page, 'swarm')
-
-  const swarm = new SwarmPage(page)
-  const title = `E2E gated card ${Date.now()}`
-  await swarm.createCard(title)
 
   const card = swarm.todoColumn.locator('.swarmCard').filter({ hasText: title })
   await card.getByRole('button', { name: 'Start', exact: true }).click()
