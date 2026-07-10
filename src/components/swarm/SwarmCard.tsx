@@ -27,7 +27,12 @@ export interface SwarmCardActions {
   councilingId: string | null
   /** Card id with a completion-report fetch in flight, if any. */
   reportingId: string | null
-  onStart: (cardId: string) => void
+  /** Card whose Start hit the council spec gate — shows the inline gate prompt. */
+  gatedId: string | null
+  /** Start (or Resume) a card; `skipGate` is the developer escape past the gate. */
+  onStart: (cardId: string, opts?: { skipGate?: boolean }) => void
+  /** Gate prompt primary action — convene the council on this card's draft. */
+  onConveneGate: (card: KanbanCard) => void
   onPark: (cardId: string) => void
   onViewTerminal: () => void
   onReview: (card: KanbanCard) => void
@@ -115,11 +120,15 @@ interface SwarmCardProps {
   counciling: boolean
   /** True while a completion-report fetch is live for THIS card. */
   reporting: boolean
+  /** True when THIS card's Start hit the council spec gate (show the prompt). */
+  gated: boolean
   onDragStart: (card: KanbanCard) => void
   onDragEnd: () => void
   onOpen: (cardId: string) => void
-  /** 6.2 — spawn a worker (To do / Parked cards only). */
-  onStart: (cardId: string) => void
+  /** 6.2 — spawn a worker (To do / Parked cards only). `skipGate` overrides the gate. */
+  onStart: (cardId: string, opts?: { skipGate?: boolean }) => void
+  /** Gate prompt primary action — convene the council on this card's draft. */
+  onConveneGate: (card: KanbanCard) => void
   /** 6.3 — stop the worker, keep the worktree (Running cards only). */
   onPark: (cardId: string) => void
   /** Jump to the Terminals view (Running cards only). */
@@ -271,10 +280,12 @@ export function SwarmCard({
   reviewing,
   counciling,
   reporting,
+  gated,
   onDragStart,
   onDragEnd,
   onOpen,
   onStart,
+  onConveneGate,
   onPark,
   onViewTerminal,
   onReview,
@@ -416,6 +427,32 @@ export function SwarmCard({
               worktree kept
             </span>
           )}
+        </div>
+      )}
+
+      {startable(card.status) && gated && (
+        <div className="swarmGatePrompt" role="note">
+          <p className="swarmGatePrompt__text">
+            This card&rsquo;s spec hasn&rsquo;t passed the council yet. Convene the gate before a
+            builder starts — or start anyway.
+          </p>
+          <div className="swarmGatePrompt__actions">
+            <button
+              className="btn btn--accent btn--sm"
+              onClick={act(() => onConveneGate(card))}
+              title="Gate this spec through the LLM council before a builder starts"
+            >
+              <IconCouncil width={11} height={11} aria-hidden /> Convene council
+            </button>
+            <button
+              className="swarmCardLink"
+              onClick={act(() => onStart(card.id, { skipGate: true }))}
+              disabled={starting}
+              title="Start the worker without a council-approved spec (recorded in the audit log)"
+            >
+              Start anyway
+            </button>
+          </div>
         </div>
       )}
 

@@ -83,9 +83,17 @@ function createSwarmTools(ctx: HermesToolContext): HermesTool[] {
     {
       name: 'start_swarm_card',
       description:
-        'Start a "To do" or "Parked" card: spawns its worker(s) in an isolated git worktree and moves the card to "In progress" — exactly what the UI Start button does. Subject to the concurrency cap and Claude quota gate. Returns the updated board.',
+        'Start a "To do" or "Parked" card: spawns its worker(s) in an isolated git worktree and moves the card to "In progress" — exactly what the UI Start button does. Subject to the concurrency cap, the Claude quota gate, and the council spec gate (a card whose spec has not passed `council_refine_spec` returns `{ gated: true }` and does NOT start — gate it first, then link its approved `councilSessionId`). Returns the updated board.',
       inputShape: swarmStartCardSchema.shape,
-      run: async (raw) => ({ board: await ctx.swarm.startCard(swarmStartCardSchema.parse(raw)) }),
+      run: async (raw) => {
+        const input = swarmStartCardSchema.parse(raw)
+        const result = await ctx.swarm.startCard(input)
+        // The card never moved when gated — return the (unchanged) board plus the
+        // flag so the agent knows to convene the council instead of retrying.
+        return result.gated
+          ? { gated: true, board: ctx.swarm.board(input.projectId) }
+          : { board: result.board }
+      },
     },
     {
       name: 'get_swarm_status',

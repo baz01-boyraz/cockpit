@@ -775,6 +775,32 @@
   cursor: help;
 }
 
+/* ----- council spec-gate prompt (Start on an ungated card, Finding 1) ----- */
+/* An ember-edged inset — the calm board-language cue that the spec must pass
+   the council first, with the convene (primary) / start-anyway (quiet) escape. */
+.swarmGatePrompt {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border-faint);
+  border-left: 2px solid var(--ember-400, #e08a5b);
+}
+.swarmGatePrompt__text {
+  margin: 0;
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.swarmGatePrompt__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* quiet per-card links: View terminal / Park / Review diff / Council */
 .swarmCardLink {
   display: inline-flex;

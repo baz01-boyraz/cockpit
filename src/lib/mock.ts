@@ -426,6 +426,42 @@ function mockSpecCouncilApproved(): CouncilResult {
   }
 }
 
+// A run interrupted mid-flight (the seeded `failed` header): no seats, no
+// verdict — exactly what a crashed run's boot-swept row reads back as. Lets the
+// detail channel model the failed branch for the browser preview.
+function mockInterruptedCouncil(): CouncilResult {
+  return {
+    ok: false,
+    mode: 'spec',
+    seats: [],
+    rankings: [],
+    aggregate: [],
+    labelToSeat: {},
+    verdict: null,
+    specVerdict: null,
+    error: 'Council run interrupted before it finished.',
+    stats: { seatsRun: 0, seatsFailed: 0, filesReviewed: 0, durationMs: 0 },
+    sessionId: 'mock-council-interrupted',
+  }
+}
+
+/** The full persisted result behind each seeded `council:sessions` header —
+ *  the detail read the renderer rehydrates on demand. */
+function mockCouncilSessionDetail(sessionId: string): CouncilResult | null {
+  switch (sessionId) {
+    case 'mock-council-spec-approved':
+      return mockSpecCouncilApproved()
+    case 'mock-council-spec':
+      return mockSpecCouncil()
+    case 'mock-council-diff':
+      return mockDiffCouncil()
+    case 'mock-council-interrupted':
+      return mockInterruptedCouncil()
+    default:
+      return null
+  }
+}
+
 export function createMockApi(): CockpitApi {
   return {
     projects: {
@@ -921,13 +957,20 @@ export function createMockApi(): CockpitApi {
         kanbanSeed.set(projectId, next)
         return assembleBoard(next)
       },
-      startCard: async ({ projectId, cardId }) => {
+      startCard: async ({ projectId, cardId, skipGate }) => {
         const cards = kanbanFor(projectId)
         const card = cards.find((c) => c.id === cardId)
         if (!card) throw new Error(`Card ${cardId} not found in this project.`)
         if (card.status !== 'todo' && card.status !== 'parked') {
           throw new Error('Only a To do or Parked card can start.')
         }
+        // Council spec gate (mock parity with SwarmService): a card clears it only
+        // with a linked session whose spec verdict is `approved`. Anything else
+        // refuses with `{ gated: true }` unless the developer overrides via skipGate.
+        const approved =
+          card.councilSessionId !== null &&
+          mockCouncilSessionDetail(card.councilSessionId)?.specVerdict?.kind === 'approved'
+        if (!approved && !skipGate) return { gated: true }
         if (cards.filter((c) => c.status === 'in_progress').length >= 3) {
           throw new Error('Concurrency cap reached (3) — park or finish a running card first.')
         }
@@ -1006,7 +1049,7 @@ export function createMockApi(): CockpitApi {
             kanbanSeed.set(projectId, moveCardInList(current, cardId, 'in_review', 0, 'service', now()))
           }
         }, 6_000)
-        return assembleBoard(next)
+        return { gated: false, board: assembleBoard(next) }
       },
       agents: async (_projectId) => namedAgentsMock,
       parkCard: async ({ projectId, cardId }) => {
@@ -1254,6 +1297,12 @@ export function createMockApi(): CockpitApi {
           createdAt: now(),
         },
       ],
+      // Detail read behind a session header — the full verdict + scorecard the
+      // renderer rehydrates on demand so a run survives leaving and returning.
+      session: async (_projectId, sessionId): Promise<CouncilResult | null> => {
+        await new Promise((r) => setTimeout(r, 120))
+        return mockCouncilSessionDetail(sessionId)
+      },
     },
     outcomes: {
       // Static judgment scorecard for the browser preview — plausible numbers

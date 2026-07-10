@@ -190,7 +190,7 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
     },
     startCard: async (input) => {
       calls.start.push(input)
-      return EMPTY_BOARD
+      return { gated: false, board: EMPTY_BOARD }
     },
     board: (projectId) => {
       calls.board.push(projectId)
@@ -510,7 +510,7 @@ describe('Hermes MCP tools — the scoped tool set', () => {
         swarm: {
           createCard: () => EMPTY_BOARD,
           updateCard: () => EMPTY_BOARD,
-          startCard: async () => EMPTY_BOARD,
+          startCard: async () => ({ gated: false, board: EMPTY_BOARD }),
           board: () => EMPTY_BOARD,
           completionReport: async () => {
             throw new Error('Card c9 not found in this project.')
@@ -738,7 +738,7 @@ describe('Hermes MCP tools — the scoped tool set', () => {
       const swarm: HermesToolContext['swarm'] = {
         createCard: () => EMPTY_BOARD,
         updateCard: () => EMPTY_BOARD,
-        startCard: async () => EMPTY_BOARD,
+        startCard: async () => ({ gated: false, board: EMPTY_BOARD }),
         board: () => boardWith(card),
         completionReport: async () => {
           throw new Error('not used in subscribe_card_output tests')

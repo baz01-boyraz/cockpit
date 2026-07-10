@@ -6,6 +6,7 @@ import {
   type BoardColumn,
   type CardStatus,
   type KanbanCard,
+  type StartCardResult,
 } from '@shared/kanban'
 import { buildWorkerCommand, HUB_POINTER_CAP } from '@shared/swarm-worker'
 import { rankNotes } from '@shared/memory-recall'
@@ -362,11 +363,37 @@ export class SwarmService {
    * to the project root when worktree creation fails (e.g. not a git repo) —
    * a refused start would be worse than an unisolated one.
    */
-  async startCard(input: { projectId: string; cardId: string }): Promise<BoardColumn[]> {
+  async startCard(input: {
+    projectId: string
+    cardId: string
+    /** Explicit developer override of the council spec gate (audited). */
+    skipGate?: boolean
+  }): Promise<StartCardResult> {
     const card = this.cardOrThrow(input.projectId, input.cardId)
     if (card.status !== 'todo' && card.status !== 'parked') {
       throw new Error('Only a To do or Parked card can start.')
     }
+
+    // Council spec gate (CLAUDE.md: "in spec mode the council is a gate before
+    // build — a draft task spec must pass before an autonomous builder touches
+    // it"). A card clears the gate only with a linked council session whose
+    // spec verdict is `approved`; a `needs_clarification` session (or none at
+    // all) does NOT pass. The gate is a normal, expected refusal surfaced as a
+    // typed `{ gated: true }` outcome — never a thrown crash — so the renderer
+    // can offer "Convene council" / "Start anyway". `skipGate` is the explicit,
+    // audited developer escape.
+    const approved = this.specVerdictKind(card) === 'approved'
+    if (!approved) {
+      if (!input.skipGate) return { gated: true }
+      this.audit.record({
+        projectId: input.projectId,
+        actor: 'user',
+        actionType: 'swarm.gate_skipped',
+        summary: `Council spec gate skipped for swarm card "${card.title}" — started without an approved spec`,
+        payload: { cardId: card.id },
+      })
+    }
+
     const cards = this.cards(input.projectId)
     const running = cards.filter((c) => c.status === 'in_progress').length
     if (running >= RUNNING_CAP) {
@@ -388,7 +415,7 @@ export class SwarmService {
       try {
         worktree = await this.worktrees.restore(projectPath, persisted.path, persisted.branch)
       } catch {
-        return this.parkMissingWorktree(input.projectId, card)
+        return { gated: false, board: this.parkMissingWorktree(input.projectId, card) }
       }
     }
     if (!worktree) {
@@ -445,7 +472,7 @@ export class SwarmService {
       summary: `Started swarm card "${card.title}"${this.pipelineSummary(assignments, step)}${worktree ? ` in ${worktree.branch}` : ' (project root — no worktree)'}`,
       payload: { cardId: card.id, sessionId: session.id, worktree: worktree?.branch ?? null, assignments, step, councilBrief: councilBrief !== null },
     })
-    return assembleBoard(next)
+    return { gated: false, board: assembleBoard(next) }
   }
 
   /**

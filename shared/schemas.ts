@@ -365,6 +365,14 @@ export const councilSessionsSchema = z.object({
   projectId: z.string().min(1),
 })
 
+// Detail read for ONE persisted session — the full CouncilResult behind a
+// `council:sessions` header. Project-scoped in main (a foreign session reads
+// back null); the id is a store UUID, so no path characters are allowed.
+export const councilSessionSchema = z.object({
+  projectId: z.string().min(1),
+  sessionId: z.string().min(1).max(200),
+})
+
 // --- outcome scorecard (Track G4) -----------------------------------------
 //
 // The read-only judgment scorecard. Input is just the project id; the aggregation
@@ -417,7 +425,12 @@ export const swarmRemoveCardSchema = z.object({
   cardId: z.string().min(1),
 })
 
-export const swarmStartCardSchema = swarmRemoveCardSchema
+// Start extends the {projectId, cardId} pair with the council spec-gate escape:
+// `skipGate` lets the developer start a card whose spec the council hasn't
+// approved (an explicit, audited override). Absent/false → the gate is enforced.
+export const swarmStartCardSchema = swarmRemoveCardSchema.extend({
+  skipGate: z.boolean().optional(),
+})
 
 // A completion report / a card-output tail take the same {projectId, cardId}
 // pair — aliased rather than re-declared, keeping one source of truth.

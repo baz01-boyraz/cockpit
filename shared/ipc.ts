@@ -19,7 +19,7 @@ import type { CaptureResult } from './memory-pipeline'
 import type { ReviewDecision, ReviewItem } from './memory-review'
 import type { LedgerEntry } from './memory-ledger'
 import type { ConsolidationResult } from './memory-consolidate'
-import type { BoardColumn, CardStatus } from './kanban'
+import type { BoardColumn, CardStatus, StartCardResult } from './kanban'
 import type { CompletionReport } from './completion-report'
 import type { Assignment } from './agent-taxonomy'
 import type { NamedAgentSummary } from './named-agents'
@@ -113,6 +113,7 @@ export const IPC = {
   councilRun: 'council:run',
   councilScorecard: 'council:scorecard',
   councilSessions: 'council:sessions',
+  councilSession: 'council:session',
 
   outcomesScorecard: 'outcomes:scorecard',
 
@@ -391,6 +392,15 @@ export interface CockpitApi {
      * diff/spec text crosses the bridge.
      */
     sessions(projectId: string): Promise<CouncilSessionSummary[]>
+    /**
+     * The full persisted `CouncilResult` for one session id — the DETAIL read
+     * behind the content-free `sessions` list. Project-scoped in main (a
+     * session belonging to another project reads back as null, never leaks),
+     * and null for an unknown id. This is what lets a verdict + scorecard
+     * survive an unmount/restart: the renderer rehydrates a session on demand
+     * instead of holding the heavy result in volatile component state.
+     */
+    session(projectId: string, sessionId: string): Promise<CouncilResult | null>
   }
   outcomes: {
     /**
@@ -483,7 +493,19 @@ export interface CockpitApi {
      * terminal session, links it to the card, and moves the card to Running.
      * 6.2 runs one card at a time; parallel worktrees arrive with 6.3.
      */
-    startCard(input: { projectId: string; cardId: string }): Promise<BoardColumn[]>
+    /**
+     * Card → running agent. Gated by the council **spec gate**: unless the card
+     * carries an approved council session (or `skipGate` is set), this refuses
+     * with `{ gated: true }` and the card stays put — a normal, expected outcome
+     * the renderer branches on, not an error. A started card returns the fresh
+     * board.
+     */
+    startCard(input: {
+      projectId: string
+      cardId: string
+      /** Explicit developer override of the spec gate (audited as `swarm.gate_skipped`). */
+      skipGate?: boolean
+    }): Promise<StartCardResult>
     /** Park a running card (worker is stopped; Start later resumes in the same worktree). */
     parkCard(input: { projectId: string; cardId: string }): Promise<BoardColumn[]>
     /** Named Agents roster from .claude/agents (user + project scope; project wins). */
@@ -664,6 +686,7 @@ export interface IpcResultMap {
   councilRun: R<CockpitApi['council']['run']>
   councilScorecard: R<CockpitApi['council']['scorecard']>
   councilSessions: R<CockpitApi['council']['sessions']>
+  councilSession: R<CockpitApi['council']['session']>
   outcomesScorecard: R<CockpitApi['outcomes']['scorecard']>
   memoryList: R<CockpitApi['memory']['list']>
   memoryRead: R<CockpitApi['memory']['read']>

@@ -47,6 +47,22 @@ export interface BoardColumn {
   cards: KanbanCard[]
 }
 
+/**
+ * The outcome of a `startCard` call. A discriminated union rather than a bare
+ * `BoardColumn[]` so the renderer can tell the council **spec gate** apart from
+ * a genuine failure: the gate is a normal, expected refusal (the card's spec
+ * hasn't passed the LLM council yet), not a thrown crash. `gated: true` carries
+ * no board (the card never moved); a started card returns the fresh board.
+ *
+ * Chosen over a thrown "marked" error because the IPC boundary flattens errors
+ * to plain messages (`formatIpcError`) — a custom code/class would not survive
+ * the bridge, so the renderer would have to string-match. A typed result is the
+ * one contract the renderer can branch on safely.
+ */
+export type StartCardResult =
+  | { gated: false; board: BoardColumn[] }
+  | { gated: true }
+
 export const COLUMN_ORDER: readonly CardStatus[] = [
   'todo',
   'in_progress',

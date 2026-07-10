@@ -40,6 +40,13 @@ export interface SwarmCouncilGate {
   onConvene: (card: KanbanCard, spec: string) => void
   /** Persist the refined spec as the card body and link the approved session. */
   onApplyRefined: (cardId: string, body: string, sessionId: string) => Promise<void>
+  /**
+   * Rehydrate a card's persisted spec-gate verdict from its linked council
+   * session (detail channel). Called on open when the card carries a
+   * `councilSessionId` but no fresh result is in the store — so a
+   * council-approved card shows its verdict again after a view switch/restart.
+   */
+  onRehydrate: (card: KanbanCard) => void
 }
 
 interface SwarmCardEditorProps {
@@ -89,6 +96,10 @@ export function SwarmCardEditor({
   const agentMissing = agent !== '' && selectedAgent === null
 
   const canSave = title.trim().length > 0 && !busy
+  // Finding 2: a running card's worker holds its worktree — the service refuses
+  // to delete it. Soften the affordance here (disabled + explain) rather than
+  // letting the guard surface as a raw IPC banner; park or kill it first.
+  const running = card.status === 'in_progress'
 
   // --- spec gate (Faz 2b) ---------------------------------------------------
   const convening = council.conveningId === card.id
@@ -100,6 +111,18 @@ export function SwarmCardEditor({
   const canApply = refinedSpec !== null && Boolean(specResult?.sessionId) && !busy
   /** Council-approved once a session is linked (persisted) or just applied. */
   const approved = applied || card.councilSessionId !== null
+
+  // On open, resurface a persisted verdict for a council-linked card when the
+  // store isn't already holding this card's result — the rehydrate path that
+  // makes an approved verdict survive a view switch or an app restart. The store
+  // action guards against clobbering an in-flight run or a result already held.
+  useEffect(() => {
+    if (card.councilSessionId && specResult === null) {
+      council.onRehydrate(card)
+    }
+    // Intentionally keyed on identity only: re-fire on a new card / new session,
+    // not on every store result change (that would fight the rehydrate itself).
+  }, [card.id, card.councilSessionId, specResult, council])
 
   const convene = () => {
     const spec = [title.trim(), body.trim()].filter(Boolean).join('\n\n')
@@ -405,7 +428,15 @@ export function SwarmCardEditor({
             Cancel
           </button>
           <span className="swarmEdit__spacer" />
-          {deleteArmed ? (
+          {running ? (
+            <button
+              className="btn btn--ghost btn--sm btn--danger"
+              disabled
+              title="This card has a running agent — park or kill it before deleting."
+            >
+              Delete
+            </button>
+          ) : deleteArmed ? (
             <button className="btn btn--sm swarmEdit__confirm" onClick={() => void remove()} disabled={busy}>
               Delete card?
             </button>

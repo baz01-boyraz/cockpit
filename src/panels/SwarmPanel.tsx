@@ -21,19 +21,36 @@ import type { SwarmCardPatch, SwarmCouncilGate } from '../components/swarm/Swarm
 const RUNNING_POLL_MS = 5_000
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Something went wrong on the board.'
+  const raw = error instanceof Error ? error.message : 'Something went wrong on the board.'
+  // Electron wraps a main-process throw as "Error invoking remote method 'x': …"
+  // (Finding 2). Strip that plumbing so the honest, actionable message shows —
+  // e.g. "Card has a running agent — kill or park it before deleting." — not the
+  // raw IPC banner.
+  return raw
+    .replace(/^Error invoking remote method '[^']*':\s*/, '')
+    .replace(/^Error:\s*/, '')
+    .trim()
 }
 
 /**
  * The active review surface under the header. `diff` is one advisory pass over
  * the worktree; `council` is the full LLM-Council (five advisors → peer review
  * → verdict). Each carries its own result shape; `result: null` = in flight.
+ *
+ * The `spec`-gate surface is NOT here: it lives in the store's council slice so a
+ * convened verdict survives leaving and returning to the board (the bug this
+ * closes). It is normalized back into `WideReview` for the shared render below.
  */
 type CardReviewState =
   | { kind: 'diff'; cardTitle: string; result: ReviewResult | null }
   | { kind: 'council'; cardTitle: string; result: CouncilResult | null }
-  | { kind: 'spec'; cardId: string; cardTitle: string; result: CouncilResult | null }
   | { kind: 'report'; cardTitle: string; result: CompletionReport | null }
+
+/** The unified wide-surface model: a local diff/council/report review, or the
+ *  store-lifted spec-gate run (source `run` only — a rehydrate feeds the editor). */
+type WideReview =
+  | CardReviewState
+  | { kind: 'spec'; cardTitle: string; result: CouncilResult | null }
 
 /** A thrown council IPC call → a renderable failure result. */
 function councilFailure(error: unknown, mode: CouncilResult['mode'] = 'diff'): CouncilResult {
@@ -77,37 +94,55 @@ export function SwarmPanel() {
   const startCard = useStore((s) => s.startCard)
   const parkCard = useStore((s) => s.parkCard)
   const setView = useStore((s) => s.setView)
+  // Spec-gate council state, lifted into the store so a verdict survives a view
+  // switch (the vanishing-verdict bug). The convene promise resolves in the
+  // slice action, not here, so a run finishing off-view still lands.
+  const councilConveningCardId = useStore((s) => s.councilConveningCardId)
+  const councilCardResult = useStore((s) => s.councilCardResult)
+  const conveneCardCouncil = useStore((s) => s.conveneCardCouncil)
+  const loadCardCouncil = useStore((s) => s.loadCardCouncil)
+  const clearCardCouncil = useStore((s) => s.clearCardCouncil)
+  const resetCouncil = useStore((s) => s.resetCouncil)
 
   const [notice, setNotice] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [startingId, setStartingId] = useState<string | null>(null)
+  // Card whose Start hit the council spec gate — shows the inline convene/skip
+  // prompt (Finding 1). Cleared once the card starts, convenes, or on switch.
+  const [gatedId, setGatedId] = useState<string | null>(null)
   const [parkingId, setParkingId] = useState<string | null>(null)
   const [reviewingId, setReviewingId] = useState<string | null>(null)
   const [councilingId, setCouncilingId] = useState<string | null>(null)
-  const [conveningId, setConveningId] = useState<string | null>(null)
   const [reportingId, setReportingId] = useState<string | null>(null)
   const [cardReview, setCardReview] = useState<CardReviewState | null>(null)
   const [scorecard, setScorecard] = useState<ScorecardEntry[] | null>(null)
 
   const reviewBusy =
-    reviewingId !== null || councilingId !== null || conveningId !== null || reportingId !== null
+    reviewingId !== null ||
+    councilingId !== null ||
+    councilConveningCardId !== null ||
+    reportingId !== null
 
   // Project switch (or first mount): reset the surface, then load the board.
+  // `resetCouncil` preserves the store's spec-gate run when the project is
+  // unchanged (a same-project view switch keeps its verdict) and wipes it on a
+  // genuine switch — so it is safe to call on every mount.
   useEffect(() => {
     setNotice(null)
     setEditing(null)
+    setGatedId(null)
     setCardReview(null)
     setReviewingId(null)
     setCouncilingId(null)
-    setConveningId(null)
     setReportingId(null)
     setScorecard(null)
+    resetCouncil(projectId)
     if (!projectId) return
     refreshBoard(projectId).catch((err: unknown) => setNotice(errorMessage(err)))
     // The Named Agents roster rides along (once per project — the slice skips
     // a project it already holds). A roster failure never blocks the board.
     refreshAgents(projectId).catch((err: unknown) => setNotice(errorMessage(err)))
-  }, [projectId, refreshBoard, refreshAgents])
+  }, [projectId, refreshBoard, refreshAgents, resetCouncil])
 
   // Only trust a board that belongs to the active project (no stale flash).
   const current = projectId && boardProjectId === projectId ? board : null
@@ -197,12 +232,19 @@ export function SwarmPanel() {
   )
 
   const handleStart = useCallback(
-    async (cardId: string) => {
+    async (cardId: string, opts?: { skipGate?: boolean }) => {
       if (!projectId || startingId) return
       setStartingId(cardId)
       try {
-        await startCard({ projectId, cardId })
-        setNotice(null)
+        const result = await startCard({ projectId, cardId, skipGate: opts?.skipGate })
+        if (result.gated) {
+          // The spec hasn't passed the council — surface the inline gate prompt
+          // (convene / start anyway) instead of a banner. The card never moved.
+          setGatedId(cardId)
+        } else {
+          setGatedId((id) => (id === cardId ? null : id))
+          setNotice(null)
+        }
       } catch (err: unknown) {
         setNotice(errorMessage(err))
       } finally {
@@ -251,6 +293,7 @@ export function SwarmPanel() {
   const handleReview = useCallback(
     async (card: KanbanCard) => {
       if (!projectId || reviewBusy) return
+      clearCardCouncil()
       setReviewingId(card.id)
       setCardReview({ kind: 'diff', cardTitle: card.title, result: null })
       try {
@@ -262,7 +305,7 @@ export function SwarmPanel() {
         setReviewingId(null)
       }
     },
-    [projectId, reviewBusy],
+    [projectId, reviewBusy, clearCardCouncil],
   )
 
   // Faz 2.5 — the decision-ready completion report for an In review card: branch,
@@ -271,6 +314,7 @@ export function SwarmPanel() {
   const handleReport = useCallback(
     async (card: KanbanCard) => {
       if (!projectId || reviewBusy) return
+      clearCardCouncil()
       setReportingId(card.id)
       setCardReview({ kind: 'report', cardTitle: card.title, result: null })
       try {
@@ -285,7 +329,7 @@ export function SwarmPanel() {
         setReportingId(null)
       }
     },
-    [projectId, reviewBusy],
+    [projectId, reviewBusy, clearCardCouncil],
   )
 
   // The LLM-Council (Karpathy's method): five independent advisors judge the
@@ -295,6 +339,7 @@ export function SwarmPanel() {
   const handleCouncil = useCallback(
     async (card: KanbanCard) => {
       if (!projectId || reviewBusy) return
+      clearCardCouncil()
       setCouncilingId(card.id)
       setCardReview({ kind: 'council', cardTitle: card.title, result: null })
       void loadScorecard()
@@ -313,37 +358,45 @@ export function SwarmPanel() {
         setCouncilingId(null)
       }
     },
-    [projectId, reviewBusy, loadScorecard],
+    [projectId, reviewBusy, loadScorecard, clearCardCouncil],
   )
 
   // Faz 2b — gate a draft spec BEFORE a builder starts: the same five-seat
   // council, in `spec` mode, judging the card's title+body as a buildable spec.
-  // The full verdict lands in the wide surface; the editor keeps the decision
-  // and the apply action. One long main-process call — guarded against a
-  // project switch outliving it, exactly like the diff council.
+  // The convene now lives in the store's council slice, so the verdict (and the
+  // in-flight spinner) survive leaving and returning to the board. The wide
+  // surface + the editor's inline gate both read the store; here we only clear
+  // any local review surface and prime the seat standings before delegating.
   const handleConvene = useCallback(
-    async (card: KanbanCard, spec: string) => {
+    (card: KanbanCard, spec: string) => {
       if (!projectId || reviewBusy) return
-      setConveningId(card.id)
-      setCardReview({ kind: 'spec', cardId: card.id, cardTitle: card.title, result: null })
+      setCardReview(null)
       void loadScorecard()
-      try {
-        const result = await cockpit().council.run(projectId, { mode: 'spec', spec, cardId: card.id })
-        if (useStore.getState().activeProjectId !== projectId) return
-        setCardReview({ kind: 'spec', cardId: card.id, cardTitle: card.title, result })
-      } catch (err: unknown) {
-        if (useStore.getState().activeProjectId !== projectId) return
-        setCardReview({
-          kind: 'spec',
-          cardId: card.id,
-          cardTitle: card.title,
-          result: councilFailure(err, 'spec'),
-        })
-      } finally {
-        setConveningId(null)
-      }
+      void conveneCardCouncil({ projectId, cardId: card.id, cardTitle: card.title, spec })
     },
-    [projectId, reviewBusy, loadScorecard],
+    [projectId, reviewBusy, loadScorecard, conveneCardCouncil],
+  )
+
+  // Finding 1 — the gate prompt's primary action. Convene the council on the
+  // card's draft (title+body) exactly as the editor does, then drop the inline
+  // prompt: the full deliberation takes over the wide surface above the board.
+  const handleGateConvene = useCallback(
+    (card: KanbanCard) => {
+      setGatedId((id) => (id === card.id ? null : id))
+      handleConvene(card, [card.title, card.body].filter(Boolean).join('\n\n'))
+    },
+    [handleConvene],
+  )
+
+  // Rehydrate a card's persisted spec-gate verdict from its linked session id
+  // (detail channel) — how a council-approved card shows its verdict again after
+  // a view switch or app restart, without a re-run.
+  const handleRehydrate = useCallback(
+    (card: KanbanCard) => {
+      if (!projectId || !card.councilSessionId) return
+      void loadCardCouncil({ projectId, cardId: card.id, sessionId: card.councilSessionId })
+    },
+    [projectId, loadCardCouncil],
   )
 
   // Apply an approved council's refined spec: it becomes the card body and the
@@ -363,16 +416,31 @@ export function SwarmPanel() {
 
   const councilGate = useMemo<SwarmCouncilGate>(
     () => ({
-      conveningId,
-      result:
-        cardReview?.kind === 'spec'
-          ? { cardId: cardReview.cardId, result: cardReview.result }
-          : null,
-      onConvene: (card, spec) => void handleConvene(card, spec),
+      conveningId: councilConveningCardId,
+      result: councilCardResult
+        ? { cardId: councilCardResult.cardId, result: councilCardResult.result }
+        : null,
+      onConvene: (card, spec) => handleConvene(card, spec),
       onApplyRefined: handleApplyRefined,
+      onRehydrate: (card) => handleRehydrate(card),
     }),
-    [conveningId, cardReview, handleConvene, handleApplyRefined],
+    [councilConveningCardId, councilCardResult, handleConvene, handleApplyRefined, handleRehydrate],
   )
+
+  // The wide review surface prefers a freshly convened spec-gate run (from the
+  // store, source `run`) over a local diff/council/report review. A rehydrated
+  // verdict (source `rehydrate`) stays in the editor's inline gate only.
+  const wideReview = useMemo<WideReview | null>(() => {
+    if (councilCardResult && councilCardResult.source === 'run') {
+      return { kind: 'spec', cardTitle: councilCardResult.cardTitle, result: councilCardResult.result }
+    }
+    return cardReview
+  }, [councilCardResult, cardReview])
+
+  const dismissWide = useCallback(() => {
+    if (wideReview?.kind === 'spec') clearCardCouncil()
+    else setCardReview(null)
+  }, [wideReview, clearCardCouncil])
 
   const cardActions = useMemo<SwarmCardActions>(
     () => ({
@@ -381,7 +449,9 @@ export function SwarmPanel() {
       reviewingId,
       councilingId,
       reportingId,
-      onStart: (cardId) => void handleStart(cardId),
+      gatedId,
+      onStart: (cardId, opts) => void handleStart(cardId, opts),
+      onConveneGate: (card) => handleGateConvene(card),
       onPark: (cardId) => void handlePark(cardId),
       onViewTerminal: () => setView('terminals'),
       onReview: (card) => void handleReview(card),
@@ -394,7 +464,9 @@ export function SwarmPanel() {
       reviewingId,
       councilingId,
       reportingId,
+      gatedId,
       handleStart,
+      handleGateConvene,
       handlePark,
       handleReview,
       handleCouncil,
@@ -442,7 +514,7 @@ export function SwarmPanel() {
         </div>
       )}
 
-      {cardReview && (
+      {wideReview && (
         <section className="card swarmReview">
           <div className="swarmReview__head">
             <span className="swarmReview__icon" aria-hidden>
@@ -450,43 +522,43 @@ export function SwarmPanel() {
             </span>
             <div className="swarmReview__headText">
               <div className="eyebrow">
-                {cardReview.kind === 'spec'
+                {wideReview.kind === 'spec'
                   ? 'llm council · spec gate'
-                  : cardReview.kind === 'council'
+                  : wideReview.kind === 'council'
                     ? `llm council · ${COUNCIL_SEATS.length} seats`
-                    : cardReview.kind === 'report'
+                    : wideReview.kind === 'report'
                       ? 'completion report'
                       : 'diff review'}
               </div>
-              <div className="swarmReview__title">{cardReview.cardTitle}</div>
+              <div className="swarmReview__title">{wideReview.cardTitle}</div>
             </div>
             <button
               className="swarmNotice__dismiss swarmReview__dismiss"
-              onClick={() => setCardReview(null)}
-              disabled={cardReview.result === null}
+              onClick={dismissWide}
+              disabled={wideReview.result === null}
               aria-label="Dismiss review results"
             >
               <IconX width={13} height={13} />
             </button>
           </div>
-          {cardReview.result === null ? (
+          {wideReview.result === null ? (
             <div className="review__busy review__busy--compact">
               <span className="review__pulse" aria-hidden />
-              {cardReview.kind === 'spec'
+              {wideReview.kind === 'spec'
                 ? 'Convening the council on this spec — five seats, then a build/clarify gate…'
-                : cardReview.kind === 'council'
+                : wideReview.kind === 'council'
                   ? 'Convening the council — five seats, peer rankings, then a verdict…'
-                  : cardReview.kind === 'report'
+                  : wideReview.kind === 'report'
                     ? 'Gathering the completion report — diff stat and acceptance criteria…'
                     : 'Reviewing the working-tree diff…'}
             </div>
-          ) : cardReview.kind === 'diff' ? (
-            <ReviewFindings result={cardReview.result} />
-          ) : cardReview.kind === 'report' ? (
-            <CompletionReportView report={cardReview.result} />
+          ) : wideReview.kind === 'diff' ? (
+            <ReviewFindings result={wideReview.result} />
+          ) : wideReview.kind === 'report' ? (
+            <CompletionReportView report={wideReview.result} />
           ) : (
             <div className="swarmReview__council">
-              <CouncilVerdict result={cardReview.result} />
+              <CouncilVerdict result={wideReview.result} />
               <CouncilScorecard entries={scorecard} />
             </div>
           )}

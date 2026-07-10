@@ -3,7 +3,7 @@ import { CockpitEvents } from '../electron/main/events'
 import { HermesApprovalExecutor } from '../electron/main/services/hermes/HermesApprovalExecutor'
 import type { HermesApprovalExecutorDeps } from '../electron/main/services/hermes/HermesApprovalExecutor'
 import type { ApprovalActionType, ApprovalRequest } from '../shared/domain'
-import type { BoardColumn, KanbanCard } from '../shared/kanban'
+import type { BoardColumn, KanbanCard, StartCardResult } from '../shared/kanban'
 import { ROLE_IDS } from '../shared/agent-taxonomy'
 
 const ACTION: ApprovalActionType = 'propose_open_swarm_card'
@@ -113,9 +113,9 @@ class FakeSwarm {
     return this.board()
   }
 
-  async startCard(input: { projectId: string; cardId: string }): Promise<BoardColumn[]> {
+  async startCard(input: { projectId: string; cardId: string }): Promise<StartCardResult> {
     this.start.push(input)
-    return this.board()
+    return { gated: false, board: this.board() }
   }
 }
 

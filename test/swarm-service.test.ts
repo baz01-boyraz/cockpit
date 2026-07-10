@@ -323,7 +323,7 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
   })
 
   it('spawns a claude worker in a fresh worktree and moves the card to Running', async () => {
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     expect(deps.spawned).toHaveLength(1)
     // The unassigned card is auto-routed at Start: "Fix the form" → a Fixer,
     // and the picked role rides the worker name and prompt.
@@ -355,7 +355,7 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
     } as never
     const localSvc = build(localStore, localDeps)
 
-    await localSvc.startCard({ projectId: 'p1', cardId: 'a' })
+    await localSvc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     const command = localDeps.spawned[0].command ?? ''
     const relevantAt = command.indexOf('.cockpit-memory/login-form-validation.md')
     const irrelevantAt = command.indexOf('.cockpit-memory/unrelated-newer.md')
@@ -384,36 +384,36 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
       undefined,
       { record },
     )
-    await svcWithRecall.startCard({ projectId: 'p1', cardId: 'a' })
+    await svcWithRecall.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     expect(record).toHaveBeenCalledWith('project:p1', ['swarm-design'], 'swarm_worker')
   })
 
   it('reuses an existing worktree on resume and never starts a done card', async () => {
     store.rows.find((r) => r.id === 'p')!.worktree_path = '/proj/.cockpit-worktrees/old'
     store.rows.find((r) => r.id === 'p')!.branch = 'swarm/old-1234'
-    await svc.startCard({ projectId: 'p1', cardId: 'p' })
+    await svc.startCard({ projectId: 'p1', cardId: 'p', skipGate: true })
     expect(deps.worktrees.create).not.toHaveBeenCalled()
     expect(deps.spawned[0].cwd).toBe('/proj/.cockpit-worktrees/old')
     await expect(svc.startCard({ projectId: 'p1', cardId: 'd' })).rejects.toThrow(/To do or Parked/)
   })
 
   it('allows 3 concurrent cards and refuses the 4th (plan D6)', async () => {
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
-    await svc.startCard({ projectId: 'p1', cardId: 'b' })
-    await svc.startCard({ projectId: 'p1', cardId: 'c' })
-    await expect(svc.startCard({ projectId: 'p1', cardId: 'e' })).rejects.toThrow(/Concurrency cap/)
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
+    await svc.startCard({ projectId: 'p1', cardId: 'b', skipGate: true })
+    await svc.startCard({ projectId: 'p1', cardId: 'c', skipGate: true })
+    await expect(svc.startCard({ projectId: 'p1', cardId: 'e', skipGate: true })).rejects.toThrow(/Concurrency cap/)
     expect(deps.spawned).toHaveLength(3)
   })
 
   it('falls back to the project root when worktree creation fails', async () => {
     deps.worktrees.create.mockRejectedValueOnce(new Error('not a git repo'))
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     expect(deps.spawned[0].cwd).toBeUndefined()
     expect(store.rows.find((r) => r.id === 'a')!.worktree_path).toBeNull()
   })
 
   it('moves the card to In review when its worker exits', async () => {
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     deps.events.emitTyped('terminal:exit', {
       sessionId: 'term_1',
       projectId: 'p1',
@@ -426,7 +426,7 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
   })
 
   it('parkCard leaves Running first, then kills the worker — the exit is ignored', async () => {
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     svc.parkCard({ projectId: 'p1', cardId: 'a' })
     expect(deps.killed).toEqual(['term_1'])
     expect(store.rows.find((r) => r.id === 'a')!.status).toBe('parked')
@@ -441,7 +441,7 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
   })
 
   it('user cannot drag a running card out; removeCard also refuses it', async () => {
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     expect(() => svc.moveCard({ projectId: 'p1', cardId: 'a', to: 'done', index: 0 })).toThrow(
       /swarm itself/,
     )
@@ -449,7 +449,7 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
   })
 
   it('removeCard cleans the worktree first and aborts when it is dirty', async () => {
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     deps.events.emitTyped('terminal:exit', {
       sessionId: 'term_1',
       projectId: 'p1',
@@ -477,16 +477,16 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
   })
 
   it('arms the done signal for the worktree before the worker spawns', async () => {
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     expect(deps.armed).toEqual(['/proj/.cockpit-worktrees/a'])
     // No worktree (fallback run) → nothing to arm.
     deps.worktrees.create.mockRejectedValueOnce(new Error('not a git repo'))
-    await svc.startCard({ projectId: 'p1', cardId: 'b' })
+    await svc.startCard({ projectId: 'p1', cardId: 'b', skipGate: true })
     expect(deps.armed).toHaveLength(1)
   })
 
   it('a turn-finished signal moves the Running card to In review; the terminal stays alive', async () => {
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     deps.signalled.add('/proj/.cockpit-worktrees/a')
 
     svc.board('p1')
@@ -505,7 +505,7 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
       { role: 'builder', spec: 'backend' },
       { role: 'reviewer', spec: 'security' },
     ])
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     expect(deps.spawned[0].name).toBe('Swarm — Builder·Backend: Fix the form')
     const wt = '/proj/.cockpit-worktrees/a'
 
@@ -530,7 +530,7 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
   })
 
   it('a late signal for a card no longer Running is consumed and ignored', async () => {
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     svc.parkCard({ projectId: 'p1', cardId: 'a' })
     deps.signalled.add('/proj/.cockpit-worktrees/a')
 
@@ -540,7 +540,7 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
   })
 
   it('without a signal the card stays Running across board reads', async () => {
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     svc.board('p1')
     expect(store.rows.find((r) => r.id === 'a')!.status).toBe('in_progress')
   })
@@ -560,16 +560,16 @@ describe('SwarmService quota gate (6.6)', () => {
       }),
     })
     const blocked = new SwarmService(store.db, deps.terminals, deps.memory, deps.audit, deps.events, deps.projects, deps.worktrees, usage(100) as never)
-    await expect(blocked.startCard({ projectId: 'p1', cardId: 'a' })).rejects.toThrow(/exhausted/)
+    await expect(blocked.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })).rejects.toThrow(/exhausted/)
 
     const warm = new SwarmService(seed().db, deps.terminals, deps.memory, deps.audit, deps.events, deps.projects, deps.worktrees, usage(85) as never)
-    await expect(warm.startCard({ projectId: 'p1', cardId: 'a' })).resolves.toBeTruthy()
+    await expect(warm.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })).resolves.toBeTruthy()
 
     const offline = new SwarmService(seed().db, deps.terminals, deps.memory, deps.audit, deps.events, deps.projects, deps.worktrees, usage(100, false) as never)
-    await expect(offline.startCard({ projectId: 'p1', cardId: 'a' })).resolves.toBeTruthy()
+    await expect(offline.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })).resolves.toBeTruthy()
 
     const broken = new SwarmService(seed().db, deps.terminals, deps.memory, deps.audit, deps.events, deps.projects, deps.worktrees, { getReport: async () => { throw new Error('probe down') } } as never)
-    await expect(broken.startCard({ projectId: 'p1', cardId: 'a' })).resolves.toBeTruthy()
+    await expect(broken.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })).resolves.toBeTruthy()
   })
 
   it('an assigned Named Agent speaks with its authored voice (N3)', async () => {
@@ -586,7 +586,7 @@ describe('SwarmService quota gate (6.6)', () => {
           : null,
     }
     const svc = new SwarmService(store.db, deps.terminals, deps.memory, deps.audit, deps.events, deps.projects, deps.worktrees, undefined, named as never)
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     expect(deps.spawned[0].command).toContain('forge god')
     expect(deps.spawned[0].command).toContain('--model sonnet')
     expect(deps.spawned[0].command).toContain('BUILDER')
@@ -597,7 +597,7 @@ describe('SwarmService quota gate (6.6)', () => {
     const store = seed()
     const deps = makeDeps()
     const svc = build(store, deps)
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     // reviewer + security-paranoid → Reviewer·Security in the canonical taxonomy.
     expect(deps.spawned[0].command).toContain('REVIEWER')
     expect(deps.spawned[0].command).toContain('Domain: SECURITY')
@@ -648,7 +648,7 @@ describe('SwarmService council brief (Faz 2a)', () => {
     const svc = buildWithCouncil(store, deps, {
       get: (id) => (id === 'sess_9' ? { projectId: 'p1', result: councilResult() } : null),
     })
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     expect(deps.spawned[0].command).toContain('COUNCIL BRIEF')
     expect(deps.spawned[0].command).toContain('Wire the intake to the CRM webhook')
     expect(deps.spawned[0].command).toContain('Builder seat notes')
@@ -664,7 +664,7 @@ describe('SwarmService council brief (Faz 2a)', () => {
     const svc = buildWithCouncil(store, deps, {
       get: (id) => (id === 'sess_9' ? { projectId: 'OTHER-project', result: councilResult() } : null),
     })
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     expect(deps.spawned).toHaveLength(1)
     expect(deps.spawned[0].command).not.toContain('COUNCIL BRIEF')
   })
@@ -673,7 +673,7 @@ describe('SwarmService council brief (Faz 2a)', () => {
     const store = makeStore([{ id: 'a', status: 'todo', position: POSITION_GAP, council_session_id: 'gone' }])
     const deps = makeDeps()
     const svc = buildWithCouncil(store, deps, { get: () => null })
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     expect(deps.spawned).toHaveLength(1)
     expect(deps.spawned[0].command).not.toContain('COUNCIL BRIEF')
     const rec = deps.audit.record as unknown as ReturnType<typeof vi.fn>
@@ -689,7 +689,7 @@ describe('SwarmService council brief (Faz 2a)', () => {
         throw new Error('corrupt result_json')
       },
     })
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     expect(deps.spawned).toHaveLength(1)
     expect(deps.spawned[0].command).not.toContain('COUNCIL BRIEF')
   })
@@ -780,7 +780,7 @@ describe('SwarmService completion report + notify (Faz 2.5)', () => {
     const notifier = vi.fn()
     const svc = buildWithReport(store, deps, notifier)
 
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     deps.events.emitTyped('terminal:exit', {
       sessionId: 'term_1',
       projectId: 'p1',
@@ -808,7 +808,7 @@ describe('SwarmService completion report + notify (Faz 2.5)', () => {
     })
     const svc = buildWithReport(store, deps, notifier)
 
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     expect(() =>
       deps.events.emitTyped('terminal:exit', {
         sessionId: 'term_1',
@@ -912,7 +912,7 @@ describe('SwarmService resumed-card missing worktree (A3)', () => {
       branch: 'swarm/gone-1234',
     })
     const svc = build(store, deps)
-    await svc.startCard({ projectId: 'p1', cardId: 'p' })
+    await svc.startCard({ projectId: 'p1', cardId: 'p', skipGate: true })
     expect(deps.worktrees.restore).toHaveBeenCalledWith('/proj', '/proj/.cockpit-worktrees/gone', 'swarm/gone-1234')
     expect(deps.worktrees.create).not.toHaveBeenCalled()
     expect(deps.spawned[0].cwd).toBe('/proj/.cockpit-worktrees/gone')
@@ -925,7 +925,7 @@ describe('SwarmService resumed-card missing worktree (A3)', () => {
     deps.worktrees.exists.mockReturnValue(false)
     deps.worktrees.restore.mockRejectedValueOnce(new Error('branch checked out elsewhere'))
     const svc = build(store, deps)
-    await svc.startCard({ projectId: 'p1', cardId: 'p' })
+    await svc.startCard({ projectId: 'p1', cardId: 'p', skipGate: true })
     expect(deps.spawned).toHaveLength(0)
     expect(store.rows.find((r) => r.id === 'p')!.status).toBe('parked')
     expect(deps.audits).toContain('swarm.card_worktree_missing')
@@ -935,7 +935,7 @@ describe('SwarmService resumed-card missing worktree (A3)', () => {
     const store = seedResumable()
     const deps = makeDeps() // exists() defaults to true
     const svc = build(store, deps)
-    await svc.startCard({ projectId: 'p1', cardId: 'p' })
+    await svc.startCard({ projectId: 'p1', cardId: 'p', skipGate: true })
     expect(deps.worktrees.restore).not.toHaveBeenCalled()
     expect(deps.worktrees.create).not.toHaveBeenCalled()
     expect(deps.spawned[0].cwd).toBe('/proj/.cockpit-worktrees/gone')
@@ -981,7 +981,7 @@ describe('SwarmService worker-exit sentinel signal (Faz A)', () => {
     const sentinel = { report: vi.fn() }
     const svc = buildWithSentinel(store, deps, sentinel)
 
-    await svc.startCard({ projectId: 'p1', cardId: 'a' })
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
     deps.events.emitTyped('terminal:exit', { sessionId: 'term_1', projectId: 'p1', role: 'claude', exitCode: 2, signal: null })
     expect(store.rows.find((r) => r.id === 'a')!.status).toBe('in_review')
     expect(sentinel.report).toHaveBeenCalledTimes(1)
@@ -995,7 +995,7 @@ describe('SwarmService worker-exit sentinel signal (Faz A)', () => {
     const deps2 = makeDeps()
     const sentinel2 = { report: vi.fn() }
     const svc2 = buildWithSentinel(store2, deps2, sentinel2)
-    await svc2.startCard({ projectId: 'p1', cardId: 'b' })
+    await svc2.startCard({ projectId: 'p1', cardId: 'b', skipGate: true })
     deps2.events.emitTyped('terminal:exit', { sessionId: 'term_1', projectId: 'p1', role: 'claude', exitCode: 0, signal: null })
     expect(sentinel2.report).not.toHaveBeenCalled()
   })
@@ -1115,5 +1115,121 @@ describe('SwarmService signal → card (Track H1) and fix verification (Track H2
     svc.moveCard({ projectId: 'p1', cardId: 'c2', to: 'done', index: 0 })
 
     expect(sentinel.resolveShippedSignal).not.toHaveBeenCalled()
+  })
+})
+
+describe('SwarmService council spec gate (Finding 1)', () => {
+  // A minimal spec-mode result carrying a chosen gate verdict (or none).
+  const councilResultWith = (kind: 'approved' | 'needs_clarification' | null) =>
+    ({
+      ok: true,
+      mode: 'spec',
+      seats: [],
+      rankings: [],
+      aggregate: [],
+      labelToSeat: {},
+      verdict: 'x',
+      specVerdict: kind ? { kind, questions: [] } : null,
+      error: null,
+      stats: { seatsRun: 1, seatsFailed: 0, filesReviewed: 0, durationMs: 1 },
+      sessionId: 'sess_1',
+    }) as never
+
+  const buildGated = (
+    store: ReturnType<typeof makeStore>,
+    deps: ReturnType<typeof makeDeps>,
+    councilSessions?: { get: (id: string) => { projectId: string; result: unknown } | null },
+  ) =>
+    new SwarmService(
+      store.db,
+      deps.terminals,
+      deps.memory,
+      deps.audit,
+      deps.events,
+      deps.projects,
+      deps.worktrees,
+      undefined,
+      undefined,
+      deps.doneSignal,
+      councilSessions as never,
+    )
+
+  it('refuses a start when the card has no council session — { gated: true }, nothing spawns', async () => {
+    const store = makeStore([{ id: 'a', status: 'todo', position: POSITION_GAP, title: 'Ungated' }])
+    const deps = makeDeps()
+    const svc = buildGated(store, deps)
+
+    const result = await svc.startCard({ projectId: 'p1', cardId: 'a' })
+
+    expect(result).toEqual({ gated: true })
+    expect(deps.spawned).toHaveLength(0)
+    expect(store.rows.find((r) => r.id === 'a')!.status).toBe('todo')
+    expect(deps.audits).not.toContain('swarm.start_card')
+    expect(deps.audits).not.toContain('swarm.gate_skipped')
+  })
+
+  it('refuses a start when the linked session only NEEDS_CLARIFICATION (not a pass)', async () => {
+    const store = makeStore([
+      { id: 'a', status: 'todo', position: POSITION_GAP, council_session_id: 'sess_1' },
+    ])
+    const deps = makeDeps()
+    const svc = buildGated(store, deps, {
+      get: (id) =>
+        id === 'sess_1' ? { projectId: 'p1', result: councilResultWith('needs_clarification') } : null,
+    })
+
+    const result = await svc.startCard({ projectId: 'p1', cardId: 'a' })
+
+    expect(result).toEqual({ gated: true })
+    expect(deps.spawned).toHaveLength(0)
+    expect(store.rows.find((r) => r.id === 'a')!.status).toBe('todo')
+  })
+
+  it('skipGate starts the card past the gate and audits swarm.gate_skipped', async () => {
+    const store = makeStore([{ id: 'a', status: 'todo', position: POSITION_GAP, title: 'Override' }])
+    const deps = makeDeps()
+    const svc = buildGated(store, deps)
+
+    const result = await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
+
+    expect(result.gated).toBe(false)
+    expect(deps.spawned).toHaveLength(1)
+    expect(store.rows.find((r) => r.id === 'a')!.status).toBe('in_progress')
+    expect(deps.audits).toContain('swarm.gate_skipped')
+    expect(deps.audits).toContain('swarm.start_card')
+  })
+
+  it('an approved council session clears the gate — starts without skipGate, no gate_skipped', async () => {
+    const store = makeStore([
+      { id: 'a', status: 'todo', position: POSITION_GAP, council_session_id: 'sess_1', title: 'Approved' },
+    ])
+    const deps = makeDeps()
+    const svc = buildGated(store, deps, {
+      get: (id) => (id === 'sess_1' ? { projectId: 'p1', result: councilResultWith('approved') } : null),
+    })
+
+    const result = await svc.startCard({ projectId: 'p1', cardId: 'a' })
+
+    expect(result.gated).toBe(false)
+    expect(deps.spawned).toHaveLength(1)
+    expect(store.rows.find((r) => r.id === 'a')!.status).toBe('in_progress')
+    expect(deps.audits).not.toContain('swarm.gate_skipped')
+    expect(deps.audits).toContain('swarm.start_card')
+  })
+
+  it('a cross-project session does NOT clear the gate (scope guard)', async () => {
+    const store = makeStore([
+      { id: 'a', status: 'todo', position: POSITION_GAP, council_session_id: 'sess_1' },
+    ])
+    const deps = makeDeps()
+    const svc = buildGated(store, deps, {
+      get: (id) =>
+        id === 'sess_1' ? { projectId: 'OTHER-project', result: councilResultWith('approved') } : null,
+    })
+
+    const result = await svc.startCard({ projectId: 'p1', cardId: 'a' })
+
+    expect(result).toEqual({ gated: true })
+    expect(deps.spawned).toHaveLength(0)
   })
 })

@@ -38,6 +38,7 @@ import {
   councilRunSchema,
   councilScorecardSchema,
   councilSessionsSchema,
+  councilSessionSchema,
   outcomesScorecardSchema,
   resumeClaudeSchema,
   routeQuerySchema,
@@ -282,6 +283,10 @@ export function registerIpc(services: Services): void {
   handle('councilSessions', (p) =>
     services.council.recentSessions(councilSessionsSchema.parse(p).projectId),
   )
+  handle('councilSession', (p) => {
+    const { projectId, sessionId } = councilSessionSchema.parse(p)
+    return services.council.session(projectId, sessionId)
+  })
 
   // --- outcome tracking (Track G4: read-only judgment scorecard, derived) ---
   handle('outcomesScorecard', (p) =>

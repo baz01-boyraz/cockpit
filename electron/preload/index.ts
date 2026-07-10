@@ -98,11 +98,15 @@ const api: CockpitApi = {
       invoke(IPC.councilRun, {
         projectId,
         model: opts?.model,
+        mode: opts?.mode,
         dir: opts?.dir,
         question: opts?.question,
+        spec: opts?.spec,
+        cardId: opts?.cardId,
       }),
     scorecard: (projectId) => invoke(IPC.councilScorecard, { projectId }),
     sessions: (projectId) => invoke(IPC.councilSessions, { projectId }),
+    session: (projectId, sessionId) => invoke(IPC.councilSession, { projectId, sessionId }),
   },
   outcomes: {
     scorecard: (projectId) => invoke(IPC.outcomesScorecard, { projectId }),

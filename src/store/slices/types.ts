@@ -23,10 +23,11 @@ import type {
   UsageSummary,
 } from '@shared/domain'
 import type { SystemInfo } from '@shared/ipc'
-import type { BoardColumn, CardStatus } from '@shared/kanban'
+import type { BoardColumn, CardStatus, StartCardResult } from '@shared/kanban'
 import type { Assignment } from '@shared/agent-taxonomy'
 import type { NamedAgentSummary } from '@shared/named-agents'
 import type { SentinelSource } from '@shared/sentinel'
+import type { CouncilResult } from '@shared/council'
 
 export type View =
   | 'dashboard'
@@ -91,6 +92,81 @@ export interface SentinelSlice {
   markSignalsSeen: (ids: string[]) => Promise<void>
   /** Optimistically bump the badge when a live signal arrives (onAlert). */
   bumpSentinelUnseen: () => void
+}
+
+/**
+ * One convened council run, held in the store so it survives the panel/editor
+ * unmounting on a view switch. `result: null` = in flight; a finished run keeps
+ * its persisted `sessionId` as the id so history rows can match it.
+ */
+export interface CouncilRunView {
+  /** Persisted session id when finished, else a local uuid while convening. */
+  id: string
+  /** Headline for the run row (first spec line, or a browsed session's question). */
+  title: string
+  /** The spec text judged (kept so a browse/re-convene has the source; '' for a browsed header). */
+  spec: string
+  /** The finished verdict, or null while the council is convening. */
+  result: CouncilResult | null
+  /** Epoch ms the run was requested. */
+  at: number
+}
+
+/**
+ * Council run state, lifted out of the CouncilPanel and the swarm card editor so
+ * a verdict (or an in-flight spinner) survives leaving and returning to the
+ * view. The heavy `CouncilResult` lives here, keyed by the project it belongs to
+ * (`councilProjectId`), and the convene promises resolve in the slice actions —
+ * never in volatile component state — so a run that finishes while the user is
+ * elsewhere still lands. The renderer rehydrates persisted verdicts on demand
+ * through the `council:session` detail channel.
+ */
+export interface CouncilSlice {
+  /** Which project every council field below belongs to — the stale-flash + preserve guard. */
+  councilProjectId: string | null
+  /** Standalone panel: a run in flight or the last completed/browsed one. */
+  councilActive: CouncilRunView | null
+  /** True while the standalone council is convening. */
+  councilConvening: boolean
+  /** A subtle "council finished" cue set when a standalone run resolves; the panel clears it. */
+  councilNotice: string | null
+  /** Swarm spec-gate: card id whose council is in flight, or null. */
+  councilConveningCardId: string | null
+  /**
+   * Swarm spec-gate: the latest result keyed by the card it judged. `source`
+   * separates a freshly convened run (`run` — also drives the wide verdict
+   * surface) from an on-open rehydration of a card's persisted session
+   * (`rehydrate` — feeds only the editor's inline gate).
+   */
+  councilCardResult: {
+    cardId: string
+    cardTitle: string
+    result: CouncilResult | null
+    source: 'run' | 'rehydrate'
+  } | null
+  /** Convene the standalone spec-mode council on free-form text (resolves in-store). */
+  conveneCouncil: (projectId: string, spec: string) => Promise<void>
+  /** Point the standalone active run at a chosen view (history browse, or null to dismiss). */
+  setCouncilActive: (run: CouncilRunView | null) => void
+  /** Clear the standalone "council finished" cue. */
+  clearCouncilNotice: () => void
+  /** Convene the swarm spec-gate council on a card's draft (resolves in-store). */
+  conveneCardCouncil: (input: {
+    projectId: string
+    cardId: string
+    cardTitle: string
+    spec: string
+  }) => Promise<void>
+  /** Rehydrate a card's persisted spec-gate verdict from its linked session id (detail channel). */
+  loadCardCouncil: (input: { projectId: string; cardId: string; sessionId: string }) => Promise<void>
+  /** Clear the swarm spec-gate result (dismiss the wide surface). */
+  clearCardCouncil: () => void
+  /**
+   * The project-scoped reset. Preserves state when `projectId` matches the held
+   * project (so a same-project view switch keeps its run) and wipes everything
+   * on a genuine project change.
+   */
+  resetCouncil: (projectId: string | null) => void
 }
 
 export interface ProjectSlice {
@@ -170,8 +246,17 @@ export interface SwarmSlice {
   }) => Promise<void>
   moveCard: (input: { projectId: string; cardId: string; to: CardStatus; index: number }) => Promise<void>
   removeCard: (input: { projectId: string; cardId: string }) => Promise<void>
-  /** 6.2: spawn a worker for a To do / Parked card — the service moves it to Running. */
-  startCard: (input: { projectId: string; cardId: string }) => Promise<void>
+  /**
+   * 6.2: spawn a worker for a To do / Parked card — the service moves it to
+   * Running. Returns the council spec-gate outcome: `{ gated: true }` when the
+   * card's spec hasn't passed the council (the board is left untouched) so the
+   * panel can prompt to convene; `skipGate` is the explicit developer escape.
+   */
+  startCard: (input: {
+    projectId: string
+    cardId: string
+    skipGate?: boolean
+  }) => Promise<StartCardResult>
   /** 6.3: stop a Running card's worker, keep its worktree — Start later resumes it. */
   parkCard: (input: { projectId: string; cardId: string }) => Promise<void>
 }
@@ -185,6 +270,7 @@ export type CockpitState = UiSlice &
   InfraSlice &
   AppUpdateSlice &
   SwarmSlice &
-  SentinelSlice
+  SentinelSlice &
+  CouncilSlice
 
 export type SliceCreator<T> = StateCreator<CockpitState, [], [], T>
