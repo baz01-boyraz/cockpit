@@ -142,6 +142,13 @@ export interface ClaudeSessionSummary {
   sizeBytes: number
 }
 
+export type ResumableSessionProvider = 'claude' | 'codex'
+
+/** A project-scoped conversation that can be reopened by its native agent CLI. */
+export interface ResumableSessionSummary extends ClaudeSessionSummary {
+  provider: ResumableSessionProvider
+}
+
 // ---------------------------------------------------------------------------
 // Agents / router
 // ---------------------------------------------------------------------------

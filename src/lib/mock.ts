@@ -59,6 +59,7 @@ import {
   approvals,
   audit,
   claudeSessionsMock,
+  resumableSessionsMock,
   gitSeeds,
   githubByProject,
   id,
@@ -577,6 +578,35 @@ export function createMockApi(): CockpitApi {
         }
         list.push(session)
         setTimeout(() => emit(session.id, `\x1b[38;5;208m●\x1b[0m resuming \x1b[1mclaude\x1b[0m session \x1b[2m${sessionId.slice(0, 8)}\x1b[0m…\r\n`), 140)
+        return session
+      },
+      agentSessions: async () => resumableSessionsMock,
+      resumeAgent: async (projectId, provider, sessionId) => {
+        const list = terminals[projectId] ?? (terminals[projectId] = [])
+        const isClaude = provider === 'claude'
+        const session: TerminalSession = {
+          id: id('term'),
+          projectId,
+          name: isClaude ? 'Claude Code' : 'Codex',
+          role: provider,
+          alias: null,
+          cwd: '.',
+          shell: '/bin/zsh',
+          status: 'running',
+          pid: Math.floor(Math.random() * 90000) + 1000,
+          exitCode: null,
+          createdAt: now(),
+          lastActiveAt: now(),
+        }
+        list.push(session)
+        setTimeout(
+          () =>
+            emit(
+              session.id,
+              `\x1b[38;5;208m●\x1b[0m resuming \x1b[1m${provider}\x1b[0m session \x1b[2m${sessionId.slice(0, 8)}\x1b[0m…\r\n`,
+            ),
+          140,
+        )
         return session
       },
       attachImage: async (input) => {

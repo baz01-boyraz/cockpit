@@ -41,6 +41,7 @@ import {
   councilSessionSchema,
   outcomesScorecardSchema,
   resumeClaudeSchema,
+  resumeAgentSchema,
   routeQuerySchema,
   secretKindOnlySchema,
   secretSetSchema,
@@ -160,6 +161,14 @@ export function registerIpc(services: Services): void {
   handle('terminalsResumeClaude', (p) => {
     const { projectId, sessionId } = resumeClaudeSchema.parse(p)
     return services.terminals.resumeClaude(projectId, sessionId)
+  })
+  handle('terminalsAgentSessions', (p) => {
+    const { projectId } = projectIdSchema.parse(p)
+    return services.agentSessions.list(services.projects.get(projectId).path)
+  })
+  handle('terminalsResumeAgent', (p) => {
+    const { projectId, provider, sessionId } = resumeAgentSchema.parse(p)
+    return services.terminals.resumeAgent(projectId, provider, sessionId)
   })
   handle('terminalsAttachImage', (p) =>
     services.attachments.saveTerminalImage(terminalAttachmentInputSchema.parse(p)),

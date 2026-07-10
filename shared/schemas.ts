@@ -151,6 +151,10 @@ export const resumeClaudeSchema = z.object({
   sessionId: z.string().regex(/^[0-9a-fA-F-]{36}$/),
 })
 
+export const resumeAgentSchema = resumeClaudeSchema.extend({
+  provider: z.enum(['claude', 'codex']),
+})
+
 export const routeQuerySchema = z.object({
   projectId: z.string().min(1),
   query: z.string().min(1).max(4000),

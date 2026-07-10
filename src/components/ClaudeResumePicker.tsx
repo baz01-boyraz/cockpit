@@ -1,34 +1,28 @@
 import { useEffect, useState } from 'react'
-import type { ClaudeSessionSummary, TerminalSession } from '@shared/domain'
-import { relativeTime } from '@shared/time'
+import type { ResumableSessionSummary, TerminalSession } from '@shared/domain'
+import { compactDateTime } from '@shared/time'
 import { cockpit } from '../lib/cockpit'
-import { IconBolt, IconRestart, IconX } from './icons'
+import { IconBolt, IconRestart, IconTerminal, IconX } from './icons'
 
-interface ClaudeResumePickerProps {
+interface AgentResumePickerProps {
   projectId: string
   onResumed: (session: TerminalSession) => void
   onClose: () => void
 }
 
-function lastActiveLabel(iso: string): string {
-  const t = relativeTime(iso)
-  return t === 'now' ? 'just now' : `${t} ago`
-}
-
 /**
- * Lists this project's past Claude Code conversations (read from the agent's own
- * transcripts) and opens a new terminal that resumes the chosen one — so the
- * session starts with full memory instead of cold.
+ * Lists this project's Claude and Codex conversations together and resumes the
+ * selected one through its native CLI.
  */
-export function ClaudeResumePicker({ projectId, onResumed, onClose }: ClaudeResumePickerProps) {
-  const [sessions, setSessions] = useState<ClaudeSessionSummary[] | null>(null)
+export function AgentResumePicker({ projectId, onResumed, onClose }: AgentResumePickerProps) {
+  const [sessions, setSessions] = useState<ResumableSessionSummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
     cockpit()
-      .terminals.claudeSessions(projectId)
+      .terminals.agentSessions(projectId)
       .then((s) => alive && setSessions(s))
       .catch((e) => alive && setError(e instanceof Error ? e.message : 'Could not load sessions'))
     return () => {
@@ -36,11 +30,11 @@ export function ClaudeResumePicker({ projectId, onResumed, onClose }: ClaudeResu
     }
   }, [projectId])
 
-  const resume = async (s: ClaudeSessionSummary) => {
+  const resume = async (s: ResumableSessionSummary) => {
     if (busy) return
     setBusy(s.id)
     try {
-      const term = await cockpit().terminals.resumeClaude(projectId, s.id)
+      const term = await cockpit().terminals.resumeAgent(projectId, s.provider, s.id)
       onResumed(term)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not resume session')
@@ -53,10 +47,14 @@ export function ClaudeResumePicker({ projectId, onResumed, onClose }: ClaudeResu
       <div className="modal__panel animate-in" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal__head">
           <div>
-            <div className="eyebrow">claude code</div>
+            <div className="eyebrow">claude + codex</div>
             <h2 className="modal__title">Resume a session</h2>
           </div>
-          <button className="btn btn--ghost btn--sm" onClick={onClose}>
+          <button
+            className="btn btn--ghost btn--sm"
+            aria-label="Close resume sessions"
+            onClick={onClose}
+          >
             <IconX width={15} height={15} />
           </button>
         </div>
@@ -68,24 +66,34 @@ export function ClaudeResumePicker({ projectId, onResumed, onClose }: ClaudeResu
           {error && <div className="modal__error">{error}</div>}
           {sessions && sessions.length === 0 && !error && (
             <div className="modal__emptyState">
-              No past Claude conversations for this project yet. Launch Claude to start one.
+              No past Claude or Codex conversations for this project yet.
             </div>
           )}
           {sessions?.map((s) => (
             <button
-              key={s.id}
+              key={`${s.provider}:${s.id}`}
               className="resumecard"
               onClick={() => void resume(s)}
               disabled={busy !== null}
               title={s.title}
             >
               <span className="resumecard__icon">
-                <IconBolt width={15} height={15} />
+                {s.provider === 'claude' ? (
+                  <IconBolt width={15} height={15} />
+                ) : (
+                  <IconTerminal width={15} height={15} />
+                )}
               </span>
               <div className="resumecard__body">
                 <div className="resumecard__title">{s.title}</div>
-                <div className="resumecard__meta mono">
-                  {lastActiveLabel(s.lastActiveAt)} · {s.id.slice(0, 8)}
+                <div className="resumecard__meta">
+                  <span className={`resumecard__provider resumecard__provider--${s.provider}`}>
+                    {s.provider === 'claude' ? 'Claude' : 'Codex'}
+                  </span>
+                  <span className="resumecard__datetime mono">
+                    {compactDateTime(s.lastActiveAt)}
+                  </span>
+                  <span className="resumecard__id mono">{s.id.slice(0, 8)}</span>
                 </div>
               </div>
               <span className="resumecard__action">

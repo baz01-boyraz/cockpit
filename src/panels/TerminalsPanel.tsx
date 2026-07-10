@@ -9,7 +9,7 @@ import {
 import type { TerminalRole, TerminalSession } from '@shared/domain'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
-import { ClaudeResumePicker } from '../components/ClaudeResumePicker'
+import { AgentResumePicker } from '../components/ClaudeResumePicker'
 import { TerminalView } from '../components/TerminalView'
 import {
   IconBolt,
@@ -400,7 +400,7 @@ export function TerminalsPanel({ panelActive = true }: { panelActive?: boolean }
               <IconBolt width={14} height={14} /> Claude Code
             </button>
             <button className="btn" onClick={() => setResumeOpen(true)}>
-              <IconRestart width={14} height={14} /> Resume Claude
+              <IconRestart width={14} height={14} /> Resume
             </button>
             <button className="btn" onClick={() => launch('codex')}>
               <IconBolt width={14} height={14} /> Codex
@@ -408,7 +408,7 @@ export function TerminalsPanel({ panelActive = true }: { panelActive?: boolean }
           </div>
         </div>
         {resumeOpen && activeProjectId && (
-          <ClaudeResumePicker
+          <AgentResumePicker
             projectId={activeProjectId}
             onResumed={onResumed}
             onClose={() => setResumeOpen(false)}
@@ -486,7 +486,7 @@ export function TerminalsPanel({ panelActive = true }: { panelActive?: boolean }
             className="btn btn--ghost btn--sm"
             onClick={() => setResumeOpen(true)}
             disabled={atLimit}
-            title={atLimit ? `Max ${MAX} terminals` : 'Resume a past Claude session'}
+            title={atLimit ? `Max ${MAX} terminals` : 'Resume a past Claude or Codex session'}
           >
             <IconRestart width={13} height={13} /> Resume
           </button>
@@ -606,7 +606,7 @@ export function TerminalsPanel({ panelActive = true }: { panelActive?: boolean }
         )}
       </div>
       {resumeOpen && activeProjectId && (
-        <ClaudeResumePicker
+        <AgentResumePicker
           projectId={activeProjectId}
           onResumed={onResumed}
           onClose={() => setResumeOpen(false)}

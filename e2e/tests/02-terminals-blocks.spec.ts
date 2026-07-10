@@ -16,6 +16,13 @@ test('opens Terminals and mounts a session with the stream/blocks surface', asyn
   await expect(page.getByRole('heading', { name: 'Terminals', exact: true })).toBeVisible()
 
   const terminals = new TerminalsPage(page)
+  await page.getByRole('button', { name: /^resume$/i }).click()
+  await expect(page.getByRole('heading', { name: 'Resume a session' })).toBeVisible()
+  await expect(page.getByText('Claude', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('Codex', { exact: true }).first()).toBeVisible()
+  await expect(page.locator('.resumecard__datetime').first()).toContainText(/\d{1,2}.+·\s\d{2}:\d{2}/)
+  await page.getByRole('button', { name: 'Close resume sessions' }).click()
+
   await expect(terminals.blankShellButton).toBeVisible()
   await terminals.createBlankShell()
 

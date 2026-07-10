@@ -15,6 +15,7 @@ import type {
   LogEvent,
   OpenRouterUsageSnapshot,
   Project,
+  ResumableSessionSummary,
   UsageSummary,
 } from '@shared/domain'
 import { insightFromMatch } from '@shared/insight-aggregation'
@@ -282,6 +283,20 @@ export const claudeSessionsMock: ClaudeSessionSummary[] = [
   { id: 'a4788b72-c9b9-47ee-bd5c-5b6e9c9e52e5', title: 'son release sonrası gözüme batanlar', createdAt: ago(360), lastActiveAt: ago(300), sizeBytes: 5_600_000 },
   { id: 'de4abd0b-1a2b-4c3d-9e8f-7a6b5c4d3e2f', title: 'chat mode\'u şimdilik kaldırmak istiyorum', createdAt: ago(520), lastActiveAt: ago(420), sizeBytes: 1_200_000 },
 ]
+
+export const resumableSessionsMock: ResumableSessionSummary[] = [
+  ...claudeSessionsMock.map(
+    (session): ResumableSessionSummary => ({ ...session, provider: 'claude' }),
+  ),
+  {
+    id: 'f59b98ab-642e-4cad-b690-2e6f6256cc88',
+    provider: 'codex' as const,
+    title: 'Unify Claude and Codex Resume sessions',
+    createdAt: ago(75),
+    lastActiveAt: ago(2),
+    sizeBytes: 840_000,
+  },
+].sort((a, b) => b.lastActiveAt.localeCompare(a.lastActiveAt))
 
 // Seeded per-project knowledge hub — interlinked so backlinks, unresolved
 // targets, and the graph are all explorable in the browser preview.

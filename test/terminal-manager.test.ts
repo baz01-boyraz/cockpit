@@ -308,6 +308,22 @@ describe('TerminalManager lifecycle', () => {
     expect(ptyState.spawned[0].write).toHaveBeenCalledWith(`claude --resume ${uuid}\r`)
   })
 
+  it('resumeAgent() launches the selected provider with its native resume command', () => {
+    vi.useFakeTimers()
+    const { mgr } = makeManager()
+    const uuid = '123e4567-e89b-12d3-a456-426614174000'
+
+    const codex = mgr.resumeAgent('prj_1', 'codex', uuid)
+    vi.advanceTimersByTime(120)
+    expect(codex).toMatchObject({ name: 'Codex', role: 'codex' })
+    expect(ptyState.spawned[0].write).toHaveBeenCalledWith(`codex resume ${uuid}\r`)
+
+    const claude = mgr.resumeAgent('prj_1', 'claude', uuid)
+    vi.advanceTimersByTime(120)
+    expect(claude).toMatchObject({ name: 'Claude Code', role: 'claude' })
+    expect(ptyState.spawned[1].write).toHaveBeenCalledWith(`claude --resume ${uuid}\r`)
+  })
+
   it('killAll() disposes every session and blocks late pty events from the DB', () => {
     // Fake timers so the SIGKILL escalation timer never fires with the real
     // process.kill after this test restores the spy; stub process.kill so the

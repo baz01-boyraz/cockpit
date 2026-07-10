@@ -38,6 +38,9 @@ const api: CockpitApi = {
     launchAgent: (projectId, agent) => invoke(IPC.terminalsLaunchAgent, { projectId, agent }),
     claudeSessions: (projectId) => invoke(IPC.terminalsClaudeSessions, { projectId }),
     resumeClaude: (projectId, sessionId) => invoke(IPC.terminalsResumeClaude, { projectId, sessionId }),
+    agentSessions: (projectId) => invoke(IPC.terminalsAgentSessions, { projectId }),
+    resumeAgent: (projectId, provider, sessionId) =>
+      invoke(IPC.terminalsResumeAgent, { projectId, provider, sessionId }),
     attachImage: (input) => invoke(IPC.terminalsAttachImage, input),
     onData: (cb) => subscribe(IPC.evtTerminalData, cb),
     onExit: (cb) => subscribe(IPC.evtTerminalExit, cb),

@@ -1913,7 +1913,32 @@
 }
 .resumecard__body { flex: 1; min-width: 0; }
 .resumecard__title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.resumecard__meta { font-size: var(--fs-xs); color: var(--text-faint); margin-top: 2px; }
+.resumecard__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  margin-top: 3px;
+}
+.resumecard__provider {
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.35;
+}
+.resumecard__provider--claude { border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); }
+.resumecard__provider--codex { border-color: color-mix(in srgb, var(--signal) 42%, var(--border)); }
+.resumecard__datetime { white-space: nowrap; }
+.resumecard__id {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.72;
+}
 .resumecard__action { color: var(--text-faint); flex-shrink: 0; display: grid; place-items: center; }
 .resumecard:hover:not(:disabled) .resumecard__action { color: var(--accent); }
 
@@ -3042,4 +3067,3 @@
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
-

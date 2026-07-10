@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDuration, relativeTime } from '@shared/time'
+import { compactDateTime, formatDuration, relativeTime } from '@shared/time'
 
 const NOW = new Date('2026-06-28T12:00:00.000Z').getTime()
 const at = (ms: number) => new Date(NOW - ms).toISOString()
@@ -64,5 +64,15 @@ describe('formatDuration', () => {
     expect(formatDuration(-1)).toBe('')
     expect(formatDuration(Number.NaN)).toBe('')
     expect(formatDuration(Number.POSITIVE_INFINITY)).toBe('')
+  })
+})
+
+describe('compactDateTime', () => {
+  it('shows a compact day, month, and wall-clock time', () => {
+    expect(compactDateTime('2026-07-09T21:41:00.000Z', 'tr-TR', 'UTC')).toBe('9 Tem · 21:41')
+  })
+
+  it('returns an empty label for an invalid date', () => {
+    expect(compactDateTime('not-a-date')).toBe('')
   })
 })

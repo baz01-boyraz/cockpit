@@ -29,6 +29,28 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
   return new Date(then).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+/** Compact local date + time for dense session lists, e.g. "9 Tem · 21:41". */
+export function compactDateTime(
+  iso: string,
+  locale?: string,
+  timeZone?: string,
+): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  const parts = new Intl.DateTimeFormat(locale, {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    ...(timeZone ? { timeZone } : {}),
+  }).formatToParts(date)
+  const part = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((item) => item.type === type)?.value ?? ''
+  const month = part('month').replace(/\.$/, '')
+  return `${part('day')} ${month} · ${part('hour')}:${part('minute')}`
+}
+
 /**
  * Compact wall-clock duration for a command block: "820ms", "1.24s", "2m 05s".
  * Sub-second stays in ms, seconds carry two/one decimals for precision, minutes

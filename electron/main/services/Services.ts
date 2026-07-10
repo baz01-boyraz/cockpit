@@ -49,6 +49,7 @@ import { OutcomeService } from './OutcomeService'
 import { EngineRunner } from './EngineRunner'
 import { CouncilSessionStore } from '../db/CouncilSessionStore'
 import { ClaudeSessionsService } from './ClaudeSessionsService'
+import { AgentSessionsService } from './AgentSessionsService'
 import { GitService } from './GitService'
 import { GitHubService } from './GitHubService'
 import { LogIntelligenceService } from './LogIntelligenceService'
@@ -81,6 +82,7 @@ export class Services {
   readonly secrets: SecretStore
   readonly terminals: TerminalManager
   readonly claudeSessions: ClaudeSessionsService
+  readonly agentSessions: AgentSessionsService
   readonly chat: ChatService
   /** Backend for the Hermes chat widget (docs/plans/hermes.md Faz 7). */
   readonly hermesChat: HermesChatService
@@ -169,6 +171,7 @@ export class Services {
     this.github = new GitHubService(this.projects)
     this.railway = new RailwayService(this.db, this.projects)
     this.claudeSessions = new ClaudeSessionsService()
+    this.agentSessions = new AgentSessionsService(this.claudeSessions)
     this.chat = new ChatService(this.projects)
     // The MCP bearer token is minted by `hermesMcp` (constructed further down),
     // so the token is read lazily at ask() time via a thunk — by then the server

@@ -46,6 +46,8 @@ import type {
   ProjectConfig,
   RailwayConnection,
   RailwayService,
+  ResumableSessionProvider,
+  ResumableSessionSummary,
   RouterResult,
   SwarmCardCompletedEvent,
   TerminalExitEvent,
@@ -73,6 +75,8 @@ export const IPC = {
   terminalsLaunchAgent: 'terminals:launchAgent',
   terminalsClaudeSessions: 'terminals:claudeSessions',
   terminalsResumeClaude: 'terminals:resumeClaude',
+  terminalsAgentSessions: 'terminals:agentSessions',
+  terminalsResumeAgent: 'terminals:resumeAgent',
   terminalsAttachImage: 'terminals:attachImage',
 
   gitStatus: 'git:status',
@@ -241,6 +245,14 @@ export interface CockpitApi {
     claudeSessions(projectId: string): Promise<ClaudeSessionSummary[]>
     /** Open a new terminal that resumes a specific Claude conversation. */
     resumeClaude(projectId: string, sessionId: string): Promise<TerminalSession>
+    /** Past Claude and Codex conversations for this project, newest first. */
+    agentSessions(projectId: string): Promise<ResumableSessionSummary[]>
+    /** Open a terminal that resumes a conversation with its native provider. */
+    resumeAgent(
+      projectId: string,
+      provider: ResumableSessionProvider,
+      sessionId: string,
+    ): Promise<TerminalSession>
     attachImage(input: {
       projectId: string
       sessionId?: string | null
@@ -645,6 +657,8 @@ export interface IpcResultMap {
   terminalsLaunchAgent: R<CockpitApi['terminals']['launchAgent']>
   terminalsClaudeSessions: R<CockpitApi['terminals']['claudeSessions']>
   terminalsResumeClaude: R<CockpitApi['terminals']['resumeClaude']>
+  terminalsAgentSessions: R<CockpitApi['terminals']['agentSessions']>
+  terminalsResumeAgent: R<CockpitApi['terminals']['resumeAgent']>
   terminalsAttachImage: R<CockpitApi['terminals']['attachImage']>
 
   gitStatus: R<CockpitApi['git']['status']>

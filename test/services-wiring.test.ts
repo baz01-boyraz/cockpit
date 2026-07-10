@@ -147,6 +147,7 @@ const EXPECTED_SERVICE_FIELDS = [
   'secrets',
   'terminals',
   'claudeSessions',
+  'agentSessions',
   'chat',
   'hermesChat',
   'hermesTriage',

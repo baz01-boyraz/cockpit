@@ -311,11 +311,21 @@ export class TerminalManager {
    * shell command interpolated here.
    */
   resumeClaude(projectId: string, sessionId: string): TerminalSession {
+    return this.resumeAgent(projectId, 'claude', sessionId)
+  }
+
+  /** Resume a persisted Claude or Codex conversation using its native CLI syntax. */
+  resumeAgent(
+    projectId: string,
+    provider: 'claude' | 'codex',
+    sessionId: string,
+  ): TerminalSession {
+    const isClaude = provider === 'claude'
     return this.create({
       projectId,
-      name: 'Claude Code',
-      role: 'claude',
-      command: `claude --resume ${sessionId}`,
+      name: isClaude ? 'Claude Code' : 'Codex',
+      role: provider,
+      command: isClaude ? `claude --resume ${sessionId}` : `codex resume ${sessionId}`,
     })
   }
 
