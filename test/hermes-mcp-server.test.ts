@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   HermesMcpServer,
   MCP_TOKEN_ENV,
+  toolFailureResult,
 } from '../electron/main/services/hermes/HermesMcpServer'
 import type { HermesToolContext } from '../electron/main/services/hermes/hermesTools'
 
@@ -33,6 +34,19 @@ function freePort(): Promise<number> {
 // The auth gate never touches the tool context — a stub is enough.
 const stubCtx = {} as unknown as HermesToolContext
 const silentLog = (): void => {}
+
+describe('HermesMcpServer tool failures', () => {
+  it('returns domain failures as a normal tool result so Hermes does not open its transport circuit breaker', () => {
+    const result = toolFailureResult(new Error('Project baz-cockpit not found'))
+    expect(result.isError).not.toBe(true)
+    expect(result.content).toEqual([
+      {
+        type: 'text',
+        text: JSON.stringify({ ok: false, error: 'Project baz-cockpit not found' }),
+      },
+    ])
+  })
+})
 
 const INITIALIZE_BODY = JSON.stringify({
   jsonrpc: '2.0',
