@@ -34,6 +34,26 @@ const defaultLogError: LogError = (context, err) => {
 }
 
 /**
+ * A service/domain refusal is not a broken MCP transport. Hermes' current MCP
+ * client increments its per-server circuit breaker for every CallToolResult
+ * carrying `isError: true`; three ordinary mistakes (for example a guessed
+ * project id) therefore poison every cockpit tool with a false "unreachable"
+ * state for 60 seconds. Keep the failure model-readable and structured while
+ * returning a normal transport result. Real auth/connect/session failures still
+ * happen at HTTP/transport level and continue to trip the breaker correctly.
+ */
+export function toolFailureResult(err: unknown): CallToolResult {
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify({ ok: false, error: toToolError(err) }),
+      },
+    ],
+  }
+}
+
+/**
  * A local MCP server (Streamable HTTP transport) hosted inside cockpiT's main
  * process, bound to 127.0.0.1 only. It exposes the narrow Faz 3 tool set so the
  * Hermes agent can drive the Swarm the way a human does — every tool re-parses
@@ -122,8 +142,9 @@ export class HermesMcpServer {
             const result = await tool.run(args)
             return { content: [{ type: 'text', text: JSON.stringify(result) }] }
           } catch (err) {
-            // Surface a model-readable message, never a raw stack trace.
-            return { content: [{ type: 'text', text: toToolError(err) }], isError: true }
+            // Surface a model-readable message, never a raw stack trace. Domain
+            // failures deliberately do not masquerade as transport failures.
+            return toolFailureResult(err)
           }
         },
       )
