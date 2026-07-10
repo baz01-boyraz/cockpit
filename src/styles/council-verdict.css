@@ -1,0 +1,372 @@
+/*
+ * Council verdict reading surface — verdict first, depth on demand.
+ * Loaded after the legacy shared council rules in components.css so both the
+ * standalone Council panel and Swarm's wide review use one progressive layout.
+ */
+
+.council {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+/* The decision is the first and loudest fact. */
+.councilDecision {
+  --decision: var(--glacier-400);
+  --decision-wash: var(--glacier-wash);
+  width: min(100%, 72ch);
+  padding: var(--sp-4);
+  border: 1px solid color-mix(in srgb, var(--decision) 34%, var(--border));
+  border-left: 4px solid var(--decision);
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--decision) 12%, transparent), transparent 56%),
+    linear-gradient(180deg, var(--surface-2), var(--surface-1));
+  box-shadow: var(--bevel), var(--shadow-card);
+}
+.councilDecision--approved {
+  --decision: var(--signal);
+  --decision-wash: var(--signal-dim);
+}
+.councilDecision--clarify {
+  --decision: var(--warning);
+  --decision-wash: var(--warning-wash);
+}
+.councilDecision--failed {
+  --decision: var(--danger);
+  --decision-wash: var(--danger-wash);
+}
+.councilDecision__verdict {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.councilDecision__icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  color: var(--decision);
+  background: var(--decision-wash);
+  border: 1px solid color-mix(in srgb, var(--decision) 34%, transparent);
+}
+.councilDecision__chip {
+  color: var(--decision);
+  font-size: clamp(var(--fs-sm), 1.2vw, var(--fs-h2));
+  font-weight: 780;
+  letter-spacing: 0.045em;
+}
+.councilDecision__why {
+  max-width: 72ch;
+  margin: var(--sp-3) 0 0;
+  color: var(--text);
+  font-size: var(--fs-body);
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+/* The one section a human must act on before opening any analysis. */
+.councilAction {
+  width: min(100%, 72ch);
+  padding: var(--sp-4);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+}
+.councilAction--clarify {
+  border-color: color-mix(in srgb, var(--warning) 30%, var(--border));
+}
+.councilAction--approved {
+  border-color: color-mix(in srgb, var(--signal) 26%, var(--border));
+}
+.councilAction__title {
+  margin: 5px 0 var(--sp-3);
+  color: var(--text);
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  letter-spacing: var(--tracking-snug);
+}
+.councilAction__questions,
+.councilAction__criteria ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: council-action;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.councilAction__questions li,
+.councilAction__criteria li {
+  position: relative;
+  padding: 10px 12px 10px 42px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border-faint);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  counter-increment: council-action;
+}
+.councilAction__questions li::before,
+.councilAction__criteria li::before {
+  content: counter(council-action);
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: var(--warning);
+  background: var(--warning-wash);
+  font: 700 var(--fs-micro) / 1 var(--font-mono);
+}
+.councilAction__criteria li::before {
+  color: var(--signal);
+  background: var(--signal-dim);
+}
+.councilAction__goal,
+.councilAction__criteria {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.28fr) minmax(0, 1fr);
+  gap: var(--sp-3);
+  align-items: start;
+}
+.councilAction__criteria {
+  margin-top: var(--sp-3);
+}
+.councilAction__goal > span,
+.councilAction__criteria > span {
+  color: var(--signal);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.councilAction__goal p {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+
+/* Long material stays closed and within a reading measure. */
+.council__disclosures,
+.councilSeats,
+.council__peer {
+  width: min(100%, 72ch);
+}
+.council__disclosures {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.councilDisclosure {
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  border: 1px solid var(--border-faint);
+  overflow: clip;
+}
+.councilDisclosure__summary,
+.councilAdvisor__summary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 10px 42px 10px var(--sp-3);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    opacity var(--dur) var(--ease-out);
+}
+.councilDisclosure__summary::-webkit-details-marker,
+.councilAdvisor__summary::-webkit-details-marker {
+  display: none;
+}
+.councilDisclosure__summary::after,
+.councilAdvisor__summary::after {
+  content: '›';
+  position: absolute;
+  right: var(--sp-3);
+  top: 50%;
+  color: var(--text-faint);
+  font-size: 20px;
+  transform: translateY(-50%) rotate(0deg);
+  transition: transform var(--dur) var(--ease-spring);
+}
+.councilDisclosure[open] > .councilDisclosure__summary::after,
+.councilAdvisor[open] > .councilAdvisor__summary::after {
+  transform: translateY(-50%) rotate(90deg);
+}
+.councilDisclosure__summary:hover,
+.councilAdvisor__summary:hover {
+  opacity: 0.82;
+}
+.councilDisclosure__summary:active,
+.councilAdvisor__summary:active {
+  transform: scale(0.995);
+}
+.councilDisclosure__summary:focus-visible,
+.councilAdvisor__summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.councilDisclosure__summary > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.councilDisclosure__summary strong {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+.councilDisclosure__summary small {
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+}
+.councilDisclosure__body {
+  max-width: 72ch;
+  padding: var(--sp-4);
+  border-top: 1px solid var(--border-faint);
+  background: var(--surface-inset);
+}
+
+/* Markdown-lite gains real list/code hierarchy without a markdown runtime. */
+.council__body {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+}
+.council__h {
+  margin: var(--sp-4) 0 var(--sp-2);
+  color: var(--accent-soft);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+.council__h:first-child {
+  margin-top: 0;
+}
+.council__p {
+  margin: 0 0 var(--sp-3);
+  overflow-wrap: anywhere;
+}
+.council__p:last-child {
+  margin-bottom: 0;
+}
+.council__list {
+  margin: 0 0 var(--sp-3);
+  padding-left: 1.35rem;
+}
+.council__list li + li {
+  margin-top: 5px;
+}
+.council__body code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  color: var(--glacier-300);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+/* Five voices become five compact, independently expandable rows. */
+.councilSeats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.council__advisors {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.councilAdvisor {
+  padding: 0;
+  border: 1px solid var(--border-faint);
+  border-left: 2px solid var(--advisor, var(--border));
+  border-top-width: 1px;
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  overflow: clip;
+}
+.councilAdvisor__summary {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 5px;
+}
+.councilAdvisor__label {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--sp-2);
+  margin: 0;
+  color: var(--advisor, var(--text-muted));
+  font-size: var(--fs-micro);
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.councilAdvisor__engine {
+  margin-left: 0;
+  padding: 1px 6px;
+}
+.councilAdvisor__preview {
+  width: 100%;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity var(--dur) var(--ease-out);
+}
+.councilAdvisor[open] .councilAdvisor__preview {
+  opacity: 0.45;
+}
+.councilAdvisor__text {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+  border-top: 1px solid var(--border-faint);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  white-space: normal;
+}
+.councilAdvisor--failed {
+  opacity: 0.62;
+}
+.council__peer {
+  margin: 0;
+}
+.council__ranking + .council__ranking {
+  margin-top: var(--sp-4);
+}
+
+@media (max-width: 720px) {
+  .councilAction__goal,
+  .councilAction__criteria {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .councilDisclosure__summary,
+  .councilAdvisor__summary,
+  .councilDisclosure__summary::after,
+  .councilAdvisor__summary::after,
+  .councilAdvisor__preview {
+    transition: none;
+  }
+}
