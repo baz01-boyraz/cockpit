@@ -9,7 +9,9 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['test/**/*.test.ts'],
+    // Backend/pure-logic suites live in test/; renderer store-slice suites live
+    // beside their source under src/ so the web tsconfig (DOM lib) typechecks them.
+    include: ['test/**/*.test.ts', 'src/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

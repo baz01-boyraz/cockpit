@@ -268,6 +268,20 @@ export class CouncilService {
   }
 
   /**
+   * The full persisted `CouncilResult` for one session id — the detail read
+   * behind `recentSessions`. Project-scoped: a session whose row belongs to a
+   * different project reads back null (never leaks another project's verdict),
+   * as does an unknown id or a row the store's defensive parse dropped. This is
+   * the channel that lets a verdict + scorecard survive an unmount/restart —
+   * the renderer rehydrates on demand rather than holding the heavy result.
+   */
+  session(projectId: string, sessionId: string): CouncilResult | null {
+    const session = this.sessions.get(sessionId)
+    if (!session || session.projectId !== projectId) return null
+    return session.result
+  }
+
+  /**
    * The inline "Project memory pointers" block for the spec seats, or null. Ranks
    * the hub notes against the spec (plus the author's already-redacted summary)
    * and renders the top few as `name — hook`, TOTAL-capped. A missing collaborator,

@@ -76,7 +76,8 @@ function makeStore() {
     finalize: (id: string, result: CouncilResult) => {
       const row = rows.find((r) => r.id === id)
       if (!row) return
-      row.result = result
+      // The real store stamps the row's own id into the stored blob's sessionId.
+      row.result = { ...result, sessionId: id }
       row.status = 'final'
       inserted.push({
         projectId: row.projectId,
@@ -89,7 +90,7 @@ function makeStore() {
     insert: (input: CouncilSessionInput) => {
       seq += 1
       const id = `sess-${seq}`
-      rows.push({ ...input, id, status: 'final' })
+      rows.push({ ...input, id, result: { ...input.result, sessionId: id }, status: 'final' })
       inserted.push(input)
       return id
     },
@@ -117,7 +118,21 @@ function makeStore() {
           status: r.status,
           createdAt: 'now',
         })),
-    get: () => null,
+    get: (id: string) => {
+      const row = rows.find((r) => r.id === id)
+      if (!row || !row.result) return null
+      return {
+        id: row.id,
+        projectId: row.projectId,
+        cardId: row.cardId,
+        mode: row.mode,
+        question: row.question,
+        result: row.result,
+        verdictKind: row.result.specVerdict?.kind ?? null,
+        status: row.status,
+        createdAt: 'now',
+      }
+    },
   }
   return { store: store as unknown as CouncilSessionStore, inserted, rows }
 }
@@ -206,6 +221,35 @@ describe('CouncilService — spec mode orchestration', () => {
       expect(scorecard[i].averageRank).toBeGreaterThanOrEqual(scorecard[i - 1].averageRank)
     }
     expect(scorecard.every((e) => e.sessions === 2)).toBe(true)
+  })
+})
+
+describe('CouncilService — session detail (rehydrate channel)', () => {
+  it('returns the full persisted result for a matching project + id', async () => {
+    const parts = makeStore()
+    const { service } = makeService(parts)
+    const run = await service.run('prj_1', { mode: 'spec', specText: 'Add caching to the gateway.' })
+    expect(run.sessionId).toBe('sess-1')
+
+    const detail = service.session('prj_1', 'sess-1')
+    expect(detail).not.toBeNull()
+    expect(detail?.sessionId).toBe('sess-1')
+    expect(detail?.mode).toBe('spec')
+    expect(detail?.specVerdict?.kind).toBe('needs_clarification')
+    expect(detail?.seats.length).toBe(5)
+  })
+
+  it('never leaks a session that belongs to another project (scoping)', async () => {
+    const parts = makeStore()
+    const { service } = makeService(parts)
+    await service.run('prj_1', { mode: 'spec', specText: 'do the thing' })
+    // Same store id, wrong project → the detail read must refuse it.
+    expect(service.session('prj_OTHER', 'sess-1')).toBeNull()
+  })
+
+  it('returns null for an unknown session id', () => {
+    const { service } = makeService()
+    expect(service.session('prj_1', 'no-such-session')).toBeNull()
   })
 })
 

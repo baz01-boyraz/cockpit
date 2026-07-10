@@ -106,6 +106,20 @@
   flex-shrink: 0;
 }
 
+/* A subtle "council finished" cue — set when a run resolves while the user may
+   have been elsewhere; the store owns it, the panel just surfaces it. */
+.councilView__flash {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: var(--signal-lime, var(--accent));
+  font-size: var(--fs-xs);
+}
+.councilView__flash svg {
+  flex-shrink: 0;
+}
+
 /* ----- result: the convened verdict + seat standings ----- */
 .councilView__result {
   display: flex;
