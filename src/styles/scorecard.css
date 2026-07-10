@@ -12,6 +12,104 @@
   max-width: 62ch;
 }
 
+/* ---------- reflective band: a quieter, collapsible section ----------
+ * The scorecard is reflective, not operational — it lives below the capacity
+ * hero as a calm band that stays collapsed until the pilot asks for it, so its
+ * honest "No data yet" tiles never shout over the live numbers. */
+.scoreband {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, var(--surface-1), var(--bg));
+  box-shadow: var(--bevel);
+  overflow: hidden;
+}
+.scoreband[open] {
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
+  box-shadow: var(--bevel), var(--shadow-card);
+}
+.scoreband__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  cursor: pointer;
+  list-style: none;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: background var(--dur) var(--ease-out);
+}
+.scoreband__summary::-webkit-details-marker {
+  display: none;
+}
+.scoreband__summary:hover {
+  background: color-mix(in srgb, var(--surface-3) 42%, transparent);
+}
+.scoreband__summary:active {
+  transform: translateY(0.5px);
+}
+.scoreband__summary:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: -2px;
+}
+.scoreband__marks {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.scoreband__eyebrow {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 600;
+  color: var(--text-faint);
+}
+.scoreband__title {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.scoreband__hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scoreband__meta {
+  flex-shrink: 0;
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.scoreband__chevron {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  transition: transform var(--dur) var(--ease-spring);
+}
+.scoreband[open] .scoreband__chevron {
+  transform: rotate(90deg);
+}
+.scoreband__body {
+  padding: var(--sp-4);
+  border-top: 1px solid var(--border);
+}
+.scoreband__body .scorecard__note {
+  margin-top: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scoreband__summary,
+  .scoreband__chevron {
+    transition: none;
+  }
+}
+
 .scorecard__grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

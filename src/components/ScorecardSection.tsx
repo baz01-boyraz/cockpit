@@ -148,23 +148,34 @@ export function ScorecardSection() {
   }, [projectId])
 
   return (
-    <div className="card scorecard">
-      <div className="card__head">
-        <div className="card__title">Judgment scorecard</div>
-        <span className="chip">read-only · last {card?.cardWindowDays ?? 30}d</span>
+    <details className="scoreband">
+      <summary className="scoreband__summary">
+        <span className="scoreband__marks">
+          <span className="scoreband__eyebrow">reflective</span>
+          <span className="scoreband__title">Judgment scorecard</span>
+        </span>
+        <span className="scoreband__hint">
+          how the machines are judging — spec gate, triage, memory, council
+        </span>
+        <span className="scoreband__meta">read-only · last {card?.cardWindowDays ?? 30}d</span>
+        <span className="scoreband__chevron" aria-hidden>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+      </summary>
+      <div className="scoreband__body">
+        <p className="scorecard__note">
+          These are correlations, not proof: a signal here is a prompt to look, never a verdict.
+        </p>
+        {failed ? (
+          <div className="scorecard__empty">Couldn&apos;t read the scorecard right now.</div>
+        ) : card === null ? (
+          <div className="scorecard__skeleton" aria-hidden />
+        ) : (
+          <ScorecardBody card={card} />
+        )}
       </div>
-      <p className="scorecard__note">
-        How the cockpit&apos;s judgment systems are doing — the spec gate, triage, memory recall, and
-        the council. These are correlations, not proof: a signal here is a prompt to look, never a
-        verdict.
-      </p>
-      {failed ? (
-        <div className="scorecard__empty">Couldn&apos;t read the scorecard right now.</div>
-      ) : card === null ? (
-        <div className="scorecard__skeleton" aria-hidden />
-      ) : (
-        <ScorecardBody card={card} />
-      )}
-    </div>
+    </details>
   )
 }

@@ -1,17 +1,8 @@
 import { type CSSProperties } from 'react'
 import { useStore } from '../store/useStore'
-import {
-  IconBolt,
-  IconSwarm,
-  IconTerminal,
-  IconUsage,
-  IconWarning,
-} from '../components/icons'
-import { useAgentUsage } from '../lib/useAgentUsage'
-import { UsageQuotaRings } from '../components/UsageQuotaRings'
+import { IconUsage, IconWarning } from '../components/icons'
 import { AiSpendOverview } from '../components/AiSpendOverview'
 import { ScorecardSection } from '../components/ScorecardSection'
-import { CountUp } from '../components/CountUp'
 
 /* Claude reads ember, Codex reads glacier; every other provider stays a
  * neutral instrument bar. */
@@ -34,7 +25,6 @@ const fmtTokens = (n: number | null): string => {
 
 export function UsagePanel() {
   const usage = useStore((s) => s.usage)
-  const agentUsage = useAgentUsage()
 
   const totals = usage.reduce(
     (acc, u) => ({
@@ -58,46 +48,16 @@ export function UsagePanel() {
         </div>
       </div>
 
-      <div className="statgrid">
-        {[
-          { label: 'Sessions', value: totals.sessions, sub: 'tracked locally', Icon: IconTerminal, live: totals.sessions > 0 },
-          { label: 'Commands', value: totals.commands, sub: 'shell runs', Icon: IconBolt, live: totals.commands > 0 },
-          { label: 'Agent tasks', value: totals.tasks, sub: 'Claude · Codex', Icon: IconSwarm, live: totals.tasks > 0 },
-          { label: 'Est. tokens', value: fmtTokens(totals.tokens || null), sub: 'estimated', Icon: IconUsage, live: totals.tokens > 0 },
-        ].map((s) => (
-          <div key={s.label} className={`card stat stat--${s.live ? 'on' : 'idle'}`}>
-            <div className="stat__top">
-              <span className="stat__icon">
-                <s.Icon width={15} height={15} />
-              </span>
-              <span className="stat__label">{s.label}</span>
-              <span className={`stat__dot stat__dot--${s.live ? 'on' : 'idle'}`} aria-hidden />
-            </div>
-            <div className="stat__value">
-              {typeof s.value === 'number' ? <CountUp value={s.value} /> : s.value}
-            </div>
-            <div className="stat__sub mono">{s.sub}</div>
-          </div>
-        ))}
-      </div>
-
-      <AiSpendOverview />
+      <AiSpendOverview
+        ledger={{
+          sessions: totals.sessions,
+          commands: totals.commands,
+          tasks: totals.tasks,
+          tokens: totals.tokens || null,
+        }}
+      />
 
       <ScorecardSection />
-
-      {agentUsage && agentUsage.length > 0 ? (
-        <div className="card usage__quota">
-          <div className="card__head">
-            <div className="card__title">Account quota</div>
-            <span className="chip">live · CLI plan</span>
-          </div>
-          <div className="usageRings">
-            {agentUsage.map((snapshot) => (
-              <UsageQuotaRings key={snapshot.provider} snapshot={snapshot} />
-            ))}
-          </div>
-        </div>
-      ) : null}
 
       <div className="card usage__table">
         <div className="card__head">

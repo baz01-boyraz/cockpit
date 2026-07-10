@@ -780,17 +780,6 @@
   letter-spacing: 0;
 }
 
-/* Usage panel quota section */
-.usage__quota {
-  margin-top: 14px;
-}
-.quotaGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: var(--sp-4);
-  padding: var(--sp-4);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .quotaWindow__fill {
     transition: none;

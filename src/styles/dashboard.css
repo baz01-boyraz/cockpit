@@ -482,180 +482,6 @@
   }
 }
 
-/* ============================ usage — ring gauges ============================ */
-.usageRings {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: var(--sp-4);
-  padding: var(--sp-4);
-}
-.usageRingCard {
-  --ring-a: var(--ember-300);
-  --ring-b: var(--ember-500);
-  --glyph: var(--accent);
-  position: relative;
-  padding: var(--sp-4);
-  border-radius: var(--r-lg);
-  border: 1px solid var(--border);
-  border-top-color: var(--edge-highlight);
-  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
-  box-shadow: var(--bevel), var(--shadow-card);
-  overflow: hidden;
-}
-.usageRingCard--claude {
-  --ring-a: var(--ember-300);
-  --ring-b: var(--ember-500);
-  --glyph: #ec7f48;
-}
-.usageRingCard--codex {
-  --ring-a: var(--glacier-300);
-  --ring-b: var(--glacier-500);
-  --glyph: var(--glacier-400);
-}
-.usageRingCard__head {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-4);
-}
-.usageRingCard__glyph {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  font-weight: 700;
-  font-size: var(--fs-body);
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--glyph) 86%, #fff 14%);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--glyph) 22%, var(--surface-3)), var(--surface-inset));
-  border: 1px solid color-mix(in srgb, var(--glyph) 40%, transparent);
-  box-shadow: var(--bevel), 0 0 14px -4px color-mix(in srgb, var(--glyph) 60%, transparent);
-}
-.usageRingCard__name {
-  font-weight: 600;
-  font-size: var(--fs-h2);
-  letter-spacing: -0.01em;
-}
-.usageRingCard__plan {
-  padding: 2px 9px;
-  border-radius: var(--r-pill);
-  font-size: var(--fs-micro);
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-  background: var(--surface-inset);
-  border: 1px solid var(--border);
-}
-.usageRingCard__rings {
-  display: flex;
-  gap: var(--sp-4);
-  justify-content: space-around;
-  flex-wrap: wrap;
-}
-.usageRingCard__reason {
-  margin: 0;
-  padding: var(--sp-3) 0 var(--sp-2);
-  color: var(--text-faint);
-  font-size: var(--fs-sm);
-}
-
-.ringGauge {
-  --ring-a: inherit;
-  --ring-b: inherit;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sp-3);
-  min-width: 148px;
-}
-.ringGauge--warning {
-  --ring-a: #f2c877;
-  --ring-b: var(--warning);
-}
-.ringGauge--critical {
-  --ring-a: #f4836b;
-  --ring-b: var(--danger);
-}
-.ringGauge__dial {
-  position: relative;
-  width: 138px;
-  height: 138px;
-}
-.ringGauge__track {
-  stroke: rgba(236, 230, 218, 0.09);
-}
-.ringGauge__progress {
-  filter: drop-shadow(0 2px 6px color-mix(in srgb, var(--ring-b) 40%, transparent));
-  animation: ring-gauge-draw 950ms var(--ease-out) 120ms backwards;
-}
-@keyframes ring-gauge-draw {
-  from {
-    stroke-dashoffset: var(--ring-circ);
-  }
-}
-.ringGauge__center {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  pointer-events: none;
-}
-.ringGauge__num {
-  display: inline-flex;
-  align-items: baseline;
-  font-size: 34px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-.ringGauge__pct {
-  font-size: 16px;
-  font-weight: 600;
-  margin-left: 1px;
-  color: var(--text-muted);
-}
-.ringGauge__left {
-  font-size: var(--fs-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--text-faint);
-  font-weight: 600;
-}
-.ringGauge__meta {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  text-align: center;
-}
-.ringGauge__title {
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  color: var(--text);
-}
-.ringGauge__reset {
-  font-size: var(--fs-micro);
-  color: var(--text-faint);
-}
-.ringGauge__used {
-  font-size: var(--fs-micro);
-  color: var(--text-muted);
-  font-weight: 600;
-}
-@media (prefers-reduced-motion: reduce) {
-  .ringGauge__progress {
-    animation: none;
-  }
-}
-
 /* ==================== usage — enriched provider rows ==================== */
 .usagerows {
   padding: var(--sp-4);
@@ -757,199 +583,345 @@
   }
 }
 
-/* ==================== usage — unified AI spend overview ==================== */
-.spend {
-  margin-top: 14px;
+/* ==================== usage — capacity command center ====================
+ * The Usage hero: one instrument cluster fusing Claude/Codex remaining
+ * *capacity* (quota rings) with the Hermes metered *spend* ($), plus a slim
+ * activity ledger. Replaces the old stat grid + AI-spend rows + account-quota
+ * card that duplicated each other (Codex 18% appeared twice). */
+.capacity {
+  padding: 0;
+  overflow: hidden;
 }
-.spend__summary {
+.capacity__head {
   display: flex;
-  align-items: center;
-  gap: var(--sp-5);
-  padding: var(--sp-4);
-  border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-4) var(--sp-3);
 }
-.spend__total {
+.capacity__title {
+  margin: 3px 0 0;
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.capacity__engines {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
+  gap: var(--sp-3);
+  padding: 0 var(--sp-4) var(--sp-4);
+  align-items: stretch;
+}
+.capacity__skeleton {
+  height: 172px;
+  margin: 0 var(--sp-4) var(--sp-4);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
+  opacity: 0.6;
+}
+
+/* ---------- one engine module (Claude / Codex / Hermes) ---------- */
+.capEngine {
+  --ring-a: var(--ember-300);
+  --ring-b: var(--ember-500);
+  --engine: var(--accent);
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: var(--sp-3) var(--sp-4);
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-3) var(--sp-4);
   border-radius: var(--r-lg);
   border: 1px solid var(--border);
   border-top-color: var(--edge-highlight);
-  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
+  background:
+    radial-gradient(130% 80% at 50% -12%, color-mix(in srgb, var(--engine) 10%, transparent), transparent 62%),
+    linear-gradient(180deg, var(--surface-2), var(--surface-1));
   box-shadow: var(--bevel), var(--shadow-card);
-  min-width: 210px;
+  overflow: hidden;
 }
-.spend__totalLabel {
-  font-size: var(--fs-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-weight: 600;
-  color: var(--text-faint);
-}
-.spend__totalValue {
-  font-size: 32px;
-  font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -0.03em;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-.spend__totalSub {
-  font-size: var(--fs-micro);
-  color: var(--text-muted);
-}
-.spend__note {
-  margin: 0;
-  flex: 1 1 260px;
-  max-width: 46ch;
-  font-size: var(--fs-sm);
-  line-height: 1.5;
-  color: var(--text-muted);
-}
-.spend__engines {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: var(--sp-3);
-  padding: var(--sp-4);
-  margin: 0;
-  list-style: none;
-}
-.spendEngine {
+.capEngine--claude {
   --ring-a: var(--ember-300);
   --ring-b: var(--ember-500);
-  display: grid;
-  grid-template-columns: 46px minmax(0, 1fr);
-  gap: var(--sp-3);
-  align-items: center;
-  padding: var(--sp-3);
-  border-radius: var(--r-md);
-  border: 1px solid var(--border);
-  border-top-color: var(--edge-highlight);
-  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
-  box-shadow: var(--bevel);
+  --engine: #ec7f48;
 }
-.spendEngine--claude {
-  --ring-a: var(--ember-300);
-  --ring-b: var(--ember-500);
-}
-.spendEngine--codex {
+.capEngine--codex {
   --ring-a: var(--glacier-300);
   --ring-b: var(--glacier-500);
+  --engine: var(--glacier-400);
 }
-.spendEngine--hermes {
+.capEngine--hermes {
   --ring-a: #d8dce6;
   --ring-b: #a6adbe;
+  --engine: #c7ccd6;
 }
-.spendEngine--warning {
-  --ring-a: #f2c877;
-  --ring-b: var(--warning);
+/* Health escalation lives on each *window* (see .capRing--warning below), so a
+ * healthy window keeps its engine identity color even when a sibling window is
+ * low. The module itself only dims when the whole engine is offline. */
+.capEngine--off {
+  opacity: 0.82;
 }
-.spendEngine--critical {
-  --ring-a: #f4836b;
-  --ring-b: var(--danger);
-}
-.spendEngine--muted {
-  --ring-a: var(--text-faint);
-  --ring-b: var(--text-faint);
-}
-.spendEngine__body {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.spendEngine__head {
+.capEngine__head {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+}
+.capEngine__glyph {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-weight: 700;
+  font-size: var(--fs-body);
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--engine) 86%, #fff 14%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--engine) 22%, var(--surface-3)), var(--surface-inset));
+  border: 1px solid color-mix(in srgb, var(--engine) 40%, transparent);
+  box-shadow: var(--bevel), 0 0 14px -4px color-mix(in srgb, var(--engine) 60%, transparent);
+}
+.capEngine--off .capEngine__glyph {
+  color: var(--text-muted);
+  background: linear-gradient(180deg, var(--surface-3), var(--surface-inset));
+  border-color: var(--border);
+  box-shadow: var(--bevel);
+}
+.capEngine__id {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   min-width: 0;
 }
-.spendEngine__name {
+.capEngine__name {
   font-weight: 600;
   font-size: var(--fs-body);
   letter-spacing: -0.01em;
   color: var(--text);
 }
-.spendEngine__kind {
-  padding: 1px 7px;
-  border-radius: var(--r-pill);
-  font-size: 9.5px;
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-faint);
-  background: var(--surface-inset);
-  border: 1px solid var(--border);
-  white-space: nowrap;
-}
-.spendEngine__readout {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-  min-width: 0;
-}
-.spendEngine__value {
-  font-size: var(--fs-h2);
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.spendEngine--muted .spendEngine__value {
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  color: var(--text-muted);
-}
-.spendEngine__cap {
+.capEngine__kind {
   font-size: var(--fs-micro);
   color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-/* compact donut echoing the panel's ring gauges */
-.spendRing {
-  position: relative;
-  width: 46px;
-  height: 46px;
-  display: grid;
-  place-items: center;
-}
-.spendRing__track {
-  stroke: rgba(236, 230, 218, 0.09);
-}
-.spendRing__fill {
-  filter: drop-shadow(0 1px 4px color-mix(in srgb, var(--ring-b) 45%, transparent));
-  animation: ring-gauge-draw 900ms var(--ease-out) 120ms backwards;
-}
-.spendRing__glyph {
-  position: absolute;
-  font-size: 14px;
+.capEngine__status {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 2px 9px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
   font-weight: 700;
-  line-height: 1;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--ring-b) 70%, var(--text) 30%);
+  letter-spacing: 0.06em;
+  color: var(--signal);
+  background: color-mix(in srgb, var(--signal) 12%, var(--surface-inset));
+  border: 1px solid color-mix(in srgb, var(--signal) 26%, var(--border));
+}
+.capEngine__status--warning {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 13%, var(--surface-inset));
+  border-color: rgba(227, 169, 63, 0.32);
+}
+.capEngine__status--critical {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 13%, var(--surface-inset));
+  border-color: rgba(226, 86, 61, 0.34);
+}
+.capEngine__status--off {
+  color: var(--text-faint);
+  background: var(--surface-inset);
+  border-color: var(--border);
+}
+.capEngine__rings {
+  flex: 1 1 auto;
+  display: flex;
+  gap: var(--sp-2);
+  justify-content: space-around;
+  align-items: center;
+  padding-top: 2px;
+}
+.capEngine__reason {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: var(--sp-2) var(--sp-1);
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+/* Hermes: one credit ring beside the metered-spend headline */
+.capEngine__credit {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  padding-top: 2px;
+}
+.capEngine__spend {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.capEngine__spendLabel {
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--text-faint);
+}
+.capEngine__spendValue {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.capEngine__spendSub {
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+}
+
+/* ---------- one capacity dial (shared ring primitive) ---------- */
+.capRing {
+  --ring-a: inherit;
+  --ring-b: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+/* Per-window tone: a low / critical window recolors its own ring to amber / red;
+ * a healthy window inherits the engine identity (ember / glacier / platinum). */
+.capRing--warning {
+  --ring-a: #f2c877;
+  --ring-b: var(--warning);
+}
+.capRing--critical {
+  --ring-a: #f4836b;
+  --ring-b: var(--danger);
+}
+.capRing--off {
+  --ring-a: var(--text-faint);
+  --ring-b: var(--text-faint);
+}
+.capRing__dial {
+  position: relative;
+}
+.capRing__dial svg {
+  display: block;
+}
+.capRing__track {
+  stroke: rgba(236, 230, 218, 0.08);
+}
+.capRing__progress {
+  filter: drop-shadow(0 2px 6px color-mix(in srgb, var(--ring-b) 40%, transparent));
+  animation: cap-ring-draw 900ms var(--ease-out) 120ms backwards;
+}
+@keyframes cap-ring-draw {
+  from {
+    stroke-dashoffset: var(--ring-circ);
+  }
+}
+.capRing__center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   pointer-events: none;
 }
-.spendEngine--muted .spendRing__glyph {
+.capRing__num {
+  display: inline-flex;
+  align-items: baseline;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.capRing__pct {
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 1px;
+  color: var(--text-muted);
+}
+.capRing__left {
+  margin-top: 2px;
+  font-size: 8.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+.capRing__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  text-align: center;
+}
+.capRing__label {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text);
+}
+.capRing__sub {
+  font-size: 9.5px;
   color: var(--text-faint);
 }
 
-.spend--loading .spend__skeleton {
-  height: 96px;
-  margin: var(--sp-4);
-  border-radius: var(--r-md);
-  border: 1px solid var(--border);
-  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
-  opacity: 0.6;
+/* ---------- activity ledger (folds the old stat grid, demoted) ---------- */
+.capacity__ledger {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--border);
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--surface-inset) 55%, transparent));
+}
+.capacity__ledgerLabel {
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+  color: var(--text-faint);
+}
+.capacity__ledgerList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.capacity__ledgerItem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.capacity__ledgerItem b {
+  color: var(--text);
+  font-weight: 650;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .spendRing__fill {
+  .capRing__progress {
     animation: none;
   }
 }
