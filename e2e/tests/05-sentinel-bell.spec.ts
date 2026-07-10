@@ -8,7 +8,7 @@ import { SentinelPage } from '../pages/sentinel.page'
  * notice), the mock replays that feed as toasts once on boot
  * (`SentinelToasts`), and the popover lists the same signals.
  */
-test('bell shows unseen count, replays a toast, and lists signals in the popover', async ({
+test('bell shows unseen count, replays a toast, and opens the full signal center', async ({
   page,
 }) => {
   await gotoApp(page)
@@ -28,4 +28,9 @@ test('bell shows unseen count, replays a toast, and lists signals in the popover
   await expect(sentinel.popover).toBeVisible()
   await expect(sentinel.popover.getByText('Approval needed: Force-push rewrites main')).toBeVisible()
   await expect(sentinel.popover.getByText('Cannot find module "@shared/schemas"')).toBeVisible()
+
+  await expect(sentinel.openSignalCenter).toBeVisible()
+  await sentinel.openSignalCenter.click()
+  await expect(page.getByRole('heading', { name: 'Sentinel' })).toBeVisible()
+  await expect(sentinel.popover).toBeHidden()
 })

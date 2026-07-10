@@ -6,6 +6,7 @@ export class SentinelPage {
   readonly page: Page
   readonly bellButton: Locator
   readonly popover: Locator
+  readonly openSignalCenter: Locator
   readonly toastHost: Locator
 
   constructor(page: Page) {
@@ -14,6 +15,7 @@ export class SentinelPage {
     // but always contains "signals" — match on that instead of exact text.
     this.bellButton = page.getByRole('button', { name: /signals/i })
     this.popover = page.getByRole('dialog', { name: 'Recent signals' })
+    this.openSignalCenter = this.popover.getByRole('button', { name: 'Open signal center' })
     // `SentinelToasts` renders a plain `<div aria-label="Signal notifications">`
     // with no ARIA role, so `getByLabel` (which targets labelable form
     // controls) won't match it — use the aria-label attribute directly.
