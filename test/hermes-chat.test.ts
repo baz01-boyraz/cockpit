@@ -210,14 +210,17 @@ describe('HermesChatService.ask', () => {
     expect(prompt).toContain('User: second')
   })
 
-  it('applies the measured -t memory,skills latency flag on every turn (A7a)', async () => {
+  it('applies the trimmed -t whitelist WITH the cockpit MCP toolset on every turn (A7a)', async () => {
     const { service, runner } = makeService(async () => ({ stdout: 'reply' }))
     await service.ask('prj_1', 'hi')
     const args = runner.mock.calls[0][1]
     // The tools flag rides alongside the oneshot argv without displacing the
-    // prompt from its slot right after --oneshot.
+    // prompt from its slot right after --oneshot. `-t` is a whitelist: losing
+    // `cockpit` from this list silently strips all 18 cockpit MCP tools
+    // (the v0.2.0 production regression).
     expect(args).toEqual(expect.arrayContaining([...HERMES_CHAT_TOOLS]))
-    expect(args[args.indexOf('-t') + 1]).toBe('memory,skills')
+    expect(args[args.indexOf('-t') + 1]).toBe('memory,skills,cockpit')
+    expect(args[args.indexOf('-t') + 1].split(',')).toContain('cockpit')
     expect(promptOf(args)).toContain('User: hi')
   })
 

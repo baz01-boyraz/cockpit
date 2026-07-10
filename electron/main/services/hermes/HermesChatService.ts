@@ -16,13 +16,16 @@ import { MCP_TOKEN_ENV } from './HermesMcpServer'
 const execFileAsync = promisify(execFile)
 
 /**
- * Restrict the Hermes CLI's loaded tool namespaces to the two the chat widget
+ * Restrict the Hermes CLI's loaded tool namespaces to what the chat widget
  * actually needs. Live testing (see `.cockpit-memory/hermes-chat-latency-*`)
- * measured `-t memory,skills` at ~20-25% faster per turn than loading the full
- * tool set; roadmap A7a applies that finding. Kept as a frozen tuple so callers
+ * measured a trimmed `-t` list at ~20-25% faster per turn than loading the full
+ * tool set. `-t` is a WHITELIST: `cockpit` (the MCP server name — hermes
+ * resolves MCP server names as toolset aliases) must be listed or the 18
+ * cockpit tools silently vanish — v0.2.0 shipped without it and Hermes lost
+ * git/checks/council access in production. Kept as a frozen tuple so callers
  * spread it without mutating the shared array.
  */
-export const HERMES_CHAT_TOOLS = ['-t', 'memory,skills'] as const
+export const HERMES_CHAT_TOOLS = ['-t', 'memory,skills,cockpit'] as const
 
 /**
  * A single conversational turn may have Hermes call several MCP tools (checking
