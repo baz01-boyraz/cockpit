@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import type { Project, ProjectConfig } from '@shared/domain'
 import { projectConfigSchema } from '@shared/schemas'
+import { CODEX_INTERACTIVE_COMMAND } from '@shared/terminal-ux'
 import type { Db } from '../db/Database'
 import { newId, nowIso, safeJson } from '../util/ids'
 import { detectTechStack } from './techDetect'
@@ -116,7 +117,7 @@ export class ProjectService {
         profiles: [
           { name: 'Dev server', cwd: '.', command: null, role: 'frontend' },
           { name: 'Claude Code', cwd: '.', command: 'claude', role: 'claude' },
-          { name: 'Codex', cwd: '.', command: 'codex', role: 'codex' },
+          { name: 'Codex', cwd: '.', command: CODEX_INTERACTIVE_COMMAND, role: 'codex' },
         ],
       },
       railway: { projectId: null, environmentId: null, services: [] },

@@ -30,30 +30,45 @@ export type CouncilMode = 'diff' | 'spec'
 
 /**
  * One council seat: a lens (its mode-neutral core identity prompt) bound to an
- * engine. `fallback` is tried once when the primary engine call throws, so a
- * seat whose primary needs a key (OpenRouter) or a second CLI (Codex) is never
- * a dead seat on a machine that lacks it.
+ * engine. `fallbacks` are tried in order when an engine call throws, so a seat
+ * can prefer the user's GPT allowance before spending Claude quota and still
+ * remain alive when a provider or local CLI is unavailable.
  */
 export interface CouncilSeat {
   id: CouncilTone
   label: string
   engine: EngineSpec
-  fallback?: EngineSpec
+  /** Ordered retry path. GPT-first seats end in Claude only as a last resort. */
+  fallbacks?: readonly EngineSpec[]
   /** The seat's lens — its identity, independent of diff/spec mode. */
   prompt: string
 }
 
 /**
- * The default roster. The engine mix is the point: three vendors and three
- * Claude tiers, so the council is genuinely diverse rather than one model
- * arguing with itself. Seats whose primary engine can be unavailable carry a
- * Claude fallback.
+ * The GPT-5.6 family is intentionally explicit rather than relying on Codex's
+ * moving default. Every Codex engine call reuses the active Codex CLI login —
+ * ChatGPT subscription access when the user signed in with ChatGPT, or API
+ * billing when they signed in with an API key.
+ */
+export const GPT56_MODELS = {
+  sol: 'gpt-5.6-sol',
+  terra: 'gpt-5.6-terra',
+  luna: 'gpt-5.6-luna',
+} as const
+
+/**
+ * The default roster is GPT-first: Sol handles the high-judgment seats, Terra
+ * the pragmatic/newcomer read, and Luna the fast expansion pass. DeepSeek keeps
+ * one genuinely independent provider in the room. Claude is an emergency
+ * fallback instead of the default spend path while a missing OpenRouter key
+ * falls back to Terra through the same Codex login.
  */
 export const COUNCIL_SEATS: readonly CouncilSeat[] = [
   {
     id: 'contrarian',
     label: 'Contrarian',
-    engine: { engine: 'claude', model: 'opus' },
+    engine: { engine: 'codex', model: GPT56_MODELS.sol },
+    fallbacks: [{ engine: 'claude', model: 'opus' }],
     prompt:
       'You are The Contrarian on an LLM Council. Your job is to find what will FAIL. Assume the work under review has a fatal flaw and go find it — challenge every assumption, hunt hidden risks, second-order consequences, regressions, and what breaks at scale, under load, or in the edge cases nobody tested. Generic warnings are worthless here: every concern must point at concrete evidence in the material, or it does not count.',
   },
@@ -61,29 +76,34 @@ export const COUNCIL_SEATS: readonly CouncilSeat[] = [
     id: 'first-principles',
     label: 'First Principles',
     engine: { engine: 'openrouter', model: 'deepseek/deepseek-chat' },
-    fallback: { engine: 'claude', model: 'sonnet' },
+    fallbacks: [
+      { engine: 'codex', model: GPT56_MODELS.terra },
+      { engine: 'claude', model: 'sonnet' },
+    ],
     prompt:
       'You are The First Principles Thinker on an LLM Council. Strip away assumptions and rebuild from the ground up: what is the REAL problem being solved here? Separate what is KNOWN from what is merely ASSUMED. Challenge the framing itself, not just the details — is this optimizing the wrong variable entirely, or solving a symptom instead of the cause?',
   },
   {
     id: 'expansionist',
     label: 'Expansionist',
-    engine: { engine: 'claude', model: 'haiku' },
+    engine: { engine: 'codex', model: GPT56_MODELS.luna },
+    fallbacks: [{ engine: 'claude', model: 'haiku' }],
     prompt:
       'You are The Expansionist on an LLM Council. Find the UPSIDE being missed. What could this be if approached more ambitiously — a reusable abstraction, a compounding win, hidden optionality sitting right next to the work? Point at the specific bigger play, grounded in the material, never a vague "think bigger".',
   },
   {
     id: 'outsider',
     label: 'Outsider',
-    engine: { engine: 'claude', model: 'sonnet' },
+    engine: { engine: 'codex', model: GPT56_MODELS.terra },
+    fallbacks: [{ engine: 'claude', model: 'sonnet' }],
     prompt:
       'You are The Outsider on an LLM Council. React with ZERO prior context about this codebase or its conventions. What is confusing? What would surprise a newcomer meeting this cold? Flag the curse of knowledge — things "obvious" to the author but invisible to everyone else. Ask the naive questions the experts skip; your ignorance is your superpower.',
   },
   {
     id: 'builder',
     label: 'Builder',
-    engine: { engine: 'codex', model: '' },
-    fallback: { engine: 'claude', model: 'opus' },
+    engine: { engine: 'codex', model: GPT56_MODELS.sol },
+    fallbacks: [{ engine: 'claude', model: 'opus' }],
     prompt:
       'You are The Builder on an LLM Council — the seat that will actually implement this. You do not critique for sport; you judge whether the work can be built well and what it will honestly cost. Be concrete about effort, and surface every place where you would be forced to guess during the build rather than papering over it.',
   },
@@ -93,12 +113,15 @@ export const COUNCIL_SEAT_IDS: readonly CouncilTone[] = COUNCIL_SEATS.map((s) =>
 
 /**
  * The chairman is NOT a seat — it synthesizes, it does not offer a lens. It runs
- * on the strongest tier with a fallback so a busy/absent primary never sinks the
- * whole session's verdict.
+ * on the strongest tier with an ordered fallback chain so a busy/absent primary
+ * never sinks the whole session's verdict.
  */
-export const CHAIRMAN: { engine: EngineSpec; fallback: EngineSpec } = {
-  engine: { engine: 'claude', model: 'opus' },
-  fallback: { engine: 'claude', model: 'sonnet' },
+export const CHAIRMAN: { engine: EngineSpec; fallbacks: readonly EngineSpec[] } = {
+  engine: { engine: 'codex', model: GPT56_MODELS.sol },
+  fallbacks: [
+    { engine: 'codex', model: GPT56_MODELS.terra },
+    { engine: 'claude', model: 'opus' },
+  ],
 }
 
 /** One seat's outcome: its reply, plus which engine produced it and whether the

@@ -6,9 +6,11 @@
  *
  * Three engines, one shape. `claude` and `codex` are local CLIs we spawn with
  * `execFile` (never a shell), so a prompt is a single discrete argv entry and
- * needs no escaping. `openrouter` is an HTTP call. The `model` field means
- * something different per engine — see EngineSpec — so callers must keep the
- * engine and model paired, never route a slug to the wrong back-end.
+ * needs no escaping. Codex therefore reuses the CLI's active auth method; this
+ * app neither reads nor forwards an OpenAI credential. `openrouter` is an HTTP
+ * call. The `model` field means something different per engine — see
+ * EngineSpec — so callers must keep the engine and model paired, never route a
+ * slug to the wrong back-end.
  */
 
 /** The back-ends a seat can run on. Adding one here forces the EngineRunner

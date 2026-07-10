@@ -72,10 +72,11 @@ export interface CouncilRunOpts {
  * The LLM-Council v2 (Karpathy's method), multi-engine. Two modes: `diff` judges
  * a card's change set (read-only — the same sanitized diff the reviewer uses),
  * `spec` gates a draft task spec before it reaches an autonomous builder. Five
- * seats run in parallel across three vendors, every OK seat ranks the anonymized
- * responses, then a chairman synthesizes one verdict. Every stage degrades
- * gracefully — a failed seat becomes a note and can fall back to a second engine,
- * not a dead session — and every completed run is persisted for the scorecard.
+ * seats run in parallel across Codex/OpenRouter primaries with ordered Claude
+ * last-resort fallbacks, every OK seat ranks the anonymized responses, then a
+ * chairman synthesizes one verdict. Every stage degrades gracefully — a failed
+ * seat becomes a note after exhausting its engine chain, not a dead session —
+ * and every completed run is persisted for the scorecard.
  */
 export class CouncilService {
   constructor(
@@ -335,7 +336,7 @@ export class CouncilService {
     return { specText: redactText(raw) }
   }
 
-  /** Run one seat: primary engine, then its fallback once, then a failure note. */
+  /** Run one seat through its ordered engine chain, then surface a failure note. */
   private async runSeat(
     seat: CouncilSeat,
     prompt: string,
@@ -343,26 +344,24 @@ export class CouncilService {
     callOpts: { cwd: string; timeout: number; maxBuffer: number },
   ): Promise<CouncilSeatOutput> {
     const primary = this.withOverride(seat.engine, claudeOverride)
-    try {
-      const text = await this.engine.call(primary, prompt, callOpts)
-      return { id: seat.id, label: seat.label, engine: primary, usedFallback: false, text, ok: text.length > 0 }
-    } catch (primaryErr) {
-      if (seat.fallback) {
-        try {
-          const text = await this.engine.call(seat.fallback, prompt, callOpts)
-          return { id: seat.id, label: seat.label, engine: seat.fallback, usedFallback: true, text, ok: text.length > 0 }
-        } catch {
-          // Both engines failed — surface the primary's reason as the note.
-        }
+    const chain = [primary, ...(seat.fallbacks ?? [])]
+    let primaryErr: unknown = new Error('call failed')
+    for (let index = 0; index < chain.length; index += 1) {
+      const engine = chain[index]
+      try {
+        const text = await this.engine.call(engine, prompt, callOpts)
+        return { id: seat.id, label: seat.label, engine, usedFallback: index > 0, text, ok: text.length > 0 }
+      } catch (err) {
+        if (index === 0) primaryErr = err
       }
-      return {
-        id: seat.id,
-        label: seat.label,
-        engine: primary,
-        usedFallback: false,
-        text: `This seat could not be reached (${errText(primaryErr)}).`,
-        ok: false,
-      }
+    }
+    return {
+      id: seat.id,
+      label: seat.label,
+      engine: primary,
+      usedFallback: false,
+      text: `This seat could not be reached (${errText(primaryErr)}).`,
+      ok: false,
     }
   }
 
@@ -403,17 +402,15 @@ export class CouncilService {
     prompt: string,
     callOpts: { cwd: string; timeout: number; maxBuffer: number },
   ): Promise<string | null> {
-    try {
-      const text = await this.engine.call(CHAIRMAN.engine, prompt, callOpts)
-      return text.length > 0 ? text : null
-    } catch {
+    for (const engine of [CHAIRMAN.engine, ...CHAIRMAN.fallbacks]) {
       try {
-        const text = await this.engine.call(CHAIRMAN.fallback, prompt, callOpts)
+        const text = await this.engine.call(engine, prompt, callOpts)
         return text.length > 0 ? text : null
       } catch {
-        return null // No verdict is a degraded session, not a crash.
+        // Try the next engine; no verdict after the chain is degraded, not fatal.
       }
     }
+    return null
   }
 
   private buildResult(input: {

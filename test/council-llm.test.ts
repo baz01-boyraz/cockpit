@@ -63,14 +63,20 @@ describe('council roster v2', () => {
     })
     expect(byId.contrarian.engine).toEqual({ engine: 'codex', model: GPT56_MODELS.sol })
     expect(byId['first-principles'].engine).toEqual({ engine: 'openrouter', model: 'deepseek/deepseek-chat' })
-    expect(byId['first-principles'].fallback).toEqual({ engine: 'codex', model: GPT56_MODELS.terra })
+    expect(byId['first-principles'].fallbacks).toEqual([
+      { engine: 'codex', model: GPT56_MODELS.terra },
+      { engine: 'claude', model: 'sonnet' },
+    ])
     expect(byId.expansionist.engine).toEqual({ engine: 'codex', model: GPT56_MODELS.luna })
     expect(byId.outsider.engine).toEqual({ engine: 'codex', model: GPT56_MODELS.terra })
     expect(byId.builder.engine).toEqual({ engine: 'codex', model: GPT56_MODELS.sol })
-    expect(byId.builder.fallback).toEqual({ engine: 'claude', model: 'opus' })
+    expect(byId.builder.fallbacks).toEqual([{ engine: 'claude', model: 'opus' }])
     expect(CHAIRMAN).toEqual({
       engine: { engine: 'codex', model: GPT56_MODELS.sol },
-      fallback: { engine: 'claude', model: 'opus' },
+      fallbacks: [
+        { engine: 'codex', model: GPT56_MODELS.terra },
+        { engine: 'claude', model: 'opus' },
+      ],
     })
   })
 })

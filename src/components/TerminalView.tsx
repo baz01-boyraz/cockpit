@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import type { TerminalAttachment, TerminalSession } from '@shared/domain'
 import { OSC_COMMAND } from '@shared/command-blocks'
+import { isTerminalCopyShortcut, normalizePromptDraft } from '@shared/terminal-ux'
 import { cockpit } from '../lib/cockpit'
 import { CommandBlockDecorations } from '../lib/commandBlocks'
 import { useSessionBlocks } from '../store/blockStore'
@@ -17,7 +18,7 @@ import {
   inferImageMime,
   readBase64,
 } from '../lib/imageAttach'
-import { IconChevron, IconImage, IconTerminal, IconX } from './icons'
+import { IconChevron, IconCopy, IconImage, IconSend, IconTerminal, IconX } from './icons'
 
 type TerminalViewMode = 'stream' | 'blocks'
 
@@ -53,6 +54,7 @@ const THEME = {
 export function TerminalView({ session, active }: { session: TerminalSession; active: boolean }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const promptInputRef = useRef<HTMLTextAreaElement>(null)
   const dragDepthRef = useRef(0)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
@@ -62,6 +64,12 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
   const [error, setError] = useState<string | null>(null)
   const [attachment, setAttachment] = useState<AttachmentPreview | null>(null)
   const [mode, setMode] = useState<TerminalViewMode>('stream')
+  const [hasSelection, setHasSelection] = useState(false)
+  const [atLiveOutput, setAtLiveOutput] = useState(true)
+  const [copyNotice, setCopyNotice] = useState<string | null>(null)
+  const [promptOpen, setPromptOpen] = useState(false)
+  const [promptDraft, setPromptDraft] = useState('')
+  const isCodex = session.role === 'codex'
   // Block capture lives app-level in blockStore (survives pane unmounts);
   // this pane only renders its session's published snapshots.
   const blocks = useSessionBlocks(session.id)
@@ -84,6 +92,12 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
       theme: THEME,
       allowProposedApi: true,
       scrollback: 5000,
+      scrollOnUserInput: true,
+      smoothScrollDuration: 110,
+      fastScrollModifier: 'alt',
+      fastScrollSensitivity: 5,
+      macOptionClickForcesSelection: true,
+      rightClickSelectsWord: true,
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
@@ -109,11 +123,28 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
     // Block capture happens app-level (blockStore's single onData subscriber);
     // this pane's subscription only paints the live xterm stream.
     const api = cockpit()
+    const syncLiveOutput = () => {
+      setAtLiveOutput(term.buffer.active.viewportY >= term.buffer.active.baseY)
+    }
     const offData = api.terminals.onData((chunk) => {
       if (chunk.sessionId !== session.id) return
-      term.write(chunk.data)
+      term.write(chunk.data, syncLiveOutput)
     })
     const sub = term.onData((data) => void api.terminals.write(session.id, data))
+    const selectionSub = term.onSelectionChange(() => setHasSelection(term.hasSelection()))
+    const scrollSub = term.onScroll(syncLiveOutput)
+    const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
+    term.attachCustomKeyEventHandler((event) => {
+      if (!isTerminalCopyShortcut(event, { hasSelection: term.hasSelection(), isMac })) return true
+      const selection = term.getSelection()
+      if (selection) {
+        void navigator.clipboard.writeText(selection).then(
+          () => setCopyNotice('Copied'),
+          () => setCopyNotice('Copy unavailable'),
+        )
+      }
+      return false
+    })
 
     const fitAndResize = () => {
       if (host.clientWidth < 20 || host.clientHeight < 20) return
@@ -132,12 +163,16 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
     return () => {
       offData()
       sub.dispose()
+      selectionSub.dispose()
+      scrollSub.dispose()
       offOsc.dispose()
       decorations.dispose()
       decorationsRef.current = null
       ro.disconnect()
       term.dispose()
       termRef.current = null
+      setHasSelection(false)
+      setAtLiveOutput(true)
     }
   }, [session.id])
 
@@ -183,6 +218,57 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
     }, 3200)
     return () => window.clearTimeout(timeout)
   }, [attachment?.id, attachment?.sent])
+
+  useEffect(() => {
+    if (!copyNotice) return
+    const timeout = window.setTimeout(() => setCopyNotice(null), 1800)
+    return () => window.clearTimeout(timeout)
+  }, [copyNotice])
+
+  useEffect(() => {
+    if (!promptOpen) return
+    const frame = requestAnimationFrame(() => promptInputRef.current?.focus())
+    return () => cancelAnimationFrame(frame)
+  }, [promptOpen])
+
+  const copyTerminalSelection = async () => {
+    const term = termRef.current
+    const selection = term?.getSelection() ?? ''
+    if (!selection) return
+    try {
+      await navigator.clipboard.writeText(selection)
+      setCopyNotice('Copied')
+    } catch {
+      setCopyNotice('Copy unavailable')
+    }
+    term?.focus()
+  }
+
+  const scrollTerminal = (pages: number) => {
+    termRef.current?.scrollPages(pages)
+  }
+
+  const jumpToLiveOutput = () => {
+    termRef.current?.scrollToBottom()
+    termRef.current?.focus()
+  }
+
+  const clearCurrentInput = () => {
+    void cockpit().terminals.write(session.id, '\x15')
+    termRef.current?.focus()
+  }
+
+  const submitPromptDraft = () => {
+    const prompt = normalizePromptDraft(promptDraft)
+    const term = termRef.current
+    if (!prompt || !term) return
+    // xterm wraps this in bracketed-paste markers when Codex asks for them,
+    // preserving a multi-line draft as one composer payload.
+    term.paste(prompt)
+    void cockpit().terminals.write(session.id, '\r')
+    setPromptDraft('')
+    term.focus()
+  }
 
   const sendAttachmentPath = async (target: TerminalAttachment) => {
     const line = `Screenshot attached: ${JSON.stringify(target.path)}`
@@ -282,21 +368,172 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
     void saveImage(file)
   }
 
+  const canSubmitPrompt = normalizePromptDraft(promptDraft) !== null
+
   return (
     <div
       className={`termview ${dragging ? 'termview--dragging' : ''} ${saving ? 'termview--saving' : ''} ${
         mode === 'blocks' ? 'termview--blocks' : ''
-      }`}
+      } ${isCodex ? 'termview--codex' : ''} ${promptOpen ? 'termview--promptOpen' : ''}`}
       onDragEnterCapture={handleDragEnter}
       onDragOverCapture={handleDragOver}
       onDragLeaveCapture={handleDragLeave}
       onDropCapture={handleDrop}
       onPasteCapture={handlePaste}
     >
-      <div className="termview__host" ref={hostRef} />
-      {mode === 'blocks' && (
-        <BlocksView blocks={blocks} projectId={session.projectId} onRerun={rerunCommand} />
-      )}
+      <div className="termview__surface">
+        <div className="termview__host" ref={hostRef} />
+        {mode === 'blocks' && (
+          <BlocksView blocks={blocks} projectId={session.projectId} onRerun={rerunCommand} />
+        )}
+
+        <div className="termview__toolbar">
+          <div className="termview__viewtoggle" role="tablist" aria-label="Terminal view">
+            <button
+              role="tab"
+              aria-selected={mode === 'stream'}
+              className={`termview__seg ${mode === 'stream' ? 'termview__seg--on' : ''}`}
+              onClick={() => setMode('stream')}
+              title="Live terminal stream"
+            >
+              <IconTerminal width={12} height={12} /> Stream
+            </button>
+            <button
+              role="tab"
+              aria-selected={mode === 'blocks'}
+              className={`termview__seg ${mode === 'blocks' ? 'termview__seg--on' : ''}`}
+              onClick={() => setMode('blocks')}
+              title="Foldable command blocks"
+            >
+              Blocks
+              {blocks.length > 0 && <span className="termview__segcount">{blocks.length}</span>}
+            </button>
+          </div>
+
+          {mode === 'stream' && (hasSelection || copyNotice) && (
+            <button
+              type="button"
+              className={`termview__copy ${copyNotice === 'Copied' ? 'termview__copy--done' : ''}`}
+              aria-label="Copy terminal selection"
+              disabled={!hasSelection}
+              onClick={() => void copyTerminalSelection()}
+            >
+              <IconCopy width={12} height={12} />
+              <span>{copyNotice ?? 'Copy'}</span>
+            </button>
+          )}
+
+          {mode === 'stream' && (
+            <div className="termview__nav" aria-label="Terminal scroll controls">
+              <button
+                type="button"
+                className="termview__navbtn"
+                aria-label="Scroll terminal up one page"
+                title="Page up"
+                onClick={() => scrollTerminal(-1)}
+              >
+                <IconChevron width={13} height={13} className="termview__navup" />
+              </button>
+              <button
+                type="button"
+                className="termview__navbtn"
+                aria-label="Scroll terminal down one page"
+                title="Page down"
+                onClick={() => scrollTerminal(1)}
+              >
+                <IconChevron width={13} height={13} className="termview__navdown" />
+              </button>
+              <button
+                type="button"
+                className={`termview__navbtn termview__navbtn--latest ${
+                  atLiveOutput ? '' : 'termview__navbtn--behind'
+                }`}
+                aria-label="Jump to live terminal output"
+                aria-pressed={atLiveOutput}
+                title={atLiveOutput ? 'Live output' : 'Jump to live output'}
+                onClick={jumpToLiveOutput}
+              >
+                <IconChevron width={13} height={13} className="termview__navdown" />
+              </button>
+            </div>
+          )}
+
+          {mode === 'stream' && isCodex && (
+            <button
+              type="button"
+              className="termview__clearInput"
+              aria-label="Clear current Codex input"
+              title="Clear the current Codex input (Ctrl+U)"
+              onClick={clearCurrentInput}
+            >
+              <IconX width={12} height={12} />
+            </button>
+          )}
+
+          {mode === 'stream' && (
+            <button
+              type="button"
+              className="termview__attach"
+              title="Send screenshot"
+              disabled={saving}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <IconImage width={14} height={14} />
+            </button>
+          )}
+        </div>
+
+        {dragging && (
+          <div className="termview__drop">
+            <div className="termview__dropIcon">
+              <IconImage width={22} height={22} />
+            </div>
+            <div>
+              <div className="termview__dropTitle">Drop to send image</div>
+              <div className="termview__dropSub">Saved into this project, then sent to this terminal.</div>
+            </div>
+          </div>
+        )}
+
+        {(attachment || error || saving) && (
+          <div className={`termattach ${attachment ? 'termattach--ready' : ''}`}>
+            {attachment ? (
+              <>
+                <img className="termattach__thumb" src={attachment.previewUrl} alt="" />
+                <div className="termattach__body">
+                  <div className="termattach__name">{attachment.name}</div>
+                  <div className="termattach__path mono">{attachment.relativePath}</div>
+                  <div className="termattach__meta">
+                    <span>{formatBytes(attachment.size)}</span>
+                    {attachment.sent && <span className="termattach__ok">sent to terminal</span>}
+                  </div>
+                </div>
+                <div className="termattach__actions">
+                  <button
+                    className="iconbtn termattach__send"
+                    title="Send again"
+                    onClick={() => void sendCurrentAttachment()}
+                  >
+                    <IconImage width={12} height={12} />
+                  </button>
+                  <button className="iconbtn" title="Dismiss" onClick={() => setAttachment(null)}>
+                    <IconX width={13} height={13} />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="termattach__loader" />
+                <div className="termattach__body">
+                  <div className="termattach__name">{saving ? 'Saving image...' : 'Image not attached'}</div>
+                  <div className="termattach__path">{error ?? 'Preparing project attachment.'}</div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
       <input
         ref={fileInputRef}
         className="termview__file"
@@ -309,109 +546,86 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
         }}
       />
 
-      <div className="termview__toolbar">
-        <div className="termview__viewtoggle" role="tablist" aria-label="Terminal view">
-          <button
-            role="tab"
-            aria-selected={mode === 'stream'}
-            className={`termview__seg ${mode === 'stream' ? 'termview__seg--on' : ''}`}
-            onClick={() => setMode('stream')}
-            title="Live terminal stream"
-          >
-            <IconTerminal width={12} height={12} /> Stream
-          </button>
-          <button
-            role="tab"
-            aria-selected={mode === 'blocks'}
-            className={`termview__seg ${mode === 'blocks' ? 'termview__seg--on' : ''}`}
-            onClick={() => setMode('blocks')}
-            title="Foldable command blocks"
-          >
-            Blocks
-            {blocks.length > 0 && <span className="termview__segcount">{blocks.length}</span>}
-          </button>
-        </div>
-        {mode === 'stream' && (
-          <div className="termview__nav">
-            <button
-              className="termview__navbtn"
-              title="Previous command"
-              onClick={() => decorationsRef.current?.scrollToPrevCommand()}
-            >
-              <IconChevron width={13} height={13} className="termview__navup" />
-            </button>
-            <button
-              className="termview__navbtn"
-              title="Next command"
-              onClick={() => decorationsRef.current?.scrollToNextCommand()}
-            >
-              <IconChevron width={13} height={13} className="termview__navdown" />
-            </button>
-            <button
-              className="termview__navbtn termview__navbtn--latest"
-              title="Jump to latest"
-              onClick={() => decorationsRef.current?.scrollToLatest()}
-            >
-              <IconChevron width={13} height={13} className="termview__navdown" />
-            </button>
-          </div>
-        )}
-        {mode === 'stream' && (
-          <button
-            className="termview__attach"
-            title="Send screenshot"
-            disabled={saving}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <IconImage width={14} height={14} />
-          </button>
-        )}
-      </div>
-
-      {dragging && (
-        <div className="termview__drop">
-          <div className="termview__dropIcon">
-            <IconImage width={22} height={22} />
-          </div>
-          <div>
-            <div className="termview__dropTitle">Drop to send image</div>
-            <div className="termview__dropSub">Saved into this project, then sent to this terminal.</div>
-          </div>
-        </div>
-      )}
-
-      {(attachment || error || saving) && (
-        <div className={`termattach ${attachment ? 'termattach--ready' : ''}`}>
-          {attachment ? (
+      {isCodex && (
+        <section className={`codexdock ${promptOpen ? 'codexdock--open' : ''}`} aria-label="Codex prompt dock">
+          {promptOpen ? (
             <>
-              <img className="termattach__thumb" src={attachment.previewUrl} alt="" />
-              <div className="termattach__body">
-                <div className="termattach__name">{attachment.name}</div>
-                <div className="termattach__path mono">{attachment.relativePath}</div>
-                <div className="termattach__meta">
-                  <span>{formatBytes(attachment.size)}</span>
-                  {attachment.sent && <span className="termattach__ok">sent to terminal</span>}
-                </div>
-              </div>
-              <div className="termattach__actions">
-                <button className="iconbtn termattach__send" title="Send again" onClick={() => void sendCurrentAttachment()}>
-                  <IconImage width={12} height={12} />
+              <div className="codexdock__head">
+                <span className="codexdock__title">
+                  <IconSend width={12} height={12} /> Prompt dock
+                </span>
+                <span className="codexdock__headHint">edit normally · paste freely · multi-line</span>
+                <button
+                  type="button"
+                  className="codexdock__close"
+                  aria-label="Close Codex prompt dock"
+                  onClick={() => {
+                    setPromptOpen(false)
+                    termRef.current?.focus()
+                  }}
+                >
+                  <IconX width={12} height={12} />
                 </button>
-                <button className="iconbtn" title="Dismiss" onClick={() => setAttachment(null)}>
-                  <IconX width={13} height={13} />
+              </div>
+              <textarea
+                ref={promptInputRef}
+                id={`codex-prompt-${session.id}`}
+                className="codexdock__input"
+                aria-label="Compose Codex prompt"
+                placeholder="Write here with normal editing, then send it into Codex…"
+                value={promptDraft}
+                onChange={(event) => setPromptDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                    event.preventDefault()
+                    submitPromptDraft()
+                  } else if (event.key === 'Escape') {
+                    event.preventDefault()
+                    setPromptOpen(false)
+                    termRef.current?.focus()
+                  }
+                }}
+                rows={3}
+              />
+              <div className="codexdock__foot">
+                <span className="codexdock__shortcut">
+                  <kbd>⌘</kbd><kbd>↵</kbd> send
+                </span>
+                <button
+                  type="button"
+                  className="codexdock__clear"
+                  disabled={promptDraft.length === 0}
+                  onClick={() => {
+                    setPromptDraft('')
+                    promptInputRef.current?.focus()
+                  }}
+                >
+                  Clear draft
+                </button>
+                <button
+                  type="button"
+                  className="codexdock__send"
+                  disabled={!canSubmitPrompt}
+                  onClick={submitPromptDraft}
+                >
+                  <IconSend width={12} height={12} /> Send to Codex
                 </button>
               </div>
             </>
           ) : (
-            <>
-              <div className="termattach__loader" />
-              <div className="termattach__body">
-                <div className="termattach__name">{saving ? 'Saving image...' : 'Image not attached'}</div>
-                <div className="termattach__path">{error ?? 'Preparing project attachment.'}</div>
-              </div>
-            </>
+            <button
+              type="button"
+              className="codexdock__launcher"
+              aria-expanded="false"
+              aria-controls={`codex-prompt-${session.id}`}
+              onClick={() => setPromptOpen(true)}
+            >
+              <IconSend width={12} height={12} />
+              <span>Draft a prompt</span>
+              <small>normal edit · paste · undo · multi-line</small>
+            </button>
           )}
-        </div>
+        </section>
       )}
     </div>
   )

@@ -2,6 +2,7 @@ import { platform } from 'node:os'
 import * as pty from 'node-pty'
 import { countActiveAgents } from '@shared/dashboard-assembly'
 import type { TerminalRole, TerminalSession } from '@shared/domain'
+import { CODEX_INTERACTIVE_COMMAND, buildCodexResumeCommand } from '@shared/terminal-ux'
 import type { Db } from '../db/Database'
 import type { CockpitEvents } from '../events'
 import { logFatal } from '../logging'
@@ -301,7 +302,8 @@ export class TerminalManager {
   launchAgent(projectId: string, agent: 'claude' | 'codex'): TerminalSession {
     const name = agent === 'claude' ? 'Claude Code' : 'Codex'
     const role: TerminalRole = agent
-    return this.create({ projectId, name, role, command: agent })
+    const command = agent === 'codex' ? CODEX_INTERACTIVE_COMMAND : agent
+    return this.create({ projectId, name, role, command })
   }
 
   /**
@@ -325,7 +327,7 @@ export class TerminalManager {
       projectId,
       name: isClaude ? 'Claude Code' : 'Codex',
       role: provider,
-      command: isClaude ? `claude --resume ${sessionId}` : `codex resume ${sessionId}`,
+      command: isClaude ? `claude --resume ${sessionId}` : buildCodexResumeCommand(sessionId),
     })
   }
 

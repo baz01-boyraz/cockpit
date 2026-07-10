@@ -153,8 +153,9 @@ describe('CouncilService — spec mode orchestration', () => {
     expect(byId['first-principles'].ok).toBe(true)
     expect(byId.builder.usedFallback).toBe(true)
     expect(byId.builder.engine).toEqual({ engine: 'claude', model: 'opus' })
-    // Claude-native seats never touch a fallback.
-    expect(byId.contrarian.usedFallback).toBe(false)
+    // GPT-first seats reach Claude only after the Codex CLI is unavailable.
+    expect(byId.contrarian.usedFallback).toBe(true)
+    expect(byId.contrarian.engine).toEqual({ engine: 'claude', model: 'opus' })
     expect(result.stats.seatsRun).toBe(5)
     expect(result.stats.seatsFailed).toBe(0)
   })

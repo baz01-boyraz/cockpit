@@ -341,6 +341,9 @@
   position: relative;
   overflow: hidden;
   padding: 7px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .termview::before {
   content: '';
@@ -360,6 +363,12 @@
   opacity: 1;
   transform: scale(1);
   animation: termDropPulse 1.4s var(--ease-out) infinite;
+}
+.termview__surface {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 .termview__host {
   height: 100%;
@@ -516,6 +525,7 @@
   transition: opacity var(--dur) var(--ease-out);
 }
 .termview:hover .termview__nav { opacity: 1; }
+.termview--codex .termview__nav { opacity: 0.72; }
 .termview__navbtn {
   display: grid;
   place-items: center;
@@ -529,6 +539,11 @@
   transition: color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
 }
 .termview__navbtn:hover { color: var(--accent-hi); background: var(--surface-3); }
+.termview__navbtn--behind {
+  color: var(--signal);
+  background: rgba(196, 227, 90, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(196, 227, 90, 0.16);
+}
 .termview__navbtn:focus-visible {
   outline: 2px solid var(--border-accent);
   outline-offset: 1px;
@@ -549,9 +564,14 @@
   opacity: 0.7;
 }
 .termview__navbtn--latest .termview__navdown { transform: rotate(90deg) translateX(-1px); }
+.termview__copy,
+.termview__clearInput,
 .termview__attach {
-  display: grid;
+  display: inline-flex;
   place-items: center;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   width: 27px;
   height: 27px;
   border-radius: var(--r-sm);
@@ -566,11 +586,34 @@
     border-color var(--dur) var(--ease-out),
     background var(--dur) var(--ease-out);
 }
+.termview__copy {
+  width: auto;
+  padding: 0 8px;
+  opacity: 1;
+  color: var(--accent-hi);
+  border-color: var(--border-accent);
+  animation: termCopyIn 150ms var(--ease-out);
+}
+.termview__copy span {
+  font-size: var(--fs-micro);
+  font-weight: 650;
+}
+.termview__copy--done {
+  color: var(--signal);
+  border-color: rgba(196, 227, 90, 0.24);
+}
+.termview__copy:disabled { cursor: default; opacity: 1; }
+.termview__clearInput {
+  opacity: 0.72;
+}
 .termview:hover .termview__attach,
+.termview:hover .termview__clearInput,
 .termview--dragging .termview__attach,
 .termview--saving .termview__attach {
   opacity: 1;
 }
+.termview__copy:hover:not(:disabled),
+.termview__clearInput:hover:not(:disabled),
 .termview__attach:hover:not(:disabled) {
   color: var(--accent-hi);
   border-color: var(--border-accent);
@@ -583,6 +626,161 @@
 .termview--saving .termview__attach svg {
   animation: termAttachFloat 0.9s var(--ease-spring) infinite alternate;
 }
+
+/* --- Codex prompt dock ---------------------------------------------------- */
+/* A normal textarea sits beside the TUI instead of pretending terminal input
+   has desktop-editor ergonomics. It stays collapsed in grid layouts and keeps
+   a draft while the user hops back into the terminal for approvals/tools. */
+.codexdock {
+  flex: 0 0 auto;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background:
+    linear-gradient(180deg, rgba(34, 38, 49, 0.86), rgba(20, 22, 28, 0.9));
+  box-shadow: inset 0 1px 0 rgba(236, 230, 218, 0.025);
+  overflow: hidden;
+}
+.codexdock__launcher {
+  width: 100%;
+  min-height: 31px;
+  padding: 0 9px;
+  border: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: text;
+  transition: color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+}
+.codexdock__launcher svg { color: var(--accent); }
+.codexdock__launcher span {
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+}
+.codexdock__launcher small {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+}
+.codexdock__launcher:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+.codexdock__launcher:focus-visible,
+.codexdock button:focus-visible,
+.codexdock__input:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: -2px;
+}
+.codexdock--open {
+  border-color: rgba(224, 123, 69, 0.3);
+  box-shadow:
+    inset 0 1px 0 rgba(236, 230, 218, 0.035),
+    0 0 18px rgba(224, 123, 69, 0.055);
+}
+.codexdock__head,
+.codexdock__foot {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 6px 8px;
+}
+.codexdock__head { border-bottom: 1px solid var(--border); }
+.codexdock__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+.codexdock__title svg { color: var(--accent); }
+.codexdock__headHint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+}
+.codexdock__close {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-faint);
+}
+.codexdock__close:hover { color: var(--text); background: var(--surface-3); }
+.codexdock__input {
+  display: block;
+  width: 100%;
+  min-height: 68px;
+  max-height: 124px;
+  resize: vertical;
+  padding: 9px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  outline: 0;
+  background: rgba(8, 9, 11, 0.55);
+  color: var(--text);
+  caret-color: var(--accent-hi);
+  font: 12px/1.5 var(--font-mono);
+}
+.codexdock__input::placeholder { color: var(--text-faint); }
+.codexdock__foot { justify-content: flex-end; }
+.codexdock__shortcut {
+  margin-right: auto;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+}
+.codexdock__shortcut kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  margin-right: 2px;
+  padding: 0 3px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  font: 10px/1 var(--font-mono);
+}
+.codexdock__clear,
+.codexdock__send {
+  min-height: 25px;
+  padding: 0 9px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--fs-micro);
+  font-weight: 650;
+}
+.codexdock__send {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-color: rgba(224, 123, 69, 0.32);
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+.codexdock__clear:hover:not(:disabled) { color: var(--text); border-color: var(--border-strong); }
+.codexdock__send:hover:not(:disabled) { background: var(--accent-hi); }
+.codexdock__clear:disabled,
+.codexdock__send:disabled { opacity: 0.42; cursor: not-allowed; }
+.termpane--tile .codexdock__launcher small { display: none; }
+.termpane--tile .codexdock__input { min-height: 54px; max-height: 76px; }
 
 /* --- Foldable Blocks view (Warp-style command cards) ------------------------ */
 /* Overlays the live xterm when the pane is toggled to Blocks. The terminal keeps
@@ -911,6 +1109,11 @@
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+@keyframes termCopyIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes termAttachFloat {
   from { transform: translateY(1px); }
   to { transform: translateY(-2px); }
@@ -926,8 +1129,8 @@
   .termview__drop::before,
   .termview--saving .termview__attach svg,
   .termattach,
-  .termattach__loader {
+  .termattach__loader,
+  .termview__copy {
     animation: none;
   }
 }
-
