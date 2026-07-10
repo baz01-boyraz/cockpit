@@ -271,6 +271,13 @@
   overflow-y: auto;
   overflow-x: hidden;
 }
+.rail__tools {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+  min-width: 0;
+}
 .rail__item {
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr) auto;
@@ -365,6 +372,213 @@
   color: var(--text-on-accent);
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.24), rgba(0, 0, 0, 0.12));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+/* ---------- rail control center ----------
+ * Audit, quota detail, and settings are necessary but low-frequency. One
+ * labelled gateway keeps the primary flight path calm without turning these
+ * destinations into mystery icons or burying them in a generic overflow. */
+.railControl {
+  position: relative;
+  flex-shrink: 0;
+  min-width: 0;
+}
+.railControl__trigger {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  gap: var(--sp-3);
+  padding: 9px var(--sp-3);
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-body);
+  font-weight: 500;
+  text-align: left;
+  transition:
+    color var(--dur) var(--ease-out),
+    background-color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
+}
+.railControl__trigger:hover,
+.railControl__trigger[aria-expanded='true'] {
+  color: var(--text);
+  background: var(--surface-1);
+  border-color: var(--border);
+}
+.railControl__trigger:focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 1px var(--accent-glow);
+}
+.railControl__trigger--active {
+  color: var(--text);
+  background: linear-gradient(90deg, var(--accent-wash), var(--surface-1) 74%);
+  border-color: var(--border-strong);
+  box-shadow: var(--bevel);
+}
+.railControl__triggerGlyph {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  justify-self: center;
+  color: var(--text-muted);
+  opacity: 0.88;
+  filter: drop-shadow(0 0 7px rgba(242, 244, 248, 0.12));
+  transition: color var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.railControl__trigger:hover .railControl__triggerGlyph,
+.railControl__trigger--active .railControl__triggerGlyph {
+  color: var(--accent-hi);
+  transform: translateY(-0.5px);
+}
+.railControl__triggerLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.railControl__triggerChevron {
+  justify-self: end;
+  color: var(--text-faint);
+  transition: transform var(--dur) var(--ease-spring), color var(--dur) var(--ease-out);
+}
+.railControl__triggerChevron--open {
+  color: var(--accent-hi);
+  transform: rotate(180deg);
+}
+.railControl__menu {
+  position: absolute;
+  left: calc(100% + 14px);
+  bottom: -4px;
+  z-index: 95;
+  width: 292px;
+  padding: var(--sp-2);
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(120% 100% at 0 100%, var(--accent-wash), transparent 58%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 94%, #fff 1%), var(--surface-1));
+  box-shadow:
+    inset 0 1px 0 var(--edge-highlight),
+    var(--shadow-float),
+    0 0 28px -18px var(--accent-glow);
+  animation: rail-control-in var(--dur) var(--ease-spring) both;
+}
+.railControl__head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-3) var(--sp-3) var(--sp-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+.railControl__eyebrow {
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.railControl__title {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--fs-body);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.railControl__items {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: var(--sp-2);
+}
+.railControl__item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  transition:
+    color var(--dur) var(--ease-out),
+    background-color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.railControl__item:hover,
+.railControl__item:focus-visible {
+  color: var(--text);
+  background: var(--surface-3);
+  border-color: var(--border);
+  transform: translateX(1px);
+}
+.railControl__item:focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 1px var(--accent-glow);
+}
+.railControl__item--active {
+  color: var(--text);
+  background: linear-gradient(90deg, var(--accent-wash), var(--surface-2) 76%);
+  border-color: var(--border-strong);
+}
+.railControl__itemGlyph {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text-muted);
+  background: linear-gradient(180deg, var(--surface-3), var(--surface-inset));
+  box-shadow: inset 0 1px 0 var(--edge-highlight), 0 2px 7px rgba(0, 0, 0, 0.24);
+}
+.railControl__item:hover .railControl__itemGlyph,
+.railControl__item--active .railControl__itemGlyph {
+  color: var(--accent-hi);
+  border-color: var(--border-accent);
+}
+.railControl__itemCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.railControl__itemLabel {
+  color: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 620;
+  line-height: 1.2;
+}
+.railControl__itemDescription {
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.railControl__itemChevron {
+  color: var(--text-faint);
+  opacity: 0.72;
+  transition: color var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.railControl__item:hover .railControl__itemChevron {
+  color: var(--accent-hi);
+  transform: translateX(1px);
+}
+@keyframes rail-control-in {
+  from { opacity: 0; transform: translate(-7px, 3px) scale(0.985); }
+  to { opacity: 1; transform: translate(0, 0) scale(1); }
 }
 .rail__footer {
   margin-top: auto;
@@ -644,6 +858,12 @@
   border-color: var(--border-accent);
   background: var(--accent-wash);
 }
+.sentinelBell__btn--selected {
+  color: var(--accent-hi);
+  border-color: var(--border-accent);
+  background: var(--accent-wash);
+  box-shadow: inset 0 1px 0 var(--edge-highlight), 0 0 14px -8px var(--accent-glow);
+}
 .sentinelBell__badge {
   position: absolute;
   top: -5px;
@@ -731,6 +951,72 @@
   border: 1px solid var(--border);
   background: var(--surface-inset);
   color: var(--text-faint);
+}
+.sentinelPopover__footer {
+  padding: var(--sp-2);
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-inset) 64%, transparent);
+}
+.sentinelPopover__openCenter {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  transition:
+    color var(--dur) var(--ease-out),
+    background-color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out);
+}
+.sentinelPopover__openCenter:hover {
+  color: var(--text);
+  background: var(--surface-3);
+  border-color: var(--border);
+}
+.sentinelPopover__openCenter:focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 1px var(--accent-glow);
+}
+.sentinelPopover__openCenterGlyph {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--accent-hi);
+  background: linear-gradient(180deg, var(--surface-3), var(--surface-inset));
+  box-shadow: inset 0 1px 0 var(--edge-highlight);
+}
+.sentinelPopover__openCenterCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.sentinelPopover__openCenterTitle {
+  color: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+.sentinelPopover__openCenterHint {
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+}
+.sentinelPopover__openCenter > svg {
+  color: var(--text-faint);
+  transition: color var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.sentinelPopover__openCenter:hover > svg {
+  color: var(--accent-hi);
+  transform: translateX(1px);
 }
 
 .sentinelRow {
@@ -860,6 +1146,11 @@
 @media (prefers-reduced-motion: reduce) {
   .sentinelPopover { animation: none; }
   .sentinelBell__btn:hover { transform: none; }
+  .railControl__menu { animation: none; }
+  .railControl__item:hover,
+  .railControl__triggerGlyph,
+  .railControl__itemChevron,
+  .sentinelPopover__openCenter > svg { transform: none; transition: none; }
 }
 
 /* ---------- responsive layout breakpoints (topbar / shell / dash / titles) ---------- */

@@ -1,6 +1,5 @@
 import { useStore, type View } from '../store/useStore'
 import {
-  IconBell,
   IconBranch,
   IconChevron,
   IconCouncil,
@@ -9,16 +8,14 @@ import {
   IconLogs,
   IconMemory,
   IconRailway,
-  IconSettings,
-  IconShieldSearch,
   IconSwarm,
   IconTerminal,
-  IconUsage,
 } from './icons'
 import type { ComponentType, SVGProps } from 'react'
 import { UsageStrip } from './UsageStrip'
 import { NotepadLauncher } from './NotepadLauncher'
 import { CockpitMark } from './CockpitBrand'
+import { ControlCenterMenu } from './ControlCenterMenu'
 
 interface NavItem {
   view: View
@@ -34,11 +31,7 @@ const NAV: NavItem[] = [
   { view: 'council', label: 'Council', Icon: IconCouncil },
   { view: 'railway', label: 'Railway', Icon: IconRailway },
   { view: 'logs', label: 'Logs & Errors', Icon: IconLogs },
-  { view: 'audit', label: 'Audit', Icon: IconShieldSearch },
-  { view: 'sentinel', label: 'Sentinel', Icon: IconBell },
   { view: 'memory', label: 'Memory', Icon: IconMemory },
-  { view: 'usage', label: 'Usage', Icon: IconUsage },
-  { view: 'settings', label: 'Settings', Icon: IconSettings },
 ]
 
 export function LeftRail() {
@@ -46,7 +39,6 @@ export function LeftRail() {
   const setView = useStore((s) => s.setView)
   const dashboard = useStore((s) => s.dashboard)
   const terminals = useStore((s) => s.terminals)
-  const sentinelUnseen = useStore((s) => s.sentinelUnseen)
   const toggleSwitcher = useStore((s) => s.toggleSwitcher)
   const project = dashboard?.project
 
@@ -54,7 +46,6 @@ export function LeftRail() {
     if (v === 'terminals' && terminals.length) return String(terminals.length)
     if (v === 'git' && dashboard?.changedFiles) return String(dashboard.changedFiles)
     if (v === 'logs' && dashboard?.recentErrors.length) return String(dashboard.recentErrors.length)
-    if (v === 'sentinel' && sentinelUnseen) return sentinelUnseen > 9 ? '9+' : String(sentinelUnseen)
     return null
   }
 
@@ -95,7 +86,10 @@ export function LeftRail() {
         })}
       </nav>
 
-      <NotepadLauncher />
+      <div className="rail__tools">
+        <ControlCenterMenu />
+        <NotepadLauncher />
+      </div>
 
       <div className="rail__footer">
         <UsageStrip />

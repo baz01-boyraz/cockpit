@@ -11,12 +11,14 @@ import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import { relativeTime } from '@shared/time'
 import { OUTCOME_META, sourceLabel, toHermesOpener } from '../lib/sentinelView'
-import { IconBell, IconCheck, IconPlus, IconX } from './icons'
+import { IconBell, IconCheck, IconChevron, IconPlus, IconX } from './icons'
 import type { SentinelSignal } from '@shared/sentinel'
 
 export function SentinelBell() {
   const unseen = useStore((s) => s.sentinelUnseen)
+  const view = useStore((s) => s.view)
   const activeProjectId = useStore((s) => s.activeProjectId)
+  const setView = useStore((s) => s.setView)
   const openHermesWith = useStore((s) => s.openHermesWith)
   const markSignalsSeen = useStore((s) => s.markSignalsSeen)
 
@@ -107,14 +109,22 @@ export function SentinelBell() {
 
   const hasUnseen = signals.some((s) => s.status === 'new')
 
+  const openSignalCenter = () => {
+    setView('sentinel')
+    setOpen(false)
+  }
+
   return (
     <div className="sentinelBell" ref={rootRef}>
       <button
         type="button"
-        className={`sentinelBell__btn ${unseen > 0 ? 'sentinelBell__btn--active' : ''}`}
+        className={`sentinelBell__btn ${unseen > 0 ? 'sentinelBell__btn--active' : ''} ${
+          view === 'sentinel' ? 'sentinelBell__btn--selected' : ''
+        }`}
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="dialog"
         aria-expanded={open}
+        aria-current={view === 'sentinel' ? 'page' : undefined}
         aria-label={unseen > 0 ? `${unseen} unseen signals` : 'Signals — all quiet'}
         title="Signals"
       >
@@ -208,6 +218,23 @@ export function SentinelBell() {
                 )
               })
             )}
+          </div>
+          <div className="sentinelPopover__footer">
+            <button
+              type="button"
+              className="sentinelPopover__openCenter"
+              onClick={openSignalCenter}
+              aria-label="Open signal center"
+            >
+              <span className="sentinelPopover__openCenterGlyph" aria-hidden="true">
+                <IconBell width={16} height={16} />
+              </span>
+              <span className="sentinelPopover__openCenterCopy">
+                <span className="sentinelPopover__openCenterTitle">Signal center</span>
+                <span className="sentinelPopover__openCenterHint">History, severity, and actions</span>
+              </span>
+              <IconChevron width={14} height={14} aria-hidden="true" />
+            </button>
           </div>
         </div>
       )}
