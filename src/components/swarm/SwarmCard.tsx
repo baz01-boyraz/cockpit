@@ -432,13 +432,16 @@ export function SwarmCard({
 
       {startable(card.status) && gated && (
         <div className="swarmGatePrompt" role="note">
+          <div className="swarmGatePrompt__head">
+            <IconCouncil width={12} height={12} aria-hidden />
+            Spec gate required
+          </div>
           <p className="swarmGatePrompt__text">
-            This card&rsquo;s spec hasn&rsquo;t passed the council yet. Convene the gate before a
-            builder starts — or start anyway.
+            Ask the council to validate this spec before assigning a builder.
           </p>
           <div className="swarmGatePrompt__actions">
             <button
-              className="btn btn--accent btn--sm"
+              className="btn btn--accent btn--sm swarmGatePrompt__primary"
               onClick={act(() => onConveneGate(card))}
               title="Gate this spec through the LLM council before a builder starts"
             >

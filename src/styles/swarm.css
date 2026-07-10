@@ -781,13 +781,27 @@
 .swarmGatePrompt {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
   margin-top: 8px;
-  padding: 8px 10px;
+  padding: 10px;
   border-radius: var(--r-md);
   background: var(--surface-inset);
   border: 1px solid var(--border-faint);
   border-left: 2px solid var(--ember-400, #e08a5b);
+}
+.swarmGatePrompt__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ember-200);
+  font-size: var(--fs-micro);
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+.swarmGatePrompt__head svg {
+  flex-shrink: 0;
 }
 .swarmGatePrompt__text {
   margin: 0;
@@ -796,9 +810,22 @@
   line-height: 1.5;
 }
 .swarmGatePrompt__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: stretch;
+  gap: 3px;
+}
+.swarmGatePrompt__primary {
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
+  padding-inline: 7px;
+  white-space: nowrap;
+}
+.swarmGatePrompt__actions .swarmCardLink {
+  justify-content: center;
+  margin-left: 0;
+  padding-block: 5px;
 }
 
 /* quiet per-card links: View terminal / Park / Review diff / Council */
