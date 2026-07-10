@@ -30,7 +30,7 @@ export interface HermesToolContext {
   agentUsage: Pick<AgentUsageService, 'getReport'>
   cardOutput: Pick<CardOutputTracker, 'track' | 'drain' | 'untrack'>
   // Faz 3b — git (read-only), checks (allowlist-only), screenshot, memory
-  git: Pick<GitService, 'status'>
+  git: Pick<GitService, 'status' | 'headCommit'>
   review: Pick<ReviewService, 'diffStat'>
   checks: Pick<HermesChecksService, 'run'>
   screenshot: Pick<AppScreenshotService, 'capture'>

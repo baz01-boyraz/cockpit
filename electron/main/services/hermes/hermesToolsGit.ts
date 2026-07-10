@@ -11,9 +11,16 @@ export function createGitTools(ctx: HermesToolContext): HermesTool[] {
     {
       name: 'get_git_status',
       description:
-        "Read the project's git status: current branch, ahead/behind counts, and the changed/staged/untracked file list. Read-only — the same snapshot the Git panel shows. Returns a clean 'no-git' snapshot for a folder that isn't a repo.",
+        "Read the project's live git status plus exact current HEAD commit evidence: branch, ahead/behind counts, changed/staged/untracked files, and headCommit hash/subject. Treat these returned fields as authoritative; never fill missing git facts from an earlier chat turn. Read-only — returns a clean 'no-git' snapshot with headCommit=null for a folder that isn't a repo.",
       inputShape: projectIdSchema.shape,
-      run: async (raw) => ctx.git.status(projectIdSchema.parse(raw).projectId),
+      run: async (raw) => {
+        const { projectId } = projectIdSchema.parse(raw)
+        const [snapshot, headCommit] = await Promise.all([
+          ctx.git.status(projectId),
+          ctx.git.headCommit(projectId),
+        ])
+        return { ...snapshot, headCommit }
+      },
     },
     {
       name: 'get_git_diff_stat',

@@ -16,6 +16,13 @@ const SNAPSHOT_KEEP_PER_PROJECT = 200
 /** Prune once per this many inserts (per project) — cheap, still bounded. */
 const SNAPSHOT_PRUNE_EVERY = 20
 
+/** Exact commit identity for consumers that must not infer HEAD from history. */
+export interface GitHeadCommit {
+  hash: string
+  shortHash: string
+  subject: string
+}
+
 /**
  * The persistence-relevant identity of a snapshot: everything except the
  * per-call `id`/`createdAt`. Two snapshots with the same fingerprint describe
@@ -97,6 +104,22 @@ export class GitService {
     }
     this.persist(snapshot)
     return snapshot
+  }
+
+  /**
+   * Read the repository's current HEAD as one NUL-delimited record. Git status
+   * deliberately does not include commit identity; callers such as Hermes must
+   * receive this evidence explicitly instead of filling the gap from an older
+   * conversation turn. A fresh repository with no commit returns null.
+   */
+  async headCommit(projectId: string): Promise<GitHeadCommit | null> {
+    const raw = await this.gitFor(projectId)
+      .raw(['log', '-1', '--format=%H%x00%h%x00%s'])
+      .catch(() => '')
+    const line = raw.replace(/\r?\n$/, '')
+    const [hash, shortHash, subject] = line.split('\u0000')
+    if (!hash || !shortHash || subject === undefined) return null
+    return { hash, shortHash, subject }
   }
 
   async diff(input: { projectId: string; path: string; staged?: boolean }): Promise<GitDiff> {
