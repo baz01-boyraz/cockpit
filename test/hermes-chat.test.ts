@@ -429,6 +429,15 @@ describe('HermesChatService.ask redaction (D1)', () => {
 // --------------------------------------------------------------------------
 
 describe('HermesChatService.ask MCP token (D3)', () => {
+  it('places the exact cockpit project id in the trusted prompt context for MCP calls', async () => {
+    const { service, runner } = makeService(async () => ({ stdout: 'reply' }))
+    await service.ask('prj_1', 'summarize this project')
+
+    const prompt = promptOf(runner.mock.calls[0][1])
+    expect(prompt).toContain('Exact cockpit projectId: prj_1')
+    expect(prompt).toContain('pass `prj_1` verbatim')
+  })
+
   it('injects the loopback MCP bearer token into the spawned CLI env', async () => {
     const { service, runner } = makeService(
       async () => ({ stdout: 'reply' }),
