@@ -90,6 +90,7 @@ describe('buildSeatPrompt', () => {
       projectName: 'cockpiT',
       question: 'add tax to the total',
       sanitized,
+      memoryBlock: 'COCKPIT PROJECT MEMORY\nUse the shared money helper.',
     })
     expect(prompt).toContain(seat.prompt)
     expect(prompt).toContain('add tax to the total')
@@ -98,6 +99,7 @@ describe('buildSeatPrompt', () => {
     expect(prompt).toContain('+const total = price * qty')
     expect(prompt).toContain('UNTRUSTED DATA')
     expect(prompt).toContain('Cite the exact file and line')
+    expect(prompt).toContain('Use the shared money helper.')
   })
 
   it('fences the spec and switches to the spec-sentence evidence rule in spec mode', () => {
@@ -169,6 +171,15 @@ describe('buildRankingPrompt', () => {
   it('names the subject as a task spec in spec mode', () => {
     const prompt = buildRankingPrompt([{ label: 'Response A', text: 'x' }], 'spec')
     expect(prompt).toContain('task spec')
+  })
+
+  it('keeps project memory available during peer ranking', () => {
+    const prompt = buildRankingPrompt(
+      [{ label: 'Response A', text: 'x' }],
+      'spec',
+      'COCKPIT PROJECT MEMORY\nDo not use blue gradients.',
+    )
+    expect(prompt).toContain('Do not use blue gradients.')
   })
 })
 
@@ -423,12 +434,14 @@ describe('chairman prompts', () => {
       question: 'q',
       seats,
       rankings: [{ seatId: 'contrarian', text: 'the ranking said things', parsed: [] }],
+      memoryBlock: 'COCKPIT PROJECT MEMORY\nThe router belongs in shared/.',
     })
     expect(prompt).toContain('### Contrarian')
     expect(prompt).not.toContain('unreachable')
     expect(prompt).toContain('the ranking said things')
     expect(prompt).toContain('### 🎯 Verdict')
     expect(prompt).toContain('### ➡️ Next step')
+    expect(prompt).toContain('The router belongs in shared/.')
   })
 
   it('spec chairman demands the gate token, refined spec, and fences the spec', () => {
@@ -438,11 +451,13 @@ describe('chairman prompts', () => {
       rankings: [],
       fenceTag: '==SPEC==',
       specText: 'draft spec body',
+      memoryBlock: 'COCKPIT PROJECT MEMORY\nLanding pages use copper accents.',
     })
     expect(prompt).toContain('APPROVED or NEEDS_CLARIFICATION')
     expect(prompt).toContain('### 📋 Refined Spec')
     expect(prompt).toContain('### ❓ Questions for the author')
     expect(prompt).toContain('draft spec body')
     expect(prompt.match(/==SPEC==/g)).toHaveLength(3)
+    expect(prompt).toContain('Landing pages use copper accents.')
   })
 })

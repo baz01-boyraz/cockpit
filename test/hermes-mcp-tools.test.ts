@@ -151,6 +151,7 @@ interface Calls {
   checks: unknown[]
   screenshot: unknown[]
   memoryList: string[]
+  memoryListDocs: string[]
   memoryWrite: unknown[]
   memoryReviewCreate: unknown[]
   auditRecord: unknown[]
@@ -177,6 +178,7 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
     checks: [],
     screenshot: [],
     memoryList: [],
+    memoryListDocs: [],
     memoryWrite: [],
     memoryReviewCreate: [],
     auditRecord: [],
@@ -268,6 +270,16 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
       list: (projectId) => {
         calls.memoryList.push(projectId)
         return MEMORY_SNAPSHOT
+      },
+      listDocs: (projectId) => {
+        calls.memoryListDocs.push(projectId)
+        return [
+          {
+            name: 'landing-page-direction',
+            content: 'Landing pages use molten obsidian and copper accents.',
+            updatedAt: 't1',
+          },
+        ]
       },
       write: (projectId, name, content) => {
         calls.memoryWrite.push({ projectId, name, content })
@@ -1003,11 +1015,14 @@ describe('Hermes MCP tools — the scoped tool set', () => {
   // --- Faz 3b: memory ------------------------------------------------------
 
   describe('read_memory_recent', () => {
-    it('validates and forwards to memory.list', async () => {
+    it('returns actual note content, not only the summary graph', async () => {
       const { ctx, calls } = makeContext()
-      const result = await toolNamed(ctx, 'read_memory_recent').run({ projectId: 'p1' })
+      const result = (await toolNamed(ctx, 'read_memory_recent').run({ projectId: 'p1' })) as {
+        notes: { name: string; content: string }[]
+      }
       expect(calls.memoryList).toEqual(['p1'])
-      expect(result).toEqual(MEMORY_SNAPSHOT)
+      expect(calls.memoryListDocs).toEqual(['p1'])
+      expect(result.notes[0].content).toContain('molten obsidian and copper accents')
     })
 
     it('rejects invalid input (missing projectId)', async () => {

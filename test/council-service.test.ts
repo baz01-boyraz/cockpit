@@ -388,6 +388,51 @@ describe('CouncilService — project memory pointers (Faz D)', () => {
     expect(seatPrompts[0]).toContain('gateway-caching')
   })
 
+  it('uses the central memory gateway so real note content reaches every council phase', async () => {
+    const { engine, prompts } = makeCapturingEngine()
+    const memoryContexts = {
+      forTask: vi.fn(() => ({
+        block: [
+          'COCKPIT PROJECT MEMORY',
+          'context_id: memctx_council',
+          'status: ready',
+          'Landing pages use molten obsidian and copper accents.',
+        ].join('\n'),
+        receipt: {
+          contextId: 'memctx_council',
+          surface: 'council_spec' as const,
+          status: 'ready' as const,
+          notes: [],
+          characters: 140,
+        },
+      })),
+    }
+    const service = new CouncilService(
+      makeProjects(),
+      makeAudit(),
+      engine,
+      makeStore().store,
+      undefined,
+      undefined,
+      undefined,
+      memoryContexts,
+    )
+
+    const result = await service.run('prj_1', {
+      mode: 'spec',
+      specText: 'Redesign the landing page.',
+    })
+
+    expect(memoryContexts.forTask).toHaveBeenCalledWith({
+      projectId: 'prj_1',
+      surface: 'council_spec',
+      query: expect.stringContaining('Redesign the landing page.'),
+    })
+    expect(prompts.length).toBeGreaterThan(5)
+    expect(prompts.every((prompt) => prompt.includes('molten obsidian and copper accents'))).toBe(true)
+    expect(result.memoryContext?.contextId).toBe('memctx_council')
+  })
+
   it('records the selected notes as a council_spec recall in spec mode (G2)', async () => {
     const { engine } = makeCapturingEngine()
     const memory = memoryWith([

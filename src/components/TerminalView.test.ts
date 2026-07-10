@@ -14,7 +14,7 @@ function session(role: TerminalRole | null): TerminalSession {
   return {
     id: `term-${role ?? 'shell'}`,
     projectId: 'project-1',
-    name: role === 'codex' ? 'Codex' : 'Shell',
+    name: role === 'codex' ? 'Codex' : role === 'claude' ? 'Claude Code' : 'Shell',
     role,
     alias: null,
     cwd: '/tmp/project',
@@ -36,7 +36,15 @@ describe('TerminalView affordances', () => {
     expect(html).toContain('normal edit · paste · undo · multi-line')
   })
 
-  it('keeps the Codex-only dock out of ordinary shell panes', () => {
+  it('gives Claude sessions the same memory-backed task gateway', () => {
+    const html = renderToStaticMarkup(createElement(TerminalView, { session: session('claude'), active: true }))
+
+    expect(html).toContain('aria-label="Claude Code prompt dock"')
+    expect(html).toContain('Draft a prompt')
+    expect(html).toContain('Memory auto-check')
+  })
+
+  it('keeps the agent-only dock out of ordinary shell panes', () => {
     const html = renderToStaticMarkup(createElement(TerminalView, { session: session('general'), active: true }))
 
     expect(html).not.toContain('aria-label="Codex prompt dock"')

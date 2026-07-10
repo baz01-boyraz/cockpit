@@ -172,18 +172,67 @@ function makeService(
   runnerImpl?: HermesChatRunner,
   rec: RecordingDb = makeRecordingDb(),
   mcpToken?: () => string | undefined,
+  memoryContexts?: {
+    forTask(input: { projectId: string; surface: string; query: string }): {
+      block: string
+      receipt: {
+        contextId: string
+        surface: 'hermes_chat'
+        status: 'ready'
+        notes: []
+        characters: number
+      }
+    }
+  },
 ) {
   const projects = {
     get: vi.fn(() => ({ id: 'prj_1', name: 'cockpiT', path: '/tmp/prj' })),
   } as unknown as ProjectService
   const runner = vi.fn(runnerImpl ?? (async () => ({ stdout: 'ok' })))
-  return { service: new HermesChatService(projects, rec.db, runner, mcpToken), runner, rec }
+  return {
+    service: new HermesChatService(projects, rec.db, runner, mcpToken, memoryContexts),
+    runner,
+    rec,
+  }
 }
 
 /** The prompt is the discrete argv entry right after --oneshot (execFile, no shell). */
 const promptOf = (args: string[]): string => args[args.indexOf('--oneshot') + 1]
 
 describe('HermesChatService.ask', () => {
+  it('automatically injects relevant project memory on every Hermes turn', async () => {
+    const memoryContexts = {
+      forTask: vi.fn(() => ({
+        block: 'COCKPIT PROJECT MEMORY\nstatus: ready\nLanding pages use copper accents.',
+        receipt: {
+          contextId: 'memctx_hermes',
+          surface: 'hermes_chat' as const,
+          status: 'ready' as const,
+          notes: [] as [],
+          characters: 80,
+        },
+      })),
+    }
+    const { service, runner } = makeService(
+      async () => ({ stdout: 'reply' }),
+      makeRecordingDb(),
+      undefined,
+      memoryContexts,
+    )
+
+    const reply = await service.ask('prj_1', 'Redesign the landing page')
+    const prompt = promptOf(runner.mock.calls[0][1])
+
+    expect(memoryContexts.forTask).toHaveBeenCalledWith({
+      projectId: 'prj_1',
+      surface: 'hermes_chat',
+      query: 'Redesign the landing page',
+    })
+    expect(prompt).toContain('Landing pages use copper accents.')
+    expect(prompt.indexOf('COCKPIT PROJECT MEMORY')).toBeLessThan(prompt.indexOf('User:'))
+    expect(reply.memoryContext?.contextId).toBe('memctx_hermes')
+  })
+
   it('accumulates user + assistant turns across calls', async () => {
     let n = 0
     const { service } = makeService(async () => ({ stdout: `reply ${++n}` }))

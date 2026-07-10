@@ -124,6 +124,39 @@ describe('ReviewService.run', () => {
     expect(auditArg.payload).toMatchObject({ filesReviewed: 1, ok: true })
   })
 
+  it('grounds a review in the same automatic project-memory gateway', async () => {
+    mockGit({ staged: patchFor('src/Hero.tsx', '+<section>new hero</section>') })
+    const audit = { record: vi.fn() } as unknown as AuditLogService
+    const projects = {
+      get: vi.fn(() => ({ id: 'prj_1', name: 'cockpiT', path: makeProjectDir() })),
+    } as unknown as ProjectService
+    const runner = vi.fn(async () => ({ stdout: '[]' }))
+    const memoryContexts = {
+      forTask: vi.fn(() => ({
+        block: 'COCKPIT PROJECT MEMORY\nLanding pages use molten obsidian and copper accents.',
+        receipt: {
+          contextId: 'memctx_review',
+          surface: 'review_diff' as const,
+          status: 'ready' as const,
+          notes: [],
+          characters: 90,
+        },
+      })),
+    }
+    const service = new ReviewService(projects, audit, runner, memoryContexts)
+
+    await service.run('prj_1')
+
+    const args = runner.mock.calls[0][1]
+    const prompt = args.at(-1) ?? ''
+    expect(memoryContexts.forTask).toHaveBeenCalledWith({
+      projectId: 'prj_1',
+      surface: 'review_diff',
+      query: expect.stringContaining('src/Hero.tsx'),
+    })
+    expect(prompt).toContain('molten obsidian and copper accents')
+  })
+
   it('never invokes the CLI when everything is blocked, but still reports', async () => {
     const { service, runner } = makeService({ staged: patchFor('.env', '+SECRET=x') })
     const result = await service.run('prj_1')

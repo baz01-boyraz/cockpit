@@ -365,6 +365,61 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
     expect(relevantAt).toBeLessThan(irrelevantAt)
   })
 
+  it('injects the selected memory note content into the worker opening prompt', async () => {
+    const memoryContexts = {
+      forTask: vi.fn(() => ({
+        block: [
+          'COCKPIT PROJECT MEMORY',
+          'context_id: memctx_swarm',
+          'status: ready',
+          'SOURCE: .cockpit-memory/form-validation.md',
+          'All form input is validated through the shared Zod schema.',
+        ].join('\n'),
+        receipt: {
+          contextId: 'memctx_swarm',
+          surface: 'swarm_worker' as const,
+          status: 'ready' as const,
+          notes: [
+            {
+              name: 'form-validation',
+              path: '.cockpit-memory/form-validation.md',
+              updatedAt: 't1',
+              truncated: false,
+            },
+          ],
+          characters: 180,
+        },
+      })),
+    }
+    const svcWithMemory = new SwarmService(
+      store.db,
+      deps.terminals,
+      deps.memory,
+      deps.audit,
+      deps.events,
+      deps.projects,
+      deps.worktrees,
+      undefined,
+      undefined,
+      deps.doneSignal,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      memoryContexts,
+    )
+
+    await svcWithMemory.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
+
+    expect(memoryContexts.forTask).toHaveBeenCalledWith({
+      projectId: 'p1',
+      surface: 'swarm_worker',
+      query: expect.stringContaining('Fix the form'),
+    })
+    expect(deps.spawned[0].command).toContain('All form input is validated through the shared Zod schema.')
+  })
+
   it('records the selected hub notes as a swarm_worker recall when a worker spawns (G2)', async () => {
     const record = vi.fn()
     const svcWithRecall = new SwarmService(
