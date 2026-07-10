@@ -4,6 +4,7 @@ import { cockpit } from '../lib/cockpit'
 import { relativeTime } from '@shared/time'
 import type { CouncilSessionSummary, ScorecardEntry } from '@shared/council'
 import { COUNCIL_SEATS } from '@shared/council'
+import { councilHistoryPresentation, visibleCouncilSessions } from '@shared/council-history'
 import { CouncilVerdict } from '../components/CouncilVerdict'
 import { CouncilScorecard } from '../components/CouncilScorecard'
 import { IconCheck, IconCouncil, IconWarning, IconX } from '../components/icons'
@@ -39,6 +40,7 @@ export function CouncilPanel() {
   const [sessions, setSessions] = useState<CouncilSessionSummary[] | null>(null)
   const [scorecard, setScorecard] = useState<ScorecardEntry[] | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
+  const [showAllHistory, setShowAllHistory] = useState(false)
 
   // Persisted history + cross-session standings, both project-scoped. A stale
   // list from another project must never flash under a new one.
@@ -67,6 +69,7 @@ export function CouncilPanel() {
     setSpec('')
     setSessions(null)
     setScorecard(null)
+    setShowAllHistory(false)
     void loadHistory()
   }, [projectId, resetCouncil, loadHistory])
 
@@ -225,36 +228,55 @@ export function CouncilPanel() {
 
       {sessions && sessions.length > 0 && (
         <section className="councilView__history u-rise">
-          <div className="eyebrow councilView__historyHead">history · {sessions.length}</div>
+          <div className="councilView__historyHead">
+            <div>
+              <div className="eyebrow">recent deliberations · {sessions.length}</div>
+              <p>Three at a glance; expand only when you need the archive.</p>
+            </div>
+            {sessions.length > 3 && (
+              <button
+                type="button"
+                className="councilView__historyToggle"
+                onClick={() => setShowAllHistory((expanded) => !expanded)}
+                aria-expanded={showAllHistory}
+              >
+                {showAllHistory ? 'Show recent' : `View all ${sessions.length}`}
+              </button>
+            )}
+          </div>
           <ul className="councilView__historyList">
-            {sessions.map((summary) => {
+            {visibleCouncilSessions(sessions, showAllHistory).map((summary) => {
               const isActive = active?.id === summary.id
-              const failed = summary.status === 'failed' || !summary.ok
-              const gate = summary.verdictKind
+              const presentation = councilHistoryPresentation(summary)
               return (
                 <li key={summary.id}>
                   <button
                     type="button"
                     className={`councilView__historyRow ${isActive ? 'councilView__historyRow--on' : ''}`}
                     onClick={() => void browse(summary)}
-                    disabled={convening || loadingDetail}
+                    disabled={convening || loadingDetail || summary.status === 'pending'}
                     aria-current={isActive}
                   >
                     <span
-                      className={`councilView__historyDot councilView__historyDot--${
-                        failed ? 'failed' : gate === 'approved' ? 'approved' : 'clarify'
-                      }`}
+                      className={`councilView__historyDot councilView__historyDot--${presentation.tone}`}
                       aria-hidden
                     >
-                      {gate === 'approved' ? (
-                        <IconCheck width={10} height={10} />
-                      ) : failed ? (
+                      {presentation.tone === 'pending' ? (
+                        <span className="councilView__historySpinner" />
+                      ) : presentation.tone === 'failed' ? (
                         <IconX width={10} height={10} />
-                      ) : (
+                      ) : presentation.tone === 'clarify' ? (
                         <IconWarning width={10} height={10} />
+                      ) : (
+                        <IconCheck width={10} height={10} />
                       )}
                     </span>
                     <span className="councilView__historyTitle">{sessionTitle(summary)}</span>
+                    <span
+                      className={`councilView__historyStatus councilView__historyStatus--${presentation.tone}`}
+                    >
+                      {presentation.label}
+                    </span>
                     <time
                       className="councilView__historyTime mono"
                       dateTime={new Date(summary.createdAt).toISOString()}

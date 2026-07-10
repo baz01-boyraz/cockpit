@@ -232,7 +232,7 @@
   gap: var(--sp-4);
 }
 
-/* ----- history: this session's runs (in-memory; no session-list IPC yet) ----- */
+/* ----- persisted history: three-run glance, expandable on demand ----- */
 .councilView__history {
   display: flex;
   flex-direction: column;
@@ -240,6 +240,44 @@
 }
 .councilView__historyHead {
   padding: 0 2px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.councilView__historyHead p {
+  margin: 4px 0 0;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+}
+.councilView__historyToggle {
+  flex-shrink: 0;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  color: var(--accent-soft);
+  background: transparent;
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  transition:
+    color var(--dur) var(--ease-out),
+    background-color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
+}
+.councilView__historyToggle:hover {
+  color: var(--accent);
+  background: var(--accent-wash);
+  border-color: var(--border-accent);
+}
+.councilView__historyToggle:active {
+  transform: scale(0.97);
+}
+.councilView__historyToggle:focus-visible {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 .councilView__historyList {
   list-style: none;
@@ -298,6 +336,34 @@
   background: var(--success-wash);
   border-color: color-mix(in srgb, var(--success) 40%, transparent);
 }
+.councilView__historyDot--final {
+  color: var(--text-muted);
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+.councilView__historyDot--pending {
+  color: var(--accent);
+  background: var(--accent-wash);
+  border-color: var(--border-accent);
+}
+.councilView__historySpinner {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: council-history-pulse 1.2s ease-in-out infinite;
+}
+@keyframes council-history-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.72);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
 .councilView__historyDot--clarify {
   color: var(--warning);
   background: var(--warning-wash);
@@ -323,6 +389,34 @@
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
+.councilView__historyStatus {
+  flex-shrink: 0;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.councilView__historyStatus--pending,
+.councilView__historyStatus--approved {
+  color: var(--success);
+  background: var(--success-wash);
+}
+.councilView__historyStatus--pending {
+  color: var(--accent);
+  background: var(--accent-wash);
+}
+.councilView__historyStatus--clarify {
+  color: var(--warning);
+  background: var(--warning-wash);
+}
+.councilView__historyStatus--failed {
+  color: var(--danger);
+  background: var(--danger-wash);
+}
 .councilView__historyNote {
   margin: 2px;
   color: var(--text-faint);
@@ -331,7 +425,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .councilView__pulse {
+  .councilView__pulse,
+  .councilView__historySpinner {
     animation: none;
   }
 }
