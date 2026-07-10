@@ -441,6 +441,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.railControl__triggerLabel--compact {
+  display: none;
+}
 .railControl__triggerChevron {
   justify-self: end;
   color: var(--text-faint);
@@ -1203,6 +1206,12 @@
   }
   .topbar__title {
     max-width: 160px;
+  }
+  .railControl__triggerLabel--full {
+    display: none;
+  }
+  .railControl__triggerLabel--compact {
+    display: inline;
   }
 }
 

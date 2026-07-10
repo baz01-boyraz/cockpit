@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ComponentType, type KeyboardEvent, type SVGProps } from 'react'
 import { useStore, type View } from '../store/useStore'
-import { IconChevron, IconSettings, IconShieldSearch, IconUsage } from './icons'
+import { IconChevron, IconFocus, IconSettings, IconShieldSearch, IconUsage } from './icons'
 
 type ControlView = Extract<View, 'audit' | 'usage' | 'settings'>
 
@@ -107,6 +107,7 @@ export function ControlCenterMenu() {
   const choose = (next: ControlView) => {
     setView(next)
     setOpen(false)
+    window.requestAnimationFrame(() => triggerRef.current?.focus())
   }
 
   return (
@@ -117,7 +118,7 @@ export function ControlCenterMenu() {
         className={`railControl__trigger ${active ? 'railControl__trigger--active' : ''}`}
         onClick={() => setOpen((value) => !value)}
         onKeyDown={onTriggerKeyDown}
-        aria-label="Open control center"
+        aria-label={open ? 'Close control center' : 'Open control center'}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls="rail-control-menu"
@@ -125,9 +126,12 @@ export function ControlCenterMenu() {
         title="Audit, usage, and settings"
       >
         <span className="railControl__triggerGlyph" aria-hidden="true">
-          <IconSettings width={17} height={17} />
+          <IconFocus width={17} height={17} />
         </span>
-        <span className="railControl__triggerLabel">Control center</span>
+        <span className="railControl__triggerLabel railControl__triggerLabel--full">
+          Control center
+        </span>
+        <span className="railControl__triggerLabel railControl__triggerLabel--compact">Controls</span>
         <IconChevron
           className={`railControl__triggerChevron ${open ? 'railControl__triggerChevron--open' : ''}`}
           width={14}
