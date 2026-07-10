@@ -67,10 +67,10 @@ export function CapacityRing({ percent, tone, label, sub, size = 104 }: Capacity
   return (
     <div
       className={`capRing capRing--${tone}`}
-      style={{ '--ring-circ': circ } as CSSProperties}
+      style={{ '--ring-circ': circ, '--ring-size': `${size}px` } as CSSProperties}
     >
-      <div className="capRing__dial" style={{ width: size, height: size }}>
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
+      <div className="capRing__dial">
+        <svg viewBox={`0 0 ${size} ${size}`} aria-hidden>
           <defs>
             <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="var(--ring-a)" />
