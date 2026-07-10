@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { MemoryDoc } from '../shared/memory-hub'
 import {
   buildMemoryContext,
+  stripAutomaticMemoryContext,
   wrapTaskWithMemory,
 } from '../shared/memory-context'
 
@@ -105,5 +106,18 @@ describe('wrapTaskWithMemory', () => {
       prompt.indexOf('Redesign landing page'),
     )
     expect(prompt).toContain('USER TASK')
+  })
+
+  it('can remove the injected block before transcript distillation', () => {
+    const context = buildMemoryContext({
+      contextId: 'memctx_strip',
+      surface: 'terminal_claude',
+      query: 'Redesign landing page',
+      docs,
+    })
+    const wrapped = wrapTaskWithMemory('Redesign landing page', context)
+
+    expect(stripAutomaticMemoryContext(wrapped)).toBe('Redesign landing page')
+    expect(stripAutomaticMemoryContext('ordinary user turn')).toBe('ordinary user turn')
   })
 })

@@ -40,6 +40,28 @@ describe('TranscriptReader', () => {
     expect(turns[0].text).toContain('[REDACTED]')
   })
 
+  it('strips cockpit-injected memory blocks so capture cannot self-ingest the hub', async () => {
+    const injected = [
+      'COCKPIT PROJECT MEMORY — AUTOMATIC TASK CONTEXT',
+      'context_id: memctx_transcript',
+      'surface: terminal_claude',
+      'status: ready',
+      '',
+      'SOURCE: .cockpit-memory/landing-page.md',
+      'Landing pages use copper accents.',
+      '',
+      'USER TASK — execute this request using the project memory above where relevant:',
+      'Redesign the landing page',
+    ].join('\n')
+    writeFileSync(path, line({ type: 'user', message: { content: injected } }))
+
+    const { turns } = await reader.read(path)
+
+    expect(turns[0].text).toBe('Redesign the landing page')
+    expect(turns[0].text).not.toContain('copper accents')
+    expect(turns[0].text).not.toContain('memctx_transcript')
+  })
+
   it('reads incrementally from an offset without re-emitting old turns', async () => {
     writeFileSync(path, line({ type: 'user', message: { content: 'first' } }))
     const first = await reader.read(path)
