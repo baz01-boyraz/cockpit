@@ -297,6 +297,11 @@ describe('TerminalManager lifecycle', () => {
     expect(session).toMatchObject({ name: 'Claude Code', role: 'claude' })
     vi.advanceTimersByTime(120)
     expect(ptyState.spawned[0].write).toHaveBeenCalledWith('claude\r')
+
+    const codex = mgr.launchAgent('prj_1', 'codex')
+    expect(codex).toMatchObject({ name: 'Codex', role: 'codex' })
+    vi.advanceTimersByTime(120)
+    expect(ptyState.spawned[1].write).toHaveBeenCalledWith('codex --no-alt-screen\r')
   })
 
   it('resumeClaude() launches claude with the resume flag and session id', () => {
@@ -316,7 +321,7 @@ describe('TerminalManager lifecycle', () => {
     const codex = mgr.resumeAgent('prj_1', 'codex', uuid)
     vi.advanceTimersByTime(120)
     expect(codex).toMatchObject({ name: 'Codex', role: 'codex' })
-    expect(ptyState.spawned[0].write).toHaveBeenCalledWith(`codex resume ${uuid}\r`)
+    expect(ptyState.spawned[0].write).toHaveBeenCalledWith(`codex --no-alt-screen resume ${uuid}\r`)
 
     const claude = mgr.resumeAgent('prj_1', 'claude', uuid)
     vi.advanceTimersByTime(120)

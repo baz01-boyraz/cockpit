@@ -3,6 +3,8 @@ import type { SanitizedDiff } from '../shared/diff-sanitize'
 import {
   COUNCIL_SEATS,
   COUNCIL_SEAT_IDS,
+  CHAIRMAN,
+  GPT56_MODELS,
   anonymizeSeats,
   composeCouncilBrief,
   computeAggregateRankings,
@@ -52,13 +54,24 @@ describe('council roster v2', () => {
     ])
   })
 
-  it('mixes three vendors and gives keyless/second-CLI seats a claude fallback', () => {
+  it('runs the GPT-5.6 family through Codex auth first, with vendor diversity and Claude fallbacks', () => {
     const byId = Object.fromEntries(COUNCIL_SEATS.map((s) => [s.id, s]))
-    expect(byId.contrarian.engine).toEqual({ engine: 'claude', model: 'opus' })
+    expect(GPT56_MODELS).toEqual({
+      sol: 'gpt-5.6-sol',
+      terra: 'gpt-5.6-terra',
+      luna: 'gpt-5.6-luna',
+    })
+    expect(byId.contrarian.engine).toEqual({ engine: 'codex', model: GPT56_MODELS.sol })
     expect(byId['first-principles'].engine).toEqual({ engine: 'openrouter', model: 'deepseek/deepseek-chat' })
-    expect(byId['first-principles'].fallback).toEqual({ engine: 'claude', model: 'sonnet' })
-    expect(byId.builder.engine).toEqual({ engine: 'codex', model: '' })
+    expect(byId['first-principles'].fallback).toEqual({ engine: 'codex', model: GPT56_MODELS.terra })
+    expect(byId.expansionist.engine).toEqual({ engine: 'codex', model: GPT56_MODELS.luna })
+    expect(byId.outsider.engine).toEqual({ engine: 'codex', model: GPT56_MODELS.terra })
+    expect(byId.builder.engine).toEqual({ engine: 'codex', model: GPT56_MODELS.sol })
     expect(byId.builder.fallback).toEqual({ engine: 'claude', model: 'opus' })
+    expect(CHAIRMAN).toEqual({
+      engine: { engine: 'codex', model: GPT56_MODELS.sol },
+      fallback: { engine: 'claude', model: 'opus' },
+    })
   })
 })
 
