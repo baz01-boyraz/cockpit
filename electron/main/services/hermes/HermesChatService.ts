@@ -170,7 +170,12 @@ export class HermesChatService {
 
     const prior = this.histories.get(projectId) ?? []
     const withUser = capHistory([...prior, { role: 'user', content: historyContent }])
-    const prompt = buildTranscriptPrompt(withUser)
+    // The model cannot read process.env directly. `COCKPIT_PROJECT_ID` still
+    // rides in the child env for tools/plugins that can, but Hermes itself must
+    // see the exact opaque database id in its trusted prompt context. Without
+    // this it guessed the display name ("baz-cockpit"), producing ordinary
+    // domain errors instead of real git/memory results.
+    const prompt = buildTranscriptPrompt(withUser, { projectId })
     const cwd = this.cwdFor(projectId)
     // The tools flag rides after the oneshot/chat argv so the prompt keeps its
     // slot right after --oneshot (or -q for the image path).

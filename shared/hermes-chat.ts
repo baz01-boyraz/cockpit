@@ -61,9 +61,19 @@ const PREAMBLE =
  * prefixed with a short instruction so a stateless oneshot invocation reads it
  * as a continuing conversation rather than a fresh question.
  */
-export function buildTranscriptPrompt(turns: readonly ChatTurn[]): string {
+export function buildTranscriptPrompt(
+  turns: readonly ChatTurn[],
+  runtime?: { projectId: string },
+): string {
   const lines = turns.map(
     (turn) => `${turn.role === 'user' ? 'User' : 'Hermes'}: ${turn.content}`,
   )
-  return `${PREAMBLE}\n\n${lines.join('\n\n')}`
+  const projectContext = runtime
+    ? [
+        'Trusted cockpiT runtime context:',
+        `- Exact cockpit projectId: ${runtime.projectId}`,
+        `- For cockpit MCP tool calls, pass \`${runtime.projectId}\` verbatim as projectId. Never infer it from the project name or path.`,
+      ].join('\n')
+    : null
+  return [PREAMBLE, projectContext, lines.join('\n\n')].filter(Boolean).join('\n\n')
 }
