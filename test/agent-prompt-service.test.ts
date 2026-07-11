@@ -3,25 +3,15 @@ import { AgentPromptService } from '../electron/main/services/AgentPromptService
 
 const readyContext = {
   block: [
-    'COCKPIT PROJECT MEMORY',
-    'context_id: memctx_terminal',
-    'status: ready',
-    'SOURCE: .cockpit-memory/landing-page.md',
-    'Use copper accents.',
+    'COCKPIT PROJECT MEMORY — search .cockpit-memory/ and read only task-relevant notes.',
   ].join('\n'),
   receipt: {
     contextId: 'memctx_terminal',
     surface: 'terminal_codex' as const,
     status: 'ready' as const,
-    notes: [
-      {
-        name: 'landing-page',
-        path: '.cockpit-memory/landing-page.md',
-        updatedAt: '2026-07-10T12:00:00.000Z',
-        truncated: false,
-      },
-    ],
-    characters: 120,
+    delivery: 'lookup' as const,
+    notes: [],
+    characters: 88,
   },
 }
 
@@ -40,8 +30,10 @@ describe('AgentPromptService', () => {
       surface: 'terminal_codex',
       query: 'Redesign the landing page',
     })
-    expect(result.prompt).toContain('Use copper accents.')
+    expect(result.prompt).toContain('search .cockpit-memory/')
     expect(result.prompt).toContain('Redesign the landing page')
+    expect(result.prompt).not.toContain('Use copper accents.')
+    expect(result.prompt.length).toBeLessThan(400)
     expect(result.memory.contextId).toBe('memctx_terminal')
   })
 

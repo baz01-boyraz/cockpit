@@ -386,6 +386,7 @@ describe('CouncilService — project memory pointers (Faz D)', () => {
     expect(seatPrompts.every((p) => p.includes('Project memory pointers'))).toBe(true)
     // The relevant note surfaces in the block.
     expect(seatPrompts[0]).toContain('gateway-caching')
+    expect(seatPrompts[0]).not.toContain('unrelated-note')
   })
 
   it('uses the central memory gateway so real note content reaches every council phase', async () => {

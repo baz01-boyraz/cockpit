@@ -25,7 +25,7 @@ const docs: MemoryDoc[] = [
 ]
 
 describe('buildMemoryContext', () => {
-  it('ranks by task relevance and injects real note content with provenance', () => {
+  it('gives filesystem-capable agents a compact lookup contract without note bodies', () => {
     const result = buildMemoryContext({
       contextId: 'memctx_test',
       surface: 'terminal_codex',
@@ -34,22 +34,66 @@ describe('buildMemoryContext', () => {
     })
 
     expect(result.receipt.status).toBe('ready')
-    expect(result.receipt.notes[0].name).toBe('landing-page-visual-direction')
-    expect(result.block).toContain('.cockpit-memory/landing-page-visual-direction.md')
-    expect(result.block).toContain('molten obsidian surfaces, copper accents')
-    expect(result.block).toContain('context_id: memctx_test')
+    expect(result.receipt.delivery).toBe('lookup')
+    expect(result.receipt.notes).toEqual([])
+    expect(result.block).toContain('.cockpit-memory/')
+    expect(result.block).toMatch(/search|read/i)
+    expect(result.block).not.toContain('molten obsidian surfaces, copper accents')
+    expect(result.block).not.toContain('Invoices are reconciled')
+    expect(result.block.length).toBeLessThan(400)
   })
 
-  it('redacts secret-shaped content before it reaches an engine prompt', () => {
+  it('gives tool-capable Hermes a compact instruction to query memory itself', () => {
     const result = buildMemoryContext({
-      contextId: 'memctx_secret',
+      contextId: 'memctx_hermes',
       surface: 'hermes_chat',
       query: 'deployment gotcha',
+      docs,
+    })
+
+    expect(result.receipt.delivery).toBe('lookup')
+    expect(result.block).toContain('read_memory_recent')
+    expect(result.block).not.toContain('Invoices are reconciled')
+  })
+
+  it('inlines at most two short relevant hooks for tool-less council/review surfaces', () => {
+    const result = buildMemoryContext({
+      contextId: 'memctx_inline',
+      surface: 'council_spec',
+      query: 'redesign the landing page visual direction',
+      docs: [
+        ...docs,
+        {
+          name: 'landing-page-layout',
+          updatedAt: '2026-07-10T12:00:00.000Z',
+          content: 'Landing page layout keeps the primary CTA above the fold.\n\n' + 'x'.repeat(2_000),
+        },
+        {
+          name: 'landing-page-copy',
+          updatedAt: '2026-07-09T12:00:00.000Z',
+          content: 'Landing page copy stays direct and concrete.',
+        },
+      ],
+    })
+
+    expect(result.receipt.delivery).toBe('inline')
+    expect(result.receipt.notes).toHaveLength(2)
+    expect(result.block).toContain('molten obsidian surfaces, copper accents')
+    expect(result.block).not.toContain('Invoices are reconciled')
+    expect(result.block).not.toContain('x'.repeat(200))
+    expect(result.block.length).toBeLessThanOrEqual(1_200)
+  })
+
+  it('redacts secret-shaped text from the short inline hook', () => {
+    const result = buildMemoryContext({
+      contextId: 'memctx_secret',
+      surface: 'review_text',
+      query: 'deployment token gotcha',
       docs: [
         {
-          name: 'deployment-gotcha',
+          name: 'deployment-token-gotcha',
           updatedAt: '2026-07-10T12:00:00.000Z',
-          content: 'The failed token was sk_live_51H2eKLAbCdEfGh123456 and must never leave memory.',
+          content: 'Deployment token sk_live_51H2eKLAbCdEfGh123456 must never leave memory.',
         },
       ],
     })
@@ -58,24 +102,19 @@ describe('buildMemoryContext', () => {
     expect(result.block).not.toContain('sk_live_')
   })
 
-  it('honours the total context budget and marks truncated notes', () => {
+  it('returns no injected block when a tool-less surface has no relevant match', () => {
     const result = buildMemoryContext({
-      contextId: 'memctx_budget',
-      surface: 'claude_chat',
-      query: 'large architecture note',
-      docs: [
-        {
-          name: 'large-architecture-note',
-          updatedAt: '2026-07-10T12:00:00.000Z',
-          content: `Architecture invariant. ${'x'.repeat(10_000)}`,
-        },
-      ],
-      limits: { maxNotes: 1, maxChars: 1_200, maxNoteChars: 700 },
+      contextId: 'memctx_no_match',
+      surface: 'council_diff',
+      query: 'database migration',
+      docs,
     })
 
-    expect(result.block.length).toBeLessThanOrEqual(1_200)
-    expect(result.receipt.notes[0].truncated).toBe(true)
-    expect(result.block).toContain('[truncated')
+    expect(result.receipt.status).toBe('empty')
+    expect(result.receipt.delivery).toBe('none')
+    expect(result.receipt.notes).toEqual([])
+    expect(result.block).toBe('')
+    expect(wrapTaskWithMemory('Run the migration', result)).toBe('Run the migration')
   })
 
   it('returns an explicit empty receipt instead of pretending memory was loaded', () => {
@@ -87,8 +126,9 @@ describe('buildMemoryContext', () => {
     })
 
     expect(result.receipt.status).toBe('empty')
+    expect(result.receipt.delivery).toBe('none')
     expect(result.receipt.notes).toEqual([])
-    expect(result.block).toContain('status: empty')
+    expect(result.block).toBe('')
   })
 })
 
@@ -106,6 +146,7 @@ describe('wrapTaskWithMemory', () => {
       prompt.indexOf('Redesign landing page'),
     )
     expect(prompt).toContain('USER TASK')
+    expect(prompt).not.toContain('molten obsidian surfaces, copper accents')
   })
 
   it('can remove the injected block before transcript distillation', () => {

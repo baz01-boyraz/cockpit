@@ -69,12 +69,15 @@ describe('summarizeAgentUsage', () => {
     expect(pill.available).toBe(false)
     expect(pill.detail).toBeNull()
     expect(pill.reason).toBe('Sign in with Claude Code to see usage.')
+    expect(pill.telemetryLabel).toBe('Usage unavailable')
+    expect(pill.telemetryShortLabel).toBe('usage n/a')
   })
 
   it('treats an available snapshot with no usable windows as unavailable', () => {
     const pill = summarizeAgentUsage(snap({ windows: [] }))
     expect(pill.available).toBe(false)
     expect(pill.reason).toContain('No quota')
+    expect(pill.telemetryLabel).toBe('Usage unavailable')
   })
 
   it('clamps remaining into 0–100 even with out-of-range usage', () => {

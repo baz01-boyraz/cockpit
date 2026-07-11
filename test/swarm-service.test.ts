@@ -360,34 +360,20 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
     const relevantAt = command.indexOf('.cockpit-memory/login-form-validation.md')
     const irrelevantAt = command.indexOf('.cockpit-memory/unrelated-newer.md')
     expect(relevantAt).toBeGreaterThanOrEqual(0)
-    expect(irrelevantAt).toBeGreaterThanOrEqual(0)
-    // The relevant note appears first despite being older than the irrelevant one.
-    expect(relevantAt).toBeLessThan(irrelevantAt)
+    expect(irrelevantAt).toBe(-1)
   })
 
-  it('injects the selected memory note content into the worker opening prompt', async () => {
+  it('tells the worker to inspect memory without injecting selected note bodies', async () => {
     const memoryContexts = {
       forTask: vi.fn(() => ({
-        block: [
-          'COCKPIT PROJECT MEMORY',
-          'context_id: memctx_swarm',
-          'status: ready',
-          'SOURCE: .cockpit-memory/form-validation.md',
-          'All form input is validated through the shared Zod schema.',
-        ].join('\n'),
+        block: 'COCKPIT PROJECT MEMORY — search .cockpit-memory/ and read task-relevant notes.',
         receipt: {
           contextId: 'memctx_swarm',
           surface: 'swarm_worker' as const,
           status: 'ready' as const,
-          notes: [
-            {
-              name: 'form-validation',
-              path: '.cockpit-memory/form-validation.md',
-              updatedAt: 't1',
-              truncated: false,
-            },
-          ],
-          characters: 180,
+          delivery: 'lookup' as const,
+          notes: [],
+          characters: 82,
         },
       })),
     }
@@ -417,7 +403,8 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
       surface: 'swarm_worker',
       query: expect.stringContaining('Fix the form'),
     })
-    expect(deps.spawned[0].command).toContain('All form input is validated through the shared Zod schema.')
+    expect(deps.spawned[0].command).toContain('search .cockpit-memory/')
+    expect(deps.spawned[0].command).not.toContain('All form input is validated through the shared Zod schema.')
   })
 
   it('records the selected hub notes as a swarm_worker recall when a worker spawns (G2)', async () => {

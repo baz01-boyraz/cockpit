@@ -44,23 +44,14 @@ describe('rankNotes', () => {
     expect(ranked[0].name).toBe('login-form-validation')
   })
 
-  it('zero-overlap query preserves recency (input) order', () => {
+  it('returns no notes for a zero-overlap query', () => {
     const ranked = rankNotes('completely unrelated xyzzy', notes, 5)
-    expect(ranked.map((n) => n.name)).toEqual([
-      'deploy-pipeline',
-      'login-form-validation',
-      'usage-billing',
-    ])
+    expect(ranked).toEqual([])
   })
 
-  it('score-0 notes fill the remaining slots after the matches (recency floor)', () => {
+  it('does not pad relevant matches with score-0 notes', () => {
     const ranked = rankNotes('billing', notes, 3)
-    // usage-billing matches; the other two are score 0 and keep input order.
-    expect(ranked.map((n) => n.name)).toEqual([
-      'usage-billing',
-      'deploy-pipeline',
-      'login-form-validation',
-    ])
+    expect(ranked.map((n) => n.name)).toEqual(['usage-billing'])
   })
 
   it('respects the limit', () => {
@@ -68,10 +59,10 @@ describe('rankNotes', () => {
     expect(rankNotes('login', notes, 0)).toEqual([])
   })
 
-  it('is safe on empty notes / empty query and normalizes hook to null', () => {
+  it('is safe on empty notes and treats an empty query as no match', () => {
     expect(rankNotes('anything', [], 5)).toEqual([])
     const ranked = rankNotes('', [{ name: 'solo' }], 5)
-    expect(ranked).toEqual([{ name: 'solo', hook: null }])
+    expect(ranked).toEqual([])
   })
 
   it('ranks a Turkish query sanely against Turkish hooks', () => {
@@ -104,6 +95,10 @@ describe('composeMemoryPointerBlock', () => {
 
   it('returns null when there are no notes', () => {
     expect(composeMemoryPointerBlock('x', [], {})).toBeNull()
+  })
+
+  it('returns null instead of filling the block with unrelated recent notes', () => {
+    expect(composeMemoryPointerBlock('database migration', notes, {})).toBeNull()
   })
 
   it('caps the TOTAL length to maxChars', () => {

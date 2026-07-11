@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { MemoryContextService } from '../electron/main/services/MemoryContextService'
 
 describe('MemoryContextService', () => {
-  it('reads the hub for every task, records delivered notes, and writes a receipt audit', () => {
+  it('delivers a compact lookup contract to tool-capable agents without recording unread notes', () => {
     const memory = {
       listDocs: vi.fn(() => [
         {
@@ -24,17 +24,15 @@ describe('MemoryContextService', () => {
 
     expect(memory.listDocs).toHaveBeenCalledWith('prj_1')
     expect(result.receipt.status).toBe('ready')
-    expect(result.block).toContain('copper type on an obsidian surface')
-    expect(recalls.record).toHaveBeenCalledWith(
-      'project:prj_1',
-      ['landing-page-direction'],
-      'hermes_chat',
-    )
+    expect(result.receipt.delivery).toBe('lookup')
+    expect(result.block).toContain('read_memory_recent')
+    expect(result.block).not.toContain('copper type on an obsidian surface')
+    expect(recalls.record).not.toHaveBeenCalled()
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         projectId: 'prj_1',
-        actionType: 'memory.context_delivered',
-        payload: expect.objectContaining({ contextId: 'memctx_fixed' }),
+        actionType: 'memory.context_lookup',
+        payload: expect.objectContaining({ contextId: 'memctx_fixed', delivery: 'lookup' }),
       }),
     )
   })
@@ -51,8 +49,9 @@ describe('MemoryContextService', () => {
     })
 
     expect(result.receipt.status).toBe('unavailable')
-    expect(result.block).toContain('status: unavailable')
-    expect(result.block).toContain('Do not claim that project memory was loaded')
+    expect(result.receipt.delivery).toBe('none')
+    expect(result.block).toContain('MEMORY UNAVAILABLE')
+    expect(result.block).toContain('do not claim it was loaded')
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ actionType: 'memory.context_unavailable' }),
     )

@@ -200,16 +200,17 @@ function makeService(
 const promptOf = (args: string[]): string => args[args.indexOf('--oneshot') + 1]
 
 describe('HermesChatService.ask', () => {
-  it('automatically injects relevant project memory on every Hermes turn', async () => {
+  it('automatically injects a compact memory-tool lookup contract on every Hermes turn', async () => {
     const memoryContexts = {
       forTask: vi.fn(() => ({
-        block: 'COCKPIT PROJECT MEMORY\nstatus: ready\nLanding pages use copper accents.',
+        block: 'COCKPIT PROJECT MEMORY — call read_memory_recent with this task as query.',
         receipt: {
           contextId: 'memctx_hermes',
           surface: 'hermes_chat' as const,
           status: 'ready' as const,
+          delivery: 'lookup' as const,
           notes: [] as [],
-          characters: 80,
+          characters: 78,
         },
       })),
     }
@@ -228,7 +229,9 @@ describe('HermesChatService.ask', () => {
       surface: 'hermes_chat',
       query: 'Redesign the landing page',
     })
-    expect(prompt).toContain('Landing pages use copper accents.')
+    expect(prompt).toContain('read_memory_recent')
+    expect(prompt).not.toContain('Landing pages use copper accents.')
+    expect(prompt.length).toBeLessThan(2_000)
     expect(prompt.indexOf('COCKPIT PROJECT MEMORY')).toBeLessThan(prompt.indexOf('User:'))
     expect(reply.memoryContext?.contextId).toBe('memctx_hermes')
   })

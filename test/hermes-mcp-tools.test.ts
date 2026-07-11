@@ -1025,6 +1025,36 @@ describe('Hermes MCP tools — the scoped tool set', () => {
       expect(result.notes[0].content).toContain('molten obsidian and copper accents')
     })
 
+    it('returns only bounded positive matches when Hermes supplies a task query', async () => {
+      const base = makeContext()
+      const memory: HermesToolContext['memory'] = {
+        list: () => MEMORY_SNAPSHOT,
+        listDocs: () => [
+          {
+            name: 'landing-page-direction',
+            content: 'Landing pages use molten obsidian and copper accents.',
+            updatedAt: 't1',
+          },
+          {
+            name: 'billing-window',
+            content: 'Billing windows reset at midnight.',
+            updatedAt: 't2',
+          },
+        ],
+        write: base.ctx.memory.write,
+      }
+      const { ctx } = makeContext({ memory })
+
+      const result = (await toolNamed(ctx, 'read_memory_recent').run({
+        projectId: 'p1',
+        query: 'redesign the landing page',
+        limit: 2,
+      })) as { notes: { name: string; content: string }[] }
+
+      expect(result.notes.map((note) => note.name)).toEqual(['landing-page-direction'])
+      expect(result.notes[0].content).toContain('molten obsidian')
+    })
+
     it('rejects invalid input (missing projectId)', async () => {
       const { ctx } = makeContext()
       await expect(toolNamed(ctx, 'read_memory_recent').run({})).rejects.toThrow()
