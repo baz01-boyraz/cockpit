@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import { relativeTime } from '@shared/time'
@@ -9,11 +9,19 @@ import type {
 } from '@shared/council'
 import { COUNCIL_SEATS } from '@shared/council'
 import { councilHistoryPresentation, visibleCouncilSessions } from '@shared/council-history'
-import { buildCouncilDisplay } from '@shared/council-display'
+import {
+  buildCouncilDisplay,
+  councilReportFilename,
+  primaryCouncilArtifact,
+  serializeCouncilReport,
+} from '@shared/council-display'
 import { CouncilVerdict, CouncilVerdictEvidence } from '../components/CouncilVerdict'
 import { CouncilScorecard } from '../components/CouncilScorecard'
 import { CouncilJourney, type CouncilJourneyPhase } from '../components/CouncilJourney'
-import { IconCheck, IconCopy, IconCouncil, IconSend, IconWarning, IconX } from '../components/icons'
+import { CopyTextButton } from '../components/CopyTextButton'
+import { CouncilTextSurface } from '../components/CouncilTextSurface'
+import { downloadTextFile } from '../lib/text-export'
+import { IconCheck, IconCouncil, IconDownload, IconSend, IconWarning, IconX } from '../components/icons'
 
 /** A persisted session's headline for the active-run surface when it is browsed. */
 function sessionTitle(summary: CouncilSessionSummary): string {
@@ -50,7 +58,6 @@ export function CouncilPanel() {
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [showAllHistory, setShowAllHistory] = useState(false)
   const [composerOpen, setComposerOpen] = useState(true)
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
 
   // Persisted history + cross-session standings, both project-scoped. A stale
   // list from another project must never flash under a new one.
@@ -164,26 +171,14 @@ export function CouncilPanel() {
     display?.kind === 'approved'
       ? display.refinedSpec ?? active?.result?.verdict ?? active?.spec ?? ''
       : ''
-
-  useEffect(() => {
-    setCopyState('idle')
-  }, [active?.id])
-
-  useEffect(() => {
-    if (copyState !== 'copied') return
-    const timer = window.setTimeout(() => setCopyState('idle'), 1800)
-    return () => window.clearTimeout(timer)
-  }, [copyState])
-
-  const copyApprovedBrief = useCallback(async () => {
-    if (!approvedBrief) return
-    try {
-      await navigator.clipboard.writeText(approvedBrief)
-      setCopyState('copied')
-    } catch {
-      setCopyState('failed')
+  const reportArtifacts = useMemo(() => {
+    if (!active?.result) return null
+    return {
+      primary: primaryCouncilArtifact(active.result),
+      full: serializeCouncilReport(active.result, { title: active.title }),
+      filename: councilReportFilename(active.result, active.id),
     }
-  }, [approvedBrief])
+  }, [active])
 
   return (
     <div className="panel panel--stagger councilView">
@@ -314,13 +309,41 @@ export function CouncilPanel() {
             </div>
           ) : (
             active.result && (
-              <div className="councilView__verdict">
+              <CouncilTextSurface
+                className="councilView__verdict"
+                fullReport={reportArtifacts?.full ?? ''}
+              >
                 <CouncilVerdict
                   result={active.result}
                   onContinue={active.spec.trim() ? handleContinue : undefined}
                   continuing={convening}
                   showEvidence={false}
                 />
+
+                {reportArtifacts && (
+                  <div className="councilResultActions" aria-label="Council report actions">
+                    <CopyTextButton
+                      text={reportArtifacts.primary.text}
+                      label={reportArtifacts.primary.label}
+                      className="btn btn--ghost btn--sm"
+                    />
+                    <CopyTextButton
+                      text={reportArtifacts.full}
+                      label="Copy full report"
+                      className="btn btn--ghost btn--sm"
+                    />
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm councilResultActions__export"
+                      onClick={() => {
+                        downloadTextFile(reportArtifacts.filename, reportArtifacts.full)
+                      }}
+                      aria-label="Export Markdown"
+                    >
+                      <IconDownload width={14} height={14} /> Export Markdown
+                    </button>
+                  </div>
+                )}
 
                 {display?.kind === 'approved' && (
                   <section className="councilReady" aria-labelledby="council-ready-title">
@@ -330,24 +353,15 @@ export function CouncilPanel() {
                       <p>Copy it, or open Swarm when you are ready to turn it into a build task.</p>
                     </div>
                     <div className="councilReady__actions">
-                      <button
-                        type="button"
+                      <CopyTextButton
+                        text={approvedBrief}
+                        label="Copy approved brief"
                         className="btn btn--ghost"
-                        onClick={() => void copyApprovedBrief()}
-                        disabled={!approvedBrief}
-                      >
-                        {copyState === 'copied' ? <IconCheck width={14} height={14} /> : <IconCopy width={14} height={14} />}
-                        {copyState === 'copied' ? 'Copied' : 'Copy approved brief'}
-                      </button>
+                      />
                       <button type="button" className="btn btn--accent" onClick={() => setView('swarm')}>
                         <IconSend width={14} height={14} /> Open Swarm
                       </button>
                     </div>
-                    {copyState === 'failed' && (
-                      <p className="councilReady__copyError" role="status">
-                        Clipboard is unavailable. Open the refined brief below to copy it manually.
-                      </p>
-                    )}
                   </section>
                 )}
 
@@ -355,15 +369,14 @@ export function CouncilPanel() {
                   <summary className="councilDisclosure__summary">
                     <span>
                       <strong>How Council reached this</strong>
-                      <small>Chairman reasoning, refined spec, five seats, rankings, and standings</small>
+                      <small>Chairman reasoning, refined spec, five seats, and peer rankings</small>
                     </span>
                   </summary>
                   <div className="councilEvidence__body">
                     <CouncilVerdictEvidence result={active.result} />
-                    <CouncilScorecard entries={scorecard} />
                   </div>
                 </details>
-              </div>
+              </CouncilTextSurface>
             )
           )}
         </section>
@@ -431,8 +444,17 @@ export function CouncilPanel() {
               )
             })}
           </ul>
+          <details className="councilHistoryScore">
+            <summary>
+              <span>
+                <strong>Cross-session seat standings</strong>
+                <small>Historical average across Council runs, not evidence for the open report</small>
+              </span>
+            </summary>
+            <CouncilScorecard entries={scorecard} />
+          </details>
           <p className="councilView__historyNote">
-            Persisted across restarts — click a run to reopen its full verdict and seat standings.
+            Persisted across restarts — click a run to reopen its complete decision and evidence.
           </p>
         </section>
       )}

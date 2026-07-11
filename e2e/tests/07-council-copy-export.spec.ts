@@ -18,7 +18,12 @@ test('Council report is selectable, copyable, exportable, and rendered once', as
   expect(await reportSurface.evaluate((element) => getComputedStyle(element).userSelect)).toBe('text')
 
   const canonicalSentence = 'Applies to the shared request/response layer both sides already import.'
-  await expect(page.getByText(canonicalSentence, { exact: true })).toHaveCount(1)
+  await expect(page.locator('.council__p').filter({ hasText: canonicalSentence })).toHaveCount(1)
+
+  await page.getByRole('button', { name: 'Copy primary brief' }).click()
+  const primaryBrief = await page.evaluate(() => navigator.clipboard.readText())
+  expect(primaryBrief).toContain(canonicalSentence)
+  expect(primaryBrief).not.toContain('# Council Report')
 
   const fullCopy = page.getByRole('button', { name: 'Copy full report' })
   await fullCopy.click()
@@ -27,7 +32,7 @@ test('Council report is selectable, copyable, exportable, and rendered once', as
   expect(fullReport).toContain('# Council Report')
   expect(fullReport).toContain('## Refined Spec')
   expect(fullReport).toContain('## Seat Perspectives')
-  expect(fullReport).toContain('- Engine: `codex · gpt-5.6-sol`')
+  expect(fullReport).toContain('- Engine: `codex · default`')
 
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Export Markdown' }).click()
@@ -40,6 +45,17 @@ test('Council report is selectable, copyable, exportable, and rendered once', as
   await expect(page.getByRole('button', { name: 'Copy refined spec copied' })).toBeVisible()
   expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(canonicalSentence)
 
+  const contrarian = page.locator('.councilAdvisor').filter({ hasText: 'Contrarian' }).first()
+  await contrarian.locator('summary').click()
+  await contrarian.getByRole('button', { name: 'Copy Contrarian perspective' }).click()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(
+    'never states what to cache or the invalidation rule',
+  )
+
+  await expect(page.locator('.councilEvidence').getByLabel('Council seat standings')).toHaveCount(0)
+  await page.locator('.councilHistoryScore > summary').click()
+  await expect(page.locator('.councilHistoryScore').getByLabel('Council seat standings')).toBeVisible()
+
   await reportSurface.locator('.councilDecision__why').click({ button: 'right' })
   const menu = page.getByRole('menu', { name: 'Council text actions' })
   await expect(menu).toBeVisible()
@@ -47,6 +63,8 @@ test('Council report is selectable, copyable, exportable, and rendered once', as
   const selected = await page.evaluate(() => window.getSelection()?.toString() ?? '')
   expect(selected).toContain('APPROVED')
   expect(selected).toContain('Your brief is ready')
+  await page.keyboard.press('ControlOrMeta+C')
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('Your brief is ready')
 
   await reportSurface.dispatchEvent('contextmenu', { clientX: 360, clientY: 260 })
   await menu.getByRole('menuitem', { name: 'Copy selection' }).click()

@@ -1,6 +1,6 @@
 # Council + Memory Quality Roadmap
 
-> Status: IN EXECUTION · R0 COMPLETE · Created 2026-07-11
+> Status: IN EXECUTION · R0 + C1 COMPLETE · Created 2026-07-11
 > Scope: Council output quality/efficiency/usability + Brain/Memory correctness,
 > retrieval and product UX
 > Governing docs: `docs/DESIGN.md`, `docs/MEMORY-CHARTER.md`,
@@ -405,6 +405,13 @@ are read-only; no `.cockpit-memory` diff; `npm run typecheck`, `npm test`, `npm 
 ---
 
 ### C1 — Council P0: select, copy, export and remove visual repetition (S–M)
+
+**Completed 2026-07-11.** Council text is selectable; primary/full/section/seat,
+keyboard and scoped context-menu copy paths share one tested clipboard fallback;
+deterministic Markdown export uses result data rather than DOM scraping. The refined spec is
+rendered once, safe Markdown rendering covers emphasis/rules/links/fenced code, and the
+cross-session scorecard now lives under History. Verification passed at 1024, 1280 and 1600 px,
+with the full unit/integration, coverage and seven-journey Playwright suites green.
 
 **Goal:** solve the immediate failure shown by the screenshots without waiting for backend
 redesign.

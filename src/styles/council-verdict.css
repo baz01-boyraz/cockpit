@@ -11,6 +11,30 @@
   min-width: 0;
 }
 
+/* The app shell disables selection globally; Council explicitly opts readable
+ * prose back in while keeping controls and disclosure labels click-oriented. */
+.councilSelectable,
+.councilSelectable .council,
+.councilSelectable .council__body,
+.councilSelectable .councilDecision,
+.councilSelectable .councilAction,
+.councilSelectable .councilReady {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+.councilSelectable button,
+.councilSelectable summary,
+.councilSelectable .chip,
+.councilSelectable .eyebrow {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.councilSelectable button,
+.councilSelectable summary {
+  cursor: pointer;
+}
+
 /* The decision is the first and loudest fact. */
 .councilDecision {
   --decision: var(--glacier-400);
@@ -472,6 +496,78 @@
   border: 1px solid var(--border);
   font-family: var(--font-mono);
   font-size: 0.9em;
+}
+.council__body a {
+  color: var(--accent-soft);
+  text-decoration-color: color-mix(in srgb, var(--accent) 52%, transparent);
+  text-underline-offset: 2px;
+}
+.council__body a:hover {
+  color: var(--accent);
+}
+.council__rule {
+  height: 1px;
+  margin: var(--sp-4) 0;
+  border: 0;
+  background: var(--border);
+}
+.council__codeBlock {
+  max-width: 100%;
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-3);
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--glacier-200);
+  background: var(--surface-3);
+  font: 0.9em/1.65 var(--font-mono);
+  white-space: pre;
+  tab-size: 2;
+}
+.council__codeBlock code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.councilArtifactActions {
+  display: flex;
+  justify-content: flex-end;
+  margin: calc(var(--sp-2) * -0.5) 0 var(--sp-3);
+}
+.copyTextButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.copyTextButton--compact {
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  color: var(--text-faint);
+  background: var(--surface-1);
+  font-size: var(--fs-xs);
+  transition:
+    color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    background-color var(--dur) var(--ease-out);
+}
+.copyTextButton--compact:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+.copyTextButton[data-copy-state='copied'] {
+  color: var(--signal);
+  border-color: color-mix(in srgb, var(--signal) 36%, var(--border));
+}
+.copyTextButton[data-copy-state='failed'] {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 36%, var(--border));
 }
 
 /* Five voices become five compact, independently expandable rows. */

@@ -303,6 +303,55 @@
   gap: var(--sp-4);
 }
 
+.councilResultActions {
+  width: min(100%, 72ch);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-1);
+  border-bottom: 1px solid var(--border-faint);
+}
+.councilResultActions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.councilTextMenu {
+  position: fixed;
+  z-index: 120;
+  width: 182px;
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--surface-2) 96%, transparent);
+  box-shadow: var(--shadow-float), var(--bevel);
+  backdrop-filter: blur(18px);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.councilTextMenu button {
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: var(--r-xs);
+  color: var(--text-muted);
+  background: transparent;
+  font-size: var(--fs-xs);
+  text-align: left;
+}
+.councilTextMenu button:hover:not(:disabled),
+.councilTextMenu button:focus-visible {
+  outline: none;
+  color: var(--text);
+  background: var(--surface-3);
+}
+.councilTextMenu button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
 /* Three calm steps replace engine/seat activity as the top-level mental model. */
 .councilJourney {
   width: min(100%, 72ch);
@@ -429,11 +478,6 @@
   border-top: 1px solid var(--border-faint);
   background: var(--surface-inset);
 }
-.councilEvidence__body .councilScore {
-  width: 100%;
-  max-width: none;
-}
-
 /* ----- persisted history: three-run glance, expandable on demand ----- */
 .councilView__history {
   display: flex;
@@ -626,6 +670,45 @@
   line-height: 1.5;
 }
 
+.councilHistoryScore {
+  overflow: clip;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-1);
+}
+.councilHistoryScore > summary {
+  display: flex;
+  align-items: center;
+  padding: 9px 12px;
+  cursor: pointer;
+  list-style: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.councilHistoryScore > summary::-webkit-details-marker {
+  display: none;
+}
+.councilHistoryScore > summary > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.councilHistoryScore > summary strong {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+}
+.councilHistoryScore > summary small {
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+}
+.councilHistoryScore .councilScore {
+  width: 100%;
+  max-width: none;
+  padding: var(--sp-3);
+  border-top: 1px solid var(--border);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .councilView__pulse,
   .councilView__historySpinner {
@@ -673,5 +756,8 @@
   .councilReady__actions {
     justify-content: flex-start;
     flex-wrap: wrap;
+  }
+  .councilResultActions > * {
+    flex: 1 1 auto;
   }
 }

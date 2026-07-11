@@ -7,7 +7,7 @@ review workflow. No Electron process is involved.
 
 ## What's covered
 
-Exactly five journeys, on purpose — this is a smoke suite, not full coverage:
+Exactly seven journeys, on purpose — this is a smoke suite, not full coverage:
 
 1. **Dashboard boot** (`01-dashboard-boot.spec.ts`) — rail, command-center
    hero, and the pending-approval banner all render on first load.
@@ -20,6 +20,12 @@ Exactly five journeys, on purpose — this is a smoke suite, not full coverage:
    the default seed project), create a note, edit it, save, see the title.
 5. **Sentinel** (`05-sentinel-bell.spec.ts`) — the bell's unseen count, the
    mock's one-time toast replay, and the popover's signal list.
+6. **Rail navigation** (`06-rail-navigation.spec.ts`) — daily work remains in
+   the primary rail while lower-frequency utilities stay discoverable in the
+   control center.
+7. **Council copy/export** (`07-council-copy-export.spec.ts`) — Council text is
+   selectable; primary, full-report, section, keyboard, and scoped context-menu
+   copy paths work; Markdown export and scorecard placement remain correct.
 
 ## Running
 
@@ -46,7 +52,7 @@ npx playwright test --repeat-each=5      # flakiness check before trusting a spe
 e2e/
   support/app.ts        # gotoApp() — navigate past the boot splash; NAV map
   pages/*.page.ts        # thin Page Object Model wrappers, one per journey area
-  tests/*.spec.ts         # the five journeys, numbered for read order
+  tests/*.spec.ts         # the seven journeys, numbered for read order
 ```
 
 Selectors prefer roles/aria-labels/visible text that already exist in the

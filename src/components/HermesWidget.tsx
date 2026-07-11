@@ -41,6 +41,7 @@ import {
 } from '../lib/imageAttach'
 import { renderHermesText } from '../lib/hermesMarkup'
 import { draftQuestion, sourceLabel, withSignalContext } from '../lib/sentinelView'
+import { copyText } from '../lib/clipboard'
 import type { HermesOpener } from '../store/slices/types'
 import hermesAvatar from '../assets/hermes/avatar.png'
 
@@ -272,22 +273,7 @@ export function HermesWidget() {
   }
 
   const copyMessage = async (id: string, text: string) => {
-    try {
-      await navigator.clipboard.writeText(text)
-    } catch {
-      // Clipboard API can be unavailable/denied — fall back to a hidden textarea + execCommand.
-      const scratch = document.createElement('textarea')
-      scratch.value = text
-      scratch.style.position = 'fixed'
-      scratch.style.opacity = '0'
-      document.body.appendChild(scratch)
-      scratch.select()
-      try {
-        document.execCommand('copy')
-      } finally {
-        document.body.removeChild(scratch)
-      }
-    }
+    if (!(await copyText(text))) return
     if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
     setCopiedId(id)
     copyTimeoutRef.current = setTimeout(() => setCopiedId(null), 1600)

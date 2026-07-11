@@ -7,11 +7,13 @@ import type {
 import { engineLabel } from '@shared/engines'
 import {
   buildCouncilDisplay,
+  parseCouncilInline,
   parseCouncilMarkdown,
   summarizeCouncilSeat,
 } from '@shared/council-display'
 import { IconCheck, IconWarning, IconX } from './icons'
 import { CouncilClarificationForm } from './CouncilClarificationForm'
+import { CopyTextButton } from './CopyTextButton'
 
 /** Seat id → its render hue (mirrors the swarm identity palette). Exported so
  *  the scorecard renders each seat in the same voice as its verdict card. */
@@ -23,14 +25,20 @@ export const COUNCIL_TONE_CLASS: Record<CouncilTone, string> = {
   builder: 'councilAdvisor--executor',
 }
 
-/** Council's tiny inline subset: bold and code, with all text still escaped by React. */
+/** Council's safe inline subset; React still escapes every model-provided string. */
 function renderInline(text: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, i) => {
-    const bold = /^\*\*([^*]+)\*\*$/.exec(part)
-    const code = /^`([^`]+)`$/.exec(part)
-    if (bold) return <strong key={i}>{bold[1]}</strong>
-    if (code) return <code key={i}>{code[1]}</code>
-    return <span key={i}>{part}</span>
+  return parseCouncilInline(text).map((token, index) => {
+    if (token.type === 'strong') return <strong key={index}>{token.text}</strong>
+    if (token.type === 'emphasis') return <em key={index}>{token.text}</em>
+    if (token.type === 'code') return <code key={index}>{token.text}</code>
+    if (token.type === 'link') {
+      return (
+        <a key={index} href={token.href} target="_blank" rel="noreferrer">
+          {token.text}
+        </a>
+      )
+    }
+    return <span key={index}>{token.text}</span>
   })
 }
 
@@ -43,6 +51,16 @@ function MarkdownLite({ text }: { text: string }) {
   return (
     <>
       {parseCouncilMarkdown(text).map((block, index) => {
+        if (block.type === 'thematic-break') {
+          return <hr key={index} className="council__rule" />
+        }
+        if (block.type === 'code-block') {
+          return (
+            <pre key={index} className="council__codeBlock">
+              <code data-language={block.language ?? undefined}>{block.code}</code>
+            </pre>
+          )
+        }
         if (block.type === 'heading') {
           return (
             <h4 key={index} className="council__h">
@@ -160,11 +178,14 @@ export function CouncilVerdict({
 /** Chairman prose, refined spec, seats, and rankings — evidence, never the primary task. */
 export function CouncilVerdictEvidence({ result }: { result: CouncilResult }) {
   const display = buildCouncilDisplay(result)
+  const peerRankings = result.rankings
+    .map((ranking, index) => `Ranking ${index + 1} — ${ranking.seatId}\n${ranking.text}`)
+    .join('\n\n')
 
   return (
     <div className="councilEvidenceContents">
       <div className="council__disclosures">
-        {result.verdict && (
+        {display.chairmanAnalysis && (
           <details className="councilDisclosure">
             <summary className="councilDisclosure__summary">
               <span>
@@ -173,7 +194,14 @@ export function CouncilVerdictEvidence({ result }: { result: CouncilResult }) {
               </span>
             </summary>
             <div className="council__body councilDisclosure__body">
-              <MarkdownLite text={result.verdict} />
+              <div className="councilArtifactActions">
+                <CopyTextButton
+                  text={display.chairmanAnalysis}
+                  label="Copy chairman analysis"
+                  compact
+                />
+              </div>
+              <MarkdownLite text={display.chairmanAnalysis} />
             </div>
           </details>
         )}
@@ -187,6 +215,9 @@ export function CouncilVerdictEvidence({ result }: { result: CouncilResult }) {
               </span>
             </summary>
             <div className="council__body councilDisclosure__body">
+              <div className="councilArtifactActions">
+                <CopyTextButton text={display.refinedSpec} label="Copy refined spec" compact />
+              </div>
               <MarkdownLite text={display.refinedSpec} />
             </div>
           </details>
@@ -213,6 +244,13 @@ export function CouncilVerdictEvidence({ result }: { result: CouncilResult }) {
                   <span className="councilAdvisor__preview">{summarizeCouncilSeat(seat.text)}</span>
                 </summary>
                 <div className="council__body councilAdvisor__text">
+                  <div className="councilArtifactActions">
+                    <CopyTextButton
+                      text={seat.text}
+                      label={`Copy ${seat.label} perspective`}
+                      compact
+                    />
+                  </div>
                   <MarkdownLite text={seat.text} />
                 </div>
               </details>
@@ -232,6 +270,9 @@ export function CouncilVerdictEvidence({ result }: { result: CouncilResult }) {
             </span>
           </summary>
           <div className="council__body councilDisclosure__body">
+            <div className="councilArtifactActions">
+              <CopyTextButton text={peerRankings} label="Copy peer rankings" compact />
+            </div>
             {result.rankings.map((r, i) => (
               <div key={r.seatId} className="council__ranking">
                 <div className="council__rankingHead">Ranking {i + 1}</div>
