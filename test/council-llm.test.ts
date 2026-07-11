@@ -236,6 +236,76 @@ describe('parseSpecVerdict', () => {
     })
   })
 
+  it('caps legacy plain-text clarification lists so the UI never becomes an interview wall', () => {
+    const text = [
+      '### Verdict',
+      'NEEDS_CLARIFICATION',
+      '### Questions for the author',
+      '1. First choice?',
+      '2. Second choice?',
+      '3. Third choice?',
+      '4. Fourth choice?',
+      '5. Fifth choice?',
+      '6. Sixth choice?',
+    ].join('\n')
+
+    expect(parseSpecVerdict(text)).toEqual({
+      kind: 'needs_clarification',
+      questions: ['First choice?', 'Second choice?', 'Third choice?'],
+    })
+  })
+
+  it('reads guided clarification metadata and caps the author interview at three questions', () => {
+    const text = [
+      '### 🎯 Verdict',
+      'NEEDS_CLARIFICATION',
+      'The remaining choices change the build.',
+      '',
+      '### ❓ Questions for the author',
+      '1. QUESTION: Which module should own the cache?',
+      '   WHY: This decides the invalidation boundary.',
+      '   RECOMMENDED: Use the shared gateway module.',
+      '2. QUESTION: What is the latency target?',
+      '   WHY: The acceptance test needs a measurable threshold.',
+      '   RECOMMENDED: Use p95 under 40ms.',
+      '3. QUESTION: Should stale reads be allowed?',
+      '   WHY: This changes the failure-mode behavior.',
+      '   RECOMMENDED: Allow up to 30 seconds of staleness.',
+      '4. QUESTION: This question must be ignored.',
+      '   WHY: The interview is intentionally bounded.',
+      '   RECOMMENDED: Ignore me.',
+    ].join('\n')
+
+    expect(parseSpecVerdict(text)).toEqual({
+      kind: 'needs_clarification',
+      questions: [
+        'Which module should own the cache?',
+        'What is the latency target?',
+        'Should stale reads be allowed?',
+      ],
+      clarifications: [
+        {
+          id: 'question-1',
+          question: 'Which module should own the cache?',
+          why: 'This decides the invalidation boundary.',
+          recommendedAnswer: 'Use the shared gateway module.',
+        },
+        {
+          id: 'question-2',
+          question: 'What is the latency target?',
+          why: 'The acceptance test needs a measurable threshold.',
+          recommendedAnswer: 'Use p95 under 40ms.',
+        },
+        {
+          id: 'question-3',
+          question: 'Should stale reads be allowed?',
+          why: 'This changes the failure-mode behavior.',
+          recommendedAnswer: 'Allow up to 30 seconds of staleness.',
+        },
+      ],
+    })
+  })
+
   it('tolerates a spaced "needs clarification" spelling', () => {
     expect(parseSpecVerdict('### 🎯 Verdict\nNeeds Clarification').kind).toBe('needs_clarification')
   })
@@ -459,5 +529,11 @@ describe('chairman prompts', () => {
     expect(prompt).toContain('draft spec body')
     expect(prompt.match(/==SPEC==/g)).toHaveLength(3)
     expect(prompt).toContain('Landing pages use copper accents.')
+    expect(prompt).toContain('maximum of 3 questions')
+    expect(prompt).toContain('same language as the author')
+    expect(prompt).toContain('Do not ask for facts the builder can discover')
+    expect(prompt).toContain('QUESTION:')
+    expect(prompt).toContain('WHY:')
+    expect(prompt).toContain('RECOMMENDED:')
   })
 })

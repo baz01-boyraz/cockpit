@@ -191,6 +191,24 @@ export interface CouncilStats {
   durationMs: number
 }
 
+/** One build-changing choice the author can answer directly in the Council UI. */
+export interface CouncilClarification {
+  /** Stable within one verdict; used to bind labels, answers, and validation. */
+  id: string
+  question: string
+  /** Why the answer changes the build, when the chairman supplied it. */
+  why: string | null
+  /** A safe default the author can accept instead of inventing an answer. */
+  recommendedAnswer: string | null
+}
+
+/** The author's answer to one guided clarification. */
+export interface CouncilClarificationAnswer {
+  id: string
+  question: string
+  answer: string
+}
+
 /** The full council session, rendered as seats → peer rankings → verdict. */
 export interface CouncilResult {
   ok: boolean
@@ -202,8 +220,13 @@ export interface CouncilResult {
   labelToSeat: Record<string, CouncilTone>
   /** The chairman's synthesized verdict (markdown), or null if it failed. */
   verdict: string | null
-  /** Spec mode only: the parsed gate decision + author questions. */
-  specVerdict: { kind: 'approved' | 'needs_clarification'; questions: string[] } | null
+  /** Spec mode only: the parsed gate decision + guided author questions. */
+  specVerdict: {
+    kind: 'approved' | 'needs_clarification'
+    questions: string[]
+    /** Optional for backward compatibility with sessions saved before guided answers. */
+    clarifications?: CouncilClarification[]
+  } | null
   error: string | null
   stats: CouncilStats
   /** The persisted session's id, or null when persistence itself failed. */
@@ -325,8 +348,17 @@ const check = (s: string): SpecKind | null => {
  * of the verdict token drifting off the exact first line; returns `kind: null`
  * for genuine garbage so the caller can treat it as a failed synthesis.
  */
-export function parseSpecVerdict(text: string): { kind: SpecKind | null; questions: string[] } {
-  return { kind: detectSpecKind(text), questions: extractQuestions(text) }
+export function parseSpecVerdict(text: string): {
+  kind: SpecKind | null
+  questions: string[]
+  clarifications?: CouncilClarification[]
+} {
+  const extracted = extractQuestions(text)
+  return {
+    kind: detectSpecKind(text),
+    questions: extracted.questions,
+    ...(extracted.clarifications ? { clarifications: extracted.clarifications } : {}),
+  }
 }
 
 function detectSpecKind(text: string): SpecKind | null {
@@ -344,18 +376,73 @@ function detectSpecKind(text: string): SpecKind | null {
   return check(text)
 }
 
-function extractQuestions(text: string): string[] {
+function extractQuestions(text: string): {
+  questions: string[]
+  clarifications?: CouncilClarification[]
+} {
   const lines = text.split('\n')
   const qIdx = lines.findIndex((l) => /^#{1,6}\s.*question/i.test(l.trim()))
-  if (qIdx < 0) return []
-  const out: string[] = []
+  if (qIdx < 0) return { questions: [] }
+
+  const out: Array<{
+    question: string
+    why: string | null
+    recommendedAnswer: string | null
+    structured: boolean
+  }> = []
+  let current: (typeof out)[number] | null = null
+
+  const flush = () => {
+    if (!current?.question) return
+    if (out.length < 3) out.push(current)
+    current = null
+  }
+
   for (const raw of lines.slice(qIdx + 1)) {
     const line = raw.trim()
-    if (/^#{1,6}\s/.test(line)) break // next section ends the list
+    if (/^#{1,6}\s/.test(line)) {
+      flush()
+      break // next section ends the list
+    }
     const item = /^\d+[.)]\s*(.+)$/.exec(line)
-    if (item) out.push(item[1].trim())
+    if (item) {
+      flush()
+      if (out.length >= 3) break
+      const structured = /^QUESTION\s*:/i.test(item[1])
+      current = {
+        question: item[1].replace(/^QUESTION\s*:\s*/i, '').trim(),
+        why: null,
+        recommendedAnswer: null,
+        structured,
+      }
+      continue
+    }
+    if (!current) continue
+    const why = /^WHY\s*:\s*(.+)$/i.exec(line)
+    if (why) {
+      current.why = why[1].trim()
+      current.structured = true
+      continue
+    }
+    const recommended = /^RECOMMENDED\s*:\s*(.+)$/i.exec(line)
+    if (recommended) {
+      current.recommendedAnswer = recommended[1].trim()
+      current.structured = true
+    }
   }
-  return out
+  flush()
+
+  const questions = out.map((item) => item.question)
+  if (!out.some((item) => item.structured)) return { questions }
+  return {
+    questions,
+    clarifications: out.map((item, index) => ({
+      id: `question-${index + 1}`,
+      question: item.question,
+      why: item.why,
+      recommendedAnswer: item.recommendedAnswer,
+    })),
+  }
 }
 
 /**

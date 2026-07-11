@@ -92,6 +92,60 @@ describe('council slice — standalone run', () => {
     // The staleness guard tripped — the prj_1 verdict was never applied.
     expect(useStore.getState().councilActive?.result).toBeNull()
   })
+
+  it('continues a clarification in place with the author answers and preserves the original request', async () => {
+    run
+      .mockResolvedValueOnce(
+        makeResult({
+          sessionId: 'sess-clarify',
+          verdict: '### 🎯 Verdict\nNEEDS_CLARIFICATION',
+          specVerdict: {
+            kind: 'needs_clarification',
+            questions: ['Which module owns the cache?'],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(makeResult({ sessionId: 'sess-approved' }))
+
+    await useStore.getState().conveneCouncil('prj_1', 'Add caching to the gateway')
+    await useStore.getState().continueCouncil('prj_1', [
+      {
+        id: 'question-1',
+        question: 'Which module owns the cache?',
+        answer: 'The shared gateway module.',
+      },
+    ])
+
+    expect(run).toHaveBeenCalledTimes(2)
+    const continuation = run.mock.calls[1][1] as { mode: string; spec: string }
+    expect(continuation.mode).toBe('spec')
+    expect(continuation.spec).toContain('Add caching to the gateway')
+    expect(continuation.spec).toContain('Which module owns the cache?')
+    expect(continuation.spec).toContain('The shared gateway module.')
+    expect(useStore.getState().councilActive?.spec).toBe('Add caching to the gateway')
+    expect(useStore.getState().councilActive?.result?.specVerdict?.kind).toBe('approved')
+  })
+
+  it('does not re-run Council until every visible clarification has an answer', async () => {
+    run.mockResolvedValue(
+      makeResult({
+        specVerdict: {
+          kind: 'needs_clarification',
+          questions: ['Which module?', 'What latency target?'],
+        },
+      }),
+    )
+    await useStore.getState().conveneCouncil('prj_1', 'Add caching')
+
+    await useStore.getState().continueCouncil('prj_1', [
+      { id: 'question-1', question: 'Which module?', answer: 'Shared gateway.' },
+    ])
+
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(useStore.getState().councilActive?.result?.specVerdict?.kind).toBe(
+      'needs_clarification',
+    )
+  })
 })
 
 describe('council slice — swarm spec gate', () => {

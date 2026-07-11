@@ -401,6 +401,26 @@ function mockSpecCouncil(): CouncilResult {
         'What is the concrete latency target the cache must hit?',
         'Which module is "the gateway"?',
       ],
+      clarifications: [
+        {
+          id: 'question-1',
+          question: 'What exactly should be cached, and what is the invalidation rule?',
+          why: 'This decides the cache key and when stale data is removed.',
+          recommendedAnswer: 'Cache gateway read responses and invalidate the matching key on every write.',
+        },
+        {
+          id: 'question-2',
+          question: 'What is the concrete latency target the cache must hit?',
+          why: 'A measurable threshold makes the result testable.',
+          recommendedAnswer: 'Use a p95 latency target below 40ms for cached reads.',
+        },
+        {
+          id: 'question-3',
+          question: 'Which module is "the gateway"?',
+          why: 'Naming the owner prevents the builder from editing the wrong boundary.',
+          recommendedAnswer: 'Use the shared gateway service in the request/response layer.',
+        },
+      ],
     },
     error: null,
     stats: { seatsRun: 5, seatsFailed: 0, filesReviewed: 0, durationMs: 1600 },
@@ -1268,7 +1288,9 @@ export function createMockApi(): CockpitApi {
         await new Promise((r) => setTimeout(r, 1600))
         if ((opts?.mode ?? 'diff') !== 'spec') return mockDiffCouncil()
         // A draft that already spells out acceptance criteria gates through.
-        return /acceptance/i.test(opts?.spec ?? '') ? mockSpecCouncilApproved() : mockSpecCouncil()
+        return /acceptance|author clarification answers/i.test(opts?.spec ?? '')
+          ? mockSpecCouncilApproved()
+          : mockSpecCouncil()
       },
       // A plausible cross-session standing, best (lowest average rank) first —
       // enough for the browser preview to render the scorecard chips.

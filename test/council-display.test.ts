@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CouncilResult } from '../shared/council'
 import {
+  buildClarificationContinuation,
   buildCouncilDisplay,
   parseCouncilMarkdown,
   summarizeCouncilSeat,
@@ -50,6 +51,49 @@ describe('buildCouncilDisplay', () => {
       'Which module is the gateway?',
       'What is the latency target?',
     ])
+    expect(display.clarifications).toEqual([
+      {
+        id: 'question-1',
+        question: 'Which module is the gateway?',
+        why: null,
+        recommendedAnswer: null,
+      },
+      {
+        id: 'question-2',
+        question: 'What is the latency target?',
+        why: null,
+        recommendedAnswer: null,
+      },
+    ])
+  })
+
+  it('exposes the chairman guidance attached to each clarification', () => {
+    const display = buildCouncilDisplay(
+      result({
+        verdict: '### Verdict\nNEEDS_CLARIFICATION\nTwo product choices remain.',
+        specVerdict: {
+          kind: 'needs_clarification',
+          questions: ['How long may results stay stale?'],
+          clarifications: [
+            {
+              id: 'question-1',
+              question: 'How long may results stay stale?',
+              why: 'This changes cache invalidation behavior.',
+              recommendedAnswer: 'Allow up to 30 seconds.',
+            },
+          ],
+        },
+      }),
+    )
+
+    expect(display.clarifications).toEqual([
+      {
+        id: 'question-1',
+        question: 'How long may results stay stale?',
+        why: 'This changes cache invalidation behavior.',
+        recommendedAnswer: 'Allow up to 30 seconds.',
+      },
+    ])
   })
 
   it('extracts the approved spec goal and numbered acceptance criteria', () => {
@@ -90,6 +134,30 @@ describe('buildCouncilDisplay', () => {
       label: 'FAILED',
       why: 'Chairman timed out.',
     })
+  })
+})
+
+describe('buildClarificationContinuation', () => {
+  it('keeps the original request and turns the guided answers into explicit author decisions', () => {
+    const continuation = buildClarificationContinuation('Build a calmer Council flow.', [
+      {
+        id: 'question-1',
+        question: 'Should expert evidence be visible by default?',
+        answer: 'No, keep it behind one disclosure.',
+      },
+      {
+        id: 'question-2',
+        question: 'Where should the user answer?',
+        answer: 'Directly beneath each question.',
+      },
+    ])
+
+    expect(continuation).toContain('Build a calmer Council flow.')
+    expect(continuation).toContain('Should expert evidence be visible by default?')
+    expect(continuation).toContain('No, keep it behind one disclosure.')
+    expect(continuation).toContain('Where should the user answer?')
+    expect(continuation).toContain('Directly beneath each question.')
+    expect(continuation).toContain('These answers resolve the ambiguities')
   })
 })
 

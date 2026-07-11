@@ -1,5 +1,9 @@
 import type { ReactNode } from 'react'
-import type { CouncilResult, CouncilTone } from '@shared/council'
+import type {
+  CouncilClarificationAnswer,
+  CouncilResult,
+  CouncilTone,
+} from '@shared/council'
 import { engineLabel } from '@shared/engines'
 import {
   buildCouncilDisplay,
@@ -7,6 +11,7 @@ import {
   summarizeCouncilSeat,
 } from '@shared/council-display'
 import { IconCheck, IconWarning, IconX } from './icons'
+import { CouncilClarificationForm } from './CouncilClarificationForm'
 
 /** Seat id → its render hue (mirrors the swarm identity palette). Exported so
  *  the scorecard renders each seat in the same voice as its verdict card. */
@@ -72,7 +77,21 @@ function MarkdownLite({ text }: { text: string }) {
  * folded away. Model prose is rendered markdown-lite — headings and bold, no
  * runtime dependency.
  */
-export function CouncilVerdict({ result }: { result: CouncilResult }) {
+interface CouncilVerdictProps {
+  result: CouncilResult
+  /** Present on the standalone flow; omitted on read-only/historical surfaces. */
+  onContinue?: (answers: CouncilClarificationAnswer[]) => void
+  continuing?: boolean
+  /** Standalone Council wraps all internals in one disclosure; Swarm keeps legacy detail. */
+  showEvidence?: boolean
+}
+
+export function CouncilVerdict({
+  result,
+  onContinue,
+  continuing = false,
+  showEvidence = true,
+}: CouncilVerdictProps) {
   const display = buildCouncilDisplay(result)
   const DecisionIcon =
     display.kind === 'failed' ? IconX : display.kind === 'clarify' ? IconWarning : IconCheck
@@ -92,17 +111,24 @@ export function CouncilVerdict({ result }: { result: CouncilResult }) {
         <p className="councilDecision__why">{display.why}</p>
       </section>
 
-      {display.kind === 'clarify' && display.questions.length > 0 && (
-        <section className="councilAction councilAction--clarify">
-          <div className="eyebrow">council needs your input</div>
-          <h3 className="councilAction__title">Answer these before the build starts</h3>
-          <ol className="councilAction__questions">
-            {display.questions.map((question, index) => (
-              <li key={index}>{question}</li>
-            ))}
-          </ol>
-        </section>
-      )}
+      {display.kind === 'clarify' && display.clarifications.length > 0 &&
+        (onContinue ? (
+          <CouncilClarificationForm
+            questions={display.clarifications}
+            continuing={continuing}
+            onContinue={onContinue}
+          />
+        ) : (
+          <section className="councilAction councilAction--clarify">
+            <div className="eyebrow">saved clarification</div>
+            <h3 className="councilAction__title">Questions recorded for the author</h3>
+            <ol className="councilAction__questions">
+              {display.questions.map((question, index) => (
+                <li key={index}>{question}</li>
+              ))}
+            </ol>
+          </section>
+        ))}
 
       {display.kind === 'approved' && (display.goal || display.acceptanceCriteria.length > 0) && (
         <section className="councilAction councilAction--approved">
@@ -126,6 +152,17 @@ export function CouncilVerdict({ result }: { result: CouncilResult }) {
         </section>
       )}
 
+      {showEvidence && <CouncilVerdictEvidence result={result} />}
+    </div>
+  )
+}
+
+/** Chairman prose, refined spec, seats, and rankings — evidence, never the primary task. */
+export function CouncilVerdictEvidence({ result }: { result: CouncilResult }) {
+  const display = buildCouncilDisplay(result)
+
+  return (
+    <div className="councilEvidenceContents">
       <div className="council__disclosures">
         {result.verdict && (
           <details className="councilDisclosure">

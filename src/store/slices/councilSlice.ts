@@ -1,5 +1,6 @@
 import { cockpit } from '../../lib/cockpit'
 import type { CouncilResult } from '@shared/council'
+import { buildClarificationContinuation } from '@shared/council-display'
 import type { CouncilRunView, CouncilSlice, SliceCreator } from './types'
 
 /**
@@ -56,7 +57,11 @@ export const createCouncilSlice: SliceCreator<CouncilSlice> = (set, get) => ({
     }
     set({ councilProjectId: projectId, councilConvening: true, councilActive: run, councilNotice: null })
     try {
-      const result = await cockpit().council.run(projectId, { mode: 'spec', spec: trimmed })
+      const result = await cockpit().council.run(projectId, {
+        mode: 'spec',
+        spec: trimmed,
+        question: run.title,
+      })
       // A council can outlive a project switch — never paint a stale verdict.
       if (get().activeProjectId !== projectId) return
       set({
@@ -70,6 +75,68 @@ export const createCouncilSlice: SliceCreator<CouncilSlice> = (set, get) => ({
         councilActive: { ...run, result: councilFailure(err) },
         councilConvening: false,
         councilNotice: 'Council run failed.',
+      })
+    }
+  },
+
+  continueCouncil: async (projectId, answers) => {
+    const active = get().councilActive
+    if (
+      !active?.spec.trim() ||
+      active.result?.specVerdict?.kind !== 'needs_clarification' ||
+      get().councilConvening
+    ) {
+      return
+    }
+
+    const verdict = active.result.specVerdict
+    const expected =
+      verdict.clarifications?.slice(0, 3) ??
+      verdict.questions.slice(0, 3).map((question, index) => ({
+        id: `question-${index + 1}`,
+        question,
+      }))
+    const answerById = new Map(
+      answers
+        .map((item) => [item.id, item.answer.trim()] as const)
+        .filter(([, answer]) => answer.length > 0),
+    )
+    if (expected.length === 0 || expected.some((item) => !answerById.has(item.id))) return
+    const answered = expected.map((item) => ({
+      id: item.id,
+      question: item.question,
+      answer: answerById.get(item.id)!,
+    }))
+    const continuationSpec = buildClarificationContinuation(
+      active.continuationSpec ?? active.spec,
+      answered,
+    )
+    const run: CouncilRunView = {
+      ...active,
+      id: `local-${Date.now()}`,
+      continuationSpec,
+      result: null,
+      at: Date.now(),
+    }
+    set({ councilProjectId: projectId, councilConvening: true, councilActive: run, councilNotice: null })
+    try {
+      const result = await cockpit().council.run(projectId, {
+        mode: 'spec',
+        spec: continuationSpec,
+        question: active.title,
+      })
+      if (get().activeProjectId !== projectId) return
+      set({
+        councilActive: { ...run, id: result.sessionId ?? run.id, result },
+        councilConvening: false,
+        councilNotice: 'Council updated the brief with your answers.',
+      })
+    } catch (err: unknown) {
+      if (get().activeProjectId !== projectId) return
+      set({
+        councilActive: { ...run, result: councilFailure(err) },
+        councilConvening: false,
+        councilNotice: 'Council could not review the answers.',
       })
     }
   },

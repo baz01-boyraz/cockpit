@@ -1,4 +1,9 @@
-import { extractRefinedSpec, type CouncilResult } from './council'
+import {
+  extractRefinedSpec,
+  type CouncilClarification,
+  type CouncilClarificationAnswer,
+  type CouncilResult,
+} from './council'
 
 export type CouncilDisplayKind = 'approved' | 'clarify' | 'failed' | 'reviewed'
 
@@ -7,6 +12,7 @@ export interface CouncilDisplayModel {
   label: string
   why: string
   questions: string[]
+  clarifications: CouncilClarification[]
   refinedSpec: string | null
   goal: string | null
   acceptanceCriteria: string[]
@@ -109,18 +115,59 @@ export function buildCouncilDisplay(result: CouncilResult): CouncilDisplayModel 
           ? 'FAILED'
           : 'REVIEWED'
   const refinedSpec = result.verdict ? extractRefinedSpec(result.verdict) : null
+  const questions = (result.specVerdict?.questions ?? []).slice(0, 3)
+  const clarifications = result.specVerdict?.clarifications?.slice(0, 3) ?? questions.map(
+    (question, index): CouncilClarification => ({
+      id: `question-${index + 1}`,
+      question,
+      why: null,
+      recommendedAnswer: null,
+    }),
+  )
 
   return {
     kind,
     label,
     why: verdictWhy(result),
-    questions: result.specVerdict?.questions ?? [],
+    questions,
+    clarifications,
     refinedSpec,
     goal: refinedSpec ? refinedField(refinedSpec, 'Goal') : null,
     acceptanceCriteria: acceptanceItems(
       refinedSpec ? refinedField(refinedSpec, 'Acceptance criteria') : null,
     ),
   }
+}
+
+/**
+ * Turn the author's form answers into the next spec-gate input. This stays
+ * deliberately plain-text so every Council engine receives the same decisions,
+ * while the service's existing untrusted-spec fence still encloses the whole
+ * payload before it reaches a model.
+ */
+export function buildClarificationContinuation(
+  originalRequest: string,
+  answers: readonly CouncilClarificationAnswer[],
+): string {
+  const cleanAnswers = answers
+    .map((item) => ({ ...item, question: item.question.trim(), answer: item.answer.trim() }))
+    .filter((item) => item.question && item.answer)
+
+  const parts = [
+    '## Original request',
+    originalRequest.trim(),
+    '',
+    '## Author clarification answers',
+  ]
+  cleanAnswers.forEach((item, index) => {
+    parts.push(`${index + 1}. Question: ${item.question}`, `   Answer: ${item.answer}`)
+  })
+  parts.push(
+    '',
+    'These answers resolve the ambiguities above. Treat them as explicit author decisions,',
+    'preserve the intent of the original request, and reassess the complete task spec.',
+  )
+  return parts.join('\n')
 }
 
 /** A one-sentence preview for a collapsed seat row. */

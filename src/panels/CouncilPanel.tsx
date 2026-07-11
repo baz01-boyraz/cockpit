@@ -2,12 +2,18 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import { relativeTime } from '@shared/time'
-import type { CouncilSessionSummary, ScorecardEntry } from '@shared/council'
+import type {
+  CouncilClarificationAnswer,
+  CouncilSessionSummary,
+  ScorecardEntry,
+} from '@shared/council'
 import { COUNCIL_SEATS } from '@shared/council'
 import { councilHistoryPresentation, visibleCouncilSessions } from '@shared/council-history'
-import { CouncilVerdict } from '../components/CouncilVerdict'
+import { buildCouncilDisplay } from '@shared/council-display'
+import { CouncilVerdict, CouncilVerdictEvidence } from '../components/CouncilVerdict'
 import { CouncilScorecard } from '../components/CouncilScorecard'
-import { IconCheck, IconCouncil, IconWarning, IconX } from '../components/icons'
+import { CouncilJourney, type CouncilJourneyPhase } from '../components/CouncilJourney'
+import { IconCheck, IconCopy, IconCouncil, IconSend, IconWarning, IconX } from '../components/icons'
 
 /** A persisted session's headline for the active-run surface when it is browsed. */
 function sessionTitle(summary: CouncilSessionSummary): string {
@@ -32,15 +38,19 @@ export function CouncilPanel() {
   const convening = useStore((s) => s.councilConvening)
   const notice = useStore((s) => s.councilNotice)
   const conveneCouncil = useStore((s) => s.conveneCouncil)
+  const continueCouncil = useStore((s) => s.continueCouncil)
   const setCouncilActive = useStore((s) => s.setCouncilActive)
   const clearCouncilNotice = useStore((s) => s.clearCouncilNotice)
   const resetCouncil = useStore((s) => s.resetCouncil)
+  const setView = useStore((s) => s.setView)
 
   const [spec, setSpec] = useState('')
   const [sessions, setSessions] = useState<CouncilSessionSummary[] | null>(null)
   const [scorecard, setScorecard] = useState<ScorecardEntry[] | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [showAllHistory, setShowAllHistory] = useState(false)
+  const [composerOpen, setComposerOpen] = useState(true)
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
 
   // Persisted history + cross-session standings, both project-scoped. A stale
   // list from another project must never flash under a new one.
@@ -70,6 +80,7 @@ export function CouncilPanel() {
     setSessions(null)
     setScorecard(null)
     setShowAllHistory(false)
+    setComposerOpen(useStore.getState().councilActive === null)
     void loadHistory()
   }, [projectId, resetCouncil, loadHistory])
 
@@ -82,15 +93,25 @@ export function CouncilPanel() {
   }, [convening, loadHistory])
 
   const handleConvene = useCallback(() => {
-    if (!projectId) return
+    if (!projectId || !spec.trim()) return
     void conveneCouncil(projectId, spec)
+    setComposerOpen(false)
   }, [projectId, spec, conveneCouncil])
+
+  const handleContinue = useCallback(
+    (answers: CouncilClarificationAnswer[]) => {
+      if (!projectId) return
+      void continueCouncil(projectId, answers)
+    },
+    [continueCouncil, projectId],
+  )
 
   // Rehydrate one persisted session's full verdict from the detail channel.
   const browse = useCallback(
     async (summary: CouncilSessionSummary) => {
       if (!projectId || convening) return
       clearCouncilNotice()
+      setComposerOpen(false)
       setLoadingDetail(true)
       setCouncilActive({
         id: summary.id,
@@ -129,6 +150,40 @@ export function CouncilPanel() {
 
   const canConvene = Boolean(projectId) && spec.trim().length > 0 && !convening
   const busy = active !== null && active.result === null
+  const display = active?.result ? buildCouncilDisplay(active.result) : null
+  const journeyPhase: CouncilJourneyPhase = busy
+    ? 'deliberating'
+    : display?.kind === 'clarify'
+      ? 'clarify'
+      : display?.kind === 'approved'
+        ? 'approved'
+        : display?.kind === 'failed'
+          ? 'failed'
+          : 'reviewed'
+  const approvedBrief =
+    display?.kind === 'approved'
+      ? display.refinedSpec ?? active?.result?.verdict ?? active?.spec ?? ''
+      : ''
+
+  useEffect(() => {
+    setCopyState('idle')
+  }, [active?.id])
+
+  useEffect(() => {
+    if (copyState !== 'copied') return
+    const timer = window.setTimeout(() => setCopyState('idle'), 1800)
+    return () => window.clearTimeout(timer)
+  }, [copyState])
+
+  const copyApprovedBrief = useCallback(async () => {
+    if (!approvedBrief) return
+    try {
+      await navigator.clipboard.writeText(approvedBrief)
+      setCopyState('copied')
+    } catch {
+      setCopyState('failed')
+    }
+  }, [approvedBrief])
 
   return (
     <div className="panel panel--stagger councilView">
@@ -144,49 +199,85 @@ export function CouncilPanel() {
         </div>
       </div>
 
-      <section className="card councilView__compose u-rise">
-        <label className="councilView__composeHead" htmlFor="council-spec">
-          <span className="eyebrow">convene · spec gate</span>
-          <span className="councilView__composeHint">
-            Five independent seats judge the text, then a chairman returns a build/clarify verdict.
+      {active && !composerOpen ? (
+        <section className="card councilView__composeCollapsed u-rise">
+          <span className="councilView__composeCollapsedIcon" aria-hidden>
+            <IconCheck width={13} height={13} />
           </span>
-        </label>
-        <textarea
-          id="council-spec"
-          className="councilView__input"
-          placeholder="Paste a draft spec, a design, or a question for the council to deliberate on…"
-          value={spec}
-          onChange={(e) => setSpec(e.target.value)}
-          onKeyDown={onKeyDown}
-          rows={6}
-          spellCheck={false}
-          disabled={!projectId}
-        />
-        <div className="councilView__composeFoot">
-          <span className="councilView__kbd">
-            <kbd className="mono">⌘</kbd>
-            <kbd className="mono">↵</kbd> to convene
-          </span>
+          <div>
+            <span className="eyebrow">request received</span>
+            <strong>{active.title}</strong>
+          </div>
           <button
             type="button"
-            className="btn btn--accent councilView__convene"
-            onClick={handleConvene}
-            disabled={!canConvene}
+            className="btn btn--ghost btn--sm"
+            onClick={() => {
+              setSpec('')
+              setComposerOpen(true)
+            }}
+            disabled={convening}
           >
-            {convening ? 'Convening…' : 'Convene council'}
+            Start another request
           </button>
-        </div>
-        {!projectId && (
-          <p className="councilView__noproject">
-            <IconWarning width={13} height={13} /> Select a project to convene its council.
-          </p>
-        )}
-        {notice && projectId && (
-          <p className="councilView__flash" role="status">
-            <IconCheck width={13} height={13} /> {notice}
-          </p>
-        )}
-      </section>
+        </section>
+      ) : (
+        <section className="card councilView__compose u-rise">
+          <div className="councilView__composeTop">
+            <label className="councilView__composeHead" htmlFor="council-spec">
+              <span className="eyebrow">ask council</span>
+              <span className="councilView__composeHint">
+                Paste your request. You will get one clear outcome: a ready brief or up to three
+                questions you can answer on this page.
+              </span>
+            </label>
+            {active && (
+              <button
+                type="button"
+                className="councilView__composeBack"
+                onClick={() => setComposerOpen(false)}
+              >
+                Back to current result
+              </button>
+            )}
+          </div>
+          <textarea
+            id="council-spec"
+            className="councilView__input"
+            placeholder="Paste a draft spec, a design, or a question for the council to deliberate on…"
+            value={spec}
+            onChange={(e) => setSpec(e.target.value)}
+            onKeyDown={onKeyDown}
+            rows={6}
+            spellCheck={false}
+            disabled={!projectId}
+          />
+          <div className="councilView__composeFoot">
+            <span className="councilView__kbd">
+              <kbd className="mono">⌘</kbd>
+              <kbd className="mono">↵</kbd> to convene
+            </span>
+            <button
+              type="button"
+              className="btn btn--accent councilView__convene"
+              onClick={handleConvene}
+              disabled={!canConvene}
+            >
+              {convening ? 'Council is reviewing…' : 'Review my request'}
+            </button>
+          </div>
+          {!projectId && (
+            <p className="councilView__noproject">
+              <IconWarning width={13} height={13} /> Select a project to convene its council.
+            </p>
+          )}
+        </section>
+      )}
+
+      {notice && projectId && (
+        <p className="councilView__flash" role="status">
+          <IconCheck width={13} height={13} /> {notice}
+        </p>
+      )}
 
       {active && (
         <section className="card councilView__result u-rise">
@@ -208,18 +299,70 @@ export function CouncilPanel() {
               <IconX width={13} height={13} />
             </button>
           </div>
+          <CouncilJourney phase={journeyPhase} />
           {busy ? (
             <div className="councilView__busy">
               <span className="councilView__pulse" aria-hidden />
-              {convening
-                ? 'Convening the council — five seats, peer rankings, then a build/clarify gate…'
-                : 'Loading the saved verdict…'}
+              <div>
+                <strong>{convening ? 'Council is reviewing your request.' : 'Opening the saved decision.'}</strong>
+                <span>
+                  {convening
+                    ? 'You do not need to do anything yet. You can leave this page; the result will stay here.'
+                    : 'This should take only a moment.'}
+                </span>
+              </div>
             </div>
           ) : (
             active.result && (
               <div className="councilView__verdict">
-                <CouncilVerdict result={active.result} />
-                <CouncilScorecard entries={scorecard} />
+                <CouncilVerdict
+                  result={active.result}
+                  onContinue={active.spec.trim() ? handleContinue : undefined}
+                  continuing={convening}
+                  showEvidence={false}
+                />
+
+                {display?.kind === 'approved' && (
+                  <section className="councilReady" aria-labelledby="council-ready-title">
+                    <div>
+                      <div className="eyebrow">what happens next</div>
+                      <h3 id="council-ready-title">Your brief is ready. Nothing has started yet.</h3>
+                      <p>Copy it, or open Swarm when you are ready to turn it into a build task.</p>
+                    </div>
+                    <div className="councilReady__actions">
+                      <button
+                        type="button"
+                        className="btn btn--ghost"
+                        onClick={() => void copyApprovedBrief()}
+                        disabled={!approvedBrief}
+                      >
+                        {copyState === 'copied' ? <IconCheck width={14} height={14} /> : <IconCopy width={14} height={14} />}
+                        {copyState === 'copied' ? 'Copied' : 'Copy approved brief'}
+                      </button>
+                      <button type="button" className="btn btn--accent" onClick={() => setView('swarm')}>
+                        <IconSend width={14} height={14} /> Open Swarm
+                      </button>
+                    </div>
+                    {copyState === 'failed' && (
+                      <p className="councilReady__copyError" role="status">
+                        Clipboard is unavailable. Open the refined brief below to copy it manually.
+                      </p>
+                    )}
+                  </section>
+                )}
+
+                <details className="councilDisclosure councilEvidence">
+                  <summary className="councilDisclosure__summary">
+                    <span>
+                      <strong>How Council reached this</strong>
+                      <small>Chairman reasoning, refined spec, five seats, rankings, and standings</small>
+                    </span>
+                  </summary>
+                  <div className="councilEvidence__body">
+                    <CouncilVerdictEvidence result={active.result} />
+                    <CouncilScorecard entries={scorecard} />
+                  </div>
+                </details>
               </div>
             )
           )}

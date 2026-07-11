@@ -27,7 +27,7 @@ import type { BoardColumn, CardStatus, StartCardResult } from '@shared/kanban'
 import type { Assignment } from '@shared/agent-taxonomy'
 import type { NamedAgentSummary } from '@shared/named-agents'
 import type { SentinelSource } from '@shared/sentinel'
-import type { CouncilResult } from '@shared/council'
+import type { CouncilClarificationAnswer, CouncilResult } from '@shared/council'
 
 export type View =
   | 'dashboard'
@@ -104,8 +104,10 @@ export interface CouncilRunView {
   id: string
   /** Headline for the run row (first spec line, or a browsed session's question). */
   title: string
-  /** The spec text judged (kept so a browse/re-convene has the source; '' for a browsed header). */
+  /** Original author request; empty for a read-only run reopened from history. */
   spec: string
+  /** Accumulated spec + author answers sent on a clarification continuation. */
+  continuationSpec?: string
   /** The finished verdict, or null while the council is convening. */
   result: CouncilResult | null
   /** Epoch ms the run was requested. */
@@ -146,6 +148,11 @@ export interface CouncilSlice {
   } | null
   /** Convene the standalone spec-mode council on free-form text (resolves in-store). */
   conveneCouncil: (projectId: string, spec: string) => Promise<void>
+  /** Re-run the active spec with the author's guided clarification answers. */
+  continueCouncil: (
+    projectId: string,
+    answers: readonly CouncilClarificationAnswer[],
+  ) => Promise<void>
   /** Point the standalone active run at a chosen view (history browse, or null to dismiss). */
   setCouncilActive: (run: CouncilRunView | null) => void
   /** Clear the standalone "council finished" cue. */

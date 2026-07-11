@@ -19,6 +19,12 @@
   flex-direction: column;
   gap: var(--sp-3);
 }
+.councilView__composeTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
 .councilView__composeHead {
   display: flex;
   flex-direction: column;
@@ -92,6 +98,56 @@
 }
 .councilView__convene {
   flex-shrink: 0;
+}
+.councilView__composeBack {
+  flex-shrink: 0;
+  padding: 3px 0;
+  border: 0;
+  color: var(--text-faint);
+  background: transparent;
+  font-size: var(--fs-xs);
+  transition: color var(--dur) var(--ease-out);
+}
+.councilView__composeBack:hover {
+  color: var(--text);
+}
+.councilView__composeBack:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.councilView__composeCollapsed {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding-block: var(--sp-3);
+}
+.councilView__composeCollapsedIcon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  color: var(--signal);
+  border: 1px solid color-mix(in srgb, var(--signal) 36%, var(--border));
+  background: var(--signal-dim);
+}
+.councilView__composeCollapsed > div {
+  min-width: 0;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+}
+.councilView__composeCollapsed strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .councilView__noproject {
@@ -196,13 +252,28 @@
 
 .councilView__busy {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--sp-3);
-  padding: var(--sp-4) var(--sp-2);
+  width: min(100%, 72ch);
+  padding: var(--sp-4);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--r-lg);
+  background: var(--surface-inset);
   color: var(--text-muted);
   font-size: var(--fs-sm);
 }
+.councilView__busy > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.5;
+}
+.councilView__busy strong {
+  color: var(--text);
+  font-weight: 650;
+}
 .councilView__pulse {
+  margin-top: 5px;
   width: 9px;
   height: 9px;
   flex-shrink: 0;
@@ -230,6 +301,137 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
+}
+
+/* Three calm steps replace engine/seat activity as the top-level mental model. */
+.councilJourney {
+  width: min(100%, 72ch);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.councilJourney__step {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.councilJourney__step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  left: 22px;
+  right: 0;
+  top: 11px;
+  height: 1px;
+  background: var(--border);
+}
+.councilJourney__marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  color: var(--text-faint);
+  background: var(--surface-1);
+  font: 700 var(--fs-micro) / 1 var(--font-mono);
+}
+.councilJourney__step--complete,
+.councilJourney__step--active {
+  color: var(--text-muted);
+}
+.councilJourney__step--complete .councilJourney__marker {
+  color: var(--signal);
+  border-color: color-mix(in srgb, var(--signal) 40%, var(--border));
+  background: var(--signal-dim);
+}
+.councilJourney__step--complete:not(:last-child)::after {
+  background: color-mix(in srgb, var(--signal) 48%, var(--border));
+}
+.councilJourney__step--active .councilJourney__marker {
+  color: var(--accent-hi);
+  border-color: var(--border-accent);
+  background: var(--accent-wash);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.councilJourney__step--error,
+.councilJourney__step--error .councilJourney__marker {
+  color: var(--danger);
+}
+.councilJourney__step--error .councilJourney__marker {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border));
+  background: var(--danger-wash);
+}
+
+/* Approved is an explicit hand-off, never an implied auto-start. */
+.councilReady {
+  width: min(100%, 72ch);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid color-mix(in srgb, var(--signal) 28%, var(--border));
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--signal-dim) 44%, var(--surface-1));
+}
+.councilReady h3 {
+  margin: 5px 0 4px;
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-weight: 680;
+}
+.councilReady p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.councilReady__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+.councilReady__actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.councilReady__copyError {
+  flex-basis: 100%;
+  color: var(--warning);
+}
+
+/* Every internal artifact is behind this one default-closed doorway. */
+.councilEvidence {
+  width: min(100%, 72ch);
+}
+.councilEvidence__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  border-top: 1px solid var(--border-faint);
+  background: var(--surface-inset);
+}
+.councilEvidence__body .councilScore {
+  width: 100%;
+  max-width: none;
 }
 
 /* ----- persisted history: three-run glance, expandable on demand ----- */
@@ -428,5 +630,48 @@
   .councilView__pulse,
   .councilView__historySpinner {
     animation: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .councilView__composeTop {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--sp-2);
+  }
+  .councilView__composeBack {
+    align-self: flex-start;
+  }
+  .councilView__composeCollapsed {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .councilView__composeCollapsed .btn {
+    margin-left: 38px;
+  }
+  .councilJourney {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .councilJourney__step:not(:last-child)::after {
+    left: 11px;
+    right: auto;
+    top: 22px;
+    bottom: -8px;
+    width: 1px;
+    height: auto;
+  }
+  .councilJourney__step {
+    align-items: center;
+    flex-direction: row;
+    gap: 8px;
+  }
+  .councilReady {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .councilReady__actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }

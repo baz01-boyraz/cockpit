@@ -590,5 +590,11 @@ function normalizeVerdictKind(kind: string | null): 'approved' | 'needs_clarific
  *  no gate, the session still renders its seats). */
 function normalizeSpecVerdict(verdict: string): CouncilResult['specVerdict'] {
   const parsed = parseSpecVerdict(verdict)
-  return parsed.kind ? { kind: parsed.kind, questions: parsed.questions } : null
+  return parsed.kind
+    ? {
+        kind: parsed.kind,
+        questions: parsed.questions,
+        ...(parsed.clarifications ? { clarifications: parsed.clarifications } : {}),
+      }
+    : null
 }
