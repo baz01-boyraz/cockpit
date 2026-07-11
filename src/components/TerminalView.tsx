@@ -57,6 +57,16 @@ export function agentPromptPlaceholder(agent: 'claude' | 'codex'): string {
   return `Write here with normal editing, then send it into ${label}…`
 }
 
+export function memoryReceiptHint(receipt: MemoryContextReceipt | null): string {
+  if (!receipt) return ' · every task'
+  if (receipt.status === 'unavailable') return ' · unavailable'
+  if (receipt.delivery === 'lookup') return ' · agent lookup'
+  if (receipt.delivery === 'inline') {
+    return ` · ${receipt.notes.length} hook${receipt.notes.length === 1 ? '' : 's'}`
+  }
+  return ' · no match'
+}
+
 export function TerminalView({ session, active }: { session: TerminalSession; active: boolean }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -275,9 +285,9 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
     setPreparingPrompt(true)
     setError(null)
     try {
-      // Main reads/ranks the project hub and returns one bounded prompt whose
-      // receipt proves which note bodies were delivered. xterm then wraps it in
-      // bracketed-paste markers for either agent TUI.
+      // Main returns either a compact lookup contract or the original prompt
+      // unchanged. Full note bodies never pass through the terminal composer.
+      // xterm wraps the result in bracketed-paste markers for either agent TUI.
       const prepared = await cockpit().terminals.prepareAgentPrompt(session.id, prompt)
       term.paste(prepared.prompt)
       await cockpit().terminals.write(session.id, '\r')
@@ -579,10 +589,8 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
                   <IconSend width={12} height={12} /> Prompt dock
                 </span>
                 <span className="codexdock__headHint">
-                  Memory auto-check
-                  {memoryReceipt
-                    ? ` · ${memoryReceipt.notes.length} note${memoryReceipt.notes.length === 1 ? '' : 's'}`
-                    : ' · every task'}
+                  Memory lookup
+                  {memoryReceiptHint(memoryReceipt)}
                 </span>
                 <button
                   type="button"
@@ -652,7 +660,7 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
             >
               <IconSend width={12} height={12} />
               <span>Draft a prompt</span>
-              <small>Memory auto-check · normal edit · paste · undo · multi-line</small>
+              <small>Memory lookup · normal edit · paste · undo · multi-line</small>
             </button>
           )}
         </section>

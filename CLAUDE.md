@@ -78,13 +78,17 @@ review queue, secrets are refused. Direct human writes from the Memory UI stay u
 
 Every app-owned task ingress passes through `MemoryContextService` before an engine sees the
 task: Claude chat, Hermes chat, Council spec + diff (all seats, rankings, and chairman), Swarm
-workers, pre-ship review, and the Claude/Codex terminal prompt dock. The gateway relevance-ranks
-the hub, injects bounded/redacted **note bodies** with source paths, and records a context receipt.
-Filename pointers alone do not count as memory delivery. If the hub cannot be read, the prompt
-contains an explicit `status: unavailable` warning; callers must never pretend memory loaded.
-Interactive Claude transcripts strip the injected block before auto-capture so memory cannot
-distill and duplicate itself. Raw terminal keystrokes are an escape hatch; use the prompt dock for
-the guaranteed memory-backed task path.
+workers, pre-ship review, and the Claude/Codex terminal prompt dock. Delivery is capability-aware:
+Claude/Codex/Swarm receive one compact instruction to search `.cockpit-memory/` and read only
+task-relevant notes themselves; Hermes receives the equivalent `read_memory_recent(query=task)`
+instruction. Never paste full note bodies into these prompts. Tool-less Council/review engines may
+receive at most two short, positively matched hooks with source paths. Zero-overlap means no
+memory block — never pad with recent unrelated notes. A receipt distinguishes `lookup`, `inline`,
+and `none`; it proves the gateway ran, not that an agent read a note. Source citations prove use.
+If the hub cannot be read, the prompt says `MEMORY UNAVAILABLE`; callers must never pretend it
+loaded. Interactive transcripts strip both the compact format and legacy v0.2.4 full-body blocks
+before auto-capture. Raw terminal keystrokes remain an escape hatch; the prompt dock is the
+guaranteed memory lookup path.
 
 ## Frontend work — always do first
 

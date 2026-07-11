@@ -1055,6 +1055,30 @@ describe('Hermes MCP tools — the scoped tool set', () => {
       expect(result.notes[0].content).toContain('molten obsidian')
     })
 
+    it('caps matched note content so one oversized note cannot become another context dump', async () => {
+      const base = makeContext()
+      const memory: HermesToolContext['memory'] = {
+        list: () => MEMORY_SNAPSHOT,
+        listDocs: () => [
+          {
+            name: 'landing-page-direction',
+            content: `Landing page direction uses copper.\n\n${'x'.repeat(20_000)}`,
+            updatedAt: 't1',
+          },
+        ],
+        write: base.ctx.memory.write,
+      }
+      const { ctx } = makeContext({ memory })
+
+      const result = (await toolNamed(ctx, 'read_memory_recent').run({
+        projectId: 'p1',
+        query: 'landing page direction',
+      })) as { notes: { content: string; truncated: boolean }[] }
+
+      expect(result.notes[0].content.length).toBeLessThanOrEqual(6_000)
+      expect(result.notes[0].truncated).toBe(true)
+    })
+
     it('rejects invalid input (missing projectId)', async () => {
       const { ctx } = makeContext()
       await expect(toolNamed(ctx, 'read_memory_recent').run({})).rejects.toThrow()

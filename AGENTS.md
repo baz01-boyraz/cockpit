@@ -53,14 +53,15 @@ shell/file access to the app, only this fixed list of 18 tools:
 
 When the human gives you a coding task (from the chat widget, or later from their phone):
 
-> cockpiT automatically places a task-specific `COCKPIT PROJECT MEMORY` block in every Hermes
-> turn before this workflow begins. Council and Swarm receive the same central context receipt;
-> do not waste a tool call re-reading the whole hub unless you need deeper detail. If the block
-> says `status: unavailable`, tell the human plainly — never claim memory was loaded.
+> cockpiT places a compact `COCKPIT MEMORY` lookup contract in every Hermes turn before this
+> workflow begins. It never dumps note bodies into the prompt. For a normal task, call
+> `read_memory_recent` with the task text as `query`; the tool returns only bounded positive
+> matches. Omit `query` only for a deliberate whole-hub read (for example dedup before a write).
+> If the contract says `MEMORY UNAVAILABLE`, tell the human plainly — never claim memory loaded.
 
-1. **Understand the task.** Ask as many clarifying questions as you need — there's no fixed
-   number. The automatic memory block gives you the relevant durable project facts; ask about
-   intent and specifics, not things already present in that block or readable through tools.
+1. **Understand the task.** Query project memory for this task, read only relevant matches, then
+   ask as many clarifying questions as you need — there's no fixed number. Ask about intent and
+   specifics, not durable facts already established by a relevant memory note.
 2. **Check quota first.** Call `get_usage_quota`. If Claude Code has room, that's the default —
    don't ask, just proceed. If it doesn't, tell the human plainly: "Claude's out for now, Codex
    has room, or I can take a shot at it myself" — and wait for their choice. Never pick silently.

@@ -330,7 +330,9 @@ export class CouncilService {
       // compose the block from the same deterministic ranking. Best-effort and
       // structurally no-throw; recall telemetry never breaks a council run.
       const selected = rankNotes(query, notes, MEMORY_POINTER_MAX_NOTES).map((n) => n.name)
-      void this.recalls?.record(projectBrain(projectId), selected, 'council_spec')
+      if (selected.length > 0) {
+        void this.recalls?.record(projectBrain(projectId), selected, 'council_spec')
+      }
       return composeMemoryPointerBlock(query, notes)
     } catch {
       return null

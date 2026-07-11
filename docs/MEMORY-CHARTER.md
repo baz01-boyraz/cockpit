@@ -14,21 +14,31 @@ that stranger, or do not write.
 
 Memory is load-bearing only when it reaches work automatically. Every task the
 cockpit owns must call the central `MemoryContextService` before invoking an
-engine. The service selects task-relevant notes, sends bounded/redacted note
-content (not only filenames), names each `.cockpit-memory/<slug>.md` source, and
-emits a receipt identifying the delivery surface and notes.
+engine. Delivery is capability-aware, retrieval-first, and never a full-body
+prompt dump:
+
+- File-capable Claude/Codex/Swarm agents receive one compact contract to search
+  `.cockpit-memory/` and read only task-relevant notes themselves.
+- Hermes receives the equivalent instruction to call `read_memory_recent` with
+  the current task as `query`; whole-hub reads are reserved for deliberate
+  dedup/curation work.
+- Tool-less Council/review engines may receive at most two short, redacted hooks
+  with source paths, and only when they positively match the task.
+- Zero-overlap means no injected memory block. Never pad context with recent but
+  unrelated notes.
 
 - Covered surfaces: Claude chat, Hermes chat, Council spec/diff, Swarm workers,
   reviews, and the Claude/Codex terminal prompt dock.
-- `ready` means note content reached the prompt; `empty` means the hub was
-  checked but had no deliverable context; `unavailable` must be surfaced and
-  must never be described as a successful read.
-- A selection counter is not proof of model cognition. The receipt proves
-  delivery; source citations in the engine answer are the evidence of use.
-- Injected context is stripped from Claude transcripts before auto-capture so
-  the brain cannot re-ingest its own notes.
+- The receipt's `delivery` is `lookup`, `inline`, or `none`. `ready` means the
+  lookup contract or matched hooks reached the prompt; `empty` means the hub was
+  checked but nothing applied; `unavailable` must be surfaced and must never be
+  described as a successful read.
+- A receipt is not proof of model cognition. A source citation in the engine
+  answer or work log is the evidence that a note materially affected the work.
+- Compact and legacy injected context is stripped from Claude transcripts before
+  auto-capture so the brain cannot re-ingest its own protocol or old note dumps.
 - Raw terminal keystrokes remain an explicit escape hatch. The prompt dock is
-  the guaranteed memory-backed task path for interactive Claude/Codex sessions.
+  the guaranteed memory-lookup path for interactive Claude/Codex sessions.
 
 ## The 7-day test (the core rule)
 

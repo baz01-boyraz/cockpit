@@ -2,7 +2,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import type { TerminalRole, TerminalSession } from '@shared/domain'
-import { agentPromptPlaceholder, TerminalView } from './TerminalView'
+import { agentPromptPlaceholder, memoryReceiptHint, TerminalView } from './TerminalView'
 
 // The renderer effect owns real xterm construction; this server-render test only
 // verifies discoverable markup, so keep the UMD addon out of Node's `self`-less
@@ -41,9 +41,22 @@ describe('TerminalView affordances', () => {
 
     expect(html).toContain('aria-label="Claude Code prompt dock"')
     expect(html).toContain('Draft a prompt')
-    expect(html).toContain('Memory auto-check')
+    expect(html).toContain('Memory lookup')
     expect(agentPromptPlaceholder('claude')).toContain('send it into Claude Code')
     expect(agentPromptPlaceholder('codex')).toContain('send it into Codex')
+  })
+
+  it('describes lookup receipts without pretending note bodies were delivered', () => {
+    expect(
+      memoryReceiptHint({
+        contextId: 'memctx-1',
+        surface: 'terminal_codex',
+        status: 'ready',
+        delivery: 'lookup',
+        notes: [],
+        characters: 180,
+      }),
+    ).toBe(' · agent lookup')
   })
 
   it('keeps the agent-only dock out of ordinary shell panes', () => {

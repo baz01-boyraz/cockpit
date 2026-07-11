@@ -44,4 +44,29 @@ describe('AgentUsageService diagnostics', () => {
       usageProbeDiagnostic(new Error('Bearer sk-ant-oat-secret-example-value failed')),
     ).not.toContain('sk-ant-oat-secret-example-value')
   })
+
+  it('does not probe Anthropic with an already-expired Claude credential', async () => {
+    const fetchImpl = vi.fn()
+    const onProbeError = vi.fn()
+    const service = new AgentUsageService({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      resolveClaudeCreds: async () => ({
+        token: 'sk-ant-oat-expired-test-token',
+        expiresAt: Date.now() - 60_000,
+        plan: 'max',
+      }),
+      readCodexAuth: async () => null,
+      onProbeError,
+    })
+
+    const report = await service.getReport()
+    const claude = report.providers.find((provider) => provider.provider === 'claude')
+
+    expect(claude).toMatchObject({
+      available: false,
+      reason: 'Session expired — reopen Claude Code to refresh.',
+    })
+    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(onProbeError).not.toHaveBeenCalled()
+  })
 })

@@ -47,11 +47,14 @@ const memoryReadSchema = projectIdSchema.extend({
   query: z
     .string()
     .trim()
+    .min(1)
     .max(20_000)
     .optional()
     .describe('Current task text. When supplied, only positive relevance matches are returned.'),
-  limit: z.number().int().min(1).max(10).optional().describe('Maximum matched notes; defaults to 3.'),
+  limit: z.number().int().min(1).max(5).optional().describe('Maximum matched notes; defaults to 3.'),
 })
+
+const MEMORY_QUERY_NOTE_CHAR_CAP = 6_000
 
 export function createMemoryTools(ctx: HermesToolContext): HermesTool[] {
   return [
@@ -69,9 +72,19 @@ export function createMemoryTools(ctx: HermesToolContext): HermesTool[] {
             docs.map((doc) => ({ name: doc.name, hook: extractHook(doc.content) })),
             limit ?? 3,
           )
-          const names = new Set(ranked.map((note) => note.name))
+          const byName = new Map(docs.map((doc) => [doc.name, doc]))
           return {
-            notes: docs.filter((doc) => names.has(doc.name)),
+            notes: ranked.flatMap((note) => {
+              const doc = byName.get(note.name)
+              if (!doc) return []
+              return [
+                {
+                  ...doc,
+                  content: doc.content.slice(0, MEMORY_QUERY_NOTE_CHAR_CAP),
+                  truncated: doc.content.length > MEMORY_QUERY_NOTE_CHAR_CAP,
+                },
+              ]
+            }),
             graph: null,
             queryApplied: true,
           }

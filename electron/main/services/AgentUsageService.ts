@@ -111,6 +111,9 @@ export class AgentUsageService {
     if (!creds) {
       return this.unavailable('claude', 'Sign in with Claude Code to see usage.')
     }
+    if (creds.expiresAt !== null && creds.expiresAt <= Date.now()) {
+      return this.unavailable('claude', 'Session expired — reopen Claude Code to refresh.')
+    }
     if (!creds.token.startsWith('sk-ant-oat')) {
       return this.unavailable(
         'claude',
@@ -277,6 +280,7 @@ export class AgentUsageService {
     if (message.includes('401') || message.includes('403')) {
       return 'Session expired — reopen the CLI to refresh.'
     }
+    if (message.includes('429')) return 'Usage endpoint rate-limited — retrying automatically.'
     if (message.includes('aborted')) return 'Usage request timed out.'
     return 'Usage temporarily unavailable.'
   }

@@ -389,7 +389,7 @@ describe('CouncilService — project memory pointers (Faz D)', () => {
     expect(seatPrompts[0]).not.toContain('unrelated-note')
   })
 
-  it('uses the central memory gateway so real note content reaches every council phase', async () => {
+  it('uses the central memory gateway so matched hooks reach every council phase', async () => {
     const { engine, prompts } = makeCapturingEngine()
     const memoryContexts = {
       forTask: vi.fn(() => ({
@@ -459,6 +459,27 @@ describe('CouncilService — project memory pointers (Faz D)', () => {
       expect.arrayContaining(['gateway-caching']),
       'council_spec',
     )
+  })
+
+  it('does not record a recall when no memory note positively matches the spec', async () => {
+    const { engine } = makeCapturingEngine()
+    const memory = memoryWith([
+      { name: 'billing-window', hook: 'invoices reset at midnight', updatedAt: 't1' },
+    ])
+    const record = vi.fn()
+    const service = new CouncilService(
+      makeProjects(),
+      makeAudit(),
+      engine,
+      makeStore().store,
+      undefined,
+      memory,
+      { record },
+    )
+
+    await service.run('prj_1', { mode: 'spec', specText: 'Redesign the landing page.' })
+
+    expect(record).not.toHaveBeenCalled()
   })
 
   it('omits the memory block entirely when no memory collaborator is wired', async () => {
