@@ -5,7 +5,7 @@ title: Molten Obsidian brand triad + dual-engine color identity
 class: architecture
 capturedAt: 2026-07-04T20:42:41.082Z
 gate: save
-updatedAt: 2026-07-06T01:35:54.065Z
+updatedAt: 2026-07-07T01:10:13.214Z
 ---
 
 cockpiT's brand color system is a role-based triad on an obsidian ground with a strict accent budget (~90/7/2/1, max ~3 ember attention points per view): Ember (orange ramp, `--molten` gradient) = the pilot's attention/CTAs; Glacier (cool blue) = machine data; Lime = safe/go signal. Dual-engine identity is fixed: Claude = ember, Codex = glacier (glacier replaced Codex's old teal #13bd92 and unified inconsistent Codex blues). Core problem this solved was 'ember fatigue' — everything being orange made the accent meaningless. Light discipline: one resting/breathing glow per view region; three glow primitives (core/pool/trace). Signature motions (glint sweep, CountUp tick-up, 1px conic ember-trace hover ring via @property + masked conic border, toast one-shot bloom) animate only transform/opacity and are all gated behind prefers-reduced-motion. Documented in docs/DESIGN-VISION.md and docs/DESIGN.md; shipped commit 20a77dd.
@@ -23,3 +23,4 @@ Related: [[diff-review]]
 - (2026-07-05) The command-center dashboard hero's big title renders the product wordmark 'cockpit' (Space Grotesk, molten gradient), NOT the active project name. Project awareness is preserved by moving the project name to the eyebrow line (COMMAND CENTER · <project>), plus it stays in the top bar and project switcher. The hero was also decluttered: the ENGINES/usage box was removed as a triplicate (usage already shows in the left-rail footer and the Usage nav), collapsing the hero grid to identity | CTAs.
 - (2026-07-05) When styling the graph's new zoom control buttons, `--bg-raised` was assumed to exist as a design token but doesn't. `--surface-3` is the correct token for raised/elevated surface buttons in this design system.
 - (2026-07-06) When styling the graph's new zoom control buttons, `--bg-raised` was assumed to exist as a design token but doesn't. `--surface-3` is the correct token for raised/elevated surface buttons in this design system.
+- (2026-07-07) Baz requested Hermes-specific orange UI accents (avatar border, input border, send button) be changed to platinum/white to align with the Hermes ring identity in the Rail. Applied during the v0.1.43 copy-button work.

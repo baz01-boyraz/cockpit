@@ -5,7 +5,7 @@ title: Hermes chat widget backend (Faz 7) — service owns history, oneshot is s
 class: decision
 capturedAt: 2026-07-05T00:00:00.000Z
 gate: save
-updatedAt: 2026-07-05T00:00:00.000Z
+updatedAt: 2026-07-06T04:40:20.564Z
 ---
 
 Hermes chat widget backend wired in Faz 7 (`docs/plans/hermes.md`). Key invariants:
@@ -20,3 +20,4 @@ Hermes chat widget backend wired in Faz 7 (`docs/plans/hermes.md`). Key invarian
 - Renderer/UI wiring (`HermesWidget.tsx`) is a SEPARATE pass — backend only here.
 
 Related: [[hermes-jarvis-plan]], [[memory-distiller-cli-only]]
+- (2026-07-06) HermesChatService.ts now tracks consecutive timeouts per project session. When the first timeout fires: returns a friendly message asking user to retry. When a 2nd consecutive timeout fires (same project, no successful response in between): the message automatically escalates — instead of 'try again', it tells the user the CLI is genuinely stuck, directs them to check ~/.hermes/logs/agent.log, and suggests restarting hermes. This prevents silent blind waiting after persistent hangs. The counter resets on any successful response.
