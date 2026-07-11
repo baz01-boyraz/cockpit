@@ -10,6 +10,8 @@ import type {
   AgentUsageWindow,
 } from '@shared/domain'
 import { windowFromUsedPercent, windowFromUtilization } from '@shared/agent-usage'
+import { redactText } from '@shared/redaction'
+import { logFatal } from '../logging'
 
 const execFileAsync = promisify(execFile)
 
@@ -19,10 +21,23 @@ const MIN_REFRESH_MS = 60_000
 /** Keep serving the last good snapshot through transient errors for this long. */
 const STALE_FALLBACK_MS = 6 * 60 * 60 * 1000
 
-interface OAuthCreds {
+export interface OAuthCreds {
   token: string
   expiresAt: number | null
   plan: string | null
+}
+
+export interface CodexAuth {
+  token: string
+  accountId: string | null
+}
+
+export interface AgentUsageServiceOptions {
+  fetchImpl?: typeof fetch
+  resolveClaudeCreds?: () => Promise<OAuthCreds | null>
+  readCodexAuth?: () => Promise<CodexAuth | null>
+  /** Receives a redacted diagnostic string; never credentials or response bodies. */
+  onProbeError?: (provider: AgentUsageProvider, diagnostic: string) => void
 }
 
 interface CacheEntry {
@@ -50,6 +65,8 @@ const LABELS: Record<AgentUsageProvider, string> = {
  */
 export class AgentUsageService {
   private readonly cache = new Map<AgentUsageProvider, CacheEntry>()
+
+  constructor(private readonly options: AgentUsageServiceOptions = {}) {}
 
   async getReport(): Promise<AgentUsageReport> {
     const [claude, codex] = await Promise.all([
@@ -79,6 +96,7 @@ export class AgentUsageService {
       if (cached && Date.now() - cached.at < STALE_FALLBACK_MS) return cached.snapshot
       return snapshot
     } catch (err) {
+      this.reportProbeError(provider, err)
       if (cached && Date.now() - cached.at < STALE_FALLBACK_MS) return cached.snapshot
       return this.unavailable(provider, this.errorReason(err))
     }
@@ -87,7 +105,9 @@ export class AgentUsageService {
   // --- Claude (Anthropic OAuth usage) -------------------------------------
 
   private async fetchClaude(): Promise<AgentUsageSnapshot> {
-    const creds = await this.resolveClaudeCreds()
+    const creds = this.options.resolveClaudeCreds
+      ? await this.options.resolveClaudeCreds()
+      : await this.resolveClaudeCreds()
     if (!creds) {
       return this.unavailable('claude', 'Sign in with Claude Code to see usage.')
     }
@@ -169,7 +189,9 @@ export class AgentUsageService {
   // --- Codex (ChatGPT backend usage) --------------------------------------
 
   private async fetchCodex(): Promise<AgentUsageSnapshot> {
-    const auth = await this.readCodexAuth()
+    const auth = this.options.readCodexAuth
+      ? await this.options.readCodexAuth()
+      : await this.readCodexAuth()
     if (!auth) {
       return this.unavailable('codex', 'Sign in with the Codex CLI to see usage.')
     }
@@ -207,7 +229,7 @@ export class AgentUsageService {
     }
   }
 
-  private async readCodexAuth(): Promise<{ token: string; accountId: string | null } | null> {
+  private async readCodexAuth(): Promise<CodexAuth | null> {
     try {
       const raw = await readFile(join(homedir(), '.codex', 'auth.json'), 'utf8')
       const parsed = JSON.parse(raw) as { tokens?: Record<string, unknown> }
@@ -227,7 +249,10 @@ export class AgentUsageService {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
     try {
-      const res = await fetch(url, { headers, signal: controller.signal })
+      const res = await (this.options.fetchImpl ?? fetch)(url, {
+        headers,
+        signal: controller.signal,
+      })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       return await res.json()
     } finally {
@@ -255,6 +280,29 @@ export class AgentUsageService {
     if (message.includes('aborted')) return 'Usage request timed out.'
     return 'Usage temporarily unavailable.'
   }
+
+  private reportProbeError(provider: AgentUsageProvider, err: unknown): void {
+    const diagnostic = usageProbeDiagnostic(err)
+    try {
+      if (this.options.onProbeError) {
+        this.options.onProbeError(provider, diagnostic)
+      } else {
+        logFatal(`agent-usage:${provider}`, new Error(diagnostic))
+      }
+    } catch {
+      // Observability must never make quota telemetry fail harder.
+    }
+  }
+}
+
+/** Reduce a provider failure to a short, secret-free diagnostic for local logs. */
+export function usageProbeDiagnostic(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err ?? '')
+  const redacted = redactText(raw).trim()
+  const status = /\bHTTP\s+\d{3}\b/i.exec(redacted)?.[0]
+  if (status) return status.toUpperCase()
+  if (/abort/i.test(redacted)) return 'request aborted'
+  return redacted.slice(0, 240) || 'unknown probe failure'
 }
 
 function parseClaudeOAuth(raw: string): OAuthCreds | null {

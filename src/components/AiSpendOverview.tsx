@@ -45,7 +45,13 @@ function HermesCapacity({ snapshot }: { snapshot: OpenRouterUsageSnapshot | null
   if (!available || !snapshot) {
     return (
       <article className="capEngine capEngine--hermes capEngine--off">
-        <CapacityHead glyph="H" name="Hermes" kind="Pay-as-you-go" tone="off" />
+        <CapacityHead
+          glyph="H"
+          name="Hermes"
+          kind="Pay-as-you-go"
+          tone="off"
+          statusLabel="Credit unavailable"
+        />
         <p className="capEngine__reason">
           {snapshot?.reason ?? 'Add an OpenRouter key in Settings to meter spend.'}
         </p>
@@ -109,7 +115,7 @@ export function AiSpendOverview({ ledger }: { ledger: ActivityLedger }) {
   }
 
   const subscriptions = snapshots ?? []
-  const onlineCount =
+  const reportingCount =
     subscriptions.filter((s) => s.available).length + (openRouter?.available ? 1 : 0)
   const totalCount = subscriptions.length + 1
 
@@ -121,7 +127,7 @@ export function AiSpendOverview({ ledger }: { ledger: ActivityLedger }) {
           <h3 className="capacity__title">Engines &amp; spend</h3>
         </div>
         <span className="chip">
-          {onlineCount}/{totalCount} engines live
+          {reportingCount}/{totalCount} meters reporting
         </span>
       </div>
 

@@ -635,22 +635,15 @@ export function createMockApi(): CockpitApi {
         }
         const surface = found.role === 'claude' ? 'terminal_claude' : 'terminal_codex'
         const contextId = `memctx_mock_${sessionId}`
-        const block = [
-          'COCKPIT PROJECT MEMORY — AUTOMATIC TASK CONTEXT',
-          `context_id: ${contextId}`,
-          `surface: ${surface}`,
-          'status: empty',
-          '',
-          'Browser preview: the project memory check completed with no injected note body.',
-        ].join('\n')
         return {
-          prompt: `${block}\n\nUSER TASK — execute this request using the project memory above where relevant:\n${prompt}`,
+          prompt,
           memory: {
             contextId,
             surface,
             status: 'empty',
+            delivery: 'none',
             notes: [],
-            characters: block.length,
+            characters: 0,
           },
         }
       },

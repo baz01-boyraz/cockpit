@@ -138,6 +138,7 @@ describe('ReviewService.run', () => {
           contextId: 'memctx_review',
           surface: 'review_diff' as const,
           status: 'ready' as const,
+          delivery: 'inline' as const,
           notes: [],
           characters: 90,
         },

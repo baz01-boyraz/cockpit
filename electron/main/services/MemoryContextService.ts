@@ -18,8 +18,8 @@ type RecallSink = {
 /**
  * The single memory-read gateway for task execution. Every engine-facing
  * service asks this collaborator for context rather than reading/ranking the hub
- * itself. One call means: hub checked, real content bounded+redacted, delivery
- * receipt recorded, and failures made explicit in the returned prompt block.
+ * itself. One call means: hub checked, a capability-appropriate lookup/inline
+ * contract prepared, a receipt recorded, and failures made explicit.
  */
 export class MemoryContextService implements MemoryContextProvider {
   constructor(
@@ -44,7 +44,7 @@ export class MemoryContextService implements MemoryContextProvider {
     }
 
     const slugs = result.receipt.notes.map((note) => note.name)
-    if (result.receipt.status === 'ready' && slugs.length > 0) {
+    if (result.receipt.delivery === 'inline' && slugs.length > 0) {
       try {
         this.recalls?.record(projectBrain(input.projectId), slugs, input.surface)
       } catch {
@@ -53,27 +53,32 @@ export class MemoryContextService implements MemoryContextProvider {
     }
 
     const actionType =
-      result.receipt.status === 'ready'
-        ? 'memory.context_delivered'
+      result.receipt.status === 'unavailable'
+        ? 'memory.context_unavailable'
         : result.receipt.status === 'empty'
           ? 'memory.context_empty'
-          : 'memory.context_unavailable'
+          : result.receipt.delivery === 'lookup'
+            ? 'memory.context_lookup'
+            : 'memory.context_delivered'
     try {
       this.audit?.record({
         projectId: input.projectId,
         actor: 'system',
         actionType,
         summary:
-          result.receipt.status === 'ready'
-            ? `Project memory delivered to ${input.surface}: ${slugs.length} note(s)`
+          result.receipt.status === 'unavailable'
+            ? `Project memory unavailable for ${input.surface}`
             : result.receipt.status === 'empty'
-              ? `Project memory checked for ${input.surface}: no context available`
-              : `Project memory unavailable for ${input.surface}`,
+              ? `Project memory checked for ${input.surface}: no relevant context`
+              : result.receipt.delivery === 'lookup'
+                ? `Project memory lookup required for ${input.surface}`
+                : `Project memory hooks delivered to ${input.surface}: ${slugs.length} note(s)`,
         // Never store the task query or note content in audit — provenance only.
         payload: {
           contextId,
           surface: input.surface,
           status: result.receipt.status,
+          delivery: result.receipt.delivery,
           notes: slugs,
           characters: result.receipt.characters,
         },

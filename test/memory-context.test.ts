@@ -142,7 +142,7 @@ describe('wrapTaskWithMemory', () => {
     })
     const prompt = wrapTaskWithMemory('Redesign landing page', context)
 
-    expect(prompt.indexOf('COCKPIT PROJECT MEMORY')).toBeLessThan(
+    expect(prompt.indexOf('COCKPIT MEMORY')).toBeLessThan(
       prompt.indexOf('Redesign landing page'),
     )
     expect(prompt).toContain('USER TASK')

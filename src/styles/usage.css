@@ -263,7 +263,7 @@
     0 1px 1px rgba(0, 0, 0, 0.55),
     0 0 10px color-mix(in srgb, var(--tone) 34%, transparent);
 }
-.engineCore__offline {
+.engineCore__unavailable {
   color: var(--text-faint);
   font-size: var(--fs-micro);
   font-weight: 700;
@@ -275,7 +275,7 @@
  * instrument dial: one fixed 56px SVG geometry shared by all three engines
  * (RING_SIZE/STROKE in UsageStrip.tsx) so Claude / Codex / Hermes always read
  * as a matched set — same size, same bezel weight — no matter how full each
- * one is or whether the engine is offline. Per-provider `--logo-scale`
+ * one is or whether its quota telemetry is unavailable. Per-provider `--logo-scale`
  * normalizes the two logo marks to one visual size within the dial.
  * Animate only transform / opacity. */
 .logoMeter {

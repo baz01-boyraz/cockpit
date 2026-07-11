@@ -19,7 +19,7 @@ const STATUS_LABEL: Record<CapacityTone, string> = {
   healthy: 'Healthy',
   warning: 'Low',
   critical: 'Critical',
-  off: 'Offline',
+  off: 'Unavailable',
 }
 
 /** Short relative reset, e.g. 'resets 2h' / 'resets 3d'. Null when unknown. */
@@ -123,11 +123,13 @@ export function CapacityHead({
   name,
   kind,
   tone,
+  statusLabel,
 }: {
   glyph: string
   name: string
   kind: string
   tone: CapacityTone
+  statusLabel?: string
 }) {
   return (
     <header className="capEngine__head">
@@ -138,7 +140,9 @@ export function CapacityHead({
         <span className="capEngine__name">{name}</span>
         <span className="capEngine__kind">{kind}</span>
       </span>
-      <span className={`capEngine__status capEngine__status--${tone}`}>{STATUS_LABEL[tone]}</span>
+      <span className={`capEngine__status capEngine__status--${tone}`}>
+        {statusLabel ?? STATUS_LABEL[tone]}
+      </span>
     </header>
   )
 }
@@ -161,6 +165,7 @@ export function SubscriptionCapacity({ snapshot }: { snapshot: AgentUsageSnapsho
         name={snapshot.label}
         kind={detail.plan ? `Subscription · ${detail.plan}` : 'Subscription'}
         tone={tone}
+        statusLabel={detail.telemetryLabel}
       />
       {detail.available ? (
         <div className="capEngine__rings">

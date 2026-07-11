@@ -330,7 +330,7 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
     expect(deps.spawned[0].name).toBe('Swarm — Fixer·Frontend: Fix the form')
     expect(deps.spawned[0].command).toContain(`claude '`)
     expect(deps.spawned[0].command).toContain('Your role: FIXER')
-    expect(deps.spawned[0].command).toContain('.cockpit-memory/swarm-design.md')
+    expect(deps.spawned[0].command).not.toContain('.cockpit-memory/swarm-design.md')
     expect(deps.spawned[0].cwd).toBe('/proj/.cockpit-worktrees/a')
     const row = store.rows.find((r) => r.id === 'a')!
     expect(row.status).toBe('in_progress')
@@ -407,7 +407,7 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
     expect(deps.spawned[0].command).not.toContain('All form input is validated through the shared Zod schema.')
   })
 
-  it('records the selected hub notes as a swarm_worker recall when a worker spawns (G2)', async () => {
+  it('does not record a fake recall when no hub note positively matches the card', async () => {
     const record = vi.fn()
     const svcWithRecall = new SwarmService(
       store.db,
@@ -427,7 +427,7 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
       { record },
     )
     await svcWithRecall.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
-    expect(record).toHaveBeenCalledWith('project:p1', ['swarm-design'], 'swarm_worker')
+    expect(record).not.toHaveBeenCalled()
   })
 
   it('reuses an existing worktree on resume and never starts a done card', async () => {

@@ -179,6 +179,7 @@ function makeService(
         contextId: string
         surface: 'hermes_chat'
         status: 'ready'
+        delivery: 'lookup'
         notes: []
         characters: number
       }

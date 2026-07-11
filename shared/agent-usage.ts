@@ -27,6 +27,9 @@ export interface AgentUsagePill {
   minRemainingPercent: number | null
   tone: UsageTone
   available: boolean
+  /** Honest telemetry state; never implies whether the underlying CLI can run. */
+  telemetryLabel: 'Usage reporting' | 'Usage unavailable'
+  telemetryShortLabel: 'live' | 'usage n/a'
   plan: string | null
   reason: string | null
 }
@@ -164,6 +167,8 @@ export function summarizeAgentUsage(snapshot: AgentUsageSnapshot): AgentUsagePil
       minRemainingPercent: null,
       tone: 'healthy',
       available: false,
+      telemetryLabel: 'Usage unavailable',
+      telemetryShortLabel: 'usage n/a',
       reason: snapshot.reason,
     }
   }
@@ -193,6 +198,8 @@ export function summarizeAgentUsage(snapshot: AgentUsageSnapshot): AgentUsagePil
       minRemainingPercent: null,
       tone: 'healthy',
       available: false,
+      telemetryLabel: 'Usage unavailable',
+      telemetryShortLabel: 'usage n/a',
       reason: 'No quota windows reported.',
     }
   }
@@ -206,6 +213,8 @@ export function summarizeAgentUsage(snapshot: AgentUsageSnapshot): AgentUsagePil
     minRemainingPercent: min,
     tone: toneFor(min),
     available: true,
+    telemetryLabel: 'Usage reporting',
+    telemetryShortLabel: 'live',
     reason: null,
   }
 }

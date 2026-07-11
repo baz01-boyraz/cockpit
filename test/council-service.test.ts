@@ -403,6 +403,7 @@ describe('CouncilService — project memory pointers (Faz D)', () => {
           contextId: 'memctx_council',
           surface: 'council_spec' as const,
           status: 'ready' as const,
+          delivery: 'inline' as const,
           notes: [],
           characters: 140,
         },

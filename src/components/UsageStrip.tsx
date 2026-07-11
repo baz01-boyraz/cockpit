@@ -132,7 +132,7 @@ function hermesDisplay(snapshot: OpenRouterUsageSnapshot | null): string {
  * status dot and the binding remaining percent. Identity color (ember / teal)
  * stays constant; the status dot escalates amber → red as the engine runs low.
  */
-function EngineCore({
+export function EngineCore({
   snapshot,
   pill,
   onOpen,
@@ -147,7 +147,7 @@ function EngineCore({
   const label = snapshot.label
   const ariaLabel = pill.available
     ? `${label} engine. ${pctAria(headline)} quota left. 5 hour window ${pctAria(pill.sessionPercent)}, weekly ${pctAria(pill.weeklyPercent)}. Open details.`
-    : `${label} engine offline. ${pill.reason ?? 'Open details.'}`
+    : `${label} quota telemetry unavailable. ${pill.reason ?? 'Open details.'}`
 
   return (
     <button
@@ -167,7 +167,7 @@ function EngineCore({
         {pill.available ? (
           <span className="engineCore__pct mono">{pctText(headline)}</span>
         ) : (
-          <span className="engineCore__offline mono">offline</span>
+          <span className="engineCore__unavailable mono">{pill.telemetryShortLabel}</span>
         )}
       </span>
     </button>
@@ -196,7 +196,7 @@ function HermesEngineCore({
   const tone = available ? toneFor(snapshot?.remainingPercent ?? null) : 'off'
   const ariaLabel = available
     ? `Hermes engine. ${display} OpenRouter credit left. Open Hermes.`
-    : `Hermes engine offline. ${snapshot?.reason ?? 'Open Hermes.'}`
+    : `Hermes credit telemetry unavailable. ${snapshot?.reason ?? 'Open Hermes.'}`
 
   return (
     <button
@@ -216,7 +216,7 @@ function HermesEngineCore({
         {available ? (
           <span className="engineCore__pct mono">{display}</span>
         ) : (
-          <span className="engineCore__offline mono">offline</span>
+          <span className="engineCore__unavailable mono">credit n/a</span>
         )}
       </span>
     </button>
@@ -241,20 +241,25 @@ export function UsageStrip() {
   // Hide the bay entirely only when nothing is connected and nothing to say.
   if (pills.every(({ pill }) => !pill.available && !pill.reason)) return null
 
-  const hermesOnline = openRouter?.available ?? false
-  const onlineCount = pills.filter(({ pill }) => pill.available).length + (hermesOnline ? 1 : 0)
+  const hermesReporting = openRouter?.available ?? false
+  const reportingCount =
+    pills.filter(({ pill }) => pill.available).length + (hermesReporting ? 1 : 0)
   const totalCount = pills.length + 1
   let worstRemaining = pills.reduce<number | null>((acc, { pill }) => {
     if (!pill.available || pill.minRemainingPercent === null) return acc
     return acc === null ? pill.minRemainingPercent : Math.min(acc, pill.minRemainingPercent)
   }, null)
-  if (hermesOnline && openRouter?.remainingPercent !== null && openRouter?.remainingPercent !== undefined) {
+  if (
+    hermesReporting &&
+    openRouter?.remainingPercent !== null &&
+    openRouter?.remainingPercent !== undefined
+  ) {
     worstRemaining =
       worstRemaining === null
         ? openRouter.remainingPercent
         : Math.min(worstRemaining, openRouter.remainingPercent)
   }
-  const bayTone = onlineCount === 0 ? 'off' : toneFor(worstRemaining)
+  const bayTone = reportingCount === 0 ? 'off' : toneFor(worstRemaining)
 
   return (
     <section className={`engineBay engineBay--${bayTone}`} aria-label="AI engines">
@@ -263,10 +268,10 @@ export function UsageStrip() {
         <span className="engineBay__rule" aria-hidden />
         <span
           className="engineBay__live mono"
-          aria-label={`${onlineCount} of ${totalCount} engines online`}
+          aria-label={`${reportingCount} of ${totalCount} quota or credit feeds reporting`}
         >
           <span className="engineBay__liveDot" aria-hidden />
-          {onlineCount}/{totalCount}
+          {reportingCount}/{totalCount} data
         </span>
       </header>
       <div className="engineBay__cores">

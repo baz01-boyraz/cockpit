@@ -2,9 +2,9 @@
  * Relevance-ranked memory recall (Faz D). Pure and dependency-free: given a query
  * (a card's title/body, a spec) and a set of hub notes, order the notes so the
  * ones whose name/hook overlap the query surface first — with recency (the
- * caller's input order) as the tie-break and the score-0 floor. The old behavior
- * (newest-first pointers) is preserved when nothing matches, so this only ever
- * SHARPENS recall, never removes a note the current code would have shown.
+ * caller's input order) only as the tie-break between positive matches. A
+ * score-zero note is never returned: unrelated recent notes are prompt noise,
+ * not a safe fallback.
  *
  * Runs in the browser mock and unit tests, so it must stay free of node/crypto.
  * (`redaction` is a sibling pure module, so the dependency-free property holds.)
@@ -56,10 +56,8 @@ export interface RankedNote {
  * Score = for every distinct query token, +2 if it appears among the note's NAME
  * tokens and +1 if it appears among its HOOK tokens (a token in both scores 3).
  * The name is weighted higher because a kebab-case slug is the human's chosen
- * label for the fact. Ties (including the all-zero case) keep the caller's input
- * order — callers pass notes newest-first, so recency is the tie-break and the
- * floor: zero-overlap notes still fill the remaining slots in recency order,
- * exactly reproducing today's "newest pointers" behavior when nothing matches.
+ * label for the fact. Ties between positive matches keep the caller's input
+ * order. Score-zero notes are dropped instead of padding the result.
  */
 export function rankNotes(
   queryText: string,
@@ -68,6 +66,7 @@ export function rankNotes(
 ): RankedNote[] {
   if (limit <= 0 || notes.length === 0) return []
   const query = new Set(tokenize(queryText))
+  if (query.size === 0) return []
   const scored = notes.map((note, index) => {
     const hook = note.hook ?? null
     let score = 0
@@ -83,11 +82,14 @@ export function rankNotes(
   })
   // Highest score first; equal scores keep input (recency) order via the index.
   scored.sort((a, b) => b.score - a.score || a.index - b.index)
-  return scored.slice(0, limit).map(({ name, hook }) => ({ name, hook }))
+  return scored
+    .filter((note) => note.score > 0)
+    .slice(0, limit)
+    .map(({ name, hook }) => ({ name, hook }))
 }
 
 /** Default caps for the council's inline memory block (see composeMemoryPointerBlock). */
-export const MEMORY_POINTER_MAX_NOTES = 5
+export const MEMORY_POINTER_MAX_NOTES = 2
 export const MEMORY_POINTER_MAX_CHARS = 900
 
 /**

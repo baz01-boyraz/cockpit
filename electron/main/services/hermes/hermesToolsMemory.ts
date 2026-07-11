@@ -6,6 +6,8 @@ import {
 } from '@shared/schemas'
 import { BAZ_GLOBAL_BRAIN, projectBrain } from '@shared/memory-ledger'
 import { gateMemoryWrite } from '@shared/memory-gate'
+import { extractHook } from '@shared/memory-hub'
+import { rankNotes } from '@shared/memory-recall'
 import type { HermesTool, HermesToolContext } from './hermesToolTypes'
 
 /**
@@ -41,18 +43,43 @@ const gatedWriteSchema = memoryWriteSchema.extend({
   justification: justificationShape.optional(),
 })
 
+const memoryReadSchema = projectIdSchema.extend({
+  query: z
+    .string()
+    .trim()
+    .max(20_000)
+    .optional()
+    .describe('Current task text. When supplied, only positive relevance matches are returned.'),
+  limit: z.number().int().min(1).max(10).optional().describe('Maximum matched notes; defaults to 3.'),
+})
+
 export function createMemoryTools(ctx: HermesToolContext): HermesTool[] {
   return [
     {
       name: 'read_memory_recent',
       description:
-        "Read the project's memory hub — all durable knowledge notes with their ACTUAL content plus the assembled graph. Read-only. Task prompts already receive relevant memory automatically; call this when you need the complete hub or before write_memory_summary. The charter is dedup-first, so you must build on what's already known and UPDATE an existing note rather than create a near-duplicate sibling.",
-      inputShape: projectIdSchema.shape,
+        "Read the project's memory hub. For normal tasks, pass `query` (the current task) to receive only bounded positive matches with actual note content; unrelated recent notes are never padded in. Omit `query` only when you genuinely need the complete hub, especially before write_memory_summary for the charter's dedup-first check.",
+      inputShape: memoryReadSchema.shape,
       run: async (raw) => {
-        const { projectId } = projectIdSchema.parse(raw)
+        const { projectId, query, limit } = memoryReadSchema.parse(raw)
+        const docs = ctx.memory.listDocs(projectId)
+        if (query) {
+          const ranked = rankNotes(
+            query,
+            docs.map((doc) => ({ name: doc.name, hook: extractHook(doc.content) })),
+            limit ?? 3,
+          )
+          const names = new Set(ranked.map((note) => note.name))
+          return {
+            notes: docs.filter((doc) => names.has(doc.name)),
+            graph: null,
+            queryApplied: true,
+          }
+        }
         return {
-          notes: ctx.memory.listDocs(projectId),
+          notes: docs,
           graph: ctx.memory.list(projectId),
+          queryApplied: false,
         }
       },
     },

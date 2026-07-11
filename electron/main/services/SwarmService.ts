@@ -733,9 +733,9 @@ export class SwarmService {
    * Read-only hub pointers for the worker prompt (Faz D: relevance-ranked). The
    * pointers are still NAMES only and capped at HUB_POINTER_CAP — the prompt
    * format is unchanged — but they are now ordered by relevance to THIS card's
-   * text (name/hook overlap), with recency as the floor, so a worker on a large
-   * hub sees the notes that actually matter for its task first. A missing hub is
-   * fine; any failure degrades to no pointers, never a refused spawn.
+   * text (name/hook overlap). Score-zero notes are omitted, so a worker never
+   * gets unrelated recent pointers merely to fill the cap. A missing hub is fine;
+   * any failure degrades to no pointers, never a refused spawn.
    */
   private hubNoteNames(projectId: string, card: { title: string; body: string }): string[] {
     try {
@@ -744,7 +744,9 @@ export class SwarmService {
       const names = ranked.map((n) => n.name)
       // Track G2: the selection IS the recall event. Best-effort and structurally
       // no-throw; wrapped anyway so telemetry can never endanger a spawn.
-      void this.recalls?.record(projectBrain(projectId), names, 'swarm_worker')
+      if (names.length > 0) {
+        void this.recalls?.record(projectBrain(projectId), names, 'swarm_worker')
+      }
       return names
     } catch {
       return []
