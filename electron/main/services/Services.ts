@@ -58,7 +58,7 @@ import { ProjectService } from './ProjectService'
 import { RailwayService } from './RailwayService'
 import { SecretStore } from './SecretStore'
 import { TerminalManager } from './TerminalManager'
-import { AgentPromptService } from './AgentPromptService'
+import { MemoryContractService } from './MemoryContractService'
 import { UsageService } from './UsageService'
 import { hasCli } from './cliDetect'
 
@@ -84,7 +84,7 @@ export class Services {
   readonly secrets: SecretStore
   readonly terminals: TerminalManager
   /** Official Claude/Codex task composer — always routes through memory. */
-  readonly agentPrompts: AgentPromptService
+  readonly memoryContract: MemoryContractService
   readonly claudeSessions: ClaudeSessionsService
   readonly agentSessions: AgentSessionsService
   readonly chat: ChatService
@@ -266,7 +266,9 @@ export class Services {
       },
       join(opts.userDataDir, 'shell-integration'),
     )
-    this.agentPrompts = new AgentPromptService(this.terminals, this.memoryContexts)
+    // The standing memory-first contract rides each agent CLI's native channel
+    // (Claude hook / Codex AGENTS.md) — user prompts are never modified.
+    this.memoryContract = new MemoryContractService(this.projects, this.audit)
     // A4: right after TerminalManager reconciled its own stale rows, audit the
     // pids those rows carried for still-alive orphans (a previous process's pty
     // children that reparented on crash) and reap only OUR recent ones. Fully

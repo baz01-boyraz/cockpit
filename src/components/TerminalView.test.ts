@@ -2,7 +2,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import type { TerminalRole, TerminalSession } from '@shared/domain'
-import { agentPromptPlaceholder, memoryReceiptHint, TerminalView } from './TerminalView'
+import { TerminalView } from './TerminalView'
 
 // The renderer effect owns real xterm construction; this server-render test only
 // verifies discoverable markup, so keep the UMD addon out of Node's `self`-less
@@ -28,41 +28,21 @@ function session(role: TerminalRole | null): TerminalSession {
 }
 
 describe('TerminalView affordances', () => {
-  it('gives Codex sessions a discoverable normal-text prompt dock', () => {
-    const html = renderToStaticMarkup(createElement(TerminalView, { session: session('codex'), active: true }))
+  it('keeps agent panes free of prompt middleware — the memory contract rides the CLI, not the UI', () => {
+    for (const role of ['codex', 'claude'] as const) {
+      const html = renderToStaticMarkup(createElement(TerminalView, { session: session(role), active: true }))
 
-    expect(html).toContain('aria-label="Codex prompt dock"')
-    expect(html).toContain('Draft a prompt')
-    expect(html).toContain('normal edit · paste · undo · multi-line')
+      // The retired dock intercepted prompts to prepend memory context. User
+      // input now reaches the TUI verbatim; nothing may sit between them.
+      expect(html).not.toContain('prompt dock')
+      expect(html).not.toContain('codexdock')
+      expect(html).not.toContain('Draft a prompt')
+    }
   })
 
-  it('gives Claude sessions the same memory-backed task gateway', () => {
-    const html = renderToStaticMarkup(createElement(TerminalView, { session: session('claude'), active: true }))
-
-    expect(html).toContain('aria-label="Claude Code prompt dock"')
-    expect(html).toContain('Draft a prompt')
-    expect(html).toContain('Memory lookup')
-    expect(agentPromptPlaceholder('claude')).toContain('send it into Claude Code')
-    expect(agentPromptPlaceholder('codex')).toContain('send it into Codex')
-  })
-
-  it('describes lookup receipts without pretending note bodies were delivered', () => {
-    expect(
-      memoryReceiptHint({
-        contextId: 'memctx-1',
-        surface: 'terminal_codex',
-        status: 'ready',
-        delivery: 'lookup',
-        notes: [],
-        characters: 180,
-      }),
-    ).toBe(' · agent lookup')
-  })
-
-  it('keeps the agent-only dock out of ordinary shell panes', () => {
+  it('keeps the shared terminal affordances on every pane', () => {
     const html = renderToStaticMarkup(createElement(TerminalView, { session: session('general'), active: true }))
 
-    expect(html).not.toContain('aria-label="Codex prompt dock"')
     expect(html).toContain('aria-label="Scroll terminal up one page"')
     expect(html).toContain('aria-label="Scroll terminal down one page"')
     expect(html).toContain('aria-label="Jump to live terminal output"')

@@ -625,28 +625,6 @@ export function createMockApi(): CockpitApi {
           createdAt: now(),
         }
       },
-      prepareAgentPrompt: async (sessionId, prompt) => {
-        let found: TerminalSession | undefined
-        for (const list of Object.values(terminals)) {
-          found = list.find((session) => session.id === sessionId) ?? found
-        }
-        if (!found || (found.role !== 'claude' && found.role !== 'codex')) {
-          throw new Error('Memory-backed task prompts require a Claude or Codex terminal.')
-        }
-        const surface = found.role === 'claude' ? 'terminal_claude' : 'terminal_codex'
-        const contextId = `memctx_mock_${sessionId}`
-        return {
-          prompt,
-          memory: {
-            contextId,
-            surface,
-            status: 'empty',
-            delivery: 'none',
-            notes: [],
-            characters: 0,
-          },
-        }
-      },
       onData: (cb) => {
         dataListeners.add(cb)
         return (() => dataListeners.delete(cb)) as Unsubscribe

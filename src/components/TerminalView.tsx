@@ -2,9 +2,8 @@ import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import type { TerminalAttachment, TerminalSession } from '@shared/domain'
-import type { MemoryContextReceipt } from '@shared/memory-context'
 import { OSC_COMMAND } from '@shared/command-blocks'
-import { isTerminalCopyShortcut, normalizePromptDraft } from '@shared/terminal-ux'
+import { isTerminalCopyShortcut } from '@shared/terminal-ux'
 import { cockpit } from '../lib/cockpit'
 import { CommandBlockDecorations } from '../lib/commandBlocks'
 import { useSessionBlocks } from '../store/blockStore'
@@ -19,7 +18,7 @@ import {
   inferImageMime,
   readBase64,
 } from '../lib/imageAttach'
-import { IconChevron, IconCopy, IconImage, IconSend, IconTerminal, IconX } from './icons'
+import { IconChevron, IconCopy, IconImage, IconTerminal, IconX } from './icons'
 
 type TerminalViewMode = 'stream' | 'blocks'
 
@@ -52,25 +51,9 @@ const THEME = {
   brightWhite: '#ffffff',
 }
 
-export function agentPromptPlaceholder(agent: 'claude' | 'codex'): string {
-  const label = agent === 'claude' ? 'Claude Code' : 'Codex'
-  return `Write here with normal editing, then send it into ${label}…`
-}
-
-export function memoryReceiptHint(receipt: MemoryContextReceipt | null): string {
-  if (!receipt) return ' · every task'
-  if (receipt.status === 'unavailable') return ' · unavailable'
-  if (receipt.delivery === 'lookup') return ' · agent lookup'
-  if (receipt.delivery === 'inline') {
-    return ` · ${receipt.notes.length} hook${receipt.notes.length === 1 ? '' : 's'}`
-  }
-  return ' · no match'
-}
-
 export function TerminalView({ session, active }: { session: TerminalSession; active: boolean }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const promptInputRef = useRef<HTMLTextAreaElement>(null)
   const dragDepthRef = useRef(0)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
@@ -83,13 +66,7 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
   const [hasSelection, setHasSelection] = useState(false)
   const [atLiveOutput, setAtLiveOutput] = useState(true)
   const [copyNotice, setCopyNotice] = useState<string | null>(null)
-  const [promptOpen, setPromptOpen] = useState(false)
-  const [promptDraft, setPromptDraft] = useState('')
-  const [preparingPrompt, setPreparingPrompt] = useState(false)
-  const [memoryReceipt, setMemoryReceipt] = useState<MemoryContextReceipt | null>(null)
   const isCodex = session.role === 'codex'
-  const isAgent = isCodex || session.role === 'claude'
-  const agentLabel = isCodex ? 'Codex' : 'Claude Code'
   // Block capture lives app-level in blockStore (survives pane unmounts);
   // this pane only renders its session's published snapshots.
   const blocks = useSessionBlocks(session.id)
@@ -245,12 +222,6 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
     return () => window.clearTimeout(timeout)
   }, [copyNotice])
 
-  useEffect(() => {
-    if (!promptOpen) return
-    const frame = requestAnimationFrame(() => promptInputRef.current?.focus())
-    return () => cancelAnimationFrame(frame)
-  }, [promptOpen])
-
   const copyTerminalSelection = async () => {
     const term = termRef.current
     const selection = term?.getSelection() ?? ''
@@ -276,29 +247,6 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
   const clearCurrentInput = () => {
     void cockpit().terminals.write(session.id, '\x15')
     termRef.current?.focus()
-  }
-
-  const submitPromptDraft = async () => {
-    const prompt = normalizePromptDraft(promptDraft)
-    const term = termRef.current
-    if (!prompt || !term) return
-    setPreparingPrompt(true)
-    setError(null)
-    try {
-      // Main returns either a compact lookup contract or the original prompt
-      // unchanged. Full note bodies never pass through the terminal composer.
-      // xterm wraps the result in bracketed-paste markers for either agent TUI.
-      const prepared = await cockpit().terminals.prepareAgentPrompt(session.id, prompt)
-      term.paste(prepared.prompt)
-      await cockpit().terminals.write(session.id, '\r')
-      setMemoryReceipt(prepared.memory)
-      setPromptDraft('')
-      term.focus()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not prepare the memory-backed task.')
-    } finally {
-      setPreparingPrompt(false)
-    }
   }
 
   const sendAttachmentPath = async (target: TerminalAttachment) => {
@@ -399,13 +347,11 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
     void saveImage(file)
   }
 
-  const canSubmitPrompt = normalizePromptDraft(promptDraft) !== null
-
   return (
     <div
       className={`termview ${dragging ? 'termview--dragging' : ''} ${saving ? 'termview--saving' : ''} ${
         mode === 'blocks' ? 'termview--blocks' : ''
-      } ${isCodex ? 'termview--codex' : ''} ${promptOpen ? 'termview--promptOpen' : ''}`}
+      } ${isCodex ? 'termview--codex' : ''}`}
       onDragEnterCapture={handleDragEnter}
       onDragOverCapture={handleDragOver}
       onDragLeaveCapture={handleDragLeave}
@@ -577,94 +523,6 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
         }}
       />
 
-      {isAgent && (
-        <section
-          className={`codexdock ${promptOpen ? 'codexdock--open' : ''}`}
-          aria-label={`${agentLabel} prompt dock`}
-        >
-          {promptOpen ? (
-            <>
-              <div className="codexdock__head">
-                <span className="codexdock__title">
-                  <IconSend width={12} height={12} /> Prompt dock
-                </span>
-                <span className="codexdock__headHint">
-                  Memory lookup
-                  {memoryReceiptHint(memoryReceipt)}
-                </span>
-                <button
-                  type="button"
-                  className="codexdock__close"
-                  aria-label="Close Codex prompt dock"
-                  onClick={() => {
-                    setPromptOpen(false)
-                    termRef.current?.focus()
-                  }}
-                >
-                  <IconX width={12} height={12} />
-                </button>
-              </div>
-              <textarea
-                ref={promptInputRef}
-                id={`codex-prompt-${session.id}`}
-                className="codexdock__input"
-                aria-label="Compose Codex prompt"
-                placeholder={agentPromptPlaceholder(isCodex ? 'codex' : 'claude')}
-                value={promptDraft}
-                onChange={(event) => setPromptDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                    event.preventDefault()
-                    void submitPromptDraft()
-                  } else if (event.key === 'Escape') {
-                    event.preventDefault()
-                    setPromptOpen(false)
-                    termRef.current?.focus()
-                  }
-                }}
-                rows={3}
-              />
-              <div className="codexdock__foot">
-                <span className="codexdock__shortcut">
-                  <kbd>⌘</kbd><kbd>↵</kbd> send
-                </span>
-                <button
-                  type="button"
-                  className="codexdock__clear"
-                  disabled={promptDraft.length === 0}
-                  onClick={() => {
-                    setPromptDraft('')
-                    promptInputRef.current?.focus()
-                  }}
-                >
-                  Clear draft
-                </button>
-                <button
-                  type="button"
-                  className="codexdock__send"
-                  disabled={!canSubmitPrompt || preparingPrompt}
-                  onClick={() => void submitPromptDraft()}
-                >
-                  <IconSend width={12} height={12} />
-                  {preparingPrompt ? 'Checking memory…' : `Send to ${agentLabel}`}
-                </button>
-              </div>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="codexdock__launcher"
-              aria-expanded="false"
-              aria-controls={`codex-prompt-${session.id}`}
-              onClick={() => setPromptOpen(true)}
-            >
-              <IconSend width={12} height={12} />
-              <span>Draft a prompt</span>
-              <small>Memory lookup · normal edit · paste · undo · multi-line</small>
-            </button>
-          )}
-        </section>
-      )}
     </div>
   )
 }

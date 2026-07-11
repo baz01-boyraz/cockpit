@@ -19,7 +19,7 @@ import type { CaptureResult } from './memory-pipeline'
 import type { ReviewDecision, ReviewItem } from './memory-review'
 import type { LedgerEntry } from './memory-ledger'
 import type { ConsolidationResult } from './memory-consolidate'
-import type { MemoryContextReceipt, PreparedAgentPrompt } from './memory-context'
+import type { MemoryContextReceipt } from './memory-context'
 import type { BoardColumn, CardStatus, StartCardResult } from './kanban'
 import type { CompletionReport } from './completion-report'
 import type { Assignment } from './agent-taxonomy'
@@ -79,7 +79,6 @@ export const IPC = {
   terminalsAgentSessions: 'terminals:agentSessions',
   terminalsResumeAgent: 'terminals:resumeAgent',
   terminalsAttachImage: 'terminals:attachImage',
-  terminalsPrepareAgentPrompt: 'terminals:prepareAgentPrompt',
 
   gitStatus: 'git:status',
   gitInitRepo: 'git:initRepo',
@@ -264,8 +263,6 @@ export interface CockpitApi {
       mimeType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
       dataBase64: string
     }): Promise<TerminalAttachment>
-    /** Prepare a Claude/Codex task through the automatic project-memory gateway. */
-    prepareAgentPrompt(sessionId: string, prompt: string): Promise<PreparedAgentPrompt>
     onData(cb: (chunk: TerminalOutputChunk) => void): Unsubscribe
     onExit(cb: (evt: TerminalExitEvent) => void): Unsubscribe
   }
@@ -666,7 +663,6 @@ export interface IpcResultMap {
   terminalsAgentSessions: R<CockpitApi['terminals']['agentSessions']>
   terminalsResumeAgent: R<CockpitApi['terminals']['resumeAgent']>
   terminalsAttachImage: R<CockpitApi['terminals']['attachImage']>
-  terminalsPrepareAgentPrompt: R<CockpitApi['terminals']['prepareAgentPrompt']>
 
   gitStatus: R<CockpitApi['git']['status']>
   gitInitRepo: R<CockpitApi['git']['initRepo']>

@@ -78,7 +78,7 @@ review queue, secrets are refused. Direct human writes from the Memory UI stay u
 
 Every app-owned task ingress passes through `MemoryContextService` before an engine sees the
 task: Claude chat, Hermes chat, Council spec + diff (all seats, rankings, and chairman), Swarm
-workers, pre-ship review, and the Claude/Codex terminal prompt dock. Delivery is capability-aware:
+workers, and pre-ship review. Delivery is capability-aware:
 Claude/Codex/Swarm receive one compact instruction to search `.cockpit-memory/` and read only
 task-relevant notes themselves; Hermes receives the equivalent `read_memory_recent(query=task)`
 instruction. Never paste full note bodies into these prompts. Tool-less Council/review engines may
@@ -87,8 +87,15 @@ memory block — never pad with recent unrelated notes. A receipt distinguishes 
 and `none`; it proves the gateway ran, not that an agent read a note. Source citations prove use.
 If the hub cannot be read, the prompt says `MEMORY UNAVAILABLE`; callers must never pretend it
 loaded. Interactive transcripts strip both the compact format and legacy v0.2.4 full-body blocks
-before auto-capture. Raw terminal keystrokes remain an escape hatch; the prompt dock is the
-guaranteed memory lookup path.
+before auto-capture.
+
+**Interactive Claude/Codex terminals ride a standing memory-first contract instead of prompt
+injection** (`docs/MEMORY-CHARTER.md`, "Memory-first contract"). The user's typed prompt is never
+modified. `shared/memory-contract.ts` holds the canonical text; `MemoryContractService` provisions
+it before every agent launch/resume — a `UserPromptSubmit` hook in `.claude/settings.local.json`
+for Claude Code, a managed `AGENTS.md` marker block for Codex. Engines must open replies with a
+`MEMORY: read …` / `MEMORY: no relevant notes` status line as visible per-task evidence. A launch
+never proceeds when the contract cannot be guaranteed.
 
 ## Frontend work — always do first
 

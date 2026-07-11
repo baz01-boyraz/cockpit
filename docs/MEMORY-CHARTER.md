@@ -28,7 +28,7 @@ prompt dump:
   unrelated notes.
 
 - Covered surfaces: Claude chat, Hermes chat, Council spec/diff, Swarm workers,
-  reviews, and the Claude/Codex terminal prompt dock.
+  and reviews.
 - The receipt's `delivery` is `lookup`, `inline`, or `none`. `ready` means the
   lookup contract or matched hooks reached the prompt; `empty` means the hub was
   checked but nothing applied; `unavailable` must be surfaced and must never be
@@ -37,8 +37,29 @@ prompt dump:
   answer or work log is the evidence that a note materially affected the work.
 - Compact and legacy injected context is stripped from Claude transcripts before
   auto-capture so the brain cannot re-ingest its own protocol or old note dumps.
-- Raw terminal keystrokes remain an explicit escape hatch. The prompt dock is
-  the guaranteed memory-lookup path for interactive Claude/Codex sessions.
+
+## Memory-first contract (MUST) — interactive terminals
+
+Interactive Claude/Codex terminal sessions are covered by a **standing
+contract**, not per-prompt injection. The user's typed prompt is never
+modified — not one prepended character. `shared/memory-contract.ts` is the
+single source of the contract text; `MemoryContractService` provisions it
+before every agent terminal launch or resume, and a launch may not proceed
+when the contract cannot be guaranteed:
+
+- **Claude Code**: a managed `UserPromptSubmit` hook in the project's
+  `.claude/settings.local.json`. Its stdout delivers the contract as context on
+  every prompt, alongside — never inside — the user's message.
+- **Codex**: a managed marker block (`<!-- COCKPIT-MEMORY:BEGIN/END -->`) in the
+  project's `AGENTS.md`, which the Codex CLI loads at session start.
+
+The contract requires the engine to search `.cockpit-memory/`, read only
+task-relevant notes, and open its reply with exactly one status line —
+`MEMORY: read <note files>` or `MEMORY: no relevant notes`. That visible line,
+plus the TUI's own tool-call rows, is the per-task evidence of compliance.
+Provisioning is idempotent, preserves all user-owned settings and hooks, and is
+audit-logged as `memory.contract_provisioned`. A corrupt settings file blocks
+the launch with an explicit error instead of being overwritten.
 
 ## The 7-day test (the core rule)
 

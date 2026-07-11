@@ -120,11 +120,6 @@ export const terminalInputSchema = z.object({
   data: z.string(),
 })
 
-export const terminalAgentPromptSchema = z.object({
-  sessionId: z.string().min(1),
-  prompt: z.string().trim().min(1).max(20_000),
-})
-
 export const terminalAttachmentInputSchema = z.object({
   projectId: z.string().min(1),
   sessionId: z.string().min(1).nullable().optional(),

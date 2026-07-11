@@ -59,7 +59,6 @@ import {
   swarmCompletionReportSchema,
   swarmUpdateCardSchema,
   terminalAttachmentInputSchema,
-  terminalAgentPromptSchema,
   terminalIdSchema,
   terminalInputSchema,
   terminalRenameSchema,
@@ -153,6 +152,9 @@ export function registerIpc(services: Services): void {
     const { projectId, agent } = z
       .object({ projectId: z.string().min(1), agent: z.enum(['claude', 'codex']) })
       .parse(p)
+    // MUST gate: the standing memory contract is provisioned before the CLI
+    // starts, so the session loads it at boot. A launch never proceeds without it.
+    services.memoryContract.ensureForAgent(projectId, agent)
     return services.terminals.launchAgent(projectId, agent)
   })
   handle('terminalsClaudeSessions', (p) => {
@@ -161,6 +163,7 @@ export function registerIpc(services: Services): void {
   })
   handle('terminalsResumeClaude', (p) => {
     const { projectId, sessionId } = resumeClaudeSchema.parse(p)
+    services.memoryContract.ensureForAgent(projectId, 'claude')
     return services.terminals.resumeClaude(projectId, sessionId)
   })
   handle('terminalsAgentSessions', (p) => {
@@ -169,15 +172,12 @@ export function registerIpc(services: Services): void {
   })
   handle('terminalsResumeAgent', (p) => {
     const { projectId, provider, sessionId } = resumeAgentSchema.parse(p)
+    services.memoryContract.ensureForAgent(projectId, provider)
     return services.terminals.resumeAgent(projectId, provider, sessionId)
   })
   handle('terminalsAttachImage', (p) =>
     services.attachments.saveTerminalImage(terminalAttachmentInputSchema.parse(p)),
   )
-  handle('terminalsPrepareAgentPrompt', (p) => {
-    const { sessionId, prompt } = terminalAgentPromptSchema.parse(p)
-    return services.agentPrompts.prepare(sessionId, prompt)
-  })
 
   // --- git ---
   handle('gitStatus', (p) => services.git.status(projectIdSchema.parse(p).projectId))

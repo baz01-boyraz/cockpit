@@ -61,11 +61,6 @@ export interface MemoryContextProvider {
   forTask(input: MemoryContextRequest): MemoryContextEnvelope
 }
 
-export interface PreparedAgentPrompt {
-  prompt: string
-  memory: MemoryContextReceipt
-}
-
 export interface MemoryContextLimits {
   maxNotes: number
   maxChars: number
