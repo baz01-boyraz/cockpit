@@ -1,84 +1,58 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
-  autoAcceptKinds,
-  DEFAULT_TRUST_MODE,
-  readTrustMode,
-  TRUST_META,
-  TRUST_MODES,
-  writeTrustMode,
-} from '../src/lib/memoryTrust'
+  autoCommitKinds,
+  brainForAccess,
+  defaultTrustModeForBrain,
+  MEMORY_POLICY,
+  MEMORY_TRUST_META,
+  MEMORY_TRUST_MODES,
+} from '../shared/memory-policy'
 
-/** Minimal in-memory localStorage + window stub for the persistence tests. */
-function stubStorage(): void {
-  const store = new Map<string, string>()
-  ;(globalThis as { window?: unknown }).window = {
-    localStorage: {
-      getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
-      setItem: (k: string, v: string) => void store.set(k, v),
-      removeItem: (k: string) => void store.delete(k),
-    },
-  }
-}
-
-afterEach(() => {
-  delete (globalThis as { window?: unknown }).window
-})
-
-describe('autoAcceptKinds', () => {
-  it('autopilot auto-accepts new + merge + conflict', () => {
-    const set = autoAcceptKinds('autopilot')
-    expect(set.has('new')).toBe(true)
-    expect(set.has('merge')).toBe(true)
-    expect(set.has('conflict')).toBe(true)
+describe('canonical memory policy', () => {
+  it('is machine-readable and locks the trust-sensitive invariants', () => {
+    expect(MEMORY_POLICY.version).toBe(1)
+    expect(MEMORY_POLICY.semanticGate.humanEditsBypassSemanticGate).toBe(true)
+    expect(MEMORY_POLICY.conflicts.autoResolve).toBe(false)
+    expect(MEMORY_POLICY.lifecycle.archiveRepresentation).toBe('status:archived')
+    expect(MEMORY_POLICY.lifecycle.forgetRepresentation).toBe('recoverable-trash')
+    expect(MEMORY_POLICY.actors).toEqual(['user', 'ai', 'system'])
+    expect(MEMORY_POLICY.ledger.requiredForEveryMutation).toBe(true)
   })
 
-  it('assisted auto-accepts only new facts', () => {
-    const set = autoAcceptKinds('assisted')
+  it('defaults project brains to Autopilot and the global brain to Assisted', () => {
+    expect(defaultTrustModeForBrain('project:proj-a')).toBe('autopilot')
+    expect(defaultTrustModeForBrain('baz-global')).toBe('assisted')
+  })
+
+  it('lets Autopilot commit high-quality new facts and merges, never conflicts', () => {
+    const set = autoCommitKinds('autopilot')
     expect(set.has('new')).toBe(true)
-    expect(set.has('merge')).toBe(false)
+    expect(set.has('merge')).toBe(true)
     expect(set.has('conflict')).toBe(false)
   })
 
-  it('manual auto-accepts nothing', () => {
-    expect(autoAcceptKinds('manual').size).toBe(0)
+  it('lets Assisted commit only high-quality new facts and Manual commit nothing', () => {
+    expect([...autoCommitKinds('assisted')]).toEqual(['new'])
+    expect(autoCommitKinds('manual').size).toBe(0)
   })
 
-  it('only autopilot auto-accepts a conflict', () => {
-    expect(autoAcceptKinds('autopilot').has('conflict')).toBe(true)
-    expect(autoAcceptKinds('assisted').has('conflict')).toBe(false)
-    expect(autoAcceptKinds('manual').has('conflict')).toBe(false)
-  })
-})
-
-describe('TRUST_META', () => {
-  it('has a label and effect line for every mode', () => {
-    for (const mode of TRUST_MODES) {
-      expect(TRUST_META[mode].label.length).toBeGreaterThan(0)
-      expect(TRUST_META[mode].effect.length).toBeGreaterThan(0)
+  it('has stable UI copy for every mode without promising silent conflict resolution', () => {
+    for (const mode of MEMORY_TRUST_MODES) {
+      expect(MEMORY_TRUST_META[mode].label.length).toBeGreaterThan(0)
+      expect(MEMORY_TRUST_META[mode].effect.length).toBeGreaterThan(0)
+      expect(MEMORY_TRUST_META[mode].effect.toLowerCase()).not.toContain('conflicts all save')
     }
   })
 })
 
-describe('read/writeTrustMode', () => {
-  it('falls back to the default when nothing is stored (no window)', () => {
-    expect(readTrustMode('proj-x')).toBe(DEFAULT_TRUST_MODE)
-    expect(DEFAULT_TRUST_MODE).toBe('autopilot')
+describe('brain access addressing', () => {
+  it('derives the target from the origin project plus an explicit scope', () => {
+    expect(brainForAccess('proj-a', 'project')).toBe('project:proj-a')
+    expect(brainForAccess('proj-a', 'global')).toBe('baz-global')
   })
 
-  it('round-trips a saved mode per project', () => {
-    stubStorage()
-    writeTrustMode('proj-a', 'manual')
-    writeTrustMode('proj-b', 'assisted')
-    expect(readTrustMode('proj-a')).toBe('manual')
-    expect(readTrustMode('proj-b')).toBe('assisted')
-    expect(readTrustMode('proj-unknown')).toBe(DEFAULT_TRUST_MODE)
-  })
-
-  it('ignores a corrupt stored value and returns the default', () => {
-    stubStorage()
-    const ls = (globalThis as { window?: { localStorage: { setItem(k: string, v: string): void } } })
-      .window!.localStorage
-    ls.setItem('cockpit.memory.trust.proj-c', 'garbage')
-    expect(readTrustMode('proj-c')).toBe(DEFAULT_TRUST_MODE)
+  it('does not accept an empty origin project', () => {
+    expect(() => brainForAccess('', 'project')).toThrow(/origin project/i)
+    expect(() => brainForAccess('', 'global')).toThrow(/origin project/i)
   })
 })

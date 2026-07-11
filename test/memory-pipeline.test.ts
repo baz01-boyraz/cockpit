@@ -10,6 +10,8 @@ import type { MemoryDistiller } from '../electron/main/services/MemoryDistiller'
 import type { ProjectService } from '../electron/main/services/ProjectService'
 import type { Observation } from '@shared/memory-observation'
 import type { ReviewItem } from '@shared/memory-review'
+import type { MemoryBrainScope, MemoryTrustMode } from '@shared/memory-policy'
+import { BAZ_GLOBAL_BRAIN, projectBrain } from '@shared/memory-ledger'
 
 const stubProjects = (path: string): ProjectService =>
   ({ get: () => ({ path }) }) as unknown as ProjectService
@@ -49,14 +51,40 @@ function fakeReviews() {
       return item
     },
     get: (id: string) => items.get(id) ?? null,
+    getPendingFor: (originProjectId: string, scope: MemoryBrainScope, id: string) => {
+      const brain = scope === 'global' ? BAZ_GLOBAL_BRAIN : projectBrain(originProjectId)
+      const item = items.get(id)
+      return item?.brain === brain && item.status === 'pending' ? item : null
+    },
     markResolved: (id: string, status: ReviewItem['status']) => {
       const it = items.get(id)
       if (it) items.set(id, { ...it, status, resolvedAt: 't' })
     },
+    markResolvedFor: (
+      originProjectId: string,
+      scope: MemoryBrainScope,
+      id: string,
+      status: ReviewItem['status'],
+    ) => {
+      const brain = scope === 'global' ? BAZ_GLOBAL_BRAIN : projectBrain(originProjectId)
+      const it = items.get(id)
+      if (!it || it.brain !== brain || it.status !== 'pending') return false
+      items.set(id, { ...it, status, resolvedAt: 't' })
+      return true
+    },
     listPending: (brain: string) => [...items.values()].filter((i) => i.brain === brain && i.status === 'pending'),
+    listPendingFor: (originProjectId: string, scope: MemoryBrainScope) => {
+      const brain = scope === 'global' ? BAZ_GLOBAL_BRAIN : projectBrain(originProjectId)
+      return [...items.values()].filter((i) => i.brain === brain && i.status === 'pending')
+    },
   }
   return { svc: svc as unknown as MemoryReviewService, items }
 }
+
+const fakePolicy = (modes: Partial<Record<string, MemoryTrustMode>>) => ({
+  trustModeForBrain: (brain: string): MemoryTrustMode =>
+    modes[brain] ?? (brain === BAZ_GLOBAL_BRAIN ? 'assisted' : 'autopilot'),
+})
 
 const fakeLedger = () => {
   const records: unknown[] = []
@@ -178,6 +206,53 @@ describe('MemoryPipeline.capture', () => {
     expect(ledger.records[0]).toMatchObject({ brain: 'baz-global' })
     rmSync(globalDir, { recursive: true, force: true })
   })
+
+  it('Manual routes even a high-quality new fact to review while the UI is closed', async () => {
+    const reviews = fakeReviews()
+    const pipe = new MemoryPipeline(
+      memory,
+      fakeLedger().svc,
+      reviews.svc,
+      stubDistiller([obs()]),
+      undefined,
+      undefined,
+      undefined,
+      fakePolicy({ [projectBrain('p1')]: 'manual' }) as never,
+    )
+
+    const res = await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
+
+    expect(res.committed).toBe(0)
+    expect(res.queued).toBe(1)
+    expect(res.proposals[0].gate).toBe('review')
+    expect(memory.read('p1', 'router-placement')).toBeNull()
+  })
+
+  it('Assisted routes a high-quality merge to review instead of changing the note', async () => {
+    memory.write('p1', 'router-placement', 'The router was originally placed in the renderer only.')
+    const reviews = fakeReviews()
+    const merge = obs({
+      isNew: false,
+      body: 'The router now belongs in shared so the renderer and main process use one rule.',
+    })
+    const pipe = new MemoryPipeline(
+      memory,
+      fakeLedger().svc,
+      reviews.svc,
+      stubDistiller([merge]),
+      undefined,
+      undefined,
+      undefined,
+      fakePolicy({ [projectBrain('p1')]: 'assisted' }) as never,
+    )
+
+    const res = await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
+
+    expect(res.committed).toBe(0)
+    expect(res.queued).toBe(1)
+    expect(res.proposals[0]).toMatchObject({ gate: 'review', reconcile: 'merge' })
+    expect(memory.read('p1', 'router-placement')?.content).not.toContain('now belongs')
+  })
 })
 
 describe('MemoryPipeline.resolveReview', () => {
@@ -197,7 +272,7 @@ describe('MemoryPipeline.resolveReview', () => {
     await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
     const [item] = reviews.items.values()
 
-    pipe.resolveReview('p1', item.id, 'accept')
+    pipe.resolveReview('p1', 'project', item.id, 'accept')
     expect(memory.read('p1', 'router-placement')?.content).toContain('lives in shared')
     expect(reviews.items.get(item.id)?.status).toBe('accepted')
     expect(ledger.records).toHaveLength(1)
@@ -209,8 +284,40 @@ describe('MemoryPipeline.resolveReview', () => {
     await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
     const [item] = reviews.items.values()
 
-    pipe.resolveReview('p1', item.id, 'discard')
+    pipe.resolveReview('p1', 'project', item.id, 'discard')
     expect(memory.read('p1', 'router-placement')).toBeNull()
     expect(reviews.items.get(item.id)?.status).toBe('discarded')
+  })
+
+  it('refuses to resolve another project review through the caller project', async () => {
+    const reviews = fakeReviews()
+    const pipe = new MemoryPipeline(memory, fakeLedger().svc, reviews.svc, stubDistiller([obs({ decision: 'ask' })]))
+    await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
+    const [item] = reviews.items.values()
+
+    expect(() => pipe.resolveReview('p2', 'project', item.id, 'accept')).toThrow(/not found|authorized/i)
+    expect(reviews.items.get(item.id)?.status).toBe('pending')
+    expect(memory.read('p1', 'router-placement')).toBeNull()
+  })
+
+  it('requires explicit global scope to resolve a Baz-brain review', async () => {
+    const globalDir = mkdtempSync(join(tmpdir(), 'cockpit-baz-review-'))
+    const globalMemory = new MemoryHubService(stubProjects(globalDir), globalDir)
+    const reviews = fakeReviews()
+    const pipe = new MemoryPipeline(
+      memory,
+      fakeLedger().svc,
+      reviews.svc,
+      stubDistiller([obs({ scope: 'user', decision: 'ask', targetSlug: 'baz-prefers-calm-ui' })]),
+      undefined,
+      globalMemory,
+    )
+    await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
+    const [item] = reviews.items.values()
+
+    expect(() => pipe.resolveReview('p1', 'project', item.id, 'accept')).toThrow(/not found|authorized/i)
+    pipe.resolveReview('p1', 'global', item.id, 'accept')
+    expect(globalMemory.read(BAZ_GLOBAL_BRAIN, 'baz-prefers-calm-ui')).not.toBeNull()
+    rmSync(globalDir, { recursive: true, force: true })
   })
 })
