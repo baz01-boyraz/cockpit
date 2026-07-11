@@ -25,6 +25,7 @@ import { MemoryLedgerService } from './MemoryLedgerService'
 import { MemoryRecallService } from './MemoryRecallService'
 import { MemoryContextService } from './MemoryContextService'
 import { MemoryReviewService } from './MemoryReviewService'
+import { MemoryPolicyService } from './MemoryPolicyService'
 import { MemoryDistiller } from './MemoryDistiller'
 import { MemoryPipeline } from './MemoryPipeline'
 import { MemoryCaptureQueue } from './MemoryCaptureQueue'
@@ -108,6 +109,8 @@ export class Services {
   /** Single automatic memory-read gateway shared by every task surface. */
   readonly memoryContexts: MemoryContextService
   readonly memoryReviews: MemoryReviewService
+  /** Main-process source of truth for project/global Memory trust policy. */
+  readonly memoryPolicy: MemoryPolicyService
   readonly memoryDistiller: MemoryDistiller
   readonly memoryPipeline: MemoryPipeline
   readonly memoryCaptureQueue: MemoryCaptureQueue
@@ -156,6 +159,7 @@ export class Services {
     // construction; both are optional — absent, the spine behaves identically.
     this.hermesTriage = new HermesTriageService()
     this.memoryReviews = new MemoryReviewService(this.db)
+    this.memoryPolicy = new MemoryPolicyService(this.db)
     // ProjectService + the memory hub are built BEFORE the sentinel so the
     // sentinel can take the hub as its Track H3 write path: a recurrence gotcha
     // the charter gate votes `accept` lands straight in the hub, while a `review`
@@ -175,6 +179,7 @@ export class Services {
       this.hermesTriage,
       this.memoryReviews,
       this.memory,
+      this.memoryPolicy,
     )
     this.logs = new LogIntelligenceService(this.db, opts.events, this.sentinel)
     this.attachments = new AttachmentService(this.projects)
@@ -238,6 +243,7 @@ export class Services {
       undefined,
       this.globalMemory,
       this.audit,
+      this.memoryPolicy,
     )
     this.memoryConsolidator = new MemoryConsolidator(this.memory, this.memoryReviews)
     // Faz D: the weekly curation sweep. Reuses the triage runner pattern (a cheap
@@ -323,6 +329,7 @@ export class Services {
       screenshot: this.appScreenshot,
       memory: this.memory,
       memoryReviews: this.memoryReviews,
+      memoryPolicy: this.memoryPolicy,
       memoryPipeline: this.memoryPipeline,
       memoryCuration: this.memoryCuration,
       logs: this.logs,

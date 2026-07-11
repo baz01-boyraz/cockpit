@@ -4,13 +4,15 @@ import type { MemoryHealth } from '@shared/memory-health'
 import type { MemoryHubSnapshot, MemoryNote } from '@shared/memory-hub'
 import type { ReviewItem } from '@shared/memory-review'
 import {
-  autoAcceptKinds,
-  readTrustMode,
-  TRUST_META,
-  TRUST_MODES,
-  writeTrustMode,
-  type TrustMode,
-} from '../../lib/memoryTrust'
+  GLOBAL_DEFAULT_TRUST_MODE,
+  MEMORY_TRUST_META,
+  MEMORY_TRUST_MODES,
+  PROJECT_DEFAULT_TRUST_MODE,
+  isMemoryTrustMode,
+  type MemoryBrainScope,
+  type MemoryTrustMode,
+} from '@shared/memory-policy'
+import { BAZ_GLOBAL_BRAIN } from '@shared/memory-ledger'
 import { IconBolt, IconCheck, IconMemory, IconX } from '../icons'
 
 interface MemoryBrainBarProps {
@@ -29,6 +31,30 @@ interface CaptureReport {
 
 function msg(err: unknown): string {
   return err instanceof Error ? err.message : 'The brain hit an error.'
+}
+
+const legacyTrustKey = (projectId: string): string => `cockpit.memory.trust.${projectId}`
+
+/** One-time bridge from the renderer-only v1 setting into main-process policy. */
+function readLegacyTrustMode(projectId: string): MemoryTrustMode | null {
+  try {
+    const key = legacyTrustKey(projectId)
+    const raw = globalThis.localStorage.getItem(key)
+    if (raw === null) return null
+    if (isMemoryTrustMode(raw)) return raw
+    globalThis.localStorage.removeItem(key)
+    return null
+  } catch {
+    return null
+  }
+}
+
+function clearLegacyTrustMode(projectId: string): void {
+  try {
+    globalThis.localStorage.removeItem(legacyTrustKey(projectId))
+  } catch {
+    // Main-process policy remains authoritative even if legacy cleanup fails.
+  }
 }
 
 /**
@@ -50,80 +76,78 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
   const [baz, setBaz] = useState<MemoryHubSnapshot | null>(null)
   const [bazNote, setBazNote] = useState<MemoryNote | null>(null)
   const [showBaz, setShowBaz] = useState(false)
-  const [mode, setMode] = useState<TrustMode>(() => readTrustMode(projectId))
-  const draining = useRef(false)
+  const [mode, setMode] = useState<MemoryTrustMode>(PROJECT_DEFAULT_TRUST_MODE)
+  const [globalMode, setGlobalMode] = useState<MemoryTrustMode>(GLOBAL_DEFAULT_TRUST_MODE)
+  const activeProjectRef = useRef(projectId)
+
+  const loadReviewQueues = useCallback(async (): Promise<ReviewItem[]> => {
+    const [projectQueue, globalQueue] = await Promise.all([
+      cockpit().memory.reviewQueue(projectId, 'project'),
+      cockpit().memory.reviewQueue(projectId, 'global'),
+    ])
+    return [...projectQueue, ...globalQueue]
+  }, [projectId])
+
+  const loadTrustMode = useCallback(
+    async (scope: MemoryBrainScope): Promise<MemoryTrustMode> => {
+      const state = await cockpit().memory.trustState(projectId, scope)
+      if (scope !== 'project' || state.isExplicit) return state.mode
+      const legacy = readLegacyTrustMode(projectId)
+      if (!legacy) return state.mode
+      const migrated = await cockpit().memory.setTrustMode(projectId, scope, legacy)
+      clearLegacyTrustMode(projectId)
+      return migrated
+    },
+    [projectId],
+  )
 
   const refresh = useCallback(async () => {
     try {
-      const [h, q] = await Promise.all([
+      const [h, q, projectMode, bazMode] = await Promise.all([
         cockpit().memory.health(projectId),
-        cockpit().memory.reviewQueue(projectId),
+        loadReviewQueues(),
+        loadTrustMode('project'),
+        loadTrustMode('global'),
       ])
+      if (activeProjectRef.current !== projectId) return
       setHealth(h)
       setReviews(q)
+      setMode(projectMode)
+      setGlobalMode(bazMode)
     } catch (err) {
+      if (activeProjectRef.current !== projectId) return
       setError(msg(err))
     }
-  }, [projectId])
+  }, [loadReviewQueues, loadTrustMode, projectId])
 
   useEffect(() => {
+    activeProjectRef.current = projectId
     setHealth(null)
     setReviews([])
     setFlash(null)
     setReport(null)
     setError(null)
     setEditing(null)
-    setMode(readTrustMode(projectId))
+    setMode(PROJECT_DEFAULT_TRUST_MODE)
+    setGlobalMode(GLOBAL_DEFAULT_TRUST_MODE)
     void refresh()
   }, [refresh, projectId])
 
   const changeMode = useCallback(
-    (next: TrustMode) => {
-      setMode(next)
-      writeTrustMode(projectId, next)
+    async (scope: MemoryBrainScope, next: MemoryTrustMode) => {
+      setError(null)
+      try {
+        await cockpit().memory.setTrustMode(projectId, scope, next)
+        if (activeProjectRef.current !== projectId) return
+        if (scope === 'global') setGlobalMode(next)
+        else setMode(next)
+      } catch (err) {
+        if (activeProjectRef.current !== projectId) return
+        setError(msg(err))
+      }
     },
     [projectId],
   )
-
-  /**
-   * Honour the trust dial across the WHOLE queue, not just items a manual
-   * capture just added. Background auto-capture can leave a backlog sitting in
-   * review; without this, "Autopilot — only conflicts ask" is a lie and Baz has
-   * to babysit a wall of cards he can't parse. So whenever the queue (or mode)
-   * changes, drain every item this mode auto-accepts. Conflicts never drain —
-   * overwriting an existing note always needs a human. Self-stabilizing: once
-   * drained, no auto-acceptable items remain and the effect no-ops.
-   */
-  useEffect(() => {
-    const accept = autoAcceptKinds(mode)
-    if (accept.size === 0 || draining.current) return
-    const drainable = reviews.filter((r) => accept.has(r.kind))
-    if (drainable.length === 0) return
-    draining.current = true
-    void (async () => {
-      try {
-        let queue = reviews
-        for (const item of drainable) {
-          queue = await cockpit().memory.resolveReview(projectId, item.id, 'accept')
-        }
-        setReviews(queue)
-        const n = drainable.length
-        const left = queue.length
-        setFlash(
-          `Autopilot saved ${n} ${n === 1 ? 'note' : 'notes'} for you` +
-            (left > 0
-              ? ` — ${left} ${left === 1 ? 'conflict needs' : 'conflicts need'} your call.`
-              : ' — nothing left to review.'),
-        )
-        onChanged()
-        await refresh()
-      } catch (err) {
-        setError(msg(err))
-      } finally {
-        draining.current = false
-      }
-    })()
-  }, [reviews, mode, projectId, onChanged, refresh])
 
   const toggleBaz = useCallback(async () => {
     const next = !showBaz
@@ -184,21 +208,16 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
         return
       }
 
-      // Auto-accept per trust mode — only items THIS capture added, never conflicts.
-      const accept = autoAcceptKinds(mode)
-      let queue = await cockpit().memory.reviewQueue(projectId)
+      // Trust is enforced in the main-process pipeline, including background
+      // capture while this panel is unmounted. A queued item is never promoted
+      // to a write by renderer convention.
+      const queue = await loadReviewQueues()
       const fresh = queue.filter((i) => !beforeIds.has(i.id))
-      const autoSavedTitles: string[] = []
-      for (const item of fresh) {
-        if (!accept.has(item.kind)) continue
-        queue = await cockpit().memory.resolveReview(projectId, item.id, 'accept')
-        autoSavedTitles.push(item.title)
-      }
       setReviews(queue)
 
       const committedTitles = res.proposals.filter((p) => p.gate === 'commit').map((p) => p.title)
-      const needsReview = fresh.filter((i) => !accept.has(i.kind)).map((i) => i.title)
-      const autoSaved = [...committedTitles, ...autoSavedTitles]
+      const needsReview = fresh.map((i) => i.title)
+      const autoSaved = committedTitles
       setReport({
         sessionTitle: session.title,
         autoSaved,
@@ -212,15 +231,15 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
     } finally {
       setBusy(false)
     }
-  }, [projectId, refresh, onChanged, reviews, mode])
+  }, [projectId, loadReviewQueues, refresh, onChanged, reviews])
 
   const resolve = useCallback(
     async (item: ReviewItem, decision: 'accept' | 'edit' | 'discard') => {
       setError(null)
       try {
         const content = decision === 'edit' ? editDraft : undefined
-        const next = await cockpit().memory.resolveReview(projectId, item.id, decision, content)
-        setReviews(next)
+        const scope: MemoryBrainScope = item.brain === BAZ_GLOBAL_BRAIN ? 'global' : 'project'
+        await cockpit().memory.resolveReview(projectId, scope, item.id, decision, content)
         setEditing(null)
         await refresh()
         if (decision !== 'discard') onChanged()
@@ -239,11 +258,10 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
       try {
         const targets =
           decision === 'accept' ? reviews.filter((r) => r.kind !== 'conflict') : reviews
-        let queue = reviews
         for (const item of targets) {
-          queue = await cockpit().memory.resolveReview(projectId, item.id, decision)
+          const scope: MemoryBrainScope = item.brain === BAZ_GLOBAL_BRAIN ? 'global' : 'project'
+          await cockpit().memory.resolveReview(projectId, scope, item.id, decision)
         }
-        setReviews(queue)
         setEditing(null)
         await refresh()
         if (decision === 'accept' && targets.length > 0) onChanged()
@@ -289,15 +307,15 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
 
         <div className="brainbar__cta">
           <div className="trustseg" role="group" aria-label="How much the brain saves on its own">
-            {TRUST_MODES.map((m) => (
+            {MEMORY_TRUST_MODES.map((m) => (
               <button
                 key={m}
                 className={`trustseg__btn ${mode === m ? 'trustseg__btn--active' : ''}`}
-                onClick={() => changeMode(m)}
+                onClick={() => void changeMode('project', m)}
                 aria-pressed={mode === m}
-                title={TRUST_META[m].effect}
+                title={MEMORY_TRUST_META[m].effect}
               >
-                {TRUST_META[m].label}
+                {MEMORY_TRUST_META[m].label}
               </button>
             ))}
           </div>
@@ -318,7 +336,7 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
         </div>
       </div>
 
-      <p className="brainbar__mode">{TRUST_META[mode].effect}</p>
+      <p className="brainbar__mode">{MEMORY_TRUST_META[mode].effect}</p>
 
       {report && (
         <div className="capreport">
@@ -376,9 +394,29 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
       {showBaz && baz && (
         <div className="bazbrain">
           <div className="bazbrain__head">
-            <span className="bazbrain__title">Baz brain</span>
-            <span className="brainstat"><b>{baz.notes.length}</b> facts about you</span>
+            <div>
+              <span className="bazbrain__title">Baz brain</span>
+              <span className="brainstat"><b>{baz.notes.length}</b> facts about you</span>
+            </div>
+            <div
+              className="trustseg"
+              role="group"
+              aria-label="How much the global Baz brain saves on its own"
+            >
+              {MEMORY_TRUST_MODES.map((m) => (
+                <button
+                  key={m}
+                  className={`trustseg__btn ${globalMode === m ? 'trustseg__btn--active' : ''}`}
+                  onClick={() => void changeMode('global', m)}
+                  aria-pressed={globalMode === m}
+                  title={MEMORY_TRUST_META[m].effect}
+                >
+                  {MEMORY_TRUST_META[m].label}
+                </button>
+              ))}
+            </div>
           </div>
+          <p className="brainbar__mode">Global policy · {MEMORY_TRUST_META[globalMode].effect}</p>
           {baz.notes.length === 0 ? (
             <p className="bazbrain__empty">
               Nothing yet — the brain files a note here when it learns something about how you work.
@@ -434,7 +472,12 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
               <li key={item.id} className={`reviewcard reviewcard--${item.kind}`}>
                 <div className="reviewcard__head">
                   <span className="reviewcard__title">{item.title}</span>
-                  <span className="chip mono reviewcard__kind">{item.kind}</span>
+                  <span>
+                    <span className="chip mono reviewcard__kind">
+                      {item.brain === BAZ_GLOBAL_BRAIN ? 'baz-global' : 'project'}
+                    </span>{' '}
+                    <span className="chip mono reviewcard__kind">{item.kind}</span>
+                  </span>
                 </div>
                 <p className="reviewcard__reason">{item.reason}</p>
                 {editing === item.id ? (

@@ -9,12 +9,14 @@ import {
 import { gateMemoryWrite } from '@shared/memory-gate'
 import { redactText } from '@shared/redaction'
 import { projectBrain } from '@shared/memory-ledger'
+import { canAutoCommit, defaultTrustModeForBrain } from '@shared/memory-policy'
 import type { Db } from '../db/Database'
 import type { CockpitEvents } from '../events'
 import { logFatal } from '../logging'
 import { newId, nowIso, safeJson } from '../util/ids'
 import type { MemoryHubService } from './MemoryHubService'
 import type { MemoryReviewService } from './MemoryReviewService'
+import type { MemoryPolicyService } from './MemoryPolicyService'
 
 /**
  * The async triage seat (Faz B). Structural so a test can pass a fake and so the
@@ -121,6 +123,8 @@ export class SentinelService {
      * (or is dropped if there is no queue either), never a bypass of the gate.
      */
     private readonly memory?: SentinelMemorySink,
+    /** Brain policy keeps background writes honest even when Memory UI is closed. */
+    private readonly memoryPolicy?: Pick<MemoryPolicyService, 'trustModeForBrain'>,
   ) {
     this.insertStmt = this.db.prepare(
       `INSERT INTO sentinel_signals
@@ -457,9 +461,9 @@ export class SentinelService {
   /**
    * Track H3 — a dedup key has recurred {@link GOTCHA_RECURRENCE_THRESHOLD} times;
    * turn it into a charter-compliant gotcha through the SAME write-gate the Hermes
-   * memory tool uses, and let the gate decide queue-vs-direct:
+   * memory tool uses. The gate establishes quality; brain policy decides queue vs direct:
    *   - `reject` (secret-shaped) → dropped, never written;
-   *   - `accept` (justified, deduped, secret-free) → written straight to the hub;
+   *   - `accept` (justified, deduped, secret-free) → written only when policy allows;
    *   - `review` (weak/twin/oversize, or no hub write path) → the review queue.
    * The note carries the VERBATIM symptom text (title + summary), per the charter
    * — a gotcha you cannot find by its error message is a dead memory. The signal
@@ -499,7 +503,10 @@ export class SentinelService {
 
       // Accept → a justified, deduped, secret-free note goes straight to disk,
       // but only when a hub write path exists; otherwise fall through to review.
-      if (gate.verdict === 'accept' && this.memory) {
+      const brain = projectBrain(signal.projectId)
+      const trustMode =
+        this.memoryPolicy?.trustModeForBrain(brain) ?? defaultTrustModeForBrain(brain)
+      if (gate.verdict === 'accept' && this.memory && canAutoCommit(trustMode, 'new')) {
         this.memory.write(signal.projectId, slug, content)
         return
       }
@@ -508,12 +515,14 @@ export class SentinelService {
       // same queue the distiller/Hermes feed. Nothing to do without a sink.
       if (!this.reviews) return
       this.reviews.create({
-        brain: projectBrain(signal.projectId),
+        brain,
         kind: 'new',
         slug,
         title: signal.title,
         proposedContent: content,
-        reason: `recurring sentinel signal (${occurrences}×) — ${gate.reasons.join('; ') || 'charter-gated gotcha'}`,
+        reason: `recurring sentinel signal (${occurrences}×) — ${
+          gate.reasons.join('; ') || `${trustMode} policy requires review`
+        }`,
         sourceId: signal.id,
       })
     } catch (err) {

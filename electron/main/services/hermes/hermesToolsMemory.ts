@@ -1,10 +1,12 @@
 import { z } from 'zod'
 import {
+  memoryBrainAccessSchema,
   memoryResolveReviewSchema,
   memoryWriteSchema,
   projectIdSchema,
 } from '@shared/schemas'
-import { BAZ_GLOBAL_BRAIN, projectBrain } from '@shared/memory-ledger'
+import { projectBrain } from '@shared/memory-ledger'
+import { canAutoCommit } from '@shared/memory-policy'
 import { gateMemoryWrite } from '@shared/memory-gate'
 import { extractHook } from '@shared/memory-hub'
 import { rankNotes } from '@shared/memory-recall'
@@ -14,9 +16,9 @@ import type { HermesTool, HermesToolContext } from './hermesToolTypes'
  * Memory tools (Faz 4 step 9 + Faz 5; write-gated in Faz C). Let Hermes read the
  * project brain, save a durable fact, and drive the review queue by conversation.
  * Every AGENT write passes the charter write-gate (docs/MEMORY-CHARTER.md): a
- * justified, non-duplicate, secret-free fact lands directly; a weak/unjustified
- * one is routed into the SAME review queue the distiller uses; a secret is
- * refused. The read/list/resolve paths re-parse with the same schema the
+ * justified, non-duplicate, secret-free fact is then evaluated by the active
+ * brain trust policy; disallowed or weak writes route into the SAME review
+ * queue the distiller uses, and a secret is refused. The read/list/resolve paths re-parse with the same schema the
  * renderer's IPC handler uses — the underlying write stays path-safe and
  * validated.
  */
@@ -99,7 +101,7 @@ export function createMemoryTools(ctx: HermesToolContext): HermesTool[] {
     {
       name: 'write_memory_summary',
       description:
-        'Save ONE durable fact to the project memory hub, held to the memory charter (docs/MEMORY-CHARTER.md). Quality over quantity — an empty write is better than a junk write. Before writing, apply the 7-DAY TEST: name the concrete situation, within ~7+ days, in which someone needs this exact fact; if you cannot, do NOT write. DEDUP-FIRST: read the notes first (read_memory_recent) and prefer updating an existing note over a new one. Include the WHY for a decision, and for a gotcha paste the VERBATIM symptom text (an error you cannot find by its message is a dead memory). NEVER write secrets. `name` is a kebab-case slug (≤120 chars); `content` is markdown (≤500,000, but one focused fact ≤6,000). Attach `justification` (7-day scenario, dedup check, evidence). A justified, deduped, secret-free write is saved directly; a weak or unjustified one is routed to the human review queue (not lost); secret-shaped content is refused.',
+        'Save ONE durable fact to the project memory hub, held to the memory charter (docs/MEMORY-CHARTER.md) and the active brain trust policy. Quality over quantity — an empty write is better than a junk write. Before writing, apply the 7-DAY TEST: name the concrete situation, within ~7+ days, in which someone needs this exact fact; if you cannot, do NOT write. DEDUP-FIRST: read the notes first (read_memory_recent) and prefer updating an existing note over a new one. Include the WHY for a decision, and for a gotcha paste the VERBATIM symptom text (an error you cannot find by its message is a dead memory). NEVER write secrets. `name` is a kebab-case slug (≤120 chars); `content` is markdown (≤500,000, but one focused fact ≤6,000). Attach `justification` (7-day scenario, dedup check, evidence). A justified, deduped, secret-free write is saved only when the active policy permits that kind; otherwise it is routed to the owner review queue. Secret-shaped content is refused.',
       inputShape: gatedWriteSchema.shape,
       run: async (raw) => {
         const { projectId, name, content, justification } = gatedWriteSchema.parse(raw)
@@ -124,30 +126,38 @@ export function createMemoryTools(ctx: HermesToolContext): HermesTool[] {
           )
         }
 
-        if (gate.verdict === 'review') {
+        const kind = existingNames.includes(name) ? 'merge' : 'new'
+        const mode = ctx.memoryPolicy.getTrustMode(projectId, 'project')
+        const policyRequiresReview =
+          gate.verdict === 'accept' && !canAutoCommit(mode, kind)
+
+        if (gate.verdict === 'review' || policyRequiresReview) {
+          const reasons = policyRequiresReview
+            ? [`${mode} policy requires review for a ${kind} proposal.`]
+            : gate.reasons
           const item = ctx.memoryReviews.create({
             brain: projectBrain(projectId),
-            kind: 'new',
+            kind,
             slug: name,
             title: name,
             proposedContent: content,
-            reason: gate.reasons.join('; '),
+            reason: reasons.join('; '),
             sourceId: null,
           })
           ctx.audit?.record({
             projectId,
             actor: 'ai',
             actionType: 'memory_write_gate',
-            summary: 'memory write routed to review by charter',
-            payload: { slug: name, verdict: 'review', reasons: gate.reasons },
+            summary: 'memory write routed to review by charter or brain policy',
+            payload: { slug: name, verdict: 'review', reasons },
           })
           return {
             queued: true,
             reviewId: item.id,
             verdict: 'review' as const,
-            reasons: gate.reasons,
+            reasons,
             message:
-              'Not saved directly — the charter routed this to the review queue. Strengthen the justification (a concrete 7-day scenario), update an existing note instead of a twin, or split an oversized note. The human/you can accept it via resolve_memory_review.',
+              'Not saved directly — the charter or active brain policy routed this to the review queue. The owner can inspect and resolve it explicitly.',
           }
         }
 
@@ -164,14 +174,11 @@ export function createMemoryTools(ctx: HermesToolContext): HermesTool[] {
     {
       name: 'get_pending_memory_reviews',
       description:
-        "Read the unified pending memory-review queue: proposals for this project's brain plus cross-project Baz-brain proposals, concatenated. These are distilled notes — and charter-gated writes — awaiting an accept/edit/discard decision.",
-      inputShape: projectIdSchema.shape,
+        "Read one explicitly scoped memory-review queue. Use scope='project' for this project's brain or scope='global' for the cross-project Baz brain; queues are never implicitly mixed.",
+      inputShape: memoryBrainAccessSchema.shape,
       run: async (raw) => {
-        const { projectId } = projectIdSchema.parse(raw)
-        return [
-          ...ctx.memoryReviews.listPending(projectBrain(projectId)),
-          ...ctx.memoryReviews.listPending(BAZ_GLOBAL_BRAIN),
-        ]
+        const { projectId, scope } = memoryBrainAccessSchema.parse(raw)
+        return ctx.memoryReviews.listPendingFor(projectId, scope)
       },
     },
     {
@@ -201,12 +208,12 @@ export function createMemoryTools(ctx: HermesToolContext): HermesTool[] {
     {
       name: 'resolve_memory_review',
       description:
-        "Resolve one queued memory review. `decision` is 'accept' (write as proposed), 'edit' (write `editedContent` instead), or 'discard' (drop it). Returns this project's remaining pending queue after the decision is applied.",
+        "Resolve one queued memory review in an explicit scope. `decision` is 'accept' (write as proposed), 'edit' (write `editedContent` instead), or 'discard' (drop it). The review must belong to the requested project/global brain.",
       inputShape: memoryResolveReviewSchema.shape,
       run: async (raw) => {
-        const { projectId, reviewId, decision, editedContent } = memoryResolveReviewSchema.parse(raw)
-        ctx.memoryPipeline.resolveReview(projectId, reviewId, decision, editedContent)
-        return ctx.memoryReviews.listPending(projectBrain(projectId))
+        const { projectId, scope, reviewId, decision, editedContent } = memoryResolveReviewSchema.parse(raw)
+        ctx.memoryPipeline.resolveReview(projectId, scope, reviewId, decision, editedContent)
+        return ctx.memoryReviews.listPendingFor(projectId, scope)
       },
     },
   ]

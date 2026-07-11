@@ -530,3 +530,17 @@ ALTER TABLE sentinel_signals ADD COLUMN outcome_at TEXT;
 export const SCHEMA_V18 = /* sql */ `
 ALTER TABLE council_sessions ADD COLUMN status TEXT NOT NULL DEFAULT 'final';
 `
+
+/**
+ * V19 — Brain-scoped Memory trust settings. Knowledge remains Markdown; this
+ * table stores operational policy only. The global brain has its own row and
+ * never inherits whichever project happens to be active in the renderer.
+ */
+export const SCHEMA_V19 = /* sql */ `
+CREATE TABLE IF NOT EXISTS memory_brain_settings (
+  brain          TEXT PRIMARY KEY,
+  trust_mode     TEXT NOT NULL,
+  policy_version INTEGER NOT NULL,
+  updated_at     TEXT NOT NULL
+);
+`

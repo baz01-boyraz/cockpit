@@ -9,6 +9,7 @@
 import { z } from 'zod'
 import { ROLE_IDS, SPEC_IDS, type Role, type Spec } from './agent-taxonomy'
 import { SENTINEL_OUTCOMES } from './sentinel'
+import { MEMORY_BRAIN_SCOPES, MEMORY_TRUST_MODES } from './memory-policy'
 
 export const approvalActionTypeSchema = z.enum([
   'git_push',
@@ -248,8 +249,19 @@ export const memoryCaptureSchema = z.object({
   dryRun: z.boolean().optional(),
 })
 
-export const memoryResolveReviewSchema = z.object({
+export const memoryBrainScopeSchema = z.enum(MEMORY_BRAIN_SCOPES)
+
+/** Every review/policy request names its origin project and explicit target scope. */
+export const memoryBrainAccessSchema = z.object({
   projectId: z.string().min(1),
+  scope: memoryBrainScopeSchema,
+})
+
+export const memorySetTrustModeSchema = memoryBrainAccessSchema.extend({
+  mode: z.enum(MEMORY_TRUST_MODES),
+})
+
+export const memoryResolveReviewSchema = memoryBrainAccessSchema.extend({
   reviewId: z.string().min(1).max(200),
   decision: z.enum(['accept', 'edit', 'discard']),
   editedContent: z.string().max(500_000).optional(),

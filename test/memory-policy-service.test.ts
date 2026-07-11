@@ -56,16 +56,24 @@ describe('MemoryPolicyService', () => {
   it('uses scope-specific safe defaults without creating rows', () => {
     expect(policy.getTrustMode('proj-a', 'project')).toBe('autopilot')
     expect(policy.getTrustMode('proj-a', 'global')).toBe('assisted')
+    expect(policy.getTrustState('proj-a', 'project')).toMatchObject({
+      brain: 'project:proj-a',
+      mode: 'autopilot',
+      isExplicit: false,
+      policyVersion: 1,
+    })
     const row = db.prepare('SELECT COUNT(*) AS count FROM memory_brain_settings').get() as { count: number }
     expect(row.count).toBe(0)
   })
 
   it('persists project and global modes independently in the main-process database', () => {
     policy.setTrustMode('proj-a', 'project', 'manual')
+    expect(policy.getTrustMode('proj-a', 'global')).toBe('assisted')
     policy.setTrustMode('proj-b', 'project', 'assisted')
     policy.setTrustMode('proj-a', 'global', 'manual')
 
     expect(policy.getTrustMode('proj-a', 'project')).toBe('manual')
+    expect(policy.getTrustState('proj-a', 'project').isExplicit).toBe(true)
     expect(policy.getTrustMode('proj-b', 'project')).toBe('assisted')
     expect(policy.getTrustMode('proj-c', 'project')).toBe('autopilot')
     expect(policy.getTrustMode('proj-b', 'global')).toBe('manual')

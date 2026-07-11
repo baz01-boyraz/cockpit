@@ -27,7 +27,6 @@
     "electron/**/*.ts",
     "shared/**/*.ts",
     "src/lib/council.ts",
-    "src/lib/memoryTrust.ts",
     "src/lib/mock.ts",
     "src/lib/mockData.ts",
     "test/**/*.ts",

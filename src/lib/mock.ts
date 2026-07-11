@@ -34,10 +34,18 @@ import { assembleHealth } from '@shared/memory-health'
 import { analyzeConsolidation } from '@shared/memory-consolidate'
 import type { CaptureResult } from '@shared/memory-pipeline'
 import type { ReviewItem } from '@shared/memory-review'
+import {
+  brainForAccess,
+  defaultTrustModeForBrain,
+  type MemoryBrainScope,
+  type MemoryTrustMode,
+} from '@shared/memory-policy'
 
 /** Browser-only review queue so the memory review UI has something to render. */
 const mockReviews = new Map<string, ReviewItem[]>()
-const reviewsFor = (projectId: string): ReviewItem[] => mockReviews.get(projectId) ?? []
+const mockTrustModes = new Map<string, MemoryTrustMode>()
+const reviewsFor = (projectId: string, scope: MemoryBrainScope): ReviewItem[] =>
+  mockReviews.get(brainForAccess(projectId, scope)) ?? []
 import {
   appendPosition,
   assembleBoard,
@@ -878,7 +886,7 @@ export function createMockApi(): CockpitApi {
         const proposedContent = `---\nschema: 1\nname: ${slug}\ntitle: Insight from ${sessionId.slice(0, 6)}\nclass: decision\ngate: asked\nupdatedAt: ${now()}\n---\nA demo fact the mock distiller proposed from this session.\n`
         if (!dryRun) {
           const item: ReviewItem = {
-            id: `rev-${Math.round(now().length + sessionId.length)}-${reviewsFor(projectId).length}`,
+            id: `rev-${Math.round(now().length + sessionId.length)}-${reviewsFor(projectId, 'project').length}`,
             brain: `project:${projectId}`,
             kind: 'new',
             slug,
@@ -892,7 +900,8 @@ export function createMockApi(): CockpitApi {
             createdAt: now(),
             resolvedAt: null,
           }
-          mockReviews.set(projectId, [...reviewsFor(projectId), item])
+          const brain = brainForAccess(projectId, 'project')
+          mockReviews.set(brain, [...reviewsFor(projectId, 'project'), item])
         }
         return {
           proposals: [
@@ -915,17 +924,33 @@ export function createMockApi(): CockpitApi {
           dryRun: !!dryRun,
         }
       },
-      reviewQueue: async (projectId) => reviewsFor(projectId),
-      resolveReview: async (projectId, reviewId, decision, editedContent) => {
-        const item = reviewsFor(projectId).find((r) => r.id === reviewId)
+      trustState: async (projectId, scope) => {
+        const brain = brainForAccess(projectId, scope)
+        return {
+          brain,
+          mode: mockTrustModes.get(brain) ?? defaultTrustModeForBrain(brain),
+          isExplicit: mockTrustModes.has(brain),
+          policyVersion: 1,
+        }
+      },
+      setTrustMode: async (projectId, scope, mode) => {
+        mockTrustModes.set(brainForAccess(projectId, scope), mode)
+        return mode
+      },
+      reviewQueue: async (projectId, scope) => reviewsFor(projectId, scope),
+      resolveReview: async (projectId, scope, reviewId, decision, editedContent) => {
+        const brain = brainForAccess(projectId, scope)
+        const item = reviewsFor(projectId, scope).find((r) => r.id === reviewId)
+        if (!item) throw new Error('Review item not found or not authorized for this brain.')
         if (item && decision !== 'discard') {
           const content = decision === 'edit' && editedContent != null ? editedContent : item.proposedContent
-          const docs = memoryDocsFor(projectId).filter((d) => d.name !== item.slug)
+          const hubId = scope === 'global' ? 'baz-global' : projectId
+          const docs = memoryDocsFor(hubId).filter((d) => d.name !== item.slug)
           docs.push({ name: item.slug, content, updatedAt: now() })
-          memoryHub.set(projectId, docs)
+          memoryHub.set(hubId, docs)
         }
-        mockReviews.set(projectId, reviewsFor(projectId).filter((r) => r.id !== reviewId))
-        return reviewsFor(projectId)
+        mockReviews.set(brain, reviewsFor(projectId, scope).filter((r) => r.id !== reviewId))
+        return reviewsFor(projectId, scope)
       },
       ledger: async () => [],
       consolidate: async (projectId) => {

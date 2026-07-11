@@ -287,7 +287,8 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
       },
     },
     memoryReviews: {
-      listPending: (brain) => {
+      listPendingFor: (projectId, scope) => {
+        const brain = scope === 'global' ? BAZ_GLOBAL_BRAIN : projectBrain(projectId)
         calls.listPending.push(brain)
         return [makeReviewItem({ brain })]
       },
@@ -296,9 +297,12 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
         return makeReviewItem({ brain: input.brain, slug: input.slug, proposedContent: input.proposedContent })
       },
     },
+    memoryPolicy: {
+      getTrustMode: () => 'autopilot',
+    },
     memoryPipeline: {
-      resolveReview: (projectId, reviewId, decision, editedContent) => {
-        calls.resolveReview.push({ projectId, reviewId, decision, editedContent })
+      resolveReview: (projectId, scope, reviewId, decision, editedContent) => {
+        calls.resolveReview.push({ projectId, scope, reviewId, decision, editedContent })
       },
     },
     memoryCuration: {
@@ -1137,6 +1141,23 @@ describe('Hermes MCP tools — the scoped tool set', () => {
       expect(result.queued).toBe(true)
     })
 
+    it('routes an otherwise accepted agent write to review when the project brain is Manual', async () => {
+      const { ctx, calls } = makeContext({
+        memoryPolicy: { getTrustMode: () => 'manual' },
+      })
+      const result = (await toolNamed(ctx, 'write_memory_summary').run({
+        projectId: 'p1',
+        name: 'manual-policy-note',
+        content: 'The router lives in shared so both bridges classify identically.',
+        justification,
+      })) as { queued: boolean; verdict: string }
+
+      expect(calls.memoryWrite).toEqual([])
+      expect(calls.memoryReviewCreate).toHaveLength(1)
+      expect(calls.memoryReviewCreate[0]).toMatchObject({ kind: 'new' })
+      expect(result).toMatchObject({ queued: true, verdict: 'review' })
+    })
+
     it('rejects secret-shaped content with a clear error citing the charter', async () => {
       const { ctx, calls } = makeContext()
       await expect(
@@ -1170,12 +1191,24 @@ describe('Hermes MCP tools — the scoped tool set', () => {
   })
 
   describe('get_pending_memory_reviews', () => {
-    it('concatenates the project brain and the global Baz brain queues', async () => {
+    it('reads the project brain only when project scope is explicit', async () => {
       const { ctx, calls } = makeContext()
-      const result = (await toolNamed(ctx, 'get_pending_memory_reviews').run({ projectId: 'p1' })) as ReviewItem[]
-      expect(calls.listPending).toEqual([projectBrain('p1'), BAZ_GLOBAL_BRAIN])
-      expect(result).toHaveLength(2)
-      expect(result.map((r) => r.brain)).toEqual([projectBrain('p1'), BAZ_GLOBAL_BRAIN])
+      const result = (await toolNamed(ctx, 'get_pending_memory_reviews').run({
+        projectId: 'p1',
+        scope: 'project',
+      })) as ReviewItem[]
+      expect(calls.listPending).toEqual([projectBrain('p1')])
+      expect(result.map((r) => r.brain)).toEqual([projectBrain('p1')])
+    })
+
+    it('reads the Baz brain only when global scope is explicit', async () => {
+      const { ctx, calls } = makeContext()
+      const result = (await toolNamed(ctx, 'get_pending_memory_reviews').run({
+        projectId: 'p1',
+        scope: 'global',
+      })) as ReviewItem[]
+      expect(calls.listPending).toEqual([BAZ_GLOBAL_BRAIN])
+      expect(result.map((r) => r.brain)).toEqual([BAZ_GLOBAL_BRAIN])
     })
 
     it('rejects invalid input (missing projectId)', async () => {
@@ -1190,11 +1223,12 @@ describe('Hermes MCP tools — the scoped tool set', () => {
       const { ctx, calls } = makeContext()
       const result = (await toolNamed(ctx, 'resolve_memory_review').run({
         projectId: 'p1',
+        scope: 'project',
         reviewId: 'r1',
         decision: 'accept',
       })) as ReviewItem[]
       expect(calls.resolveReview).toEqual([
-        { projectId: 'p1', reviewId: 'r1', decision: 'accept', editedContent: undefined },
+        { projectId: 'p1', scope: 'project', reviewId: 'r1', decision: 'accept', editedContent: undefined },
       ])
       // Only the project brain's remaining queue is re-read (matches the IPC handler).
       expect(calls.listPending).toEqual([projectBrain('p1')])
@@ -1205,19 +1239,20 @@ describe('Hermes MCP tools — the scoped tool set', () => {
       const { ctx, calls } = makeContext()
       await toolNamed(ctx, 'resolve_memory_review').run({
         projectId: 'p1',
+        scope: 'project',
         reviewId: 'r1',
         decision: 'edit',
         editedContent: 'fixed up',
       })
       expect(calls.resolveReview).toEqual([
-        { projectId: 'p1', reviewId: 'r1', decision: 'edit', editedContent: 'fixed up' },
+        { projectId: 'p1', scope: 'project', reviewId: 'r1', decision: 'edit', editedContent: 'fixed up' },
       ])
     })
 
     it('rejects an unknown decision before resolving', async () => {
       const { ctx, calls } = makeContext()
       await expect(
-        toolNamed(ctx, 'resolve_memory_review').run({ projectId: 'p1', reviewId: 'r1', decision: 'nuke' }),
+        toolNamed(ctx, 'resolve_memory_review').run({ projectId: 'p1', scope: 'project', reviewId: 'r1', decision: 'nuke' }),
       ).rejects.toThrow()
       expect(calls.resolveReview).toEqual([])
     })

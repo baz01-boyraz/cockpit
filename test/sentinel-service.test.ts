@@ -559,6 +559,29 @@ describe('SentinelService recurrence gotcha (Track H3)', () => {
     expect(create.mock.calls[0][0].slug).toBe('signal-approval-keeps-timing-out')
   })
 
+  it('routes an otherwise accepted recurrence to review when the project brain is Manual', () => {
+    const store = makeDb()
+    seedRow(store.rows, { projectId: 'p1', source: 'log-intelligence', title: 'Manual policy boom', createdAt: '2020-01-01T00:00:00.000Z' })
+    seedRow(store.rows, { projectId: 'p1', source: 'log-intelligence', title: 'Manual policy boom', createdAt: '2020-01-02T00:00:00.000Z' })
+    const { memory, write } = makeMemory([])
+    const { reviews, create } = makeReviewSink()
+    const policy = { trustModeForBrain: () => 'manual' as const }
+    const svc = new SentinelService(
+      store.db,
+      new CockpitEvents(),
+      undefined,
+      undefined,
+      reviews,
+      memory,
+      policy,
+    )
+
+    svc.report({ projectId: 'p1', severity: 'notice', source: 'log-intelligence', title: 'Manual policy boom', summary: 's' })
+    expect(write).not.toHaveBeenCalled()
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(create.mock.calls[0][0].reason).toContain('manual policy requires review')
+  })
+
   it('does NOT route below the threshold (a second occurrence is not yet a pattern)', () => {
     const store = makeDb()
     seedRow(store.rows, { projectId: 'p1', source: 'council', title: 'Council seat fell back', createdAt: '2020-01-01T00:00:00.000Z' })

@@ -8,6 +8,7 @@ import type { MemoryHubService } from '../MemoryHubService'
 import type { MemoryReviewService } from '../MemoryReviewService'
 import type { MemoryPipeline } from '../MemoryPipeline'
 import type { MemoryCurationService } from '../MemoryCurationService'
+import type { MemoryPolicyService } from '../MemoryPolicyService'
 import type { ApprovalService } from '../ApprovalService'
 import type { AuditLogService } from '../AuditLogService'
 import type { LogIntelligenceService } from '../LogIntelligenceService'
@@ -37,7 +38,8 @@ export interface HermesToolContext {
   memory: Pick<MemoryHubService, 'list' | 'listDocs' | 'write'>
   // `create` lets the charter write-gate (Faz C) route a junk/unjustified write
   // into the SAME review queue the distiller uses, instead of persisting it.
-  memoryReviews: Pick<MemoryReviewService, 'listPending' | 'create'>
+  memoryReviews: Pick<MemoryReviewService, 'listPendingFor' | 'create'>
+  memoryPolicy: Pick<MemoryPolicyService, 'getTrustMode'>
   memoryPipeline: Pick<MemoryPipeline, 'resolveReview'>
   // Faz D — the weekly memory curation sweep. `run_memory_sweep` triggers it;
   // proposals land in the review queue above, never a direct file operation.

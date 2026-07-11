@@ -24,11 +24,13 @@ import {
   dismissInsightSchema,
   ingestLogSchema,
   memoryBazReadSchema,
+  memoryBrainAccessSchema,
   memoryCaptureSchema,
   memoryLedgerSchema,
   memoryNameSchema,
   memoryRenameSchema,
   memoryResolveReviewSchema,
+  memorySetTrustModeSchema,
   memoryWriteSchema,
   projectIdSchema,
   requestApprovalSchema,
@@ -328,22 +330,38 @@ export function registerIpc(services: Services): void {
     const transcriptPath = services.claudeSessions.transcriptPath(projectPath, sessionId)
     return services.memoryPipeline.capture({ projectId, transcriptPath, sessionId, dryRun })
   })
+  handle('memoryTrustState', (p) => {
+    const { projectId, scope } = memoryBrainAccessSchema.parse(p)
+    services.projects.get(projectId)
+    return services.memoryPolicy.getTrustState(projectId, scope)
+  })
+  handle('memorySetTrustMode', (p) => {
+    const { projectId, scope, mode } = memorySetTrustModeSchema.parse(p)
+    services.projects.get(projectId)
+    const saved = services.memoryPolicy.setTrustMode(projectId, scope, mode)
+    services.audit.record({
+      projectId,
+      actor: 'user',
+      actionType: 'memory.trust_mode_changed',
+      summary: `${scope} Memory trust mode changed to ${saved}`,
+      payload: { scope, mode: saved },
+    })
+    return saved
+  })
   handle('memoryReviewQueue', (p) => {
-    // The unified queue: project-brain proposals plus cross-project Baz-brain ones.
-    const { projectId } = projectIdSchema.parse(p)
-    return [
-      ...services.memoryReviews.listPending(projectBrain(projectId)),
-      ...services.memoryReviews.listPending(BAZ_GLOBAL_BRAIN),
-    ]
+    const { projectId, scope } = memoryBrainAccessSchema.parse(p)
+    services.projects.get(projectId)
+    return services.memoryReviews.listPendingFor(projectId, scope)
   })
   handle('memoryBazList', () => services.globalMemory.list(BAZ_GLOBAL_BRAIN))
   handle('memoryBazRead', (p) =>
     services.globalMemory.read(BAZ_GLOBAL_BRAIN, memoryBazReadSchema.parse(p).name),
   )
   handle('memoryResolveReview', (p) => {
-    const { projectId, reviewId, decision, editedContent } = memoryResolveReviewSchema.parse(p)
-    services.memoryPipeline.resolveReview(projectId, reviewId, decision, editedContent)
-    return services.memoryReviews.listPending(projectBrain(projectId))
+    const { projectId, scope, reviewId, decision, editedContent } = memoryResolveReviewSchema.parse(p)
+    services.projects.get(projectId)
+    services.memoryPipeline.resolveReview(projectId, scope, reviewId, decision, editedContent)
+    return services.memoryReviews.listPendingFor(projectId, scope)
   })
   handle('memoryLedger', (p) => {
     const { projectId, noteSlug } = memoryLedgerSchema.parse(p)

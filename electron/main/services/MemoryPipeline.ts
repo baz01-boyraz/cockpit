@@ -11,12 +11,19 @@ import { reconcile, type Reconciled } from '@shared/memory-reconcile'
 import type { MemoryDoc } from '@shared/memory-hub'
 import type { Observation } from '@shared/memory-observation'
 import type { CaptureResult, MemoryProposal } from '@shared/memory-pipeline'
-import type { ReviewDecision } from '@shared/memory-review'
+import type { ReviewDecision, ReviewKind } from '@shared/memory-review'
+import {
+  brainForAccess,
+  canAutoCommit,
+  defaultTrustModeForBrain,
+  type MemoryBrainScope,
+} from '@shared/memory-policy'
 import type { MemoryHubService } from './MemoryHubService'
 import type { MemoryLedgerService } from './MemoryLedgerService'
 import type { MemoryReviewService } from './MemoryReviewService'
 import type { MemoryDistiller } from './MemoryDistiller'
 import type { AuditLogService } from './AuditLogService'
+import type { MemoryPolicyService } from './MemoryPolicyService'
 
 export interface CaptureRequest {
   projectId: string
@@ -49,6 +56,8 @@ export class MemoryPipeline {
     private readonly userMemory?: MemoryHubService,
     /** Faz C: gate outcome counters (accept/review/reject, no content). Optional. */
     private readonly audit?: Pick<AuditLogService, 'record'>,
+    /** Brain-scoped trust policy; optional keeps isolated tests/back-compat safe. */
+    private readonly policy?: Pick<MemoryPolicyService, 'trustModeForBrain'>,
   ) {}
 
   /** Which hub, docs, brain-key, and hub-id a given scope's fact belongs to. */
@@ -97,7 +106,13 @@ export class MemoryPipeline {
     for (const obs of distilled.observations) {
       const target = this.route(obs.scope, req.projectId, projectDocs, userDocs)
       const rec = reconcile(obs, target.docs)
-      const gate = decideGate(obs, rec)
+      const initialGate = decideGate(obs, rec)
+      const kind = this.reviewKind(rec)
+      const mode = this.policy?.trustModeForBrain(target.brain) ?? defaultTrustModeForBrain(target.brain)
+      const gate =
+        initialGate === 'commit' && !canAutoCommit(mode, kind)
+          ? 'review'
+          : initialGate
       const proposedContent = gate === 'skip' ? null : this.buildContent(obs, rec, gate)
 
       proposals.push({
@@ -145,7 +160,11 @@ export class MemoryPipeline {
           target.docs.push({ name: rec.targetSlug, content: proposedContent, updatedAt: this.now() })
         }
       } else if (gate === 'review' && proposedContent) {
-        this.queueReview(target.brain, rec, obs, proposedContent, req.sessionId, obs.reason)
+        const reason =
+          initialGate === 'commit'
+            ? `${mode} policy requires review for a ${kind} proposal. ${obs.reason}`
+            : obs.reason
+        this.queueReview(target.brain, rec, obs, proposedContent, req.sessionId, reason)
         queued += 1
       }
     }
@@ -171,7 +190,7 @@ export class MemoryPipeline {
   ): void {
     this.reviews.create({
       brain,
-      kind: rec.decision === 'conflict' ? 'conflict' : rec.decision === 'merge' ? 'merge' : 'new',
+      kind: this.reviewKind(rec),
       slug: rec.targetSlug,
       title: obs.title,
       proposedContent,
@@ -179,6 +198,12 @@ export class MemoryPipeline {
       existingContent: rec.existingContent,
       sourceId: sessionId ?? null,
     })
+  }
+
+  private reviewKind(rec: Reconciled): ReviewKind {
+    if (rec.decision === 'conflict') return 'conflict'
+    if (rec.decision === 'merge') return 'merge'
+    return 'new'
   }
 
   /** Record a gate outcome for the junk-rate metric (stats only, never note content). */
@@ -233,8 +258,15 @@ export class MemoryPipeline {
   }
 
   /** The hub + id a review's brain writes to (project hub, or the global Baz brain). */
-  private hubForBrain(brain: string, projectId: string): { memory: MemoryHubService; hubId: string } {
-    if (brain === BAZ_GLOBAL_BRAIN && this.userMemory) {
+  private hubForBrain(
+    brain: string,
+    projectId: string,
+    scope: MemoryBrainScope,
+  ): { memory: MemoryHubService; hubId: string } {
+    const authorizedBrain = brainForAccess(projectId, scope)
+    if (brain !== authorizedBrain) throw new Error('Review item is not authorized for this brain.')
+    if (scope === 'global') {
+      if (!this.userMemory) throw new Error('Global Memory brain is unavailable.')
       return { memory: this.userMemory, hubId: BAZ_GLOBAL_BRAIN }
     }
     return { memory: this.memory, hubId: projectId }
@@ -244,13 +276,20 @@ export class MemoryPipeline {
    * Resolve a queued review (G4). accept/edit writes the proposal (validated +
    * ledgered), discard leaves the hub untouched. Returns the resolved item's id.
    */
-  resolveReview(projectId: string, reviewId: string, decision: ReviewDecision, editedContent?: string): void {
-    const item = this.reviews.get(reviewId)
-    if (!item) throw new Error('Review item not found.')
-    if (item.status !== 'pending') throw new Error('Review item is already resolved.')
+  resolveReview(
+    projectId: string,
+    scope: MemoryBrainScope,
+    reviewId: string,
+    decision: ReviewDecision,
+    editedContent?: string,
+  ): void {
+    const item = this.reviews.getPendingFor(projectId, scope, reviewId)
+    if (!item) throw new Error('Review item not found or not authorized for this brain.')
 
     if (decision === 'discard') {
-      this.reviews.markResolved(reviewId, 'discarded')
+      if (!this.reviews.markResolvedFor(projectId, scope, reviewId, 'discarded')) {
+        throw new Error('Review item changed before it could be resolved.')
+      }
       return
     }
 
@@ -259,7 +298,7 @@ export class MemoryPipeline {
     if (!check.ok) {
       throw new Error(`Refusing to write invalid note "${item.slug}": ${check.errors.join('; ')}`)
     }
-    const { memory, hubId } = this.hubForBrain(item.brain, projectId)
+    const { memory, hubId } = this.hubForBrain(item.brain, projectId, scope)
     const before = memory.read(hubId, item.slug)?.content ?? null
     memory.write(hubId, item.slug, content)
     this.ledger.record({
@@ -287,6 +326,15 @@ export class MemoryPipeline {
         })
       }
     }
-    this.reviews.markResolved(reviewId, decision === 'edit' ? 'edited' : 'accepted')
+    if (
+      !this.reviews.markResolvedFor(
+        projectId,
+        scope,
+        reviewId,
+        decision === 'edit' ? 'edited' : 'accepted',
+      )
+    ) {
+      throw new Error('Review item changed before it could be resolved.')
+    }
   }
 }

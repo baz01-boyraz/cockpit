@@ -13,6 +13,7 @@ import { z } from 'zod'
 import { NOTE_CLASSES } from './memory-note-schema'
 import { normalizeNoteName } from './wikilink'
 import type { TranscriptTurn } from './transcript'
+import { MEMORY_POLICY_PROMPT } from './memory-policy'
 
 export const OBSERVATION_SCOPES = ['project', 'user'] as const
 export type ObservationScope = (typeof OBSERVATION_SCOPES)[number]
@@ -55,6 +56,8 @@ export interface DistillInput {
 const PROMPT_HEADER = `You are the memory distiller for cockpiT — a coding cockpit. You read a work
 session between a developer (Baz) and an AI, and you extract the FEW facts worth
 remembering forever. You are the developer's second brain: precision over recall.
+
+${MEMORY_POLICY_PROMPT}
 
 Extract only durable, high-signal facts. GOOD: an architectural decision and its
 reason, a non-obvious gotcha, a stable preference of Baz's, a hard constraint.

@@ -1,6 +1,6 @@
 # Council + Memory Quality Roadmap
 
-> Status: IN EXECUTION · R0 + C1 COMPLETE · Created 2026-07-11
+> Status: IN EXECUTION · R0 + C1 + M1a COMPLETE · Created 2026-07-11
 > Scope: Council output quality/efficiency/usability + Brain/Memory correctness,
 > retrieval and product UX
 > Governing docs: `docs/DESIGN.md`, `docs/MEMORY-CHARTER.md`,
@@ -661,6 +661,15 @@ migration and no result deletion.
 
 ### M1 — Canonical Memory policy and concurrency-safe mutation gateway (L)
 
+> **M1a completed 2026-07-11; M1b–M1d remain pending.** One shared machine-readable
+> policy now drives prompts, backend gates, Hermes and UI copy. Project/global trust lives in
+> additive SQLite migration V19 with independent defaults (project Autopilot, global Assisted),
+> with stricter legacy renderer choices adopted once before the old key is removed. Queued
+> uncertainty is never promoted by renderer code. Project/global review reads and
+> resolutions require explicit scope and reject foreign-brain ids. No Markdown Memory content
+> was migrated or rewritten. Unit/integration, Electron-native migration smoke, browser journey
+> and 1024/1280/1600 visual checks passed.
+
 **Goal:** make every write path obey one explicit integrity model before changing retrieval or
 UI.
 
@@ -730,7 +739,8 @@ UI.
 - `electron/main/services/hermes/hermesToolsMemory.ts`
 - `electron/main/ipc/registerIpc.ts`, `electron/main/db/schema.ts`,
   `electron/main/db/Database.ts`
-- `src/lib/memoryTrust.ts`, `src/components/memory/MemoryBrainBar.tsx`
+- `shared/memory-policy.ts`, `electron/main/services/MemoryPolicyService.ts`
+- `src/components/memory/MemoryBrainBar.tsx`
 - IPC/schema/mock parity files and memory mutation/review/concurrency tests
 
 **Acceptance / verification:** project A cannot list/resolve/transplant project B reviews; global

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { ReviewItem, ReviewKind } from '@shared/memory-review'
+import { brainForAccess, type MemoryBrainScope } from '@shared/memory-policy'
 import type { Db } from '../db/Database'
 
 interface ReviewRow {
@@ -97,8 +98,28 @@ export class MemoryReviewService {
     return (rows as ReviewRow[]).map(toItem)
   }
 
+  /** External-facing list: target brain is derived, never caller-supplied. */
+  listPendingFor(originProjectId: string, scope: MemoryBrainScope): ReviewItem[] {
+    return this.listPending(brainForAccess(originProjectId, scope))
+  }
+
   get(id: string): ReviewItem | null {
     const row = this.db.prepare('SELECT * FROM memory_review WHERE id = ?').get(id)
+    return row ? toItem(row as ReviewRow) : null
+  }
+
+  /** Return one pending item only when it belongs to the authorized brain. */
+  getPendingFor(
+    originProjectId: string,
+    scope: MemoryBrainScope,
+    id: string,
+  ): ReviewItem | null {
+    const brain = brainForAccess(originProjectId, scope)
+    const row = this.db
+      .prepare(
+        "SELECT * FROM memory_review WHERE id = ? AND brain = ? AND status = 'pending'",
+      )
+      .get(id, brain)
     return row ? toItem(row as ReviewRow) : null
   }
 
@@ -107,5 +128,21 @@ export class MemoryReviewService {
     this.db
       .prepare('UPDATE memory_review SET status = ?, resolved_at = ? WHERE id = ?')
       .run(status, new Date().toISOString(), id)
+  }
+
+  /** Scope-checked resolution. False means missing, foreign, or no longer pending. */
+  markResolvedFor(
+    originProjectId: string,
+    scope: MemoryBrainScope,
+    id: string,
+    status: ReviewItem['status'],
+  ): boolean {
+    const brain = brainForAccess(originProjectId, scope)
+    const result = this.db
+      .prepare(
+        "UPDATE memory_review SET status = ?, resolved_at = ? WHERE id = ? AND brain = ? AND status = 'pending'",
+      )
+      .run(status, new Date().toISOString(), id, brain)
+    return result.changes === 1
   }
 }

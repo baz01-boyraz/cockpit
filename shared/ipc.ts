@@ -20,6 +20,7 @@ import type { ReviewDecision, ReviewItem } from './memory-review'
 import type { LedgerEntry } from './memory-ledger'
 import type { ConsolidationResult } from './memory-consolidate'
 import type { MemoryContextReceipt } from './memory-context'
+import type { MemoryBrainScope, MemoryTrustMode, MemoryTrustState } from './memory-policy'
 import type { BoardColumn, CardStatus, StartCardResult } from './kanban'
 import type { CompletionReport } from './completion-report'
 import type { Assignment } from './agent-taxonomy'
@@ -129,6 +130,8 @@ export const IPC = {
   memoryTrash: 'memory:trash',
   memoryHealth: 'memory:health',
   memoryCaptureSession: 'memory:captureSession',
+  memoryTrustState: 'memory:trustState',
+  memorySetTrustMode: 'memory:setTrustMode',
   memoryReviewQueue: 'memory:reviewQueue',
   memoryResolveReview: 'memory:resolveReview',
   memoryLedger: 'memory:ledger',
@@ -445,11 +448,19 @@ export interface CockpitApi {
      * previews the proposals without writing anything.
      */
     captureSession(projectId: string, sessionId: string, dryRun?: boolean): Promise<CaptureResult>
-    /** Pending review cards awaiting Baz's decision (memory-imp G4). */
-    reviewQueue(projectId: string): Promise<ReviewItem[]>
-    /** Resolve a review (accept/edit writes it, discard drops it); returns the fresh queue. */
+    /** Brain-scoped trust lives in main/SQLite, never renderer localStorage. */
+    trustState(projectId: string, scope: MemoryBrainScope): Promise<MemoryTrustState>
+    setTrustMode(
+      projectId: string,
+      scope: MemoryBrainScope,
+      mode: MemoryTrustMode,
+    ): Promise<MemoryTrustMode>
+    /** Pending review cards for one explicitly selected brain. */
+    reviewQueue(projectId: string, scope: MemoryBrainScope): Promise<ReviewItem[]>
+    /** Scope-authorized resolution; returns that brain's fresh queue. */
     resolveReview(
       projectId: string,
+      scope: MemoryBrainScope,
       reviewId: string,
       decision: ReviewDecision,
       editedContent?: string,
@@ -712,6 +723,8 @@ export interface IpcResultMap {
   memoryTrash: R<CockpitApi['memory']['trash']>
   memoryHealth: R<CockpitApi['memory']['health']>
   memoryCaptureSession: R<CockpitApi['memory']['captureSession']>
+  memoryTrustState: R<CockpitApi['memory']['trustState']>
+  memorySetTrustMode: R<CockpitApi['memory']['setTrustMode']>
   memoryReviewQueue: R<CockpitApi['memory']['reviewQueue']>
   memoryResolveReview: R<CockpitApi['memory']['resolveReview']>
   memoryLedger: R<CockpitApi['memory']['ledger']>

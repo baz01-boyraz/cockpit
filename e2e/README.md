@@ -17,7 +17,9 @@ Exactly seven journeys, on purpose — this is a smoke suite, not full coverage:
 3. **Swarm** (`03-swarm-create-card.spec.ts`) — open the board, create a
    card through the To-do column's inline composer, see it land.
 4. **Memory** (`04-memory-create-note.spec.ts`) — open the hub (empty for
-   the default seed project), create a note, edit it, save, see the title.
+   the default seed project), migrate the legacy renderer trust choice into
+   independent project/global policy, then save a human note under Manual mode
+   without gate friction.
 5. **Sentinel** (`05-sentinel-bell.spec.ts`) — the bell's unseen count, the
    mock's one-time toast replay, and the popover's signal list.
 6. **Rail navigation** (`06-rail-navigation.spec.ts`) — daily work remains in

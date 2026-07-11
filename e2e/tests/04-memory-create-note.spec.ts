@@ -10,10 +10,47 @@ import { MemoryPage } from '../pages/memory.page'
  * and saves — the documented fallback for an empty hub.
  */
 test('creates and saves a note through the empty-state composer', async ({ page }) => {
+  // Simulate an upgrade from the renderer-only trust setting. M1a must adopt it
+  // once into main/mock policy and delete the legacy key.
+  await page.addInitScript(() => {
+    localStorage.setItem('cockpit.memory.trust.prj_serbest', 'manual')
+  })
   await gotoApp(page)
   await openView(page, 'memory')
 
   await expect(page.getByRole('heading', { name: 'Project memory' })).toBeVisible()
+
+  // Trust policy comes from the app bridge (main-process SQLite in Electron,
+  // in-memory service state in the browser mock), not renderer localStorage.
+  const projectTrust = page.getByRole('group', {
+    name: 'How much the brain saves on its own',
+    exact: true,
+  })
+  await expect(projectTrust.getByRole('button', { name: 'Manual' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  expect(
+    await page.evaluate(() => localStorage.getItem('cockpit.memory.trust.prj_serbest')),
+  ).toBeNull()
+
+  await openView(page, 'dashboard')
+  await openView(page, 'memory')
+  await expect(
+    page
+      .getByRole('group', { name: 'How much the brain saves on its own', exact: true })
+      .getByRole('button', { name: 'Manual' }),
+  ).toHaveAttribute('aria-pressed', 'true')
+
+  await page.getByRole('button', { name: 'Baz brain' }).click()
+  const globalTrust = page.getByRole('group', {
+    name: 'How much the global Baz brain saves on its own',
+  })
+  await expect(globalTrust.getByRole('button', { name: 'Assisted' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  await page.getByRole('button', { name: 'Baz brain' }).click()
 
   const memory = new MemoryPage(page)
   const slug = `e2e-note-${Date.now()}`
