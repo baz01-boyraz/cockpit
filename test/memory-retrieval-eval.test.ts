@@ -21,6 +21,8 @@ import {
 
 const fixturePath = resolve('test/fixtures/memory/retrieval-corpus.json')
 const manifestScript = resolve('scripts/diagnostics/memory-manifest.mjs')
+const retrievalScript = resolve('scripts/diagnostics/memory-retrieval-baseline.ts')
+const viteNode = resolve('node_modules/vite-node/vite-node.mjs')
 const tempRoots: string[] = []
 
 function loadCorpus(): MemoryEvalCorpus {
@@ -67,11 +69,122 @@ describe('Memory R0 retrieval corpus', () => {
     expect(first.unsafeSelections.length).toBeGreaterThan(0)
   })
 
+  it('rejects malformed labels and never includes query or hook prose in a report', () => {
+    const corpus = loadCorpus()
+    const malformed = structuredClone(corpus)
+    malformed.cases[0].expectedTop3 = ['missing-note']
+    expect(validateMemoryEvalCorpus(malformed)).toContain(
+      `unknown note missing-note in case ${malformed.cases[0].id}`,
+    )
+
+    const report = evaluateMemoryRetrievalCorpus(corpus)
+    const serialized = JSON.stringify(report)
+    expect(serialized).not.toContain(corpus.cases[0].query)
+    expect(serialized).not.toContain(corpus.notes[0].hook)
+  })
+
+  it('returns actionable validation errors for malformed runtime JSON', () => {
+    const malformed = {
+      schemaVersion: 2,
+      sourceKind: 'remote',
+      notes: [
+        { name: 'duplicate', hook: 42, status: '', eligible: 'yes' },
+        { name: 'duplicate', hook: null, status: 'active', eligible: true },
+      ],
+      cases: [
+        {
+          id: 'same',
+          split: 'other',
+          language: 'de',
+          category: 'other',
+          severity: 'urgent',
+          query: '',
+          expectedTop3: 'duplicate',
+          forbiddenNotes: 'duplicate',
+        },
+        {
+          id: 'same',
+          split: 'tune',
+          language: 'en',
+          category: 'no_match',
+          severity: 'high',
+          query: 'query',
+          expectedTop3: ['duplicate'],
+          forbiddenNotes: ['missing'],
+          expectNoMatch: true,
+        },
+      ],
+    } as unknown as MemoryEvalCorpus
+    const errors = validateMemoryEvalCorpus(malformed)
+
+    expect(errors).toEqual(expect.arrayContaining([
+      'schemaVersion must be 1',
+      'sourceKind must be synthetic or local-redacted',
+      'duplicate note: duplicate',
+      'note duplicate has invalid hook',
+      'note duplicate needs status',
+      'note duplicate needs eligible:boolean',
+      'invalid split: same',
+      'invalid language: same',
+      'invalid category: same',
+      'invalid severity: same',
+      'empty query: same',
+      'expectedTop3 must be an array: same',
+      'forbiddenNotes must be an array: same',
+      'non-no-match case same needs expectedTop3',
+      'duplicate case: same',
+      'no-match case same cannot have expectedTop3',
+      'unknown note missing in case same',
+    ]))
+    expect(validateMemoryEvalCorpus({
+      schemaVersion: 1,
+      sourceKind: 'synthetic',
+      notes: [],
+      cases: [],
+    })).toEqual(['notes must not be empty', 'cases must not be empty'])
+  })
+
+  it('keeps misses, unsafe selections, and no-match injections as separate failures', () => {
+    const corpus = loadCorpus()
+    const report = evaluateMemoryRetrievalCorpus(corpus, (query) => [{
+      name: query.startsWith('quantum') ? 'unknown-note' : 'archived-heroku-deploy',
+      hook: null,
+    }])
+
+    expect(report.top1HitRate).toBe(0)
+    expect(report.top3HitRate).toBe(0)
+    expect(report.misses).toHaveLength(50)
+    expect(report.noMatchFalseInjections).toBe(10)
+    expect(report.unsafeSelections.length).toBeGreaterThan(0)
+  })
+
+  it('exposes the same content-free retrieval scorecard through a read-only CLI', () => {
+    const before = readFileSync(fixturePath, 'utf8')
+    const first = execFileSync(
+      process.execPath,
+      [viteNode, retrievalScript, '--input', fixturePath],
+      { cwd: process.cwd(), encoding: 'utf8' },
+    )
+    const second = execFileSync(
+      process.execPath,
+      [viteNode, retrievalScript, '--input', fixturePath],
+      { cwd: process.cwd(), encoding: 'utf8' },
+    )
+    const report = JSON.parse(first) as ReturnType<typeof evaluateMemoryRetrievalCorpus>
+
+    expect(second).toBe(first)
+    expect(readFileSync(fixturePath, 'utf8')).toBe(before)
+    expect(report.caseCount).toBe(60)
+    expect(report.noMatchFalseInjections).toBe(0)
+    expect(first).not.toContain(loadCorpus().cases[0].query)
+    expect(first).not.toContain(loadCorpus().notes[0].hook)
+  })
+
   it('keeps tool-less context bounded and injects nothing for a no-match query', () => {
     const corpus = loadCorpus()
     const docs = corpus.notes.map((note, index) => ({
       name: note.name,
-      content: note.hook,
+      content: note.hook ?? '',
       updatedAt: new Date(Date.UTC(2026, 6, 11, 0, 0, index)).toISOString(),
     }))
     const noMatch = corpus.cases.find((item) => item.expectNoMatch)
@@ -153,7 +266,7 @@ describe('read-only memory manifest CLI', () => {
       repeatedFacts: { note: string; count: number }[]
       unresolvedLinks: { target: string; wantedBy: string[] }[]
       ignoredSymlinks: string[]
-      notes: { name: string; bytes: number; sha256: string }[]
+      notes: { name: string; bytes: number; sha256: string; frontmatter: string }[]
     }
 
     expect(second).toBe(stdout)
@@ -174,6 +287,7 @@ describe('read-only memory manifest CLI', () => {
       name: 'alpha-note',
       bytes: Buffer.byteLength(alpha),
       sha256: createHash('sha256').update(alpha).digest('hex'),
+      frontmatter: 'valid',
     })
     expect(stdout).not.toContain('PRIVATE SYNTHETIC BODY')
     expect(stdout).not.toContain('outside content')

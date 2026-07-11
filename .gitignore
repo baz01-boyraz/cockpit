@@ -18,6 +18,9 @@ npm-debug.log*
 # local data / secrets
 .dev-cockpit/attachments/
 .dev-cockpit/secrets/
+# Human-reviewed Council eval labels derived from local sessions. These may
+# contain private project findings even though raw prose is removed.
+.dev-cockpit/evals/
 *.sqlite
 *.sqlite3
 *.db
