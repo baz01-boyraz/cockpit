@@ -11,6 +11,7 @@ export const NAV = {
   dashboard: '[data-nav="dashboard"]',
   terminals: '[data-nav="terminals"]',
   swarm: '[data-nav="swarm"]',
+  council: '[data-nav="council"]',
   memory: '[data-nav="memory"]',
 } as const
 

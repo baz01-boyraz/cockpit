@@ -3,7 +3,10 @@ import type { CouncilResult } from '../shared/council'
 import {
   buildClarificationContinuation,
   buildCouncilDisplay,
+  parseCouncilInline,
   parseCouncilMarkdown,
+  primaryCouncilArtifact,
+  serializeCouncilReport,
   summarizeCouncilSeat,
 } from '../shared/council-display'
 
@@ -179,5 +182,115 @@ describe('council reading helpers', () => {
         'FEASIBILITY: buildable. The implementation needs three modules and a migration.',
       ),
     ).toBe('FEASIBILITY: buildable.')
+  })
+
+  it('parses fenced code, thematic breaks, emphasis, and safe links without HTML', () => {
+    expect(
+      parseCouncilMarkdown([
+        'Before.',
+        '',
+        '---',
+        '',
+        '```ts',
+        'const answer = 42',
+        '```',
+      ].join('\n')),
+    ).toEqual([
+      { type: 'paragraph', text: 'Before.' },
+      { type: 'thematic-break' },
+      { type: 'code-block', language: 'ts', code: 'const answer = 42' },
+    ])
+    expect(parseCouncilInline('Use *care* and [docs](https://example.com) with `code`.')).toEqual([
+      { type: 'text', text: 'Use ' },
+      { type: 'emphasis', text: 'care' },
+      { type: 'text', text: ' and ' },
+      { type: 'link', text: 'docs', href: 'https://example.com' },
+      { type: 'text', text: ' with ' },
+      { type: 'code', text: 'code' },
+      { type: 'text', text: '.' },
+    ])
+    expect(parseCouncilInline('[unsafe](javascript:alert(1))')).toEqual([
+      { type: 'text', text: '[unsafe](javascript:alert(1))' },
+    ])
+  })
+})
+
+describe('Council report artifacts', () => {
+  const approved = result({
+    seats: [
+      {
+        id: 'contrarian',
+        label: 'Contrarian',
+        engine: { engine: 'codex', model: 'gpt-5.6-sol' },
+        usedFallback: true,
+        ok: true,
+        text: 'The migration needs a rollback path.',
+      },
+    ],
+    rankings: [{
+      seatId: 'contrarian',
+      text: 'FINAL RANKING: Response A',
+      parsed: ['Response A'],
+    }],
+    aggregate: [{ seatId: 'contrarian', averageRank: 1, count: 1 }],
+    labelToSeat: { 'Response A': 'contrarian' },
+    verdict: [
+      '### Verdict',
+      'APPROVED',
+      'The scope is testable.',
+      '',
+      '### Refined Spec',
+      '**Goal** — Ship the canonical brief once.',
+      '**Acceptance criteria** — 1. Copy works. 2. Export works.',
+      '',
+      '### Final note',
+      'Preserve the existing visual language.',
+    ].join('\n'),
+    specVerdict: { kind: 'approved', questions: [] },
+  })
+
+  it('returns the correct primary artifact for approved, clarify, and failed runs', () => {
+    expect(primaryCouncilArtifact(approved)).toEqual({
+      kind: 'brief',
+      label: 'Copy primary brief',
+      text: [
+        '**Goal** — Ship the canonical brief once.',
+        '**Acceptance criteria** — 1. Copy works. 2. Export works.',
+      ].join('\n'),
+    })
+    expect(primaryCouncilArtifact(result({
+      verdict: '### Verdict\nNEEDS_CLARIFICATION\nTwo choices remain.',
+      specVerdict: {
+        kind: 'needs_clarification',
+        questions: ['Which module?', 'What retention window?'],
+      },
+    }))).toEqual({
+      kind: 'questions',
+      label: 'Copy clarification questions',
+      text: '1. Which module?\n2. What retention window?',
+    })
+    expect(primaryCouncilArtifact(result({ ok: false, error: 'Chairman timed out.' }))).toEqual({
+      kind: 'decision',
+      label: 'Copy decision',
+      text: 'Chairman timed out.',
+    })
+  })
+
+  it('serializes one deterministic Markdown report with actual engines and no duplicated refined spec', () => {
+    const first = serializeCouncilReport(approved, { title: 'Memory redesign' })
+    const second = serializeCouncilReport(approved, { title: 'Memory redesign' })
+
+    expect(second).toBe(first)
+    expect(first).toContain('# Council Report — Memory redesign')
+    expect(first).toContain('- Session: `session-1`')
+    expect(first).toContain('## Decision')
+    expect(first).toContain('## Refined Spec')
+    expect(first).toContain('## Chairman Analysis')
+    expect(first).toContain('### Contrarian')
+    expect(first).toContain('- Engine: `codex · gpt-5.6-sol`')
+    expect(first).toContain('- Fallback: yes')
+    expect(first).toContain('## Peer Rankings')
+    expect(first).toContain('## Aggregate Standings')
+    expect(first.match(/Ship the canonical brief once\./g)).toHaveLength(1)
   })
 })
