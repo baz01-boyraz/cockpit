@@ -22,7 +22,8 @@ function makeService(stdout: string) {
     })),
   }
   const runner = vi.fn(async () => ({ stdout })) as unknown as ChatRunner
-  return { service: new ChatService(projects, memory, runner), memory, runner }
+  const audit = { record: vi.fn() }
+  return { service: new ChatService(projects, memory, runner, audit), memory, runner, audit }
 }
 
 describe('ChatService memory foundation', () => {
@@ -55,9 +56,18 @@ describe('ChatService memory foundation', () => {
     })
   })
 
-  it('marks a reply that ignored the contract as missing evidence', async () => {
-    const { service } = makeService('Just an answer, no status line.')
+  it('marks a reply that ignored the contract as missing evidence and audits the violation', async () => {
+    const { service, audit } = makeService('Just an answer, no status line.')
     const reply = await service.ask('prj_1', 'Redesign the landing page')
     expect(reply.memoryContext?.evidence?.status).toBe('missing')
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ actionType: 'memory.compliance_missing' }),
+    )
+  })
+
+  it('does not audit a compliant reply', async () => {
+    const { service, audit } = makeService('MEMORY: read a.md\nPlan…')
+    await service.ask('prj_1', 'Redesign the landing page')
+    expect(audit.record).not.toHaveBeenCalled()
   })
 })

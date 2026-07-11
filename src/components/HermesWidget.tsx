@@ -25,6 +25,8 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import type { ClipboardEvent, DragEvent, SVGProps } from 'react'
+import type { MemoryContextReceipt } from '@shared/memory-context'
+import { MemoryBadge } from './MemoryBadge'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import {
@@ -56,6 +58,7 @@ interface HermesMessage {
   role: HermesRole
   text: string
   image?: HermesImage
+  memory?: MemoryContextReceipt
 }
 
 interface PendingAttachment {
@@ -323,7 +326,7 @@ export function HermesWidget() {
         att?.path,
       )
       const next: HermesMessage = reply.ok
-        ? { id: nextId(), role: 'hermes', text: reply.text }
+        ? { id: nextId(), role: 'hermes', text: reply.text, memory: reply.memoryContext }
         : {
             id: nextId(),
             role: 'error',
@@ -475,6 +478,7 @@ export function HermesWidget() {
                   {m.role === 'hermes' ? renderHermesText(m.text) : m.text}
                 </div>
               )}
+              {m.role === 'hermes' && <MemoryBadge receipt={m.memory} />}
               {m.role === 'hermes' && m.text && (
                 <div className="hermes__msgActions">
                   <button

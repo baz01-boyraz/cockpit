@@ -8,6 +8,7 @@ import type { HermesChatReply } from '@shared/ipc'
 import { redactText } from '@shared/redaction'
 import type { MemoryContextProvider } from '@shared/memory-context'
 import { detectMemoryEvidence } from '@shared/memory-evidence'
+import type { AuditLogService } from '../AuditLogService'
 import type { Db } from '../../db/Database'
 import { logFatal } from '../../logging'
 import { nowIso } from '../../util/ids'
@@ -94,6 +95,7 @@ export class HermesChatService {
     runner?: HermesChatRunner,
     mcpToken?: () => string | undefined,
     private readonly memoryContexts?: MemoryContextProvider,
+    private readonly audit?: Pick<AuditLogService, 'record'>,
   ) {
     this.runner = runner ?? this.spawnHermes.bind(this)
     this.mcpToken = mcpToken
@@ -221,12 +223,29 @@ export class HermesChatService {
       this.histories.set(projectId, next)
       this.persist(projectId, next)
       this.consecutiveTimeouts.delete(projectId)
+      const evidence =
+        memoryContext && memoryContext.receipt.delivery === 'lookup'
+          ? detectMemoryEvidence(text)
+          : null
+      if (evidence?.status === 'missing') {
+        try {
+          this.audit?.record({
+            projectId,
+            actor: 'system',
+            actionType: 'memory.compliance_missing',
+            summary: 'Hermes chat reply ignored the memory-first contract',
+            payload: { contextId: memoryContext?.receipt.contextId, surface: 'hermes_chat' },
+          })
+        } catch {
+          // The evidence still reaches the renderer when audit storage is down.
+        }
+      }
       return {
         ok: true,
         text,
         memoryContext:
-          memoryContext && memoryContext.receipt.delivery === 'lookup'
-            ? { ...memoryContext.receipt, evidence: detectMemoryEvidence(text) }
+          memoryContext && evidence
+            ? { ...memoryContext.receipt, evidence }
             : memoryContext?.receipt,
       }
     } catch (err) {

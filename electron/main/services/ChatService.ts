@@ -6,6 +6,7 @@ import { promisify } from 'node:util'
 import { buildClaudeArgs, type ClaudeRunOptions } from '@shared/claude-run'
 import { resolveChatModel } from '@shared/chat-models'
 import type { ChatReply } from '@shared/ipc'
+import type { AuditLogService } from './AuditLogService'
 import type { MemoryContextProvider, MemoryContextReceipt } from '@shared/memory-context'
 import { detectMemoryEvidence } from '@shared/memory-evidence'
 import type { ProjectService } from './ProjectService'
@@ -49,6 +50,7 @@ export class ChatService {
     private readonly projects: ProjectService,
     private readonly memoryContexts: MemoryContextProvider,
     private readonly runner: ChatRunner = defaultRunner,
+    private readonly audit?: Pick<AuditLogService, 'record'>,
   ) {}
 
   private cwdFor(projectId: string): string {
@@ -72,7 +74,8 @@ export class ChatService {
       model: model.id,
       systemPrompt: context.block.trim() || undefined,
     })
-    return this.askClaude(cwd, args, `${CHAT_BRAND} · ${model.label}`, context.receipt)
+    const reply = await this.askClaude(cwd, args, `${CHAT_BRAND} · ${model.label}`, context.receipt)
+    return this.withEvidence(projectId, reply)
   }
 
   private async askClaude(
@@ -88,21 +91,40 @@ export class ChatService {
         timeout: 180_000,
         maxBuffer: 8 * 1024 * 1024,
       })
-      const text = stdout.trim() || '(Claude returned no message)'
       return {
         ok: true,
-        text,
+        text: stdout.trim() || '(Claude returned no message)',
         model: modelLabel,
-        // A lookup receipt only proves delivery; the reply's MEMORY: status
-        // line is the per-turn compliance evidence.
-        memoryContext:
-          memoryContext.delivery === 'lookup'
-            ? { ...memoryContext, evidence: detectMemoryEvidence(text) }
-            : memoryContext,
+        memoryContext,
       }
     } catch (err) {
       return { ...this.fail(err, 'Claude'), memoryContext }
     }
+  }
+
+  /**
+   * A lookup receipt only proves delivery; the reply's MEMORY: status line is
+   * the per-turn compliance evidence. Ignoring the contract is audit-logged so
+   * violations are visible beyond the chat panel.
+   */
+  private withEvidence(projectId: string, reply: ChatReply): ChatReply {
+    const receipt = reply.memoryContext
+    if (!reply.ok || !receipt || receipt.delivery !== 'lookup') return reply
+    const evidence = detectMemoryEvidence(reply.text)
+    if (evidence.status === 'missing') {
+      try {
+        this.audit?.record({
+          projectId,
+          actor: 'system',
+          actionType: 'memory.compliance_missing',
+          summary: 'Claude chat reply ignored the memory-first contract',
+          payload: { contextId: receipt.contextId, surface: receipt.surface },
+        })
+      } catch {
+        // The evidence still reaches the renderer when audit storage is down.
+      }
+    }
+    return { ...reply, memoryContext: { ...receipt, evidence } }
   }
 
   private fail(err: unknown, label: string): ChatReply {

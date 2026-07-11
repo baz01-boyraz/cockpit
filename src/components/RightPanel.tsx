@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
 import type { RouteRecommendation } from '@shared/domain'
+import type { MemoryContextReceipt } from '@shared/memory-context'
 import { CHAT_MODELS, DEFAULT_CHAT_MODEL, type ChatModel } from '@shared/chat-models'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
@@ -14,6 +15,7 @@ import {
   readBase64,
 } from '../lib/imageAttach'
 import { ApprovalCard } from './ApprovalCard'
+import { MemoryBadge } from './MemoryBadge'
 import { IconBolt, IconChevron, IconCopy, IconImage, IconSend, IconShield, IconX } from './icons'
 
 interface ChatImage {
@@ -30,6 +32,7 @@ interface Msg {
   error?: boolean
   route?: RouteRecommendation | null
   image?: ChatImage
+  memory?: MemoryContextReceipt
 }
 
 interface PendingAttachment {
@@ -199,7 +202,15 @@ export function RightPanel() {
       setMsgs((m) =>
         m.map((x) =>
           x.id === aId
-            ? { ...x, text: reply.text, model: reply.model, answering: false, error: !reply.ok, route: result.primary }
+            ? {
+                ...x,
+                text: reply.text,
+                model: reply.model,
+                answering: false,
+                error: !reply.ok,
+                route: result.primary,
+                memory: reply.memoryContext,
+              }
             : x,
         ),
       )
@@ -436,6 +447,7 @@ export function RightPanel() {
                       ) : (
                         <span />
                       )}
+                      <MemoryBadge receipt={m.memory} />
                       {m.text && !m.error && (
                         <button
                           type="button"

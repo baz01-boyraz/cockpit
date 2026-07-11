@@ -3367,3 +3367,32 @@
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
+
+/* --- Memory-contract evidence badge (chat replies) ------------------------- */
+/* Proof chip for the memory-first contract: ok = engine proved a read via its
+   MEMORY: status line, warn = contract ignored or hub unavailable. */
+.membadge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  margin-top: 4px;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  line-height: 1.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.membadge--ok {
+  border-color: rgba(196, 227, 90, 0.28);
+  color: var(--lime, #c4e35a);
+}
+.membadge--warn {
+  border-color: rgba(232, 178, 74, 0.35);
+  color: var(--warning);
+  background: var(--warning-wash);
+}
+.membadge--dim { color: var(--text-faint); }

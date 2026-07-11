@@ -184,7 +184,7 @@ export class Services {
     this.railway = new RailwayService(this.db, this.projects)
     this.claudeSessions = new ClaudeSessionsService()
     this.agentSessions = new AgentSessionsService(this.claudeSessions)
-    this.chat = new ChatService(this.projects, this.memoryContexts)
+    this.chat = new ChatService(this.projects, this.memoryContexts, undefined, this.audit)
     // The MCP bearer token is minted by `hermesMcp` (constructed further down),
     // so the token is read lazily at ask() time via a thunk — by then the server
     // exists. This keeps the chat service decoupled from construction order.
@@ -194,6 +194,7 @@ export class Services {
       undefined,
       () => this.hermesMcp?.authToken,
       this.memoryContexts,
+      this.audit,
     )
     this.review = new ReviewService(this.projects, this.audit, undefined, this.memoryContexts)
     // One session store, shared: the council writes runs to it, the swarm reads
