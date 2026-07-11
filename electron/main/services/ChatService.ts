@@ -6,7 +6,8 @@ import { promisify } from 'node:util'
 import { buildClaudeArgs, type ClaudeRunOptions } from '@shared/claude-run'
 import { resolveChatModel } from '@shared/chat-models'
 import type { ChatReply } from '@shared/ipc'
-import { wrapTaskWithMemory, type MemoryContextProvider, type MemoryContextReceipt } from '@shared/memory-context'
+import type { MemoryContextProvider, MemoryContextReceipt } from '@shared/memory-context'
+import { detectMemoryEvidence } from '@shared/memory-evidence'
 import type { ProjectService } from './ProjectService'
 
 const execFileAsync = promisify(execFile)
@@ -66,7 +67,11 @@ export class ChatService {
       surface: 'claude_chat',
       query: prompt,
     })
-    const args = buildClaudeArgs(wrapTaskWithMemory(prompt, context), { model: model.id })
+    // The contract rides the system channel; the user's prompt goes verbatim.
+    const args = buildClaudeArgs(prompt, {
+      model: model.id,
+      systemPrompt: context.block.trim() || undefined,
+    })
     return this.askClaude(cwd, args, `${CHAT_BRAND} · ${model.label}`, context.receipt)
   }
 
@@ -83,11 +88,17 @@ export class ChatService {
         timeout: 180_000,
         maxBuffer: 8 * 1024 * 1024,
       })
+      const text = stdout.trim() || '(Claude returned no message)'
       return {
         ok: true,
-        text: stdout.trim() || '(Claude returned no message)',
+        text,
         model: modelLabel,
-        memoryContext,
+        // A lookup receipt only proves delivery; the reply's MEMORY: status
+        // line is the per-turn compliance evidence.
+        memoryContext:
+          memoryContext.delivery === 'lookup'
+            ? { ...memoryContext, evidence: detectMemoryEvidence(text) }
+            : memoryContext,
       }
     } catch (err) {
       return { ...this.fail(err, 'Claude'), memoryContext }

@@ -26,7 +26,13 @@ through each engine's native standing channel instead:
   without the contract — `guarded()`-style MUST semantics).
 
 Evidence of compliance = the engine's opening `MEMORY: read <files>` /
-`MEMORY: no relevant notes` status line + TUI tool-call rows. Phase 2 (pending):
-same standing/system-prompt delivery for Council/Swarm/Hermes + a violation
-badge when the status line is missing. See [[memory-hub]] and
-`docs/MEMORY-CHARTER.md` "Memory-first contract".
+`MEMORY: no relevant notes` status line + TUI tool-call rows.
+
+Phase 2 (same day): Claude chat now rides the contract on
+`--append-system-prompt` (user message stays the verbatim positional prompt);
+Hermes carries it in the trusted preamble; council/swarm/review prompts are
+app-composed → compliant by construction. All lookup surfaces reuse the one
+canonical text. `shared/memory-evidence.ts` parses the reply status line into
+`receipt.evidence` (`read`/`none`/`missing`) — `missing` = engine ignored the
+contract. See [[memory-hub]] and `docs/MEMORY-CHARTER.md` "Memory-first
+contract".

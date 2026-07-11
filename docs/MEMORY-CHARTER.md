@@ -61,6 +61,18 @@ Provisioning is idempotent, preserves all user-owned settings and hooks, and is
 audit-logged as `memory.contract_provisioned`. A corrupt settings file blocks
 the launch with an explicit error instead of being overwritten.
 
+The same MUST applies beyond terminals. Claude chat delivers the contract via
+`--append-system-prompt` — the user's chat message is the positional prompt,
+byte-for-byte verbatim. Hermes chat carries it in the trusted runtime preamble,
+never inside the user's transcript turn. Council seats, Swarm worker briefs,
+and review prompts are app-composed documents (no interactive user prose), so
+their memory sections are compliant by construction. Every lookup surface now
+uses the one canonical contract text from `shared/memory-contract.ts`, and
+chat replies are parsed by `shared/memory-evidence.ts`: the receipt's
+`evidence` field records `read` (with files), `none`, or `missing` — `missing`
+means the engine ignored the contract and must never be presented as a
+successful lookup.
+
 ## The 7-day test (the core rule)
 
 Before **any** write, answer one question out loud:

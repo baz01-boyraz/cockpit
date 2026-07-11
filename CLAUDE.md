@@ -89,13 +89,16 @@ If the hub cannot be read, the prompt says `MEMORY UNAVAILABLE`; callers must ne
 loaded. Interactive transcripts strip both the compact format and legacy v0.2.4 full-body blocks
 before auto-capture.
 
-**Interactive Claude/Codex terminals ride a standing memory-first contract instead of prompt
-injection** (`docs/MEMORY-CHARTER.md`, "Memory-first contract"). The user's typed prompt is never
-modified. `shared/memory-contract.ts` holds the canonical text; `MemoryContractService` provisions
-it before every agent launch/resume — a `UserPromptSubmit` hook in `.claude/settings.local.json`
-for Claude Code, a managed `AGENTS.md` marker block for Codex. Engines must open replies with a
-`MEMORY: read …` / `MEMORY: no relevant notes` status line as visible per-task evidence. A launch
-never proceeds when the contract cannot be guaranteed.
+**The memory-first contract is a system-wide MUST and never rides user content**
+(`docs/MEMORY-CHARTER.md`, "Memory-first contract"). `shared/memory-contract.ts` holds the one
+canonical text. Interactive terminals get it as a standing channel — a `UserPromptSubmit` hook in
+`.claude/settings.local.json` for Claude Code, a managed `AGENTS.md` marker block for Codex —
+provisioned by `MemoryContractService` before every launch/resume; a launch never proceeds when
+the contract cannot be guaranteed. Claude chat rides it on `--append-system-prompt`; Hermes chat
+in the trusted preamble; council/swarm/review prompts are app-composed and compliant by
+construction. Engines must open replies with a `MEMORY: read …` / `MEMORY: no relevant notes`
+status line; `shared/memory-evidence.ts` parses it into the receipt's `evidence` field
+(`read`/`none`/`missing`) as per-task proof.
 
 ## Frontend work — always do first
 

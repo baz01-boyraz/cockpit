@@ -24,6 +24,21 @@ describe('buildClaudeArgs', () => {
     expect(buildClaudeArgs('hi')).toContain('--no-session-persistence')
   })
 
+  it('rides extra instructions on --append-system-prompt, keeping the user prompt last and verbatim', () => {
+    expect(buildClaudeArgs('user words', { systemPrompt: 'MEMORY CONTRACT' })).toEqual([
+      '--print',
+      '--no-session-persistence',
+      '--append-system-prompt',
+      'MEMORY CONTRACT',
+      'user words',
+    ])
+    expect(buildClaudeArgs('hi', { systemPrompt: '   ' })).toEqual([
+      '--print',
+      '--no-session-persistence',
+      'hi',
+    ])
+  })
+
   it('keeps the prompt as a single argv entry (no shell, no escaping)', () => {
     const prompt = 'rm -rf / ; echo "$(whoami)" && `id`'
     expect(buildClaudeArgs(prompt, { model: 'sonnet' })).toEqual([

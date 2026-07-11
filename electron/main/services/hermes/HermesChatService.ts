@@ -7,6 +7,7 @@ import { buildTranscriptPrompt, capHistory, type ChatRole, type ChatTurn } from 
 import type { HermesChatReply } from '@shared/ipc'
 import { redactText } from '@shared/redaction'
 import type { MemoryContextProvider } from '@shared/memory-context'
+import { detectMemoryEvidence } from '@shared/memory-evidence'
 import type { Db } from '../../db/Database'
 import { logFatal } from '../../logging'
 import { nowIso } from '../../util/ids'
@@ -220,7 +221,14 @@ export class HermesChatService {
       this.histories.set(projectId, next)
       this.persist(projectId, next)
       this.consecutiveTimeouts.delete(projectId)
-      return { ok: true, text, memoryContext: memoryContext?.receipt }
+      return {
+        ok: true,
+        text,
+        memoryContext:
+          memoryContext && memoryContext.receipt.delivery === 'lookup'
+            ? { ...memoryContext.receipt, evidence: detectMemoryEvidence(text) }
+            : memoryContext?.receipt,
+      }
     } catch (err) {
       // A failed turn must NOT leave a dangling user message in history — that
       // would desync the transcript on the next turn — so we never commit

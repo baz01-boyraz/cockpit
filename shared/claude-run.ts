@@ -22,6 +22,12 @@
 export interface ClaudeRunOptions {
   /** Model alias for `claude --model`, e.g. `sonnet`, `opus`, `haiku`. */
   model?: string
+  /**
+   * Extra system-prompt text via `--append-system-prompt`. The memory-first
+   * contract rides here so the positional user prompt stays byte-for-byte
+   * verbatim — never glue instructions onto user content.
+   */
+  systemPrompt?: string
 }
 
 /**
@@ -33,6 +39,8 @@ export function buildClaudeArgs(prompt: string, opts: ClaudeRunOptions = {}): st
   const args = ['--print', '--no-session-persistence']
   const model = opts.model?.trim()
   if (model) args.push('--model', model)
+  const systemPrompt = opts.systemPrompt?.trim()
+  if (systemPrompt) args.push('--append-system-prompt', systemPrompt)
   args.push(prompt)
   return args
 }
