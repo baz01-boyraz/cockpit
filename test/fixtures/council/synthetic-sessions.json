@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 1,
+  "sourceKind": "synthetic",
+  "cases": [
+    {
+      "id": "spec-approved-tr",
+      "split": "tune",
+      "language": "tr",
+      "severity": "high",
+      "expectedIntent": "spec",
+      "requiredSignals": ["acceptance criteria", "migration"],
+      "forbiddenClaims": ["canonical memory.md"],
+      "result": {
+        "mode": "spec",
+        "seats": [
+          { "id": "contrarian", "engine": { "engine": "codex", "model": "sol" }, "usedFallback": false, "ok": true, "text": "Migration rollback must be explicit." },
+          { "id": "first_principles", "engine": { "engine": "openrouter", "model": "deepseek/deepseek-v3" }, "usedFallback": false, "ok": true, "text": "The request needs measurable acceptance criteria." },
+          { "id": "expansionist", "engine": { "engine": "claude", "model": "haiku" }, "usedFallback": true, "ok": true, "text": "Preserve a compact export artifact." },
+          { "id": "outsider", "engine": { "engine": "claude", "model": "sonnet" }, "usedFallback": true, "ok": true, "text": "Keep raw evidence behind diagnostics." },
+          { "id": "builder", "engine": { "engine": "claude", "model": "opus" }, "usedFallback": true, "ok": true, "text": "Build in reversible slices with tests." }
+        ],
+        "rankings": [
+          { "seatId": "contrarian", "text": "Builder is most actionable. FINAL RANKING: Builder, Contrarian, First Principles, Outsider, Expansionist" },
+          { "seatId": "first_principles", "text": "Contrarian found the migration gap. FINAL RANKING: Contrarian, Builder, First Principles, Outsider, Expansionist" },
+          { "seatId": "expansionist", "text": "Builder balances scope. FINAL RANKING: Builder, Expansionist, Contrarian, Outsider, First Principles" },
+          { "seatId": "outsider", "text": "First Principles corrected framing. FINAL RANKING: First Principles, Builder, Outsider, Contrarian, Expansionist" },
+          { "seatId": "builder", "text": "Contrarian is strongest. FINAL RANKING: Contrarian, Builder, First Principles, Outsider, Expansionist" }
+        ],
+        "verdict": "### Verdict\nAPPROVED — the scope is buildable.\n\n### Refined Spec\n**Goal** — deliver a bounded baseline.\n\n**Acceptance criteria**\n1. Deterministic fixtures.\n2. Migration and rollback are documented.",
+        "stats": { "seatsRun": 5, "seatsFailed": 0, "filesReviewed": 0, "durationMs": 12500 }
+      }
+    },
+    {
+      "id": "spec-clarify-en",
+      "split": "holdout",
+      "language": "en",
+      "severity": "high",
+      "expectedIntent": "spec",
+      "requiredSignals": ["retention policy", "user approval"],
+      "forbiddenClaims": ["implementation completed"],
+      "result": {
+        "mode": "spec",
+        "seats": [
+          { "id": "contrarian", "engine": { "engine": "codex", "model": "sol" }, "usedFallback": false, "ok": true, "text": "The retention policy is unspecified." },
+          { "id": "first_principles", "engine": { "engine": "openrouter", "model": "deepseek/deepseek-v3" }, "usedFallback": false, "ok": true, "text": "The owner must define user approval boundaries." },
+          { "id": "expansionist", "engine": { "engine": "codex", "model": "terra" }, "usedFallback": false, "ok": true, "text": "Add an export path after clarification." },
+          { "id": "outsider", "engine": { "engine": "openrouter", "model": "anthropic/claude-sonnet-4" }, "usedFallback": false, "ok": true, "text": "Do not infer destructive defaults." },
+          { "id": "builder", "engine": { "engine": "codex", "model": "luna" }, "usedFallback": false, "ok": true, "text": "Two product decisions block implementation." }
+        ],
+        "rankings": [
+          { "seatId": "contrarian", "text": "FINAL RANKING: First Principles, Contrarian, Builder, Outsider, Expansionist" },
+          { "seatId": "first_principles", "text": "FINAL RANKING: Contrarian, First Principles, Builder, Outsider, Expansionist" },
+          { "seatId": "expansionist", "text": "FINAL RANKING: Builder, Contrarian, First Principles, Expansionist, Outsider" },
+          { "seatId": "outsider", "text": "FINAL RANKING: First Principles, Outsider, Contrarian, Builder, Expansionist" },
+          { "seatId": "builder", "text": "FINAL RANKING: Contrarian, First Principles, Builder, Outsider, Expansionist" }
+        ],
+        "verdict": "### Verdict\nNEEDS CLARIFICATION. Define the retention policy and whether destructive changes require explicit user approval.",
+        "stats": { "seatsRun": 5, "seatsFailed": 0, "filesReviewed": 0, "durationMs": 9800 }
+      }
+    },
+    {
+      "id": "diff-security-en",
+      "split": "tune",
+      "language": "en",
+      "severity": "critical",
+      "expectedIntent": "diff",
+      "requiredSignals": ["path traversal", "rollback"],
+      "forbiddenClaims": ["no issues found"],
+      "result": {
+        "mode": "diff",
+        "seats": [
+          { "id": "contrarian", "engine": { "engine": "codex", "model": "sol" }, "usedFallback": false, "ok": true, "text": "Untrusted paths can escape the workspace." },
+          { "id": "first_principles", "engine": { "engine": "openrouter", "model": "deepseek/deepseek-v3" }, "usedFallback": false, "ok": true, "text": "Containment must be proven before mutation." },
+          { "id": "expansionist", "engine": { "engine": "claude", "model": "haiku" }, "usedFallback": true, "ok": true, "text": "Add audit evidence." },
+          { "id": "outsider", "engine": { "engine": "claude", "model": "sonnet" }, "usedFallback": true, "ok": true, "text": "Symlinks bypass string-prefix guards." },
+          { "id": "builder", "engine": { "engine": "claude", "model": "opus" }, "usedFallback": true, "ok": true, "text": "Ship only with a rollback test." }
+        ],
+        "rankings": [
+          { "seatId": "contrarian", "text": "FINAL RANKING: Outsider, Contrarian, Builder, First Principles, Expansionist" },
+          { "seatId": "first_principles", "text": "FINAL RANKING: Contrarian, Outsider, Builder, First Principles, Expansionist" },
+          { "seatId": "expansionist", "text": "FINAL RANKING: Builder, Outsider, Contrarian, Expansionist, First Principles" },
+          { "seatId": "outsider", "text": "FINAL RANKING: Contrarian, Outsider, First Principles, Builder, Expansionist" },
+          { "seatId": "builder", "text": "FINAL RANKING: Outsider, Contrarian, Builder, First Principles, Expansionist" }
+        ],
+        "verdict": "### Verdict\nCHANGES REQUIRED. The path traversal risk is release-blocking; add symlink containment and a rollback test.",
+        "stats": { "seatsRun": 5, "seatsFailed": 0, "filesReviewed": 4, "durationMs": 13100 }
+      }
+    },
+    {
+      "id": "analysis-memory-research-tr",
+      "split": "holdout",
+      "language": "tr",
+      "severity": "critical",
+      "expectedIntent": "analysis",
+      "requiredSignals": ["markdown", "capability-aware"],
+      "forbiddenClaims": ["canonical memory.md"],
+      "result": {
+        "mode": "spec",
+        "seats": [
+          { "id": "contrarian", "engine": { "engine": "claude", "model": "opus" }, "usedFallback": true, "ok": true, "text": "Repository evidence is incomplete." },
+          { "id": "first_principles", "engine": { "engine": "openrouter", "model": "deepseek/deepseek-v3" }, "usedFallback": false, "ok": true, "text": "Markdown files are the source of truth." },
+          { "id": "expansionist", "engine": { "engine": "claude", "model": "haiku" }, "usedFallback": true, "ok": true, "text": "A capability-aware context gateway already exists." },
+          { "id": "outsider", "engine": { "engine": "claude", "model": "sonnet" }, "usedFallback": true, "ok": true, "text": "Do not invent repository tables." },
+          { "id": "builder", "engine": { "engine": "claude", "model": "opus" }, "usedFallback": true, "ok": true, "text": "The task needs a read-only evidence phase." }
+        ],
+        "rankings": [
+          { "seatId": "contrarian", "text": "FINAL RANKING: Builder, Contrarian, First Principles, Outsider, Expansionist" },
+          { "seatId": "first_principles", "text": "FINAL RANKING: Contrarian, Builder, First Principles, Outsider, Expansionist" },
+          { "seatId": "expansionist", "text": "FINAL RANKING: Builder, Expansionist, First Principles, Contrarian, Outsider" },
+          { "seatId": "outsider", "text": "FINAL RANKING: First Principles, Outsider, Builder, Contrarian, Expansionist" },
+          { "seatId": "builder", "text": "FINAL RANKING: Contrarian, Builder, First Principles, Outsider, Expansionist" }
+        ],
+        "verdict": "### Verdict\nAPPROVED as a downstream task. Markdown notes and a capability-aware gateway are present, together with a canonical MEMORY.md index.",
+        "stats": { "seatsRun": 5, "seatsFailed": 0, "filesReviewed": 0, "durationMs": 16200 }
+      }
+    },
+    {
+      "id": "degraded-fallback-en",
+      "split": "tune",
+      "language": "en",
+      "severity": "medium",
+      "expectedIntent": "spec",
+      "requiredSignals": ["degraded diversity"],
+      "forbiddenClaims": [],
+      "result": {
+        "mode": "spec",
+        "seats": [
+          { "id": "contrarian", "engine": { "engine": "claude", "model": "opus" }, "usedFallback": true, "ok": true, "text": "Provider convergence must be visible." },
+          { "id": "first_principles", "engine": { "engine": "openrouter", "model": "deepseek/deepseek-v3" }, "usedFallback": false, "ok": false, "text": "" },
+          { "id": "expansionist", "engine": { "engine": "claude", "model": "haiku" }, "usedFallback": true, "ok": true, "text": "Keep a compact degraded result." },
+          { "id": "outsider", "engine": { "engine": "openrouter", "model": "anthropic/claude-sonnet-4" }, "usedFallback": false, "ok": false, "text": "" },
+          { "id": "builder", "engine": { "engine": "claude", "model": "opus" }, "usedFallback": true, "ok": true, "text": "Proceed with three surviving seats." }
+        ],
+        "rankings": [
+          { "seatId": "contrarian", "text": "FINAL RANKING: Builder, Contrarian, Expansionist" },
+          { "seatId": "expansionist", "text": "FINAL RANKING: Builder, Expansionist, Contrarian" },
+          { "seatId": "builder", "text": "FINAL RANKING: Contrarian, Builder, Expansionist" }
+        ],
+        "verdict": "### Verdict\nAPPROVED WITH DEGRADED DIVERSITY. Three seats survived and all converged on one provider.",
+        "stats": { "seatsRun": 5, "seatsFailed": 2, "filesReviewed": 0, "durationMs": 20100 }
+      }
+    },
+    {
+      "id": "synthesis-failed-tr",
+      "split": "holdout",
+      "language": "tr",
+      "severity": "high",
+      "expectedIntent": "spec",
+      "requiredSignals": [],
+      "forbiddenClaims": [],
+      "expectNoVerdict": true,
+      "result": {
+        "mode": "spec",
+        "seats": [
+          { "id": "contrarian", "engine": { "engine": "codex", "model": "sol" }, "usedFallback": false, "ok": false, "text": "" },
+          { "id": "first_principles", "engine": { "engine": "openrouter", "model": "deepseek/deepseek-v3" }, "usedFallback": false, "ok": false, "text": "" },
+          { "id": "expansionist", "engine": { "engine": "codex", "model": "terra" }, "usedFallback": false, "ok": false, "text": "" },
+          { "id": "outsider", "engine": { "engine": "openrouter", "model": "anthropic/claude-sonnet-4" }, "usedFallback": false, "ok": false, "text": "" },
+          { "id": "builder", "engine": { "engine": "codex", "model": "luna" }, "usedFallback": false, "ok": false, "text": "" }
+        ],
+        "rankings": [],
+        "verdict": null,
+        "stats": { "seatsRun": 5, "seatsFailed": 5, "filesReviewed": 0, "durationMs": 360000 }
+      }
+    }
+  ]
+}
