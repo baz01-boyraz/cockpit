@@ -273,8 +273,8 @@ export class MemoryPipeline {
   }
 
   /**
-   * Resolve a queued review (G4). accept/edit writes the proposal (validated +
-   * ledgered), discard leaves the hub untouched. Returns the resolved item's id.
+   * Resolve a queued review (G4). accept/edit applies the proposed write or
+   * recoverable archive (validated + ledgered); discard leaves the hub untouched.
    */
   resolveReview(
     projectId: string,

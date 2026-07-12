@@ -21,11 +21,11 @@ export interface ReviewItem {
   kind: ReviewKind
   slug: string
   title: string
-  /** The full note content that will be written if accepted. */
+  /** Content to write for create/merge, or the captured current snapshot for archive. */
   proposedContent: string
   /** One-line explanation of why this is being asked rather than auto-saved. */
   reason: string
-  /** The existing note's content for a merge/conflict, else null. */
+  /** Existing content used for merge/conflict/archive stale-write protection. */
   existingContent: string | null
   /** The capture source (transcript session) this came from, if any. */
   sourceId: string | null
