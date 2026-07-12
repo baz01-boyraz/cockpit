@@ -18,6 +18,7 @@ describe('Council stage language contract', () => {
     expect(detectCouncilResponseLanguage('Refactor the cache and document the rollback path.')).toBe(
       'en',
     )
+    expect(detectCouncilResponseLanguage('I need the migration to be reversible.')).toBe('en')
   })
 
   it('honours an explicit safe language tag and keeps machine labels stable', () => {
@@ -52,6 +53,7 @@ describe('Council seat envelope', () => {
     expect(normalized.text).not.toContain('Free-form preamble')
     expect(normalized.text.match(/^FINDING \d+:/gm)).toHaveLength(normalized.findings.length)
     expect(normalized.text.match(/^EVIDENCE:/gm)).toHaveLength(normalized.findings.length)
+    expect(normalized.text).toContain('truncated by cockpiT')
     expect(normalized.truncated).toBe(true)
   })
 
@@ -66,6 +68,32 @@ describe('Council seat envelope', () => {
     )
     expect(normalized.text).toContain('truncated')
     expect(normalized.truncated).toBe(true)
+  })
+
+  it('keeps the Builder feasibility appendix inside the same bounded envelope', () => {
+    const normalized = normalizeCouncilSeatText(
+      [
+        'FINDING 1: Migration order is explicit.',
+        'IMPACT: Builders do not have to guess.',
+        'RECOMMENDATION: Keep the staged rollout.',
+        'BASIS: EVIDENCE',
+        'EVIDENCE: docs/roadmap.md:42',
+        'FEASIBILITY: buildable-with-risks',
+        'EFFORT: M — touches service and prompts',
+        'PLAN: shared/council-stages.ts then CouncilService.ts',
+        'AMBIGUITIES: none',
+      ].join('\n'),
+      { builder: true },
+    )
+
+    expect(normalized.builderAssessment).toMatchObject({
+      feasibility: 'buildable-with-risks',
+      ambiguities: 'none',
+    })
+    expect(normalized.text).toContain('FEASIBILITY: buildable-with-risks')
+    expect(normalized.text.length).toBeLessThanOrEqual(
+      COUNCIL_STAGE_BUDGETS.seat.outputChars,
+    )
   })
 })
 
@@ -108,6 +136,24 @@ describe('Council compact peer judgment', () => {
       factualityFlags: [],
     })
     expect(normalized.text).toBe('FINAL RANKING:\n1. Response C\n2. Response A')
+  })
+
+  it('never truncates the required ranking block when optional fields fill the budget', () => {
+    const labels = 'ABCDEFGHIJ'.split('')
+    const normalized = normalizeCouncilRankingText([
+      `STRONGEST CONTRIBUTION: Response A — ${'strong '.repeat(200)}`,
+      `COLLECTIVE GAP: ${'gap '.repeat(300)}`,
+      'FACTUALITY FLAGS:',
+      ...Array.from({ length: 8 }, (_, index) => `- Response A — ${`flag-${index} `.repeat(100)}`),
+      'FINAL RANKING:',
+      ...labels.map((label, index) => `${index + 1}. Response ${label}`),
+    ].join('\n'))
+
+    expect(normalized.text.length).toBeLessThanOrEqual(
+      COUNCIL_STAGE_BUDGETS.ranking.outputChars,
+    )
+    expect(normalized.text).toContain('10. Response J')
+    expect(normalized.parsed).toHaveLength(10)
   })
 })
 

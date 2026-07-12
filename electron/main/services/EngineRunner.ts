@@ -14,6 +14,8 @@ export interface EngineCallOpts {
   cwd: string
   timeout: number
   maxBuffer: number
+  /** Provider-enforced only where the engine capability says so. */
+  maxTokens?: number
 }
 
 /** Injectable so tests never spawn a real CLI (mirrors CouncilService). */
@@ -101,7 +103,12 @@ export class EngineRunner {
    * closed stdin, so one runner serves both branches.
    */
   private spawnCli(bin: string, args: string[], opts: EngineCallOpts): Promise<{ stdout: string }> {
-    const running = execFileAsync(bin, args, { ...opts, env: { ...process.env } })
+    const running = execFileAsync(bin, args, {
+      cwd: opts.cwd,
+      timeout: opts.timeout,
+      maxBuffer: opts.maxBuffer,
+      env: { ...process.env },
+    })
     running.child.stdin?.end()
     return running
   }
@@ -174,7 +181,13 @@ export class EngineRunner {
           Authorization: `Bearer ${key}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ model: spec.model, messages: [{ role: 'user', content: prompt }] }),
+        body: JSON.stringify({
+          model: spec.model,
+          messages: [{ role: 'user', content: prompt }],
+          ...(Number.isInteger(opts.maxTokens) && (opts.maxTokens ?? 0) > 0
+            ? { max_completion_tokens: opts.maxTokens }
+            : {}),
+        }),
         signal: controller.signal,
       })
     } catch {

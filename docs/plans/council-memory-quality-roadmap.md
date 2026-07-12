@@ -1,6 +1,6 @@
 # Council + Memory Quality Roadmap
 
-> Status: IN EXECUTION · R0 + C1 + C2a + M1a COMPLETE · Created 2026-07-11
+> Status: IN EXECUTION · R0 + C1 + C2a–C2b + M1a COMPLETE · Created 2026-07-11
 > Scope: Council output quality/efficiency/usability + Brain/Memory correctness,
 > retrieval and product UX
 > Governing docs: `docs/DESIGN.md`, `docs/MEMORY-CHARTER.md`,
@@ -460,7 +460,7 @@ screenshots at three desktop widths.
 
 ### C2 — Council v3 result contract, intent and hard output budgets (L)
 
-> **C2a completed 2026-07-11; C2b and the remaining C2c work stay pending.** A strict,
+> **C2a completed 2026-07-11.** A strict,
 > bounded `CouncilResultV3` envelope now separates decision, primary artifact, execution and
 > raw evidence. One defensive adapter dual-reads unversioned/v2 and v3 results without rewriting
 > old session blobs; malformed/unknown versions fail closed. The session store, renderer/export,
@@ -468,9 +468,21 @@ screenshots at three desktop widths.
 > normalized contract. `analysis` is a persisted intent but can never satisfy a spec gate, even
 > if a corrupt decision or denormalized DB column says `approved`; analysis crash markers also use
 > a readable v3 pending envelope. Full tests/coverage, typecheck, lint, production build and all
-> seven Playwright journeys passed. C2b still owns prompts, structured parsers, language behavior
-> and generation/input budgets; the remaining C2c work owns explicit mode selection and final
-> producer/IPC adoption.
+> seven Playwright journeys passed.
+>
+> **C2b completed 2026-07-11; C2c remains pending.** Seat responses now use a tolerant,
+> machine-stable finding envelope (maximum four findings) with bounded legacy-prose fallback;
+> Builder feasibility/effort/plan/ambiguities survive the same cap. Peer ranking essays are
+> normalized to ordered labels, strongest contribution, one collective gap and factuality flags;
+> the chairman receives unique compact peer evidence plus aggregate rank, never five repeated
+> essays. Deterministic language routing keeps human prose Turkish/English with stable English
+> machine labels and persists the selected response language. Stage budgets are enforced in the
+> prompt, by post-response fieldwise caps, and at a 36,000-character chairman input boundary.
+> OpenRouter receives the current provider-enforced `max_completion_tokens`; Claude/Codex are
+> explicitly modelled as prompt-target-only and remain protected by the same post-response caps.
+> Verification passed with 1,281 tests, 85.8% statement/line coverage, typecheck, lint, production
+> build and seven Playwright journeys. C2c still owns explicit spec/diff/analysis selection,
+> validated language override exposure, v3-only new writes and final IPC/renderer contract cleanup.
 
 **Goal:** make concision and intent part of the domain model rather than a prompt suggestion.
 

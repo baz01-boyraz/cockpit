@@ -17,6 +17,25 @@
  *  switch to handle it (exhaustive `never` check) rather than silently no-op. */
 export type EngineId = 'claude' | 'codex' | 'openrouter'
 
+export type EngineOutputTokenLimit = 'provider-enforced' | 'prompt-target-only'
+
+export interface EngineCapability {
+  /** Whether a requested completion-token ceiling is enforced by the provider. */
+  outputTokenLimit: EngineOutputTokenLimit
+}
+
+/**
+ * Honest capability matrix for Council stage budgets. The local Claude/Codex
+ * CLIs expose no stable completion-token flag in this app's one-shot runners,
+ * so their limits remain prompt targets plus a post-response character cap.
+ * OpenRouter accepts `max_completion_tokens` and enforces it provider-side.
+ */
+export const ENGINE_CAPABILITIES: Readonly<Record<EngineId, EngineCapability>> = {
+  claude: { outputTokenLimit: 'prompt-target-only' },
+  codex: { outputTokenLimit: 'prompt-target-only' },
+  openrouter: { outputTokenLimit: 'provider-enforced' },
+}
+
 /**
  * A {engine, model} pair. `model` semantics are engine-specific:
  *  - claude:     an alias for `claude --model` — `sonnet` | `opus` | `haiku`.

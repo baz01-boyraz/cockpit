@@ -80,6 +80,20 @@ describe('EngineRunner — CLI branches', () => {
     expect(ENGINE_CAPABILITIES.codex.outputTokenLimit).toBe('prompt-target-only')
     expect(ENGINE_CAPABILITIES.openrouter.outputTokenLimit).toBe('provider-enforced')
   })
+
+  it('does not invent a completion-token CLI flag when only a prompt target is available', async () => {
+    const { runner, calls } = recordingCli('bounded by post-processing')
+    const service = new EngineRunner(fakeSecrets(null), runner)
+
+    await service.call(
+      { engine: 'codex', model: 'gpt-5-codex' },
+      'ship it',
+      { ...OPTS, maxTokens: 123 },
+    )
+
+    expect(calls[0].args).toEqual(buildCodexArgs('ship it', { model: 'gpt-5-codex' }))
+    expect(calls[0].args).not.toContain('123')
+  })
 })
 
 describe('EngineRunner.killAll — orphan CLI child cleanup (A2)', () => {
@@ -161,7 +175,7 @@ describe('EngineRunner — openrouter branch', () => {
     }
     expect(body.model).toBe('deepseek/deepseek-chat')
     expect(body.messages).toEqual([{ role: 'user', content: 'what is 2+2' }])
-    expect((body as { max_tokens?: number }).max_tokens).toBe(321)
+    expect((body as { max_completion_tokens?: number }).max_completion_tokens).toBe(321)
   })
 
   it('returns a friendly "add a key" error when none is stored', async () => {

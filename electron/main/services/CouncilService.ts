@@ -12,7 +12,6 @@ import {
   computeScorecard,
   councilSpecVerdictKind,
   normalizeCouncilResult,
-  parseRankingFromText,
   parseSpecVerdict,
   type AggregateRank,
   type CouncilMode,
@@ -25,13 +24,20 @@ import {
   type ScorecardEntry,
 } from '@shared/council'
 import { buildChairmanPrompt, buildRankingPrompt, buildSeatPrompt, buildSpecChairmanPrompt } from '@shared/council-prompts'
+import {
+  COUNCIL_STAGE_BUDGETS,
+  detectCouncilResponseLanguage,
+  normalizeCouncilChairmanText,
+  normalizeCouncilRankingText,
+  normalizeCouncilSeatText,
+} from '@shared/council-stages'
 import { composeMemoryPointerBlock, rankNotes, MEMORY_POINTER_MAX_NOTES } from '@shared/memory-recall'
 import { projectBrain } from '@shared/memory-ledger'
 import type { MemoryContextEnvelope, MemoryContextProvider } from '@shared/memory-context'
 import type { CouncilSessionStore } from '../db/CouncilSessionStore'
 import { collectDiffInputs } from './ReviewService'
 import type { AuditLogService } from './AuditLogService'
-import type { EngineRunner } from './EngineRunner'
+import type { EngineCallOpts, EngineRunner } from './EngineRunner'
 import type { MemoryHubService } from './MemoryHubService'
 import type { MemoryRecallService } from './MemoryRecallService'
 import type { ProjectService } from './ProjectService'
@@ -69,6 +75,8 @@ export interface CouncilRunOpts {
   cardId?: string
   /** Back-compat claude alias — overrides the model of claude-engine seats only. */
   model?: string
+  /** Internal/domain override; C2c owns exposing a validated IPC/UI selector. */
+  responseLanguage?: string
 }
 
 /**
@@ -158,6 +166,10 @@ export class CouncilService {
       if ('earlyError' in prep) return this.earlyError('spec', prep.earlyError, started)
       specText = prep.specText
     }
+    const responseLanguage = detectCouncilResponseLanguage(
+      `${question ?? ''}\n${specText ?? ''}`,
+      opts.responseLanguage,
+    )
 
     // A6: the early-exit guards have passed, so the run is committed — reserve a
     // durable `pending` row up front. A crash between here and the final
@@ -166,7 +178,19 @@ export class CouncilService {
     // falls back to a single insert of the completed result.
     const pendingId = this.reservePending(projectId, cardId, mode, question)
 
-    const callOpts = { cwd: project.path, timeout: CALL_TIMEOUT_MS, maxBuffer: CALL_MAX_BUFFER }
+    const baseCallOpts = { cwd: project.path, timeout: CALL_TIMEOUT_MS, maxBuffer: CALL_MAX_BUFFER }
+    const seatCallOpts: EngineCallOpts = {
+      ...baseCallOpts,
+      maxTokens: COUNCIL_STAGE_BUDGETS.seat.maxTokens,
+    }
+    const rankingCallOpts: EngineCallOpts = {
+      ...baseCallOpts,
+      maxTokens: COUNCIL_STAGE_BUDGETS.ranking.maxTokens,
+    }
+    const chairmanCallOpts: EngineCallOpts = {
+      ...baseCallOpts,
+      maxTokens: COUNCIL_STAGE_BUDGETS.chairman.maxTokens,
+    }
     const fenceTag = `====COCKPIT-UNTRUSTED-${mode.toUpperCase()}-${randomUUID()}====`
     const claudeOverride = opts.model ? resolveChatModel(opts.model).id : null
 
@@ -186,11 +210,22 @@ export class CouncilService {
       (mode === 'spec' ? this.memoryPointerBlock(projectId, question, specText) : null)
 
     const seatPrompt = (seat: CouncilSeat): string =>
-      buildSeatPrompt(seat, { mode, fenceTag, projectName: project.name, question, sanitized, specText, memoryBlock })
+      buildSeatPrompt(seat, {
+        mode,
+        fenceTag,
+        projectName: project.name,
+        question,
+        sanitized,
+        specText,
+        memoryBlock,
+        responseLanguage,
+      })
 
     // Phase 1 — every seat, in parallel, blind to the others (with fallback).
     const seats: CouncilSeatOutput[] = await Promise.all(
-      COUNCIL_SEATS.map((seat) => this.runSeat(seat, seatPrompt(seat), claudeOverride, callOpts)),
+      COUNCIL_SEATS.map((seat) =>
+        this.runSeat(seat, seatPrompt(seat), claudeOverride, seatCallOpts),
+      ),
     )
 
     const okSeats = seats.filter((s) => s.ok)
@@ -207,6 +242,7 @@ export class CouncilService {
         error: 'Every council seat failed to respond.',
         filesReviewed,
         started,
+        responseLanguage,
         memoryContext: automaticMemory,
       })
       return this.persistAndRecord(projectId, pendingId, cardId, mode, question, result)
@@ -217,23 +253,33 @@ export class CouncilService {
       seats,
       okSeats,
       mode,
-      callOpts,
+      rankingCallOpts,
       memoryBlock,
+      responseLanguage,
     )
 
     // Phase 3 — chairman synthesis (with fallback retry).
     const chairmanPrompt =
       mode === 'diff'
-        ? buildChairmanPrompt({ question, seats, rankings, memoryBlock })
+        ? buildChairmanPrompt({
+            question,
+            seats,
+            rankings,
+            aggregate,
+            memoryBlock,
+            responseLanguage,
+          })
         : buildSpecChairmanPrompt({
             question,
             seats,
             rankings,
+            aggregate,
             fenceTag,
             specText: specText ?? '',
             memoryBlock,
+            responseLanguage,
           })
-    const verdict = await this.runChairman(chairmanPrompt, callOpts)
+    const verdict = await this.runChairman(chairmanPrompt, mode, chairmanCallOpts)
 
     const specVerdict = mode === 'spec' && verdict ? normalizeSpecVerdict(verdict) : null
 
@@ -249,6 +295,7 @@ export class CouncilService {
       error: null,
       filesReviewed,
       started,
+      responseLanguage,
       memoryContext: automaticMemory,
     })
     return this.persistAndRecord(projectId, pendingId, cardId, mode, question, result)
@@ -388,7 +435,7 @@ export class CouncilService {
     seat: CouncilSeat,
     prompt: string,
     claudeOverride: string | null,
-    callOpts: { cwd: string; timeout: number; maxBuffer: number },
+    callOpts: EngineCallOpts,
   ): Promise<CouncilSeatOutput> {
     const primary = this.withOverride(seat.engine, claudeOverride)
     const chain = [primary, ...(seat.fallbacks ?? [])]
@@ -396,18 +443,33 @@ export class CouncilService {
     for (let index = 0; index < chain.length; index += 1) {
       const engine = chain[index]
       try {
-        const text = await this.engine.call(engine, prompt, callOpts)
-        return { id: seat.id, label: seat.label, engine, usedFallback: index > 0, text, ok: text.length > 0 }
+        const raw = await this.engine.call(engine, prompt, callOpts)
+        const normalized = normalizeCouncilSeatText(raw, { builder: seat.id === 'builder' })
+        return {
+          id: seat.id,
+          label: seat.label,
+          engine,
+          usedFallback: index > 0,
+          text: normalized.text,
+          ok: normalized.text.length > 0,
+          ...(normalized.findings.length > 0 ? { findings: normalized.findings } : {}),
+          ...(normalized.builderAssessment
+            ? { builderAssessment: normalized.builderAssessment }
+            : {}),
+        }
       } catch (err) {
         if (index === 0) primaryErr = err
       }
     }
+    const failure = normalizeCouncilSeatText(
+      `This seat could not be reached (${errText(primaryErr)}).`,
+    )
     return {
       id: seat.id,
       label: seat.label,
       engine: primary,
       usedFallback: false,
-      text: `This seat could not be reached (${errText(primaryErr)}).`,
+      text: failure.text,
       ok: false,
     }
   }
@@ -423,20 +485,29 @@ export class CouncilService {
     seats: readonly CouncilSeatOutput[],
     okSeats: readonly CouncilSeatOutput[],
     mode: CouncilMode,
-    callOpts: { cwd: string; timeout: number; maxBuffer: number },
+    callOpts: EngineCallOpts,
     memoryBlock?: string | null,
+    responseLanguage = 'und',
   ): Promise<{ rankings: CouncilRanking[]; aggregate: AggregateRank[]; labelToSeat: Record<string, CouncilTone> }> {
     if (okSeats.length < 2) return { rankings: [], aggregate: [], labelToSeat: {} }
 
     const { anonymized, labelToSeat } = anonymizeSeats(seats, shuffledOrder(okSeats.length))
-    const rankingPrompt = buildRankingPrompt(anonymized, mode, memoryBlock)
+    const rankingPrompt = buildRankingPrompt(anonymized, mode, memoryBlock, responseLanguage)
     const settled = await Promise.all(
       okSeats.map(async (s): Promise<CouncilRanking | null> => {
         try {
           // A seat ranks through the engine it actually succeeded on.
-          const text = await this.engine.call(s.engine, rankingPrompt, callOpts)
-          if (text.length === 0) return null
-          return { seatId: s.id, text, parsed: parseRankingFromText(text) }
+          const raw = await this.engine.call(s.engine, rankingPrompt, callOpts)
+          if (raw.length === 0) return null
+          const normalized = normalizeCouncilRankingText(raw)
+          return {
+            seatId: s.id,
+            text: normalized.text,
+            parsed: normalized.parsed,
+            strongestContribution: normalized.strongestContribution,
+            collectiveGap: normalized.collectiveGap,
+            factualityFlags: normalized.factualityFlags,
+          }
         } catch {
           return null // A missing ranking never blocks the aggregate or verdict.
         }
@@ -448,12 +519,13 @@ export class CouncilService {
 
   private async runChairman(
     prompt: string,
-    callOpts: { cwd: string; timeout: number; maxBuffer: number },
+    mode: CouncilMode,
+    callOpts: EngineCallOpts,
   ): Promise<string | null> {
     for (const engine of [CHAIRMAN.engine, ...CHAIRMAN.fallbacks]) {
       try {
         const text = await this.engine.call(engine, prompt, callOpts)
-        return text.length > 0 ? text : null
+        return text.length > 0 ? normalizeCouncilChairmanText(text, mode) : null
       } catch {
         // Try the next engine; no verdict after the chain is degraded, not fatal.
       }
@@ -473,12 +545,14 @@ export class CouncilService {
     error: string | null
     filesReviewed: number
     started: number
+    responseLanguage: string
     memoryContext?: MemoryContextEnvelope | null
   }): CouncilResult {
     const seatsRun = input.seats.filter((s) => s.ok).length
     return {
       ok: input.ok,
       mode: input.mode,
+      responseLanguage: input.responseLanguage,
       seats: input.seats,
       rankings: input.rankings,
       aggregate: input.aggregate,
@@ -576,6 +650,7 @@ export class CouncilService {
       payload: {
         ...result.stats,
         mode: result.mode,
+        responseLanguage: result.responseLanguage ?? 'und',
         ok: result.ok,
         verdictKind: councilSpecVerdictKind(result),
       },

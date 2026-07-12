@@ -48,6 +48,24 @@ export interface CouncilSeat {
   prompt: string
 }
 
+export type CouncilFindingBasis = 'evidence' | 'inference' | 'unknown'
+
+/** One bounded, machine-readable seat contribution. Human values may be any language. */
+export interface CouncilFinding {
+  finding: string
+  impact: string
+  recommendation: string
+  basis: CouncilFindingBasis
+  evidenceRef: string | null
+}
+
+export interface CouncilBuilderAssessment {
+  feasibility: string | null
+  effort: string | null
+  plan: string | null
+  ambiguities: string | null
+}
+
 /**
  * The GPT-5.6 family is intentionally explicit rather than relying on Codex's
  * moving default. Every Codex engine call reuses the active Codex CLI login —
@@ -137,6 +155,9 @@ export interface CouncilSeatOutput {
   usedFallback: boolean
   text: string
   ok: boolean
+  /** Present on new structured runs; absent on persisted legacy prose. */
+  findings?: CouncilFinding[]
+  builderAssessment?: CouncilBuilderAssessment | null
 }
 
 /** One seat's ranking pass over the anonymized responses. `parsed` is the
@@ -145,6 +166,10 @@ export interface CouncilRanking {
   seatId: CouncilTone
   text: string
   parsed: string[]
+  /** Compact peer-judgment fields; absent on legacy ranking essays. */
+  strongestContribution?: string | null
+  collectiveGap?: string | null
+  factualityFlags?: string[]
 }
 
 /** A seat's aggregate standing within ONE run: mean position across every peer
@@ -615,6 +640,52 @@ function engine(value: unknown): EngineSpec | null {
   return { engine: item.engine, model: item.model }
 }
 
+function findingBasis(value: unknown): CouncilFindingBasis | null {
+  return value === 'evidence' || value === 'inference' || value === 'unknown' ? value : null
+}
+
+function normalizedFindings(value: unknown): CouncilFinding[] {
+  if (!Array.isArray(value)) return []
+  return value.slice(0, 4).flatMap((candidate) => {
+    const item = record(candidate)
+    const basis = findingBasis(item?.basis)
+    if (
+      !item ||
+      !basis ||
+      typeof item.finding !== 'string' ||
+      typeof item.impact !== 'string' ||
+      typeof item.recommendation !== 'string' ||
+      !validNullableString(item.evidenceRef)
+    ) return []
+    const finding = boundedText(item.finding, COUNCIL_V3_LIMITS.findingChars)
+    const impact = boundedText(item.impact, COUNCIL_V3_LIMITS.findingChars)
+    const recommendation = boundedText(item.recommendation, COUNCIL_V3_LIMITS.findingChars)
+    if (!finding || !impact || !recommendation) return []
+    return [{
+      finding,
+      impact,
+      recommendation,
+      basis,
+      evidenceRef: nullableBoundedText(item.evidenceRef, 500),
+    }]
+  })
+}
+
+function normalizedBuilderAssessment(value: unknown): CouncilBuilderAssessment | null {
+  if (value === null || value === undefined) return null
+  const item = record(value)
+  if (!item) return null
+  const fields = ['feasibility', 'effort', 'plan', 'ambiguities'] as const
+  if (fields.some((field) => !validNullableString(item[field]))) return null
+  const assessment: CouncilBuilderAssessment = {
+    feasibility: nullableBoundedText(item.feasibility, 500),
+    effort: nullableBoundedText(item.effort, 500),
+    plan: nullableBoundedText(item.plan, 800),
+    ambiguities: nullableBoundedText(item.ambiguities, 800),
+  }
+  return Object.values(assessment).some((entry) => entry !== null) ? assessment : null
+}
+
 function seats(value: unknown): CouncilSeatOutput[] {
   if (!Array.isArray(value)) return []
   return value.flatMap((candidate) => {
@@ -624,6 +695,8 @@ function seats(value: unknown): CouncilSeatOutput[] {
     if (!item || !id || !actualEngine || typeof item.label !== 'string' || typeof item.text !== 'string') {
       return []
     }
+    const findings = normalizedFindings(item.findings)
+    const builderAssessment = normalizedBuilderAssessment(item.builderAssessment)
     return [{
       id,
       label: boundedText(item.label, 120),
@@ -631,6 +704,8 @@ function seats(value: unknown): CouncilSeatOutput[] {
       usedFallback: item.usedFallback === true,
       text: boundedText(item.text, 16_000),
       ok: item.ok === true,
+      ...(findings.length > 0 ? { findings } : {}),
+      ...(builderAssessment ? { builderAssessment } : {}),
     }]
   })
 }
@@ -641,6 +716,9 @@ function rankings(value: unknown): CouncilRanking[] {
     const item = record(candidate)
     const seatId = tone(item?.seatId)
     if (!item || !seatId || typeof item.text !== 'string' || !Array.isArray(item.parsed)) return []
+    const strongestContribution = nullableBoundedText(item.strongestContribution, 600)
+    const collectiveGap = nullableBoundedText(item.collectiveGap, 800)
+    const flags = boundedStringArray(item.factualityFlags, 3)
     return [{
       seatId,
       text: boundedText(item.text, 8_000),
@@ -649,6 +727,9 @@ function rankings(value: unknown): CouncilRanking[] {
         .map((entry) => boundedText(entry, 80))
         .filter(Boolean)
         .slice(0, 10),
+      ...(item.strongestContribution !== undefined ? { strongestContribution } : {}),
+      ...(item.collectiveGap !== undefined ? { collectiveGap } : {}),
+      ...(item.factualityFlags !== undefined ? { factualityFlags: flags } : {}),
     }]
   })
 }

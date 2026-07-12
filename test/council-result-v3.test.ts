@@ -169,6 +169,54 @@ describe('normalizeCouncilResult', () => {
     expect(normalized?.specVerdict).toBeNull()
     expect(councilSpecVerdictKind(normalized)).toBeNull()
   })
+
+  it('preserves bounded C2b seat findings and compact peer fields across legacy reads', () => {
+    const raw = legacy({
+      seats: [
+        {
+          ...legacy().seats[0],
+          findings: [
+            {
+              finding: 'The migration has no rollback.',
+              impact: 'A failed write can strand the project.',
+              recommendation: 'Add a restore drill.',
+              basis: 'evidence',
+              evidenceRef: 'src/migration.ts:42',
+            },
+          ],
+          builderAssessment: {
+            feasibility: 'buildable-with-risks',
+            effort: 'M',
+            plan: 'shared/council.ts then CouncilService.ts',
+            ambiguities: 'none',
+          },
+        },
+      ],
+      rankings: [
+        {
+          seatId: 'builder',
+          text: 'FINAL RANKING:\n1. Response A',
+          parsed: ['Response A'],
+          strongestContribution: 'Response A — rollback gap.',
+          collectiveGap: 'No crash test.',
+          factualityFlags: ['Response B cites no file.'],
+        },
+      ],
+    })
+
+    const normalized = normalizeCouncilResult(raw)!
+
+    expect(normalized.seats[0].findings?.[0]).toMatchObject({
+      basis: 'evidence',
+      evidenceRef: 'src/migration.ts:42',
+    })
+    expect(normalized.seats[0].builderAssessment?.effort).toBe('M')
+    expect(normalized.rankings[0]).toMatchObject({
+      strongestContribution: 'Response A — rollback gap.',
+      collectiveGap: 'No crash test.',
+      factualityFlags: ['Response B cites no file.'],
+    })
+  })
 })
 
 describe('spec-gate isolation', () => {
