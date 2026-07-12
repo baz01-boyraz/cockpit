@@ -34,14 +34,18 @@ const longNoteWithFact = (fact: string): string =>
       (_, index) =>
         `- (2026-06-01) unrelatedtopic${index} component${index} behavior${index} remains documented separately`,
     ),
-    `- (2026-07-01) ${fact}`,
     'Related: [[ipc-contract]]',
+    `- (2026-07-01) ${fact}`,
   ].join('\n')
 
 describe('textSimilarity', () => {
   it('is 1 for identical text and 0 for disjoint', () => {
     expect(textSimilarity('alpha beta gamma', 'alpha beta gamma')).toBe(1)
     expect(textSimilarity('alpha beta', 'delta epsilon')).toBe(0)
+  })
+
+  it('keeps Turkish words intact instead of tokenizing an exact fact to empty', () => {
+    expect(textSimilarity('Çağrı ölçümü', 'Çağrı ölçümü')).toBe(1)
   })
 })
 
@@ -69,20 +73,19 @@ describe('reconcile', () => {
   })
 
   it('keeps the duplicate threshold inclusive without swallowing the just-below case', () => {
-    const sharedAbove =
-      'alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november'
-    const aboveBody = `${sharedAbove} oscar`
-    const aboveExisting = `${sharedAbove} papa quebec`
-    expect(textSimilarity(aboveBody, aboveExisting)).toBeGreaterThan(DUPLICATE_SIMILARITY)
+    const sharedAtThreshold = Array.from({ length: 41 }, (_, index) => `common${index}`).join(' ')
+    const atThresholdBody = `${sharedAtThreshold} left0 left1 left2 left3`
+    const atThresholdExisting = `${sharedAtThreshold} right0 right1 right2 right3 right4`
+    expect(textSimilarity(atThresholdBody, atThresholdExisting)).toBe(DUPLICATE_SIMILARITY)
     expect(
-      reconcile(obs({ isNew: false, body: aboveBody }), [
-        doc('router-placement', aboveExisting),
+      reconcile(obs({ isNew: false, body: atThresholdBody }), [
+        doc('router-placement', atThresholdExisting),
       ]).decision,
     ).toBe('duplicate')
 
-    const sharedBelow = 'alpha bravo charlie delta echo foxtrot golf hotel india'
-    const belowBody = `${sharedBelow} juliet`
-    const belowExisting = `${sharedBelow} kilo`
+    const sharedBelow = Array.from({ length: 40 }, (_, index) => `common${index}`).join(' ')
+    const belowBody = `${sharedBelow} left0 left1 left2 left3`
+    const belowExisting = `${sharedBelow} right0 right1 right2 right3 right4`
     expect(textSimilarity(belowBody, belowExisting)).toBeLessThan(DUPLICATE_SIMILARITY)
     expect(
       reconcile(obs({ isNew: false, body: belowBody }), [
