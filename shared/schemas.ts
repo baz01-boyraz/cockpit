@@ -213,8 +213,8 @@ export const reviewDiffStatSchema = z.object({
 export const councilRunSchema = z.object({
   projectId: z.string().min(1),
   model: z.string().min(1).max(120).optional(),
-  // 'diff' judges a worktree change set; 'spec' gates a draft task spec.
-  mode: z.enum(['diff', 'spec']).optional(),
+  // Explicit intent; analysis fails closed in main until C3's evidence collector lands.
+  mode: z.enum(['diff', 'spec', 'analysis']).optional(),
   // Absolute path of a swarm worktree; main re-validates it sits inside the project.
   dir: z.string().min(1).max(1024).optional(),
   // The card's own title/body — the author's stated intent, grounds the seats.
@@ -223,6 +223,13 @@ export const councilRunSchema = z.object({
   spec: z.string().max(16_000).optional(),
   // The card a spec-gate run belongs to — kept as session history, no card FK.
   cardId: z.string().max(200).optional(),
+  // BCP-47-ish override. Human prose follows this; machine labels remain English.
+  responseLanguage: z
+    .string()
+    .min(2)
+    .max(32)
+    .regex(/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i)
+    .optional(),
 })
 
 export const memoryNameSchema = z.object({

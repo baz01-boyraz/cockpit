@@ -106,6 +106,7 @@ const api: CockpitApi = {
         question: opts?.question,
         spec: opts?.spec,
         cardId: opts?.cardId,
+        responseLanguage: opts?.responseLanguage,
       }),
     scorecard: (projectId) => invoke(IPC.councilScorecard, { projectId }),
     sessions: (projectId) => invoke(IPC.councilSessions, { projectId }),

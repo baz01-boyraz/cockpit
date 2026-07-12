@@ -7,20 +7,29 @@ import type { EngineSpec } from '@shared/engines'
 import {
   CHAIRMAN,
   COUNCIL_SEATS,
+  COUNCIL_RESULT_SCHEMA_VERSION,
+  COUNCIL_V3_LIMITS,
   anonymizeSeats,
   computeAggregateRankings,
   computeScorecard,
   councilSpecVerdictKind,
+  extractRefinedSpec,
   normalizeCouncilResult,
   parseSpecVerdict,
   type AggregateRank,
+  type CouncilClarification,
+  type CouncilDecisionKind,
+  type CouncilIntentMode,
   type CouncilMode,
   type CouncilRanking,
   type CouncilResult,
+  type CouncilResultArtifact,
+  type CouncilResultV3,
   type CouncilSeat,
   type CouncilSeatOutput,
   type CouncilSessionSummary,
   type CouncilTone,
+  type NormalizedCouncilResult,
   type ScorecardEntry,
 } from '@shared/council'
 import { buildChairmanPrompt, buildRankingPrompt, buildSeatPrompt, buildSpecChairmanPrompt } from '@shared/council-prompts'
@@ -67,8 +76,88 @@ function errText(err: unknown): string {
   return e.stderr?.trim() || e.message || 'call failed'
 }
 
+const COUNCIL_TRUNCATION = '…[truncated]'
+
+function boundedCouncilText(value: string, cap: number): string {
+  const clean = value.trim()
+  if (clean.length <= cap) return clean
+  return `${clean.slice(0, Math.max(0, cap - COUNCIL_TRUNCATION.length)).trimEnd()}${COUNCIL_TRUNCATION}`
+}
+
+function uniqueCouncilText(values: readonly (string | null | undefined)[], count: number): string[] {
+  const seen = new Set<string>()
+  const output: string[] = []
+  for (const value of values) {
+    if (!value?.trim()) continue
+    const clean = boundedCouncilText(value, COUNCIL_V3_LIMITS.findingChars)
+    const key = clean.toLocaleLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    output.push(clean)
+    if (output.length >= count) break
+  }
+  return output
+}
+
+function markdownSection(text: string | null, heading: RegExp): string | null {
+  if (!text) return null
+  const lines = text.split('\n')
+  const start = lines.findIndex(
+    (line) => /^#{1,6}\s+/.test(line.trim()) && heading.test(line),
+  )
+  if (start < 0) return null
+  const body: string[] = []
+  for (const line of lines.slice(start + 1)) {
+    if (/^#{1,6}\s+/.test(line.trim())) break
+    body.push(line)
+  }
+  return body.join('\n').trim() || null
+}
+
+function decisionSummary(
+  verdict: string | null,
+  error: string | null,
+  kind: CouncilDecisionKind,
+): string {
+  if (error?.trim()) return boundedCouncilText(error, COUNCIL_V3_LIMITS.summaryChars)
+  const verdictSection = markdownSection(verdict, /verdict/i)
+  const summary = (verdictSection ?? verdict ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^(APPROVED|NEEDS[_\s-]?CLARIFICATION)$/i.test(line))
+    .join(' ')
+  return boundedCouncilText(
+    summary || `Council decision: ${kind.replace(/_/g, ' ')}.`,
+    COUNCIL_V3_LIMITS.summaryChars,
+  )
+}
+
+function decisionQuestions(
+  verdict: CouncilResult['specVerdict'],
+): CouncilClarification[] {
+  const source = verdict?.clarifications?.length
+    ? verdict.clarifications
+    : (verdict?.questions ?? []).map((question, index) => ({
+        id: `question-${index + 1}`,
+        question,
+        why: null,
+        recommendedAnswer: null,
+      }))
+  return source.slice(0, COUNCIL_V3_LIMITS.questions).map((item, index) => ({
+    id: boundedCouncilText(item.id || `question-${index + 1}`, 120),
+    question: boundedCouncilText(item.question, COUNCIL_V3_LIMITS.questionChars),
+    why: item.why
+      ? boundedCouncilText(item.why, COUNCIL_V3_LIMITS.questionChars)
+      : null,
+    recommendedAnswer: item.recommendedAnswer
+      ? boundedCouncilText(item.recommendedAnswer, COUNCIL_V3_LIMITS.questionChars)
+      : null,
+  }))
+}
+
 export interface CouncilRunOpts {
-  mode?: CouncilMode
+  mode?: CouncilIntentMode
   dir?: string
   question?: string
   specText?: string
@@ -80,9 +169,10 @@ export interface CouncilRunOpts {
 }
 
 /**
- * The LLM-Council v2 (Karpathy's method), multi-engine. Two modes: `diff` judges
- * a card's change set (read-only — the same sanitized diff the reviewer uses),
- * `spec` gates a draft task spec before it reaches an autonomous builder. Five
+ * The LLM-Council v3 (Karpathy's method), multi-engine. `diff` judges a card's
+ * change set (read-only — the same sanitized diff the reviewer uses), while
+ * `spec` gates a draft task before it reaches an autonomous builder. `analysis`
+ * is an explicit intent but fails closed until C3 supplies grounded evidence. Five
  * seats run in parallel across Codex/OpenRouter primaries with ordered Claude
  * last-resort fallbacks, every OK seat ranks the anonymized responses, then a
  * chairman synthesizes one verdict. Every stage degrades gracefully — a failed
@@ -139,9 +229,9 @@ export class CouncilService {
     }
   }
 
-  async run(projectId: string, opts: CouncilRunOpts = {}): Promise<CouncilResult> {
+  async run(projectId: string, opts: CouncilRunOpts = {}): Promise<NormalizedCouncilResult> {
     const started = Date.now()
-    const mode: CouncilMode = opts.mode ?? 'diff'
+    const intent: CouncilIntentMode = opts.mode ?? 'diff'
     const project = this.projects.get(projectId)
     // The question is card title+body — user-authored, so it gets the same
     // redaction as the spec/diff before it can reach a third-party engine
@@ -149,6 +239,24 @@ export class CouncilService {
     const rawQuestion = opts.question?.trim() || null
     const question = rawQuestion ? redactText(rawQuestion) : null
     const cardId = opts.cardId ?? null
+
+    // C2c exposes analysis as a first-class intent, but C3 owns the bounded,
+    // repository-grounded evidence collector. Until that collector exists we
+    // fail closed before reserving a row or calling an engine; a tool-less model
+    // must never fabricate repository findings and label them as analysis.
+    if (intent === 'analysis') {
+      const responseLanguage = detectCouncilResponseLanguage(
+        `${question ?? ''}\n${opts.specText ?? ''}`,
+        opts.responseLanguage,
+      )
+      return this.earlyError(
+        intent,
+        'Repository analysis requires grounded repository evidence from the C3 collector; no engine was called and no result was persisted.',
+        started,
+        responseLanguage,
+      )
+    }
+    const mode: CouncilMode = intent
 
     // Diff seats/chairman need the change set; spec seats need the fenced spec.
     // Each branch narrows to its own material so nothing downstream juggles a
@@ -354,7 +462,7 @@ export class CouncilService {
    * the channel that lets a verdict + scorecard survive an unmount/restart —
    * the renderer rehydrates on demand rather than holding the heavy result.
    */
-  session(projectId: string, sessionId: string): CouncilResult | null {
+  session(projectId: string, sessionId: string): NormalizedCouncilResult | null {
     const session = this.sessions.get(sessionId)
     if (!session || session.projectId !== projectId) return null
     return session.result
@@ -547,47 +655,127 @@ export class CouncilService {
     started: number
     responseLanguage: string
     memoryContext?: MemoryContextEnvelope | null
-  }): CouncilResult {
+  }): CouncilResultV3 {
     const seatsRun = input.seats.filter((s) => s.ok).length
+    const decisionKind: CouncilDecisionKind = !input.ok
+      ? 'failed'
+      : input.mode === 'spec'
+        ? input.specVerdict?.kind ?? 'failed'
+        : input.verdict
+          ? 'review_complete'
+          : 'failed'
+    const reliable = decisionKind !== 'failed'
+    const error = input.error ?? (
+      reliable ? null : 'Council could not produce a reliable chairman decision.'
+    )
+    const stats = {
+      seatsRun,
+      seatsFailed: input.seats.length - seatsRun,
+      filesReviewed: input.filesReviewed,
+      durationMs: Date.now() - input.started,
+    }
+    let primaryArtifact: CouncilResultArtifact | null = null
+    if (input.verdict && input.mode === 'spec') {
+      const refined = extractRefinedSpec(input.verdict)
+      if (refined) {
+        primaryArtifact = {
+          kind: 'refinedSpec',
+          content: boundedCouncilText(refined, COUNCIL_V3_LIMITS.primaryArtifactChars),
+        }
+      }
+    } else if (input.verdict && input.mode === 'diff') {
+      primaryArtifact = {
+        kind: 'diffVerdict',
+        content: boundedCouncilText(input.verdict, COUNCIL_V3_LIMITS.primaryArtifactChars),
+      }
+    }
+    const consensus = markdownSection(input.verdict, /consensus|disagreement/i)
+    const keyFindings = uniqueCouncilText(
+      input.seats.flatMap((seat) => seat.findings?.map((finding) => finding.finding) ?? []),
+      COUNCIL_V3_LIMITS.keyFindings,
+    )
+    const dissent = uniqueCouncilText(
+      input.rankings.flatMap((ranking) => [
+        ...(ranking.factualityFlags ?? []),
+        ranking.collectiveGap,
+      ]),
+      COUNCIL_V3_LIMITS.dissent,
+    )
     return {
-      ok: input.ok,
+      schemaVersion: COUNCIL_RESULT_SCHEMA_VERSION,
+      ok: input.ok && reliable,
       mode: input.mode,
       responseLanguage: input.responseLanguage,
-      seats: input.seats,
-      rankings: input.rankings,
-      aggregate: input.aggregate,
-      labelToSeat: input.labelToSeat,
-      verdict: input.verdict,
-      specVerdict: input.specVerdict,
-      error: input.error,
-      stats: {
-        seatsRun,
-        seatsFailed: input.seats.length - seatsRun,
-        filesReviewed: input.filesReviewed,
-        durationMs: Date.now() - input.started,
+      decision: {
+        kind: decisionKind,
+        summary: decisionSummary(input.verdict, error, decisionKind),
+        why: consensus
+          ? boundedCouncilText(consensus, COUNCIL_V3_LIMITS.whyChars)
+          : null,
+        questions: input.mode === 'spec' ? decisionQuestions(input.specVerdict) : [],
+        keyFindings,
+        dissent,
       },
+      primaryArtifact,
+      execution: {
+        stats,
+        ...(input.memoryContext?.receipt ? { memoryContext: input.memoryContext.receipt } : {}),
+      },
+      evidence: {
+        seats: input.seats,
+        rankings: input.rankings,
+        aggregate: input.aggregate,
+        labelToSeat: input.labelToSeat,
+        rawChairman: input.verdict
+          ? boundedCouncilText(input.verdict, COUNCIL_V3_LIMITS.rawChairmanChars)
+          : null,
+      },
+      error,
       sessionId: null,
-      memoryContext: input.memoryContext?.receipt,
     }
   }
 
-  private earlyError(mode: CouncilMode, message: string, started: number): CouncilResult {
+  private earlyError(
+    mode: CouncilIntentMode,
+    message: string,
+    started: number,
+    responseLanguage = 'und',
+  ): NormalizedCouncilResult {
     // An early exit (clean worktree / missing spec) is not a convened run, so it
     // is not persisted — but it is still audit-logged as a no-op outcome.
-    const result: CouncilResult = {
+    const raw: CouncilResultV3 = {
+      schemaVersion: COUNCIL_RESULT_SCHEMA_VERSION,
       ok: false,
       mode,
-      seats: [],
-      rankings: [],
-      aggregate: [],
-      labelToSeat: {},
-      verdict: null,
-      specVerdict: null,
+      responseLanguage,
+      decision: {
+        kind: 'failed',
+        summary: boundedCouncilText(message, COUNCIL_V3_LIMITS.summaryChars),
+        why: null,
+        questions: [],
+        keyFindings: [],
+        dissent: [],
+      },
+      primaryArtifact: null,
+      execution: {
+        stats: {
+          seatsRun: 0,
+          seatsFailed: 0,
+          filesReviewed: 0,
+          durationMs: Date.now() - started,
+        },
+      },
+      evidence: {
+        seats: [],
+        rankings: [],
+        aggregate: [],
+        labelToSeat: {},
+        rawChairman: null,
+      },
       error: message,
-      stats: { seatsRun: 0, seatsFailed: 0, filesReviewed: 0, durationMs: Date.now() - started },
       sessionId: null,
     }
-    return result
+    return normalizeCouncilResult(raw)!
   }
 
   /** Persist a completed run (even ok:false), then audit-log stats only. A6: this
@@ -599,8 +787,8 @@ export class CouncilService {
     cardId: string | null,
     mode: CouncilMode,
     question: string | null,
-    result: CouncilResult,
-  ): CouncilResult {
+    result: CouncilResultV3,
+  ): NormalizedCouncilResult {
     let sessionId: string | null = pendingId
     try {
       if (pendingId) {
@@ -614,7 +802,8 @@ export class CouncilService {
       // sessionId still points at it. If the fallback insert threw, sessionId is
       // null. Either way the audit line records the run.
     }
-    const withId: CouncilResult = { ...result, sessionId }
+    const withId = normalizeCouncilResult({ ...result, sessionId })
+    if (!withId) throw new Error('Council produced an invalid v3 result envelope.')
     this.record(projectId, withId)
     // Faz A: a spec gate that comes back needs_clarification is a `notice` — the
     // draft can't proceed to a builder until the author answers. Fire-and-forget;
@@ -622,7 +811,7 @@ export class CouncilService {
     if (councilSpecVerdictKind(withId) === 'needs_clarification') {
       const subject = question ?? (cardId ? `card ${cardId}` : 'the draft spec')
       const questions =
-        normalizeCouncilResult(withId)?.decision.questions.map((item) => item.question) ?? []
+        withId.decision.questions.map((item) => item.question)
       this.sentinel?.report({
         projectId,
         severity: 'notice',
@@ -638,7 +827,7 @@ export class CouncilService {
     return withId
   }
 
-  private record(projectId: string, result: CouncilResult): void {
+  private record(projectId: string, result: NormalizedCouncilResult): void {
     this.audit.record({
       projectId,
       actor: 'ai',

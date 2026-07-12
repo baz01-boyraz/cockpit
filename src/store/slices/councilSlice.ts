@@ -1,5 +1,10 @@
 import { cockpit } from '../../lib/cockpit'
-import { normalizeCouncilResult, type CouncilResult } from '@shared/council'
+import {
+  normalizeCouncilResult,
+  type CouncilIntentMode,
+  type CouncilResultV3,
+  type NormalizedCouncilResult,
+} from '@shared/council'
 import { buildClarificationContinuation } from '@shared/council-display'
 import type { CouncilRunView, CouncilSlice, SliceCreator } from './types'
 
@@ -14,21 +19,40 @@ import type { CouncilRunView, CouncilSlice, SliceCreator } from './types'
  */
 
 /** A thrown council IPC call → a renderable failure result (mirrors the panel helper). */
-function councilFailure(error: unknown, mode: CouncilResult['mode'] = 'spec'): CouncilResult {
+function councilFailure(
+  error: unknown,
+  mode: CouncilIntentMode = 'spec',
+  responseLanguage = 'und',
+): NormalizedCouncilResult {
   const message = error instanceof Error ? error.message : 'The council run failed.'
-  return {
+  const raw: CouncilResultV3 = {
+    schemaVersion: 3,
     ok: false,
     mode,
-    seats: [],
-    rankings: [],
-    aggregate: [],
-    labelToSeat: {},
-    verdict: null,
-    specVerdict: null,
+    responseLanguage,
+    decision: {
+      kind: 'failed',
+      summary: message,
+      why: null,
+      questions: [],
+      keyFindings: [],
+      dissent: [],
+    },
+    primaryArtifact: null,
+    execution: {
+      stats: { seatsRun: 0, seatsFailed: 0, filesReviewed: 0, durationMs: 0 },
+    },
+    evidence: {
+      seats: [],
+      rankings: [],
+      aggregate: [],
+      labelToSeat: {},
+      rawChairman: null,
+    },
     error: message,
-    stats: { seatsRun: 0, seatsFailed: 0, filesReviewed: 0, durationMs: 0 },
     sessionId: null,
   }
+  return normalizeCouncilResult(raw)!
 }
 
 /** The spec's first non-empty line, trimmed to a headline length. */
@@ -45,13 +69,15 @@ export const createCouncilSlice: SliceCreator<CouncilSlice> = (set, get) => ({
   councilConveningCardId: null,
   councilCardResult: null,
 
-  conveneCouncil: async (projectId, spec) => {
+  conveneCouncil: async (projectId, spec, options = {}) => {
     const trimmed = spec.trim()
     if (!trimmed || get().councilConvening) return
     const run: CouncilRunView = {
       id: `local-${Date.now()}`,
       title: runTitle(trimmed),
       spec: trimmed,
+      mode: 'spec',
+      responseLanguage: options.responseLanguage,
       result: null,
       at: Date.now(),
     }
@@ -61,6 +87,7 @@ export const createCouncilSlice: SliceCreator<CouncilSlice> = (set, get) => ({
         mode: 'spec',
         spec: trimmed,
         question: run.title,
+        responseLanguage: options.responseLanguage,
       })
       const result = normalizeCouncilResult(rawResult) ?? councilFailure(
         new Error('Council returned an invalid result envelope.'),
@@ -68,14 +95,22 @@ export const createCouncilSlice: SliceCreator<CouncilSlice> = (set, get) => ({
       // A council can outlive a project switch — never paint a stale verdict.
       if (get().activeProjectId !== projectId) return
       set({
-        councilActive: { ...run, id: result.sessionId ?? run.id, result },
+        councilActive: {
+          ...run,
+          id: result.sessionId ?? run.id,
+          responseLanguage: options.responseLanguage ?? result.responseLanguage,
+          result,
+        },
         councilConvening: false,
         councilNotice: 'Council finished deliberating.',
       })
     } catch (err: unknown) {
       if (get().activeProjectId !== projectId) return
       set({
-        councilActive: { ...run, result: councilFailure(err) },
+        councilActive: {
+          ...run,
+          result: councilFailure(err, 'spec', options.responseLanguage),
+        },
         councilConvening: false,
         councilNotice: 'Council run failed.',
       })
@@ -127,20 +162,29 @@ export const createCouncilSlice: SliceCreator<CouncilSlice> = (set, get) => ({
         mode: 'spec',
         spec: continuationSpec,
         question: active.title,
+        responseLanguage: active.responseLanguage,
       })
       const result = normalizeCouncilResult(rawResult) ?? councilFailure(
         new Error('Council returned an invalid result envelope.'),
       )
       if (get().activeProjectId !== projectId) return
       set({
-        councilActive: { ...run, id: result.sessionId ?? run.id, result },
+        councilActive: {
+          ...run,
+          id: result.sessionId ?? run.id,
+          responseLanguage: active.responseLanguage ?? result.responseLanguage,
+          result,
+        },
         councilConvening: false,
         councilNotice: 'Council updated the brief with your answers.',
       })
     } catch (err: unknown) {
       if (get().activeProjectId !== projectId) return
       set({
-        councilActive: { ...run, result: councilFailure(err) },
+        councilActive: {
+          ...run,
+          result: councilFailure(err, 'spec', active.responseLanguage),
+        },
         councilConvening: false,
         councilNotice: 'Council could not review the answers.',
       })

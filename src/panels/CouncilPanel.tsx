@@ -4,6 +4,7 @@ import { cockpit } from '../lib/cockpit'
 import { relativeTime } from '@shared/time'
 import type {
   CouncilClarificationAnswer,
+  CouncilIntentMode,
   CouncilSessionSummary,
   ScorecardEntry,
 } from '@shared/council'
@@ -29,6 +30,12 @@ function sessionTitle(summary: CouncilSessionSummary): string {
   if (summary.mode === 'spec') return 'Spec-gate deliberation'
   if (summary.mode === 'analysis') return 'Repository analysis'
   return 'Diff-review deliberation'
+}
+
+function modeLabel(mode: CouncilIntentMode): string {
+  if (mode === 'analysis') return 'repository analysis'
+  if (mode === 'diff') return 'change review'
+  return 'request refinement'
 }
 
 /**
@@ -60,6 +67,7 @@ export function CouncilPanel() {
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [showAllHistory, setShowAllHistory] = useState(false)
   const [composerOpen, setComposerOpen] = useState(true)
+  const [responseLanguage, setResponseLanguage] = useState<'auto' | 'tr' | 'en'>('auto')
 
   // Persisted history + cross-session standings, both project-scoped. A stale
   // list from another project must never flash under a new one.
@@ -89,6 +97,7 @@ export function CouncilPanel() {
     setSessions(null)
     setScorecard(null)
     setShowAllHistory(false)
+    setResponseLanguage('auto')
     setComposerOpen(useStore.getState().councilActive === null)
     void loadHistory()
   }, [projectId, resetCouncil, loadHistory])
@@ -103,9 +112,11 @@ export function CouncilPanel() {
 
   const handleConvene = useCallback(() => {
     if (!projectId || !spec.trim()) return
-    void conveneCouncil(projectId, spec)
+    void conveneCouncil(projectId, spec, {
+      responseLanguage: responseLanguage === 'auto' ? undefined : responseLanguage,
+    })
     setComposerOpen(false)
-  }, [projectId, spec, conveneCouncil])
+  }, [projectId, spec, responseLanguage, conveneCouncil])
 
   const handleContinue = useCallback(
     (answers: CouncilClarificationAnswer[]) => {
@@ -126,6 +137,7 @@ export function CouncilPanel() {
         id: summary.id,
         title: sessionTitle(summary),
         spec: '',
+        mode: summary.mode,
         result: null,
         at: Date.parse(summary.createdAt) || Date.now(),
       })
@@ -136,6 +148,8 @@ export function CouncilPanel() {
           id: summary.id,
           title: sessionTitle(summary),
           spec: '',
+          mode: summary.mode,
+          responseLanguage: result?.responseLanguage,
           result,
           at: Date.parse(summary.createdAt) || Date.now(),
         })
@@ -237,6 +251,27 @@ export function CouncilPanel() {
               </button>
             )}
           </div>
+          <div className="councilView__intent" role="group" aria-label="Council intent">
+            <span className="eyebrow">intent</span>
+            <div className="councilView__intentGrid">
+              <button
+                type="button"
+                className="councilView__intentOption councilView__intentOption--on"
+                aria-pressed="true"
+              >
+                <strong>Refine request</strong>
+                <small>Turn a draft into one build-ready brief.</small>
+              </button>
+              <button type="button" className="councilView__intentOption" disabled>
+                <strong>Analyze repository</strong>
+                <small>Grounded analysis ships next with verified repository evidence.</small>
+              </button>
+              <button type="button" className="councilView__intentOption" disabled>
+                <strong>Review change</strong>
+                <small>Use Council from a Swarm card with an actual change set.</small>
+              </button>
+            </div>
+          </div>
           <textarea
             id="council-spec"
             className="councilView__input"
@@ -249,10 +284,26 @@ export function CouncilPanel() {
             disabled={!projectId}
           />
           <div className="councilView__composeFoot">
-            <span className="councilView__kbd">
-              <kbd className="mono">⌘</kbd>
-              <kbd className="mono">↵</kbd> to convene
-            </span>
+            <div className="councilView__composeMeta">
+              <span className="councilView__kbd">
+                <kbd className="mono">⌘</kbd>
+                <kbd className="mono">↵</kbd> to convene
+              </span>
+              <label className="councilView__language">
+                <span>Output language</span>
+                <select
+                  aria-label="Output language"
+                  value={responseLanguage}
+                  onChange={(event) =>
+                    setResponseLanguage(event.target.value as 'auto' | 'tr' | 'en')
+                  }
+                >
+                  <option value="auto">Auto-detect</option>
+                  <option value="tr">Türkçe</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
+            </div>
             <button
               type="button"
               className="btn btn--accent councilView__convene"
@@ -283,7 +334,7 @@ export function CouncilPanel() {
               <IconCouncil width={14} height={14} />
             </span>
             <div className="councilView__resultText">
-              <div className="eyebrow">llm council · spec gate</div>
+              <div className="eyebrow">llm council · {modeLabel(active.mode)}</div>
               <div className="councilView__resultTitle">{active.title}</div>
             </div>
             <button

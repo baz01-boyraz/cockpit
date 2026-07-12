@@ -470,7 +470,7 @@ screenshots at three desktop widths.
 > a readable v3 pending envelope. Full tests/coverage, typecheck, lint, production build and all
 > seven Playwright journeys passed.
 >
-> **C2b completed 2026-07-11; C2c remains pending.** Seat responses now use a tolerant,
+> **C2b completed 2026-07-11.** Seat responses now use a tolerant,
 > machine-stable finding envelope (maximum four findings) with bounded legacy-prose fallback;
 > Builder feasibility/effort/plan/ambiguities survive the same cap. Peer ranking essays are
 > normalized to ordered labels, strongest contribution, one collective gap and factuality flags;
@@ -481,8 +481,21 @@ screenshots at three desktop widths.
 > OpenRouter receives the current provider-enforced `max_completion_tokens`; Claude/Codex are
 > explicitly modelled as prompt-target-only and remain protected by the same post-response caps.
 > Verification passed with 1,281 tests, 85.8% statement/line coverage, typecheck, lint, production
-> build and seven Playwright journeys. C2c still owns explicit spec/diff/analysis selection,
-> validated language override exposure, v3-only new writes and final IPC/renderer contract cleanup.
+> build and seven Playwright journeys.
+>
+> **C2c completed 2026-07-11.** `CouncilService` now produces strict v3 envelopes, while the
+> session store enforces v3-only serialization across pending, finalize and fallback-insert paths;
+> existing v2 rows remain untouched and dual-readable. Main IPC, preload, browser mock and Zustand
+> expose one normalized read contract. The run schema accepts explicit `spec | diff | analysis`
+> intent plus a validated BCP-47-like response-language override, and the override survives guided
+> clarification turns. The standalone composer labels all three intents without pretending they
+> are interchangeable: request refinement is available there, change review stays grounded in a
+> Swarm card's real diff, and repository analysis is visible but disabled until C3 lands. Direct
+> analysis calls fail closed before pending-row creation, persistence or any engine call, so a
+> tool-less model cannot manufacture repository facts. Verification passed with 1,286 tests,
+> 85.89% statement/line coverage, typecheck, lint, production build, eight Playwright journeys and
+> visual inspection at 1024, 1280 and 1600 px. C3 still owns the evidence collector that will make
+> repository analysis executable.
 
 **Goal:** make concision and intent part of the domain model rather than a prompt suggestion.
 
@@ -536,8 +549,8 @@ input produces Turkish human prose; Hermes still receives only compact gate payl
 cannot authorize a Swarm card; outcome scorecards distinguish analysis from approved specs;
 baseline critical-issue recall stays within the predeclared tolerance.
 
-**Rollback:** feature flag writes v2-compatible raw fields and reads both versions. Never
-rewrite old session blobs in place.
+**Rollback:** revert the v3 producer/store write gateway while retaining the dual-read adapter
+for sessions already written in either version. Never rewrite old session blobs in place.
 
 ---
 

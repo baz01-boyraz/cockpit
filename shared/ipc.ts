@@ -11,7 +11,12 @@
  */
 import type { ClaudeRunOptions } from './claude-run'
 import type { DiffStat, ReviewResult } from './review'
-import type { CouncilResult, CouncilSessionSummary, ScorecardEntry } from './council'
+import type {
+  CouncilIntentMode,
+  CouncilSessionSummary,
+  NormalizedCouncilResult,
+  ScorecardEntry,
+} from './council'
 import type { OutcomeScorecard } from './outcomes'
 import type { MemoryHubSnapshot, MemoryNote } from './memory-hub'
 import type { MemoryHealth } from './memory-health'
@@ -380,23 +385,24 @@ export interface CockpitApi {
     /**
      * Multi-engine LLM-Council (Karpathy's method): five seats across three
      * vendors → anonymized peer rankings → chairman verdict, persisted as a
-     * session for the scorecard. `mode` picks what is judged — `diff` (default)
-     * reviews a card's change set (read-only, same sanitized diff as the
-     * reviewer); `spec` gates a draft task `spec` before it reaches an autonomous
-     * builder and returns a NEEDS_CLARIFICATION/APPROVED gate. Prompts are
-     * authored in shared/council-prompts; the diff/spec is fenced as untrusted.
+     * session for the scorecard. `mode` is explicit: `diff` (default) reviews a
+     * card's change set, `spec` refines/gates a draft, and `analysis` is a
+     * repository-analysis intent (fail-closed until its grounded evidence
+     * collector is available). Prompts are authored in shared/council-prompts;
+     * supplied material is fenced as untrusted.
      */
     run(
       projectId: string,
       opts?: {
         model?: string
-        mode?: 'diff' | 'spec'
+        mode?: CouncilIntentMode
         dir?: string
         question?: string
         spec?: string
         cardId?: string
+        responseLanguage?: string
       },
-    ): Promise<CouncilResult>
+    ): Promise<NormalizedCouncilResult>
     /**
      * Cross-session seat standings for a project (Faz 2a) — recent persisted
      * council sessions merged into a per-seat scorecard, best (lowest average
@@ -418,7 +424,7 @@ export interface CockpitApi {
      * survive an unmount/restart: the renderer rehydrates a session on demand
      * instead of holding the heavy result in volatile component state.
      */
-    session(projectId: string, sessionId: string): Promise<CouncilResult | null>
+    session(projectId: string, sessionId: string): Promise<NormalizedCouncilResult | null>
   }
   outcomes: {
     /**

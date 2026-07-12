@@ -1,12 +1,12 @@
 /**
- * LLM-Council v2 — roster, result shapes, and the pure ranking/verdict parsers
+ * LLM-Council v3 — roster, result shapes, and the pure ranking/verdict parsers
  * (Karpathy's method, multi-engine, wired into the swarm board).
  *
  * Five independent seats analyze the material from radically different angles,
  * every OK seat then ranks all anonymized responses, and a chairman synthesizes
- * one verdict. Two modes share this machinery: `diff` judges a change set,
- * `spec` judges whether a draft task spec is buildable before it reaches an
- * autonomous builder.
+ * one verdict. The execution machinery currently grounds `diff` in a change set
+ * and `spec` in a draft task; `analysis` is a first-class persisted intent whose
+ * repository evidence collector lands separately in C3.
  *
  * Security posture (unchanged from v1): every prompt string lives in this module
  * and its sibling `council-prompts.ts` — prompts never cross the IPC boundary.

@@ -25,10 +25,14 @@ import type {
 import type { CockpitApi, SystemInfo, Unsubscribe } from '@shared/ipc'
 import {
   councilSpecVerdictKind,
+  normalizeCouncilResult,
   type CouncilResult,
+  type CouncilResultV3,
   type CouncilSessionSummary,
+  type NormalizedCouncilResult,
   type ScorecardEntry,
 } from '@shared/council'
+import { detectCouncilResponseLanguage } from '@shared/council-stages'
 import type { OutcomeScorecard } from '@shared/outcomes'
 import { buildSignal, composeSignalCardSpec, type SentinelSignal } from '@shared/sentinel'
 import { resolveChatModel } from '@shared/chat-models'
@@ -494,6 +498,45 @@ function mockCouncilSessionDetail(sessionId: string): CouncilResult | null {
     default:
       return null
   }
+}
+
+function normalizedMockCouncil(result: CouncilResult | CouncilResultV3): NormalizedCouncilResult {
+  const normalized = normalizeCouncilResult(result)
+  if (!normalized) throw new Error('Mock Council fixture violates the versioned result contract.')
+  return normalized
+}
+
+function mockAnalysisUnavailable(
+  responseLanguage: string,
+): NormalizedCouncilResult {
+  return normalizedMockCouncil({
+    schemaVersion: 3,
+    ok: false,
+    mode: 'analysis',
+    responseLanguage,
+    decision: {
+      kind: 'failed',
+      summary: 'Grounded repository analysis is not available yet.',
+      why: null,
+      questions: [],
+      keyFindings: [],
+      dissent: [],
+    },
+    primaryArtifact: null,
+    execution: {
+      stats: { seatsRun: 0, seatsFailed: 0, filesReviewed: 0, durationMs: 0 },
+    },
+    evidence: {
+      seats: [],
+      rankings: [],
+      aggregate: [],
+      labelToSeat: {},
+      rawChairman: null,
+    },
+    error:
+      'Repository analysis requires grounded repository evidence from the C3 collector; no engine was called and no result was persisted.',
+    sessionId: null,
+  })
 }
 
 export function createMockApi(): CockpitApi {
@@ -1316,11 +1359,20 @@ export function createMockApi(): CockpitApi {
     council: {
       run: async (_projectId, opts) => {
         await new Promise((r) => setTimeout(r, 1600))
-        if ((opts?.mode ?? 'diff') !== 'spec') return mockDiffCouncil()
+        const mode = opts?.mode ?? 'diff'
+        if (mode === 'analysis') {
+          return mockAnalysisUnavailable(
+            detectCouncilResponseLanguage(
+              `${opts?.question ?? ''}\n${opts?.spec ?? ''}`,
+              opts?.responseLanguage,
+            ),
+          )
+        }
+        if (mode !== 'spec') return normalizedMockCouncil(mockDiffCouncil())
         // A draft that already spells out acceptance criteria gates through.
-        return /acceptance|author clarification answers/i.test(opts?.spec ?? '')
+        return normalizedMockCouncil(/acceptance|author clarification answers/i.test(opts?.spec ?? '')
           ? mockSpecCouncilApproved()
-          : mockSpecCouncil()
+          : mockSpecCouncil())
       },
       // A plausible cross-session standing, best (lowest average rank) first —
       // enough for the browser preview to render the scorecard chips.
@@ -1381,9 +1433,10 @@ export function createMockApi(): CockpitApi {
       ],
       // Detail read behind a session header — the full verdict + scorecard the
       // renderer rehydrates on demand so a run survives leaving and returning.
-      session: async (_projectId, sessionId): Promise<CouncilResult | null> => {
+      session: async (_projectId, sessionId): Promise<NormalizedCouncilResult | null> => {
         await new Promise((r) => setTimeout(r, 120))
-        return mockCouncilSessionDetail(sessionId)
+        const result = mockCouncilSessionDetail(sessionId)
+        return result ? normalizedMockCouncil(result) : null
       },
     },
     outcomes: {

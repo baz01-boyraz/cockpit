@@ -89,7 +89,7 @@ function MarkdownLite({ text }: { text: string }) {
 }
 
 /**
- * Renders a finished LLM-Council v2 session: the spec gate (spec mode) and the
+ * Renders a normalized LLM-Council v2/v3 session: the spec gate (spec mode) and the
  * chairman's verdict lead, then each seat's perspective with its engine chip
  * (and "(fallback)" when the primary engine was down), then the peer rankings
  * folded away. Model prose is rendered markdown-lite — headings and bold, no

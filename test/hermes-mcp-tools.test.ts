@@ -5,7 +5,12 @@ import { HermesChecksService } from '../electron/main/services/hermes/HermesChec
 import { createHermesTools, type HermesTool, type HermesToolContext } from '../electron/main/services/hermes/hermesTools'
 import type { BoardColumn, CardStatus, KanbanCard } from '../shared/kanban'
 import type { AgentUsageReport, ApprovalRequest, ErrorInsight, GitSnapshot, LogEvent } from '../shared/domain'
-import type { CouncilResult, CouncilResultV3 } from '../shared/council'
+import {
+  normalizeCouncilResult,
+  type CouncilResult,
+  type CouncilResultV3,
+  type NormalizedCouncilResult,
+} from '../shared/council'
 import type { DiffStat } from '../shared/review'
 import type { MemoryHubSnapshot, MemoryNote } from '../shared/memory-hub'
 import type { ReviewItem } from '../shared/memory-review'
@@ -118,8 +123,8 @@ function makeReviewItem(over: Partial<ReviewItem> = {}): ReviewItem {
 }
 
 /** A spec-gate result whose verdict carries a parseable "Refined Spec" section. */
-function makeCouncilResult(over: Partial<CouncilResult> = {}): CouncilResult {
-  return {
+function makeCouncilResult(over: Partial<CouncilResult> = {}): NormalizedCouncilResult {
+  return normalizeCouncilResult({
     ok: true,
     mode: 'spec',
     seats: [],
@@ -135,7 +140,7 @@ function makeCouncilResult(over: Partial<CouncilResult> = {}): CouncilResult {
     stats: { seatsRun: 5, seatsFailed: 0, filesReviewed: 0, durationMs: 10 },
     sessionId: 'sess-1',
     ...over,
-  }
+  })!
 }
 
 function makeCouncilV3(over: Partial<CouncilResultV3> = {}): CouncilResultV3 {
@@ -669,7 +674,7 @@ describe('Hermes MCP tools — the scoped tool set', () => {
 
     it('reads a v3 approved spec from its structured artifact, not chairman Markdown', async () => {
       const council: HermesToolContext['council'] = {
-        run: async () => makeCouncilV3() as unknown as CouncilResult,
+        run: async () => normalizeCouncilResult(makeCouncilV3())!,
         scorecard: () => [],
       }
       const { ctx } = makeContext({ council })
@@ -688,11 +693,13 @@ describe('Hermes MCP tools — the scoped tool set', () => {
     it('never promotes a v3 analysis result into Hermes spec-gate approval', async () => {
       const council: HermesToolContext['council'] = {
         run: async () =>
-          makeCouncilV3({
-            mode: 'analysis',
-            decision: { ...makeCouncilV3().decision, kind: 'approved' },
-            primaryArtifact: { kind: 'analysisReport', content: 'Repository report.' },
-          }) as unknown as CouncilResult,
+          normalizeCouncilResult(
+            makeCouncilV3({
+              mode: 'analysis',
+              decision: { ...makeCouncilV3().decision, kind: 'approved' },
+              primaryArtifact: { kind: 'analysisReport', content: 'Repository report.' },
+            }),
+          )!,
         scorecard: () => [],
       }
       const { ctx } = makeContext({ council })

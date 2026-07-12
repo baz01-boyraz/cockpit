@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import {
+  COUNCIL_RESULT_SCHEMA_VERSION,
   councilSpecVerdictKind,
   normalizeCouncilResult,
   type CouncilIntentMode,
   type CouncilResultLike,
+  type CouncilResultV3,
   type NormalizedCouncilResult,
 } from '@shared/council'
 import type { Db } from './Database'
@@ -63,52 +65,37 @@ interface SessionRow {
 }
 
 /**
- * A well-formed placeholder result for a `pending` row. Every read path
+ * A well-formed v3 placeholder result for a `pending` row. Every read path
  * (`listRecent` → scorecard, `get` → swarm brief) dereferences result fields —
  * `computeScorecard` iterates `aggregate` — so a pending row must carry a valid,
  * empty CouncilResult, never `{}`. A run that crashes mid-flight leaves exactly
  * this shape behind, which honestly reads as "0 seats, no verdict".
  */
-function pendingPlaceholder(mode: CouncilIntentMode): CouncilResultLike {
+function pendingPlaceholder(mode: CouncilIntentMode): CouncilResultV3 {
   const stats = { seatsRun: 0, seatsFailed: 0, filesReviewed: 0, durationMs: 0 }
-  if (mode === 'analysis') {
-    return {
-      schemaVersion: 3,
-      ok: false,
-      mode,
-      responseLanguage: 'und',
-      decision: {
-        kind: 'failed',
-        summary: 'Council run in progress.',
-        why: null,
-        questions: [],
-        keyFindings: [],
-        dissent: [],
-      },
-      primaryArtifact: null,
-      execution: { stats },
-      evidence: {
-        seats: [],
-        rankings: [],
-        aggregate: [],
-        labelToSeat: {},
-        rawChairman: null,
-      },
-      error: 'Council run in progress.',
-      sessionId: null,
-    }
-  }
   return {
+    schemaVersion: COUNCIL_RESULT_SCHEMA_VERSION,
     ok: false,
     mode,
-    seats: [],
-    rankings: [],
-    aggregate: [],
-    labelToSeat: {},
-    verdict: null,
-    specVerdict: null,
+    responseLanguage: 'und',
+    decision: {
+      kind: 'failed',
+      summary: 'Council run in progress.',
+      why: null,
+      questions: [],
+      keyFindings: [],
+      dissent: [],
+    },
+    primaryArtifact: null,
+    execution: { stats },
+    evidence: {
+      seats: [],
+      rankings: [],
+      aggregate: [],
+      labelToSeat: {},
+      rawChairman: null,
+    },
     error: 'Council run in progress.',
-    stats,
     sessionId: null,
   }
 }
@@ -133,13 +120,27 @@ function withSessionId(
   result: CouncilResultLike,
   sessionId: string,
   expectedMode?: CouncilIntentMode,
-): CouncilResultLike {
+): CouncilResultV3 {
   const stored = { ...result, sessionId } as CouncilResultLike
   const normalized = normalizeCouncilResult(stored)
   if (!normalized || (expectedMode !== undefined && normalized.mode !== expectedMode)) {
     throw new Error('Council result does not satisfy the versioned persistence contract.')
   }
-  return stored
+  // Reads remain dual-version, but every NEW write crosses this one strict v3
+  // gateway. A legacy-shaped internal caller is upgraded in memory; historical
+  // rows are never rewritten or migrated in place.
+  return {
+    schemaVersion: COUNCIL_RESULT_SCHEMA_VERSION,
+    ok: normalized.ok,
+    mode: normalized.mode,
+    responseLanguage: normalized.responseLanguage,
+    decision: normalized.decision,
+    primaryArtifact: normalized.primaryArtifact,
+    execution: normalized.execution,
+    evidence: normalized.evidence,
+    error: normalized.error,
+    sessionId,
+  }
 }
 
 function toSession(row: SessionRow): CouncilSession | null {

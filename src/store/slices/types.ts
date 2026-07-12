@@ -27,7 +27,11 @@ import type { BoardColumn, CardStatus, StartCardResult } from '@shared/kanban'
 import type { Assignment } from '@shared/agent-taxonomy'
 import type { NamedAgentSummary } from '@shared/named-agents'
 import type { SentinelSource } from '@shared/sentinel'
-import type { CouncilClarificationAnswer, CouncilResult } from '@shared/council'
+import type {
+  CouncilClarificationAnswer,
+  CouncilIntentMode,
+  NormalizedCouncilResult,
+} from '@shared/council'
 
 export type View =
   | 'dashboard'
@@ -108,8 +112,12 @@ export interface CouncilRunView {
   spec: string
   /** Accumulated spec + author answers sent on a clarification continuation. */
   continuationSpec?: string
+  /** Explicitly selected intent; never inferred from the request body. */
+  mode: CouncilIntentMode
+  /** Stable response-language choice/detection reused by clarification turns. */
+  responseLanguage?: string
   /** The finished verdict, or null while the council is convening. */
-  result: CouncilResult | null
+  result: NormalizedCouncilResult | null
   /** Epoch ms the run was requested. */
   at: number
 }
@@ -143,11 +151,15 @@ export interface CouncilSlice {
   councilCardResult: {
     cardId: string
     cardTitle: string
-    result: CouncilResult | null
+    result: NormalizedCouncilResult | null
     source: 'run' | 'rehydrate'
   } | null
   /** Convene the standalone spec-mode council on free-form text (resolves in-store). */
-  conveneCouncil: (projectId: string, spec: string) => Promise<void>
+  conveneCouncil: (
+    projectId: string,
+    spec: string,
+    options?: { responseLanguage?: string },
+  ) => Promise<void>
   /** Re-run the active spec with the author's guided clarification answers. */
   continueCouncil: (
     projectId: string,
