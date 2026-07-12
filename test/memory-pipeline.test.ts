@@ -138,6 +138,37 @@ describe('MemoryPipeline.capture', () => {
     expect(res.committed).toBe(0)
   })
 
+  it('skips repeated captures of one bullet already buried in a long note', async () => {
+    const repeatedFact =
+      'The router lives in shared so both bridges classify identically and stay in lockstep.'
+    const longBody = [
+      'A long-lived architecture note with independent historical facts.',
+      ...Array.from(
+        { length: 12 },
+        (_, index) =>
+          `- (2026-06-01) unrelatedtopic${index} component${index} behavior${index} remains documented separately`,
+      ),
+      `- (2026-07-01) ${repeatedFact}`,
+      'Related: [[ipc-contract]]',
+    ].join('\n')
+    memory.write('p1', 'router-placement', longBody)
+    const ledger = fakeLedger()
+    const repeated = obs({ isNew: false, body: repeatedFact })
+    const pipe = new MemoryPipeline(
+      memory,
+      ledger.svc,
+      fakeReviews().svc,
+      stubDistiller([repeated, repeated]),
+    )
+
+    const res = await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
+
+    expect(res.skipped).toBe(2)
+    expect(res.committed).toBe(0)
+    expect(ledger.records).toHaveLength(0)
+    expect(memory.read('p1', 'router-placement')?.content).toBe(longBody)
+  })
+
   it('dry run writes nothing but returns proposals', async () => {
     const ledger = fakeLedger()
     const pipe = new MemoryPipeline(memory, ledger.svc, fakeReviews().svc, stubDistiller([obs()]))

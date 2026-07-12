@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { reconcile, textSimilarity } from '@shared/memory-reconcile'
+import {
+  DUPLICATE_SIMILARITY,
+  reconcile,
+  textSimilarity,
+} from '@shared/memory-reconcile'
 import type { MemoryDoc } from '@shared/memory-hub'
 import type { Observation } from '@shared/memory-observation'
 
@@ -22,6 +26,18 @@ const doc = (name: string, content: string): MemoryDoc => ({
   updatedAt: '2026-07-04T10:00:00Z',
 })
 
+const longNoteWithFact = (fact: string): string =>
+  [
+    'A long-lived architecture note with independent historical facts.',
+    ...Array.from(
+      { length: 12 },
+      (_, index) =>
+        `- (2026-06-01) unrelatedtopic${index} component${index} behavior${index} remains documented separately`,
+    ),
+    `- (2026-07-01) ${fact}`,
+    'Related: [[ipc-contract]]',
+  ].join('\n')
+
 describe('textSimilarity', () => {
   it('is 1 for identical text and 0 for disjoint', () => {
     expect(textSimilarity('alpha beta gamma', 'alpha beta gamma')).toBe(1)
@@ -41,6 +57,38 @@ describe('reconcile', () => {
     const r = reconcile(obs(), [existing])
     expect(r.decision).toBe('duplicate')
     expect(r.similarity).toBeGreaterThan(0.8)
+  })
+
+  it('finds a duplicate atomic bullet inside a long accumulated note', () => {
+    const existing = doc('router-placement', longNoteWithFact(obs().body))
+
+    const r = reconcile(obs({ isNew: false }), [existing])
+
+    expect(r.decision).toBe('duplicate')
+    expect(r.similarity).toBe(1)
+  })
+
+  it('keeps the duplicate threshold inclusive without swallowing the just-below case', () => {
+    const sharedAbove =
+      'alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november'
+    const aboveBody = `${sharedAbove} oscar`
+    const aboveExisting = `${sharedAbove} papa quebec`
+    expect(textSimilarity(aboveBody, aboveExisting)).toBeGreaterThan(DUPLICATE_SIMILARITY)
+    expect(
+      reconcile(obs({ isNew: false, body: aboveBody }), [
+        doc('router-placement', aboveExisting),
+      ]).decision,
+    ).toBe('duplicate')
+
+    const sharedBelow = 'alpha bravo charlie delta echo foxtrot golf hotel india'
+    const belowBody = `${sharedBelow} juliet`
+    const belowExisting = `${sharedBelow} kilo`
+    expect(textSimilarity(belowBody, belowExisting)).toBeLessThan(DUPLICATE_SIMILARITY)
+    expect(
+      reconcile(obs({ isNew: false, body: belowBody }), [
+        doc('router-placement', belowExisting),
+      ]).decision,
+    ).toBe('merge')
   })
 
   it('returns CONFLICT when the slug is taken but content differs and model said new', () => {

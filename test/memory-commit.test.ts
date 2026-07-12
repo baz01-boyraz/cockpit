@@ -83,4 +83,28 @@ describe('mergeObservationIntoNote', () => {
     expect(content).toContain('brain addition')
     expect(parseNote(content).frontmatter?.name).toBe('router-placement')
   })
+
+  it('is byte-idempotent when a near-identical fact already exists as one bullet', () => {
+    const shared =
+      'alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november'
+    const existingFact = `${shared} papa quebec`
+    const incomingFact = `${shared} oscar`
+    const existing = buildNoteFromObservation(
+      obs({
+        body: [
+          'A separate original fact about the routing subsystem.',
+          `- (2026-07-01) ${existingFact}`,
+        ].join('\n'),
+      }),
+      { now: '2026-07-01T00:00:00.000Z', gate: 'save' },
+    ).content
+
+    const merged = mergeObservationIntoNote(
+      existing,
+      obs({ isNew: false, body: incomingFact }),
+      { now: NOW, gate: 'save' },
+    )
+
+    expect(merged.content).toBe(existing)
+  })
 })
