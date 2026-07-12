@@ -32,6 +32,7 @@ import { MemoryCaptureQueue } from './MemoryCaptureQueue'
 import { MemoryAutoCapture } from './MemoryAutoCapture'
 import { MemoryConsolidator } from './MemoryConsolidator'
 import { MemoryCurationService } from './MemoryCurationService'
+import { MemoryLifecycleSentinel } from './MemoryLifecycleSentinel'
 import { registerMemoryExitCapture } from './memoryExitTrigger'
 import { SwarmService } from './SwarmService'
 import { SentinelService, type SentinelNotifier } from './SentinelService'
@@ -125,6 +126,8 @@ export class Services {
   readonly memoryConsolidator: MemoryConsolidator
   /** Faz D: the weekly curation sweep — proposes archive/merge for stale notes. */
   readonly memoryCuration: MemoryCurationService
+  /** Thresholded, content-free Memory queue/audit/review health sensors. */
+  readonly memoryLifecycle: MemoryLifecycleSentinel
   readonly swarm: SwarmService
   /** Always-on deterministic signal layer: sensors → dedup → feed + notify. */
   readonly sentinel: SentinelService
@@ -195,6 +198,11 @@ export class Services {
       opts.events,
       this.sentinel,
       this.hermesCompletion,
+    )
+    this.memoryLifecycle = new MemoryLifecycleSentinel(
+      this.sentinel,
+      this.audit,
+      this.memoryReviews,
     )
     this.logs = new LogIntelligenceService(this.db, opts.events, this.sentinel)
     this.attachments = new AttachmentService(this.projects)
@@ -267,13 +275,35 @@ export class Services {
     // Faz D: the weekly curation sweep. Reuses the triage runner pattern (a cheap
     // Hermes oneshot); proposals route into the review queue, never a file op.
     this.memoryCuration = new MemoryCurationService(this.memory, this.memoryReviews, this.audit)
-    this.memoryCaptureQueue = new MemoryCaptureQueue(this.db)
+    this.memoryCaptureQueue = new MemoryCaptureQueue(this.db, this.memoryLifecycle)
     this.memoryAutoCapture = new MemoryAutoCapture(
       this.memoryCaptureQueue,
       this.memoryPipeline,
       this.projects,
       this.claudeSessions,
     )
+    // Rehydrate lifecycle pressure from durable state. Models are not involved;
+    // only queue status/counts/ages reach Sentinel.
+    for (const project of this.projects.list()) {
+      this.memoryLifecycle.registerProject(project.id, project.createdAt)
+      let curationExpected = false
+      try {
+        curationExpected = this.memory.listDocs(project.id).length > 0
+      } catch {
+        // An unreadable hub is handled by the curation failure sensor later.
+      }
+      let captureJobs: ReturnType<MemoryCaptureQueue['list']> = []
+      try {
+        captureJobs = this.memoryCaptureQueue.list(project.id)
+      } catch {
+        // A lifecycle read-model miss must never block app startup.
+      }
+      this.memoryLifecycle.scanProject(
+        project.id,
+        captureJobs,
+        curationExpected,
+      )
+    }
     this.appUpdate = new AppUpdateService(opts.events)
 
     this.terminals = new TerminalManager(
@@ -682,6 +712,7 @@ export class Services {
     if (this.closing) return
     this.closing = true
     this.memoryAutoCapture.stop()
+    this.memoryLifecycle.dispose()
     this.cardOutput.clear()
     this.swarmCompletion.clear()
     // Fire-and-forget: the process is quitting; closing the socket is best-effort.

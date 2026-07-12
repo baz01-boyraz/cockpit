@@ -73,7 +73,7 @@ export class MemoryCurationService {
     try {
       docs = this.memory.listDocs(projectId)
     } catch {
-      return null
+      return this.fail(projectId, 'inventory')
     }
     if (docs.length === 0) return null // nothing to curate
 
@@ -101,12 +101,12 @@ export class MemoryCurationService {
     } catch {
       // Timeout / spawn-fail / anything: a missed sweep costs nothing. We build
       // NO error string from the argv (the raw-argv leak lesson).
-      return null
+      return this.fail(projectId, 'runner')
     }
-    // Unparseable output = the model failed; do NOT audit (so the cadence retries
-    // rather than counting a failed run as a completed sweep). A valid empty array
-    // falls through to a recorded zero-proposal sweep below (the hub is healthy).
-    if (proposals === null) return null
+    // Unparseable output = the model failed. Record a failure event, never a
+    // successful `memory.curation_sweep`, so cadence still retries. A valid empty
+    // array falls through to a recorded zero-proposal sweep (the hub is healthy).
+    if (proposals === null) return this.fail(projectId, 'parse')
 
     // Defense in depth: only act on proposals that reference REAL notes, and a
     // merge whose survivor is a real, distinct note. A hallucinated name never
@@ -167,6 +167,22 @@ export class MemoryCurationService {
       },
     })
     return { proposals: queued }
+  }
+
+  /** Content-free failure audit; success cadence still keys only curation_sweep. */
+  private fail(projectId: string, stage: 'inventory' | 'runner' | 'parse'): null {
+    try {
+      this.audit.record({
+        projectId,
+        actor: 'system',
+        actionType: 'memory.curation_failed',
+        summary: 'Memory curation sweep did not complete',
+        payload: { stage },
+      })
+    } catch {
+      // sweep() is best-effort and never throws, including audit failures.
+    }
+    return null
   }
 }
 

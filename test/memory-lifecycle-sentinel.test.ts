@@ -8,6 +8,7 @@ import {
 import type { CaptureJob } from '../shared/memory-capture'
 import type { ReviewItem } from '../shared/memory-review'
 import { MemoryLifecycleSentinel } from '../electron/main/services/MemoryLifecycleSentinel'
+import type { SentinelReportInput } from '../electron/main/services/SentinelService'
 
 const NOW = Date.parse('2026-07-12T06:00:00.000Z')
 
@@ -47,8 +48,8 @@ const review = (i: number, over: Partial<ReviewItem> = {}): ReviewItem => ({
 function harness() {
   const reports: Record<string, unknown>[] = []
   const sentinel = {
-    report: vi.fn((input: Record<string, unknown>) => {
-      reports.push(input)
+    report: vi.fn((input: SentinelReportInput) => {
+      reports.push(input as unknown as Record<string, unknown>)
       return {} as never
     }),
   }
@@ -222,5 +223,15 @@ describe('MemoryLifecycleSentinel', () => {
         'Memory review queue needs attention',
       ]),
     )
+  })
+
+  it('does not call an empty hub stale merely because it has no sweep history', () => {
+    const h = harness()
+    h.sensor.registerProject(
+      'p1',
+      new Date(NOW - 30 * 24 * 60 * 60_000).toISOString(),
+    )
+    h.sensor.scanProject('p1', [], false)
+    expect(h.reports).toHaveLength(0)
   })
 })

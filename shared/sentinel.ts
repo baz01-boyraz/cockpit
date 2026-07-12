@@ -1,7 +1,7 @@
 /**
  * The sentinel signal spine (Faz A) — the pure, dependency-free core of an
  * always-on deterministic signal layer. Sensors across the app (log intelligence,
- * swarm completion/worker exits, approvals, council) emit structured {@link SentinelSignal}
+ * swarm completion/worker exits, Memory lifecycle, approvals, council) emit structured {@link SentinelSignal}
  * facts; the main-process `SentinelService` dedups, persists, and pushes them to
  * the renderer plus (for alerts) a macOS notification.
  *
@@ -24,6 +24,7 @@ export type SentinelSource =
   | 'approval'
   | 'council'
   | 'swarm-completion'
+  | 'memory-lifecycle'
 
 /**
  * The Hermes enrichment verdict — normally cheap async triage, and also the

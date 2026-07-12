@@ -491,6 +491,10 @@ Only after 0–3 are proven does capture become hands-off.
 - **Incremental capture:** `last_offset` means only *new* turns are distilled, not the
   whole transcript every time — bounds work on long sessions.
 - **Consolidation/curation** runs on the weekly due-check or manual action, never per-keystroke.
+- **Lifecycle monitoring is deterministic and content-free.** Durable capture status, redacted
+  audit verdicts, and review counts/age feed conservative thresholds. Only a verified pressure
+  signal reaches Sentinel (where optional Flash triage may interpret it); note bodies, transcript
+  paths, and raw errors never enter the lifecycle payload.
 
 ## Decisions (current; original set 2026-07-04, model/cadence later superseded)
 

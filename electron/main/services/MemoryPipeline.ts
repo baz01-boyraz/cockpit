@@ -10,6 +10,7 @@ import { gateMemoryWrite } from '@shared/memory-gate'
 import { reconcile, type Reconciled } from '@shared/memory-reconcile'
 import type { MemoryDoc } from '@shared/memory-hub'
 import type { Observation } from '@shared/memory-observation'
+import { classifyMemoryFailure } from '@shared/memory-lifecycle'
 import type { CaptureResult, MemoryProposal } from '@shared/memory-pipeline'
 import {
   reviewOperation,
@@ -92,6 +93,17 @@ export class MemoryPipeline {
     })
 
     if (distilled.error) {
+      try {
+        this.audit?.record({
+          projectId: req.projectId,
+          actor: 'system',
+          actionType: 'memory.distiller_failed',
+          summary: 'Memory distiller failed to produce valid observations',
+          payload: { failureKind: classifyMemoryFailure(distilled.error) },
+        })
+      } catch {
+        // The capture result still carries the failure when audit storage is down.
+      }
       return {
         proposals: [],
         committed: 0,
@@ -155,7 +167,7 @@ export class MemoryPipeline {
           this.recordGate(req.projectId, rec.targetSlug, 'reject', decision.reasons)
           skipped += 1
         } else if (decision.verdict === 'review') {
-          this.queueReview(target.brain, rec, obs, proposedContent, req.sessionId, decision.reasons.join('; '))
+          this.queueReview(req.projectId, target.brain, rec, obs, proposedContent, req.sessionId, decision.reasons.join('; '))
           this.recordGate(req.projectId, rec.targetSlug, 'review', decision.reasons)
           queued += 1
         } else {
@@ -169,7 +181,7 @@ export class MemoryPipeline {
           initialGate === 'commit'
             ? `${mode} policy requires review for a ${kind} proposal. ${obs.reason}`
             : obs.reason
-        this.queueReview(target.brain, rec, obs, proposedContent, req.sessionId, reason)
+        this.queueReview(req.projectId, target.brain, rec, obs, proposedContent, req.sessionId, reason)
         queued += 1
       }
     }
@@ -186,6 +198,7 @@ export class MemoryPipeline {
 
   /** Enqueue a proposal for human review (shared by the model-ask and gate-review paths). */
   private queueReview(
+    originProjectId: string,
     brain: string,
     rec: Reconciled,
     obs: Observation,
@@ -202,6 +215,7 @@ export class MemoryPipeline {
       reason,
       existingContent: rec.existingContent,
       sourceId: sessionId ?? null,
+      originProjectId,
     })
   }
 

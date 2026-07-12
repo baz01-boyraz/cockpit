@@ -61,12 +61,13 @@ cockpiT first tightens memory correctness, then expands Hermes/Sentinel into a p
    - Convert the existing completion event into a structured, persisted signal.
    - Gather bounded evidence: card/spec, diff stat, checks, branch/worktree state, and notable output or failure markers.
    - Ask Hermes for a short manager summary only after deterministic evidence exists, then deliver it through app toast/macOS with a direct review or chat action.
-   - **Result:** successful cards now stage a deduplicated `swarm-completion` Sentinel row before inference. A session-scoped 64 KiB tail is reduced to redacted valid JSON (≤1,900 chars) with card/spec, diff, observed checks, worktree state, and notable markers. Tool-less Hermes V4 Pro calls are serialized; invalid/unavailable Pro falls back to a deterministic summary, crash-staged rows resume on boot, and the final signal publishes once to app toast + macOS with Review card / Ask Hermes actions. Nonzero exits stay on the existing worker-failure path.
+   - **Result:** successful cards persist bounded evidence before tool-less V4 Pro summaries, with recovery, fallback, dedup, app/macOS delivery, and Review/Ask actions. Nonzero exits keep their failure path.
 
-7. **Memory lifecycle events as Sentinel sources**
+7. **Memory lifecycle events as Sentinel sources — complete (2026-07-12)**
    - Raise structured signals for capture retry exhaustion, distiller failure, review-queue backlog, unresolved conflicts, curation failure/staleness, write-gate rejection spikes, and memory-contract compliance misses.
    - Deduplicate and threshold these events so normal queue activity stays quiet.
    - Let recurring, verified failures become charter-gated gotcha candidates; never write raw errors or secrets directly into memory.
+   - **Result:** `memory-lifecycle` observes durable queue/audit/review facts. Conservative thresholds surface exhaustion, repeated failures, queue pressure, reject/compliance spikes, and real staleness; empty hubs and isolated events stay quiet. Only counts, age, and closed failure categories reach Sentinel—never content, paths, or raw errors.
 
 8. **Scheduled operational health sweep**
    - Build a cheap deterministic snapshot of git state, quota, stuck/parked Swarm work, orphaned processes, recent log/error patterns, pending approvals, and memory queue health.

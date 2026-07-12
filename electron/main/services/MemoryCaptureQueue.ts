@@ -34,6 +34,10 @@ export interface EnqueueInput {
   sourcePath: string
 }
 
+export interface CaptureFailureObserver {
+  captureFailed(job: CaptureJob): void
+}
+
 /**
  * Durable capture queue (docs/memory-imp.md G2 "never miss"). One row per
  * session (session_id is unique). Enqueue is idempotent: a session already
@@ -42,7 +46,10 @@ export interface EnqueueInput {
  * `recoverStuck()`. Nothing is processed in-memory only — the row is the truth.
  */
 export class MemoryCaptureQueue {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly observer?: CaptureFailureObserver,
+  ) {}
 
   private getBySession(sessionId: string): QueueRow | undefined {
     return this.db
@@ -109,16 +116,31 @@ export class MemoryCaptureQueue {
   }
 
   /** Record a failure; retry (queued) until the attempt ceiling, then 'error'. */
-  fail(id: string, message: string): void {
+  fail(id: string, message: string): CaptureJob | null {
     const row = this.db.prepare('SELECT * FROM memory_capture_queue WHERE id = ?').get(id) as
       | QueueRow
       | undefined
-    if (!row) return
+    if (!row) return null
     const attempts = row.attempts + 1
     const status: CaptureStatus = attempts >= CAPTURE_MAX_ATTEMPTS ? 'error' : 'queued'
+    const updatedAt = new Date().toISOString()
+    const error = message.slice(0, 500)
     this.db
       .prepare('UPDATE memory_capture_queue SET status = ?, attempts = ?, error = ?, updated_at = ? WHERE id = ?')
-      .run(status, attempts, message.slice(0, 500), new Date().toISOString(), id)
+      .run(status, attempts, error, updatedAt, id)
+    const job: CaptureJob = {
+      ...toJob(row),
+      status,
+      attempts,
+      error,
+      updatedAt,
+    }
+    try {
+      this.observer?.captureFailed(job)
+    } catch {
+      // Queue durability never depends on the optional lifecycle observer.
+    }
+    return job
   }
 
   /** Boot recovery: any row stuck 'processing' (crash mid-run) becomes 'queued'. */

@@ -18,7 +18,15 @@ interface AuditRow {
  * redacted before persistence so secrets never land on disk in plaintext.
  */
 export class AuditLogService {
+  private readonly listeners = new Set<(entry: AuditEntry) => void>()
+
   constructor(private readonly db: Db) {}
+
+  /** Observe entries only after their append succeeds; listener faults are isolated. */
+  subscribe(listener: (entry: AuditEntry) => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
 
   record(input: {
     projectId: string | null
@@ -50,7 +58,32 @@ export class AuditLogService {
         payload: JSON.stringify(entry.payloadRedacted),
         createdAt: entry.createdAt,
       })
+    for (const listener of this.listeners) {
+      try {
+        listener(entry)
+      } catch {
+        // Observability consumers never endanger the append-only audit write.
+      }
+    }
     return entry
+  }
+
+  /** Bounded action-specific window used by deterministic lifecycle sensors. */
+  recent(
+    projectId: string,
+    actionType: string,
+    since: string,
+    limit = 100,
+  ): AuditEntry[] {
+    const bounded = Math.max(1, Math.min(500, Math.floor(limit)))
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM audit_log
+         WHERE project_id = ? AND action_type = ? AND created_at >= ?
+         ORDER BY created_at DESC LIMIT ?`,
+      )
+      .all(projectId, actionType, since, bounded) as AuditRow[]
+    return rows.map((row) => this.toEntry(row))
   }
 
   /**

@@ -22,6 +22,8 @@ Markdown is durable knowledge truth: project notes live in `.cockpit-memory/*.md
 
 The v0.1.33 pipeline is Capture → Distill → Reconcile → Gate → Commit/Review. Session transcripts are redacted before an LLM distills bounded observations; deterministic reconciliation classifies new, merge, duplicate, or conflict; policy gates decide save versus review; accepted writes are atomic and carry ledger/snapshot provenance. Idle and session-end capture use a durable SQLite work queue. Current contracts live in `docs/memory-imp.md` and `docs/MEMORY-CHARTER.md`.
 
+Memory operations are watched by a content-free lifecycle sensor: durable queue state, audit verdicts, and review counts/age can raise thresholded `memory-lifecycle` Sentinel signals. Note bodies, transcript paths, and raw errors never cross that sensor boundary.
+
 There are two isolated brains:
 
 - Project brain: `.cockpit-memory/`

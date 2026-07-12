@@ -58,6 +58,15 @@ export interface CreateReviewInput {
   alsoTrash?: string | null
   operation?: ReviewOperation | null
   alsoTrashContent?: string | null
+  /** Runtime-only ownership for global-brain pressure signals; never persisted. */
+  originProjectId?: string | null
+}
+
+export interface MemoryReviewChange {
+  type: 'queued' | 'resolved'
+  brain: string
+  kind: ReviewKind
+  originProjectId: string | null
 }
 
 /**
@@ -66,7 +75,14 @@ export interface CreateReviewInput {
  * the row resolved. A discarded proposal simply never touches the hub.
  */
 export class MemoryReviewService {
+  private readonly listeners = new Set<(event: MemoryReviewChange) => void>()
+
   constructor(private readonly db: Db) {}
+
+  subscribe(listener: (event: MemoryReviewChange) => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
 
   create(input: CreateReviewInput): ReviewItem {
     const id = randomUUID()
@@ -87,7 +103,7 @@ export class MemoryReviewService {
          VALUES (?, ?, ?, ?, ?, 'pending', ?, NULL)`,
       )
       .run(id, input.brain, input.kind, input.slug, JSON.stringify(payload), createdAt)
-    return toItem({
+    const item = toItem({
       id,
       brain: input.brain,
       kind: input.kind,
@@ -97,6 +113,13 @@ export class MemoryReviewService {
       created_at: createdAt,
       resolved_at: null,
     })
+    this.emit({
+      type: 'queued',
+      brain: input.brain,
+      kind: input.kind,
+      originProjectId: input.originProjectId ?? projectIdFromBrain(input.brain),
+    })
+    return item
   }
 
   listPending(brain: string): ReviewItem[] {
@@ -133,9 +156,18 @@ export class MemoryReviewService {
 
   /** Mark a review resolved with its final status ('accepted'|'edited'|'discarded'). */
   markResolved(id: string, status: ReviewItem['status']): void {
-    this.db
+    const item = this.get(id)
+    const result = this.db
       .prepare('UPDATE memory_review SET status = ?, resolved_at = ? WHERE id = ?')
       .run(status, new Date().toISOString(), id)
+    if (item && result.changes === 1) {
+      this.emit({
+        type: 'resolved',
+        brain: item.brain,
+        kind: item.kind,
+        originProjectId: projectIdFromBrain(item.brain),
+      })
+    }
   }
 
   /** Scope-checked resolution. False means missing, foreign, or no longer pending. */
@@ -146,11 +178,34 @@ export class MemoryReviewService {
     status: ReviewItem['status'],
   ): boolean {
     const brain = brainForAccess(originProjectId, scope)
+    const item = this.getPendingFor(originProjectId, scope, id)
     const result = this.db
       .prepare(
         "UPDATE memory_review SET status = ?, resolved_at = ? WHERE id = ? AND brain = ? AND status = 'pending'",
       )
       .run(status, new Date().toISOString(), id, brain)
+    if (result.changes === 1 && item) {
+      this.emit({
+        type: 'resolved',
+        brain,
+        kind: item.kind,
+        originProjectId,
+      })
+    }
     return result.changes === 1
   }
+
+  private emit(event: MemoryReviewChange): void {
+    for (const listener of this.listeners) {
+      try {
+        listener(event)
+      } catch {
+        // Queue storage and resolution never depend on an observer.
+      }
+    }
+  }
+}
+
+function projectIdFromBrain(brain: string): string | null {
+  return brain.startsWith('project:') ? brain.slice('project:'.length) || null : null
 }
