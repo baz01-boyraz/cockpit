@@ -185,7 +185,7 @@ describe('CouncilService — spec mode orchestration', () => {
     expect(result.ok).toBe(true)
     expect(result.mode).toBe('spec')
     expect(result.stats.filesReviewed).toBe(0)
-    expect(result.specVerdict).toEqual({
+    expect(result.specVerdict).toMatchObject({
       kind: 'needs_clarification',
       questions: ['What is the latency target?', 'Which module is the gateway?'],
     })
@@ -773,8 +773,11 @@ describe('CouncilSessionStore', () => {
 
     expect(rows).toHaveLength(1)
     expect(rows[0].verdict_kind).toBe('needs_clarification')
-    // The persisted blob carries its own id.
-    expect(JSON.parse(rows[0].result_json).sessionId).toBe(id)
+    // Every new write is strict v3 even when a legacy-shaped caller reaches the store.
+    const stored = JSON.parse(rows[0].result_json) as Record<string, unknown>
+    expect(stored).toMatchObject({ schemaVersion: 3, sessionId: id })
+    expect(stored).not.toHaveProperty('seats')
+    expect(stored).not.toHaveProperty('specVerdict')
 
     const fetched = store.get(id)
     expect(fetched?.mode).toBe('spec')
@@ -795,6 +798,9 @@ describe('CouncilSessionStore — pending lifecycle (A6)', () => {
     const id = store.insertPending({ projectId: 'prj_1', cardId: 'c1', mode: 'spec', question: 'q' })
     expect(rows).toHaveLength(1)
     expect(rows[0].status).toBe('pending')
+    const placeholder = JSON.parse(rows[0].result_json) as Record<string, unknown>
+    expect(placeholder).toMatchObject({ schemaVersion: 3, mode: 'spec', sessionId: id })
+    expect(placeholder).not.toHaveProperty('seats')
     // The placeholder is a valid CouncilResult so read paths never throw on it.
     const fetched = store.get(id)
     expect(fetched?.status).toBe('pending')
