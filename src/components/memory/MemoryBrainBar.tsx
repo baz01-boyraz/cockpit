@@ -188,9 +188,14 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
     setReport(null)
     try {
       const res = await cockpit().memory.consolidate(projectId)
+      const repetitiveNotes = new Set(res.report.repetitions.map((finding) => finding.slug)).size
       setFlash(
         res.queued > 0
           ? `Memory found ${res.queued} cleanup suggestion${res.queued === 1 ? '' : 's'}. They are grouped in the inbox.`
+          : res.report.repetitions.length > 0
+            ? `I found ${res.report.repetitions.length} repeated ${res.report.repetitions.length === 1 ? 'fact' : 'facts'} across ${repetitiveNotes} ${repetitiveNotes === 1 ? 'memory' : 'memories'}. Nothing changed; a safety snapshot is ready.`
+            : res.report.oversized.length > 0
+              ? `${res.report.oversized.length} long ${res.report.oversized.length === 1 ? 'memory needs' : 'memories need'} a careful split. Nothing changed; a safety snapshot is ready.`
           : 'Memory is tidy — no duplicate notes need your attention.',
       )
       await refresh()

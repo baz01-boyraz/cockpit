@@ -72,6 +72,17 @@ const HEADING_RE = /^#{1,6}\s+/
  * candidates prevent a large history from diluting one repeated bullet.
  */
 export function noteFactSegments(content: string): string[] {
+  const atomic = noteAtomicFacts(content)
+  const combined = atomic.join(' ').trim()
+  return [...new Set([combined, ...atomic].filter(Boolean))]
+}
+
+/**
+ * Return the note's atomic prose/list facts in source order. Unlike
+ * `noteFactSegments`, this intentionally preserves repeated facts so a
+ * read-only maintenance pass can report existing historical duplication.
+ */
+export function noteAtomicFacts(content: string): string[] {
   const atomic: string[] = []
   let current: string[] = []
 
@@ -104,9 +115,7 @@ export function noteFactSegments(content: string): string[] {
     current.push(line)
   }
   flush()
-
-  const combined = atomic.join(' ').trim()
-  return [...new Set([combined, ...atomic].filter(Boolean))]
+  return atomic
 }
 
 /** Highest observation similarity across a note's whole and atomic fact candidates. */

@@ -6,9 +6,10 @@ import type { MemoryReviewService } from './MemoryReviewService'
 /**
  * Consolidation ("sleep") pass (docs/memory-imp.md Phase 5, G5). Snapshots the
  * hub first (G7 — a bad clean-up is one restore away), scans for maintenance
- * work, and queues duplicate merges as review items so Baz approves them like
- * any other change. Oversized/dangling findings are reported for visibility;
- * they are not auto-mutated. Read-mostly and idempotent — running it twice just
+ * work, and queues duplicate-note merges as review items so Baz approves them
+ * like any other change. Oversized, in-note repetition, and dangling-link
+ * findings are report-only; they are never auto-mutated or turned into fresh
+ * observations. Read-mostly and idempotent — running it twice just
  * re-queues the same proposals (deduped by the review UI on resolve).
  */
 export class MemoryConsolidator {

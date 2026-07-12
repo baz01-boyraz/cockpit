@@ -5,7 +5,11 @@
  * service snapshots the hub and queues these as review items; the actual fixes
  * are gated through Baz like any other change.
  */
-import { textSimilarity } from './memory-reconcile'
+import {
+  DUPLICATE_SIMILARITY,
+  noteAtomicFacts,
+  textSimilarity,
+} from './memory-reconcile'
 import { MEMORY_NOTE_SCHEMA_VERSION, type NoteFrontmatter, parseNote, serializeNote } from './memory-note-schema'
 import { buildLinkIndex, normalizeNoteName } from './wikilink'
 import { OVERSIZE_BYTES } from './memory-health'
@@ -24,6 +28,16 @@ export interface OversizeFinding {
   bytes: number
 }
 
+export interface RepetitionFinding {
+  kind: 'repetition'
+  slug: string
+  /** First durable fact in source order; cleanup keeps this until a human edits the proposal. */
+  canonicalFact: string
+  /** A later fact that substantially repeats the canonical one. */
+  repeatedFact: string
+  similarity: number
+}
+
 export interface DanglingFinding {
   kind: 'dangling'
   /** A wanted link target with no note, and the notes that reference it. */
@@ -31,11 +45,13 @@ export interface DanglingFinding {
   wantedBy: string[]
 }
 
-export type ConsolidationFinding = DuplicateFinding | OversizeFinding | DanglingFinding
+export type ConsolidationFinding = DuplicateFinding | OversizeFinding | RepetitionFinding | DanglingFinding
 
 export interface ConsolidationReport {
   duplicates: DuplicateFinding[]
   oversized: OversizeFinding[]
+  /** Read-only, bullet/paragraph-level candidates. Never queued or applied automatically. */
+  repetitions: RepetitionFinding[]
   dangling: DanglingFinding[]
 }
 
@@ -50,6 +66,47 @@ export interface ConsolidationResult {
 
 const utf8Bytes = (s: string): number => new TextEncoder().encode(s).length
 const bodyOf = (content: string): string => parseNote(content).body
+const factTokenCount = (fact: string): number =>
+  fact
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token.length > 2).length
+
+function findRepetitions(
+  slug: string,
+  content: string,
+  similarityThreshold: number,
+  minFactTokens: number,
+): RepetitionFinding[] {
+  const canonicalFacts: string[] = []
+  const findings: RepetitionFinding[] = []
+
+  for (const fact of noteAtomicFacts(content)) {
+    if (factTokenCount(fact) < minFactTokens) continue
+
+    let best: { fact: string; similarity: number } | null = null
+    for (const canonical of canonicalFacts) {
+      const similarity = textSimilarity(canonical, fact)
+      if (!best || similarity > best.similarity) best = { fact: canonical, similarity }
+    }
+
+    if (best && best.similarity >= similarityThreshold) {
+      findings.push({
+        kind: 'repetition',
+        slug,
+        canonicalFact: best.fact,
+        repeatedFact: fact,
+        similarity: best.similarity,
+      })
+      continue
+    }
+    canonicalFacts.push(fact)
+  }
+
+  return findings
+}
 
 /**
  * Analyze the hub for maintenance work. Deterministic; does not mutate. A note
@@ -58,10 +115,17 @@ const bodyOf = (content: string): string => parseNote(content).body
  */
 export function analyzeConsolidation(
   docs: MemoryDoc[],
-  opts: { duplicateSimilarity?: number; oversizeBytes?: number } = {},
+  opts: {
+    duplicateSimilarity?: number
+    oversizeBytes?: number
+    repetitionSimilarity?: number
+    minRepetitionTokens?: number
+  } = {},
 ): ConsolidationReport {
   const dupThreshold = opts.duplicateSimilarity ?? 0.72
   const oversizeBytes = opts.oversizeBytes ?? OVERSIZE_BYTES
+  const repetitionThreshold = opts.repetitionSimilarity ?? DUPLICATE_SIMILARITY
+  const minRepetitionTokens = opts.minRepetitionTokens ?? 8
 
   const named = docs
     .map((d) => ({ slug: normalizeNoteName(d.name), doc: d }))
@@ -90,6 +154,10 @@ export function analyzeConsolidation(
     .filter((x) => x.bytes > oversizeBytes)
     .map((x) => ({ kind: 'oversized' as const, slug: x.slug, bytes: x.bytes }))
 
+  const repetitions = named.flatMap(({ slug, doc }) =>
+    findRepetitions(slug, doc.content, repetitionThreshold, minRepetitionTokens),
+  )
+
   const idx = buildLinkIndex(docs)
   const dangling: DanglingFinding[] = [...idx.unresolved.entries()].map(([target, wantedBy]) => ({
     kind: 'dangling' as const,
@@ -97,7 +165,7 @@ export function analyzeConsolidation(
     wantedBy: [...wantedBy],
   }))
 
-  return { duplicates: pairs, oversized, dangling }
+  return { duplicates: pairs, oversized, repetitions, dangling }
 }
 
 /**
