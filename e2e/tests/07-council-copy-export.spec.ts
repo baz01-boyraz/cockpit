@@ -1,6 +1,22 @@
 import { expect, test } from '@playwright/test'
 import { gotoApp, openView } from '../support/app'
 
+test('Council composer labels intent honestly and exposes output language', async ({ page }) => {
+  await gotoApp(page)
+  await openView(page, 'council')
+
+  await expect(page.getByRole('button', { name: /Refine request/ })).toBeEnabled()
+  await expect(page.getByRole('button', { name: /Analyze repository/ })).toBeDisabled()
+  await expect(page.getByRole('button', { name: /Review change/ })).toBeDisabled()
+  await expect(page.getByText(/Grounded analysis ships next/)).toBeVisible()
+  await expect(page.getByText(/Use Council from a Swarm card/)).toBeVisible()
+
+  const language = page.getByLabel('Output language')
+  await expect(language).toHaveValue('auto')
+  await language.selectOption('tr')
+  await expect(language).toHaveValue('tr')
+})
+
 test('Council report is selectable, copyable, exportable, and rendered once', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
     origin: 'http://localhost:3000',

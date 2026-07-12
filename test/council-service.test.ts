@@ -225,6 +225,68 @@ describe('CouncilService — spec mode orchestration', () => {
     expect(councilSpecVerdictKind(inserted[0].result)).toBe('needs_clarification')
   })
 
+  it('writes a strict v3 envelope while returning the normalized read model', async () => {
+    const { service, inserted } = makeService()
+
+    const result = await service.run('prj_1', {
+      mode: 'spec',
+      specText: 'Add caching to the gateway.',
+    })
+
+    expect(result).toMatchObject({
+      schemaVersion: 3,
+      mode: 'spec',
+      responseLanguage: 'en',
+      decision: { kind: 'needs_clarification' },
+    })
+    // IPC/render consumers retain the one normalized, flat compatibility view.
+    expect(result.seats).toHaveLength(5)
+    expect(result.execution?.stats).toEqual(result.stats)
+
+    // The persistence boundary itself is v3-only: no duplicate legacy fields.
+    expect(inserted[0].result).toMatchObject({
+      schemaVersion: 3,
+      mode: 'spec',
+      decision: { kind: 'needs_clarification' },
+      primaryArtifact: null,
+      evidence: { seats: expect.any(Array), rawChairman: expect.any(String) },
+      execution: { stats: expect.any(Object) },
+    })
+    expect(inserted[0].result).not.toHaveProperty('seats')
+    expect(inserted[0].result).not.toHaveProperty('specVerdict')
+    expect(inserted[0].result).not.toHaveProperty('stats')
+  })
+
+  it('fails analysis closed before engines or persistence until grounded evidence exists', async () => {
+    const call = vi.fn(async () => {
+      throw new Error('analysis must not reach an engine before C3')
+    })
+    const parts = makeStore()
+    const service = new CouncilService(
+      makeProjects(),
+      makeAudit(),
+      { call } as unknown as EngineRunner,
+      parts.store,
+    )
+
+    const result = await service.run('prj_1', {
+      mode: 'analysis',
+      specText: 'Analyze the repository memory architecture.',
+    } as never)
+
+    expect(result).toMatchObject({
+      schemaVersion: 3,
+      ok: false,
+      mode: 'analysis',
+      decision: { kind: 'failed' },
+      primaryArtifact: null,
+    })
+    expect(result.error).toMatch(/grounded repository evidence/i)
+    expect(call).not.toHaveBeenCalled()
+    expect(parts.rows).toHaveLength(0)
+    expect(parts.inserted).toHaveLength(0)
+  })
+
   it('merges recent sessions into a best-first scorecard', async () => {
     const parts = makeStore()
     const { service } = makeService(parts)

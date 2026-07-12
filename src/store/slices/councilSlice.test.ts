@@ -108,6 +108,49 @@ describe('council slice — standalone run', () => {
     })
   })
 
+  it('forwards and preserves an explicit response language across clarification', async () => {
+    run
+      .mockResolvedValueOnce(
+        makeResult({
+          sessionId: 'sess-clarify-tr',
+          specVerdict: {
+            kind: 'needs_clarification',
+            questions: ['Hangi modül önbelleği yönetiyor?'],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(makeResult({ sessionId: 'sess-approved-tr' }))
+    const convene = useStore.getState().conveneCouncil as unknown as (
+      projectId: string,
+      spec: string,
+      options: { responseLanguage: string },
+    ) => Promise<void>
+
+    await convene('prj_1', 'Gateway önbelleğini iyileştir.', { responseLanguage: 'tr' })
+    await useStore.getState().continueCouncil('prj_1', [
+      {
+        id: 'question-1',
+        question: 'Hangi modül önbelleği yönetiyor?',
+        answer: 'Shared gateway modülü.',
+      },
+    ])
+
+    expect(run).toHaveBeenNthCalledWith(
+      1,
+      'prj_1',
+      expect.objectContaining({ mode: 'spec', responseLanguage: 'tr' }),
+    )
+    expect(run).toHaveBeenNthCalledWith(
+      2,
+      'prj_1',
+      expect.objectContaining({ mode: 'spec', responseLanguage: 'tr' }),
+    )
+    expect(
+      (useStore.getState().councilActive as unknown as { responseLanguage?: string })
+        ?.responseLanguage,
+    ).toBe('tr')
+  })
+
   it('a convened verdict survives a same-project reset (the vanishing-verdict guard)', async () => {
     run.mockResolvedValue(makeResult({ sessionId: 'sess-1' }))
     await useStore.getState().conveneCouncil('prj_1', 'x')
