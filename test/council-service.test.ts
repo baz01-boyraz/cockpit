@@ -176,6 +176,41 @@ describe('CouncilService — spec mode orchestration', () => {
     expect(result.stats.seatsFailed).toBe(0)
   })
 
+  it('emits safe run-scoped seat, ranking, and chairman progress', async () => {
+    const emitTyped = vi.fn()
+    const parts = makeStore()
+    const service = new CouncilService(
+      makeProjects(),
+      makeAudit(),
+      makeEngine(),
+      parts.store,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { emitTyped } as never,
+    )
+
+    await service.run('prj_1', {
+      mode: 'spec',
+      specText: 'Add caching to the gateway.',
+      clientRunId: 'local-progress-1',
+    })
+
+    const progress = emitTyped.mock.calls
+      .filter(([event]) => event === 'council:progress')
+      .map(([, payload]) => payload)
+    expect(progress.map((event) => event.stage)).toEqual(
+      expect.arrayContaining(['preparing', 'seats', 'ranking', 'chairman', 'complete']),
+    )
+    expect(progress.filter((event) => event.kind === 'seat')).toHaveLength(5)
+    expect(progress.every((event) => event.runId === 'local-progress-1')).toBe(true)
+    expect(progress.every((event) => event.projectId === 'prj_1')).toBe(true)
+    expect(JSON.stringify(progress)).not.toContain('codex CLI missing')
+    expect(JSON.stringify(progress)).not.toContain('no OpenRouter key')
+  })
+
   it('produces the spec gate, ranks, and a filesReviewed=0 diff-free run', async () => {
     const { service } = makeService()
     const result = await service.run('prj_1', {

@@ -23,6 +23,20 @@ test('Council composer labels intent honestly and exposes output language', asyn
   await expect(page.getByRole('checkbox', { name: /I consent to sending bounded/ })).toBeVisible()
 })
 
+test('Council waiting state shows a live, safe room instead of an empty card', async ({ page }) => {
+  await gotoApp(page)
+  await openView(page, 'council')
+
+  await page.locator('#council-spec').fill('Review the Council waiting experience')
+  await page.getByRole('button', { name: 'Review my request' }).click()
+
+  const room = page.getByLabel('Council live activity')
+  await expect(room).toBeVisible()
+  await expect(room.getByText('Council room')).toBeVisible()
+  await expect(room.getByText('Contrarian')).toBeVisible()
+  await expect(room).toContainText('Concise outputs, not private reasoning')
+})
+
 test('local repository analysis discloses zero egress and cited-source metadata', async ({ page }) => {
   await gotoApp(page)
   await openView(page, 'council')
