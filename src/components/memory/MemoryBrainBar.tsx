@@ -295,7 +295,9 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
   const activeReview = reviews[activeReviewIndex] ?? null
   const activePresentation = activeReview ? presentMemoryReview(activeReview) : null
   const inboxHeadline = reviewSummary.attention > 0
-    ? `${reviewSummary.attention} memory decision${reviewSummary.attention === 1 ? '' : 's'} need a closer look`
+    ? reviewSummary.attention === 1
+      ? '1 memory decision needs a closer look'
+      : `${reviewSummary.attention} memory decisions need a closer look`
     : reviewSummary.cleanup > 0
       ? `${reviewSummary.cleanup} cleanup suggestion${reviewSummary.cleanup === 1 ? '' : 's'}, neatly grouped`
       : `${reviewSummary.suggestions} memory suggestion${reviewSummary.suggestions === 1 ? '' : 's'}`
@@ -486,7 +488,7 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
             </span>
             <span className="memoryInbox__counts" aria-label={`${reviews.length} total suggestions`}>
               {reviewSummary.cleanup > 0 && <span>{reviewSummary.cleanup} cleanup</span>}
-              {reviewSummary.attention > 0 && <span className="memoryInbox__count--attention">{reviewSummary.attention} attention</span>}
+              {reviewSummary.attention > 0 && <span className="memoryInbox__count--attention">{reviewSummary.attention} careful review</span>}
               {reviewSummary.suggestions > 0 && <span>{reviewSummary.suggestions} suggestion</span>}
             </span>
             <span className="memoryInbox__openLabel">
