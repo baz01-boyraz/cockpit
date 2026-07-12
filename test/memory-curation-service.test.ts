@@ -12,11 +12,25 @@ const DOCS: MemoryDoc[] = [
 ]
 
 function makeDeps(docs: MemoryDoc[] = DOCS) {
-  const created: { kind: string; slug: string; title: string; alsoTrash?: string | null }[] = []
+  const created: {
+    kind: string
+    slug: string
+    title: string
+    operation?: string | null
+    alsoTrash?: string | null
+    alsoTrashContent?: string | null
+  }[] = []
   const audited: { actionType: string; payload?: Record<string, unknown> }[] = []
   const memory = { listDocs: vi.fn(() => docs.map((d) => ({ ...d }))) }
   const reviews = {
-    create: vi.fn((input: { kind: string; slug: string; title: string; alsoTrash?: string | null }) => {
+    create: vi.fn((input: {
+      kind: string
+      slug: string
+      title: string
+      operation?: string | null
+      alsoTrash?: string | null
+      alsoTrashContent?: string | null
+    }) => {
       created.push(input)
       return {} as never
     }),
@@ -47,10 +61,20 @@ describe('MemoryCurationService.sweep', () => {
 
     expect(result).toEqual({ proposals: 2 })
     expect(deps.created).toHaveLength(2)
-    // Archive: slug is the note itself, non-destructive (kept for owner to decide).
-    expect(deps.created[0]).toMatchObject({ kind: 'maintenance', slug: 'stale-fact' })
+    // Archive is an explicit, recoverable cleanup operation.
+    expect(deps.created[0]).toMatchObject({
+      kind: 'maintenance',
+      slug: 'stale-fact',
+      operation: 'archive',
+    })
     // Merge: survivor is `into`, the duplicate is queued to trash on accept.
-    expect(deps.created[1]).toMatchObject({ kind: 'maintenance', slug: 'canonical', alsoTrash: 'duplicate' })
+    expect(deps.created[1]).toMatchObject({
+      kind: 'maintenance',
+      slug: 'canonical',
+      operation: 'merge',
+      alsoTrash: 'duplicate',
+      alsoTrashContent: DOCS[2].content,
+    })
     expect(deps.audited).toHaveLength(1)
     expect(deps.audited[0].actionType).toBe('memory.curation_sweep')
     expect(deps.audited[0].payload).toMatchObject({ proposals: 2, notes: 3 })

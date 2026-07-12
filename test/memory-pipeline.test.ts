@@ -289,6 +289,69 @@ describe('MemoryPipeline.resolveReview', () => {
     expect(reviews.items.get(item.id)?.status).toBe('discarded')
   })
 
+  it('accepting a legacy archive cleanup really soft-deletes the note and ledgers it', () => {
+    const content = '# Stale fact\n\nSomething that used to be true.'
+    memory.write('p1', 'stale-fact', content)
+    const ledger = fakeLedger()
+    const reviews = fakeReviews()
+    reviews.items.set('archive-1', {
+      id: 'archive-1',
+      brain: projectBrain('p1'),
+      kind: 'maintenance',
+      slug: 'stale-fact',
+      title: 'Archive stale note: stale-fact',
+      proposedContent: content,
+      reason: 'Curation — archive: no longer true',
+      existingContent: content,
+      sourceId: null,
+      alsoTrash: null,
+      status: 'pending',
+      createdAt: 't',
+      resolvedAt: null,
+    })
+    const pipe = new MemoryPipeline(memory, ledger.svc, reviews.svc, stubDistiller([]))
+
+    pipe.resolveReview('p1', 'project', 'archive-1', 'accept')
+
+    expect(memory.read('p1', 'stale-fact')).toBeNull()
+    expect(reviews.items.get('archive-1')?.status).toBe('accepted')
+    expect(ledger.records).toContainEqual(expect.objectContaining({
+      noteSlug: 'stale-fact',
+      action: 'trash',
+      gate: 'consolidation',
+      contentBefore: content,
+      contentAfter: null,
+    }))
+  })
+
+  it('refuses a queued change when the live note changed after the proposal', () => {
+    const original = '# Release process\n\nUse the old workflow.'
+    const changed = '# Release process\n\nUse the newly signed workflow.'
+    memory.write('p1', 'release-process', original)
+    const reviews = fakeReviews()
+    reviews.items.set('stale-review', {
+      id: 'stale-review',
+      brain: projectBrain('p1'),
+      kind: 'merge',
+      slug: 'release-process',
+      title: 'Release process changed',
+      proposedContent: '# Release process\n\nUse the proposed workflow.',
+      reason: 'A newer session suggested a different workflow.',
+      existingContent: original,
+      sourceId: null,
+      alsoTrash: null,
+      status: 'pending',
+      createdAt: 't',
+      resolvedAt: null,
+    })
+    memory.write('p1', 'release-process', changed)
+    const pipe = new MemoryPipeline(memory, fakeLedger().svc, reviews.svc, stubDistiller([]))
+
+    expect(() => pipe.resolveReview('p1', 'project', 'stale-review', 'accept')).toThrow(/changed since/i)
+    expect(memory.read('p1', 'release-process')?.content).toBe(changed)
+    expect(reviews.items.get('stale-review')?.status).toBe('pending')
+  })
+
   it('refuses to resolve another project review through the caller project', async () => {
     const reviews = fakeReviews()
     const pipe = new MemoryPipeline(memory, fakeLedger().svc, reviews.svc, stubDistiller([obs({ decision: 'ask' })]))
