@@ -23,6 +23,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { IPC } from '@shared/ipc'
+import { MEMORY_POLICY_VERSION } from '@shared/memory-policy'
 import { councilRunSchema, projectConfigSchema } from '@shared/schemas'
 import { createMockApi } from '../src/lib/mock'
 
@@ -280,5 +281,10 @@ describe('mock parity — smoke getters', () => {
   it('projects.config output parses against the shared projectConfig schema', async () => {
     const config = await mock.projects.config(PID)
     expect(() => projectConfigSchema.parse(config)).not.toThrow()
+  })
+
+  it('browser preview reports the same memory policy version as the backend contract', async () => {
+    const state = await mock.memory.trustState(PID, 'project')
+    expect(state.policyVersion).toBe(MEMORY_POLICY_VERSION)
   })
 })

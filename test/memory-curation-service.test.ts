@@ -151,6 +151,7 @@ describe('MemoryCurationService.sweep', () => {
 
     const args = (runner as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[]
     expect(args).toContain('--ignore-rules')
+    expect(args).toEqual(expect.arrayContaining(['-m', 'deepseek/deepseek-v4-flash']))
     expect(args).toContain('--oneshot')
     const prompt = args[args.indexOf('--oneshot') + 1]
     expect(prompt).toMatch(/UNTRUSTED DATA/)

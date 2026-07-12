@@ -130,6 +130,27 @@ describe('buildMemoryContext', () => {
     expect(result.receipt.notes).toEqual([])
     expect(result.block).toBe('')
   })
+
+  it.each([
+    'claude_chat',
+    'hermes_chat',
+    'swarm_worker',
+    'terminal_claude',
+    'terminal_codex',
+  ] as const)('keeps the memory-first lookup contract on an empty hub for %s', (surface) => {
+    const result = buildMemoryContext({
+      contextId: `memctx_empty_${surface}`,
+      surface,
+      query: 'start a task',
+      docs: [],
+    })
+
+    expect(result.receipt.status).toBe('empty')
+    expect(result.receipt.delivery).toBe('lookup')
+    expect(result.receipt.notes).toEqual([])
+    expect(result.block).toContain('MEMORY: no relevant notes')
+    if (surface === 'hermes_chat') expect(result.block).toContain('read_memory_recent')
+  })
 })
 
 describe('wrapTaskWithMemory', () => {

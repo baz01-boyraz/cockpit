@@ -31,6 +31,10 @@ function deferred<T>() {
 describe('HermesTriageService', () => {
   const NOW = '2026-07-08T09:00:00.000Z'
 
+  it('pins bounded background judgment to DeepSeek V4 Flash', () => {
+    expect(HERMES_TRIAGE_MODEL).toBe('deepseek/deepseek-v4-flash')
+  })
+
   it('passes the DeepSeek model + oneshot argv and returns a parsed verdict', async () => {
     const runner: HermesTriageRunner = vi.fn(async () => ({
       stdout:

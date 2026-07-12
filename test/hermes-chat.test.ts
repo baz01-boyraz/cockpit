@@ -256,7 +256,8 @@ describe('HermesChatService.ask', () => {
     await service.ask('prj_1', 'second')
     const secondArgs = runner.mock.calls[1][1]
     expect(secondArgs).not.toContain('--ignore-rules')
-    expect(secondArgs[0]).toBe('--oneshot')
+    expect(secondArgs.slice(0, 2)).toEqual(['-m', 'deepseek/deepseek-v4-pro'])
+    expect(secondArgs).toContain('--oneshot')
     const prompt = promptOf(secondArgs)
     expect(prompt).toContain('User: first')
     expect(prompt).toContain('Hermes: reply')
@@ -404,7 +405,7 @@ describe('HermesChatService.ask image attachment', () => {
     await service.ask('prj_1', 'hi', '/etc/passwd')
     const args = runner.mock.calls[0][1]
     expect(args).not.toContain('--image')
-    expect(args[0]).toBe('--oneshot')
+    expect(args).toContain('--oneshot')
     expect(service.history('prj_1')[0]).toEqual({ role: 'user', content: 'hi' })
   })
 
