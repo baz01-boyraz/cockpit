@@ -245,14 +245,17 @@ describe('Services — zombie liveness audit (A4)', () => {
    * pane's pid is its shell, launched with an optional startup command).
    */
   function dbWithStaleRow(
-    row: { id: string; pid: number | null; last_active_at: string },
+    row: { id: string; project_id?: string; pid: number | null; last_active_at: string },
     identity: { shell: string; command: string | null } | null = {
       shell: '/bin/zsh',
       command: 'claude --resume abc123',
     },
   ) {
     const rec = makeRecordingDb({
-      all: (sql) => (sql.includes('pid, last_active_at') ? [row] : []),
+      all: (sql) =>
+        sql.includes('project_id, pid, last_active_at')
+          ? [{ project_id: 'p1', ...row }]
+          : [],
       get: (sql) => (sql.includes('shell, command') ? (identity ?? undefined) : undefined),
     })
     ;(rec.db as unknown as { close: () => void }).close = vi.fn()

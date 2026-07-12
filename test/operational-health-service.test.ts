@@ -48,6 +48,7 @@ class FakeState implements OperationalHealthStateRepository {
   running = false
   completions: OperationalHealthCompleteInput[] = []
   recoverStale = vi.fn(() => 0)
+  onComplete: (() => void) | null = null
 
   claim(projectId: string, at: string): OperationalHealthState | null {
     if (this.running) return null
@@ -66,6 +67,7 @@ class FakeState implements OperationalHealthStateRepository {
   }
 
   complete(input: OperationalHealthCompleteInput): OperationalHealthState {
+    this.onComplete?.()
     this.completions.push(input)
     this.running = false
     this.current = {
@@ -92,6 +94,7 @@ function harness() {
   let now = BASE
   const state = new FakeState()
   const order: string[] = []
+  state.onComplete = () => order.push('persist')
   const reports: SentinelReportInput[] = []
   const sentinel = {
     report: vi.fn((input: SentinelReportInput) => {
@@ -120,7 +123,6 @@ function harness() {
     audit: { recent: vi.fn(() => []) },
     now: () => now,
     schedule,
-    onPersist: () => order.push('persist'),
   })
   return {
     service,
@@ -194,7 +196,7 @@ describe('OperationalHealthService', () => {
     })
   })
 
-  it('isolates a failed sensor, persists the partial snapshot, and never leaks the raw exception', async () => {
+  it('isolates sensor failure, waits for a repeat, and never leaks the raw exception', async () => {
     const h = harness()
     h.git.status.mockRejectedValue(new Error('PRIVATE GIT ERROR /secret/path'))
     const snapshot = await h.service.runProject('p1')
@@ -203,12 +205,15 @@ describe('OperationalHealthService', () => {
     expect(snapshot?.anomalies.map((item) => item.code)).toContain('sensor-unavailable:git')
     expect(JSON.stringify(snapshot)).not.toContain('PRIVATE GIT ERROR')
     expect(JSON.stringify(snapshot)).not.toContain('/secret/path')
+    expect(h.reports).toHaveLength(0)
+
+    await h.service.runProject('p1')
     expect(h.reports).toHaveLength(1)
   })
 
   it('skips overlapping project runs instead of duplicating probes or reports', async () => {
     const h = harness()
-    let release: ((value: GitSnapshot) => void) | null = null
+    let release!: (value: GitSnapshot) => void
     h.git.status.mockImplementation(
       () => new Promise<GitSnapshot>((resolve) => {
         release = resolve
@@ -219,7 +224,7 @@ describe('OperationalHealthService', () => {
     const second = await h.service.runProject('p1')
     expect(second).toBeNull()
     expect(h.git.status).toHaveBeenCalledTimes(1)
-    release?.(gitSnapshot())
+    release(gitSnapshot())
     await first
   })
 

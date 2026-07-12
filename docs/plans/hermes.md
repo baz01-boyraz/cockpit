@@ -76,7 +76,7 @@ yazılmıyor, var olanı Hermes'e açıyoruz.
 | `read_memory_recent` / `write_memory_summary` | `memoryWriteSchema` (`schemas.ts:203-207`, body ≤500.000 char) | — |
 | `get_pending_memory_reviews` / `resolve_memory_review` | scoped review schema + Hermes-only delegated-conflict extension | accept/edit/discard; conflicts require basis+rationale+evidence |
 | `subscribe_card_output(cardId)` | **Yeni, küçük plumbing** | `TerminalManager`'ın PTY stream'ini, sadece o kart running olduğu sürece, Hermes'e tee eder. 7/24 global izleme değil — sadece o an dispatch edilen tek görev. |
-| cron/scheduled task | hermes-agent'ın **kendi** scheduled-task desteği | cockpiT tarafında yeni bir scheduler yazılmıyor (v1'deki karar aynen geçerli) |
+| user-defined cron/scheduled task | hermes-agent'ın **kendi** scheduled-task desteği | Built-in operational health is separate: cockpiT runs its own deterministic 30-minute sensor cadence |
 
 OpenRouter API key: sadece child process env değişkeni olarak taşınır, asla komut stringine
 girmez (v1'deki karar aynen geçerli, `SecretStore`/`safeStorage` deseni). `shared/redaction.ts`
@@ -376,7 +376,7 @@ Değişecekler:
    `terminal:exit` tüketicilerinde (`SwarmService`, `CardOutputTracker`, `index.ts`) regresyon yok.
 
 ### Faz 6 — Git/log app steward
-**Bağımlılık:** Faz 3 · **Model:** opus (ApprovalService'e dokunuyor)
+**Bağımlılık:** Faz 3 · **Model:** LLM-free sensors → bounded V4 Flash triage; approvals remain deterministic
 
 **Scoping cevabı (Baz, 2026-07-05): İkisi de — günlük özet HER ZAMAN üretilir, ama bulunan
 sorunlar için kart açma önerisi Baz'ın onayını bekler, Hermes kendi başına açmaz.**
@@ -391,10 +391,10 @@ Somut tasarım:
    var olan "Awaiting your approval" banner'ında görünüyor (aynı UI, yeni bir approval kind).
    Baz Approve'a basınca, main process **doğrudan** (Hermes'e geri dönmeden) `create_swarm_card`
    + `start_swarm_card`'ı çalıştırıyor — tıpkı `git_push` onayının çalışma şekli gibi.
-3. **Günlük tetikleyici: hermes-agent'ın kendi cron'u** (`hermes cron add`) — cockpiT'te yeni
-   bir scheduler yazılmıyor (v1'deki karar aynen geçerli). Cron job günde bir `get_git_status` +
-   `get_log_intelligence` + `get_swarm_status` çağırıp `write_memory_summary` ile özet bırakıyor;
-   ciddi bir şey bulursa `propose_swarm_card` çağırıyor.
+3. **Tetikleyici ayrımı (2026-07-12 güncel):** user-defined jobs later use Hermes cron, while
+   cockpiT's built-in `OperationalHealthService` owns the 30-minute deterministic system sweep.
+   It persists a bounded snapshot first and wakes Flash only for a changed actionable anomaly
+   or a due daily digest; healthy/unchanged runs make no model call.
 4. **`AGENTS.md`'ye eklenecek:** "insan senden istedi" (Faz 4 akışı, create+start doğrudan) ile
    "kendi başına fark ettim" (Faz 6 akışı, mutlaka propose+onay bekle) ayrımı — Hermes bu ikisini
    asla karıştırmamalı.
@@ -426,6 +426,18 @@ Somut tasarım:
   (spy) ispatı; `get_log_intelligence` happy/Zod-reddi; executor için approve→create+start+consumed,
   rejected→hiçbir şey, duplicate→tek create (idempotent), event-wiring, ve start hata verse bile
   watcher çökmez. `typecheck`/`lint`/`test`/`build` hepsi yeşil.
+
+#### Faz 6 operational health sweep (2026-07-12)
+
+- `OperationalHealthService` checks git divergence/conflicts, Claude/Codex quota, missing/stuck/
+  parked Swarm work, verified orphan-process audit facts, grouped error counts, stale approvals,
+  and Memory queue/review counts every 30 minutes. Sensors are isolated and content-free.
+- V20 keeps one row per project with last run/result, actionable fingerprint, notification and
+  digest cadence, plus an atomic overlap claim. A stale claim recovers after ten minutes.
+- Existing Log Intelligence and Memory lifecycle alerts are counted but never duplicated. A
+  one-off sensor miss is quiet; a repeated blind spot becomes a change-only Sentinel notice.
+- First healthy boot anchors the 24-hour digest silently. Only changed actionable degradation or
+  a due digest reaches the standard `operational-health` Sentinel → V4 Flash path.
 
 ### Faz 7 — Hermes chat widget — TAMAMLANDI (2026-07-05)
 

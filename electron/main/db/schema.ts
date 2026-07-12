@@ -544,3 +544,23 @@ CREATE TABLE IF NOT EXISTS memory_brain_settings (
   updated_at     TEXT NOT NULL
 );
 `
+
+/**
+ * V20 — one bounded operational-health state row per project. Snapshots contain
+ * counts/categories only; raw logs, paths, card text, approval payloads, and
+ * Memory content never enter this table. The row doubles as an atomic run claim
+ * so a timer tick or second app process cannot overlap an active sweep.
+ */
+export const SCHEMA_V20 = /* sql */ `
+CREATE TABLE IF NOT EXISTS operational_health_state (
+  project_id                 TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+  status                     TEXT NOT NULL DEFAULT 'idle',
+  last_run_at                TEXT,
+  last_result_json           TEXT,
+  last_fingerprint           TEXT,
+  last_notified_fingerprint  TEXT,
+  last_notified_at           TEXT,
+  last_digest_at             TEXT,
+  updated_at                 TEXT NOT NULL
+);
+`

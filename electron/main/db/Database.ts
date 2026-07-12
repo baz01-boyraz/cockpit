@@ -19,6 +19,7 @@ import {
   SCHEMA_V17,
   SCHEMA_V18,
   SCHEMA_V19,
+  SCHEMA_V20,
 } from './schema'
 
 export type Db = BetterSqlite3.Database
@@ -49,7 +50,11 @@ const MIGRATIONS: Migration[] = [
   { version: 17, name: 'sentinel_signal_outcome', sql: SCHEMA_V17 },
   { version: 18, name: 'council_session_status', sql: SCHEMA_V18 },
   { version: 19, name: 'memory_brain_settings', sql: SCHEMA_V19 },
+  { version: 20, name: 'operational_health_state', sql: SCHEMA_V20 },
 ]
+
+/** Exported for migration contract tests and diagnostics. */
+export const DATABASE_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0
 
 /**
  * Opens (or creates) the SQLite database, applies pending migrations inside a

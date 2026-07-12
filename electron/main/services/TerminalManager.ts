@@ -24,6 +24,7 @@ interface LiveTerminal {
  */
 export interface ReconciledStaleSession {
   id: string
+  projectId: string
   pid: number | null
   lastActiveAt: string
 }
@@ -81,11 +82,16 @@ export class TerminalManager {
     this.reconciledThisBoot = (
       this.db
         .prepare(
-          `SELECT id, pid, last_active_at FROM terminal_sessions
+          `SELECT id, project_id, pid, last_active_at FROM terminal_sessions
            WHERE status IN ('running', 'starting')`,
         )
-        .all() as { id: string; pid: number | null; last_active_at: string }[]
-    ).map((r) => ({ id: r.id, pid: r.pid, lastActiveAt: r.last_active_at }))
+        .all() as { id: string; project_id: string; pid: number | null; last_active_at: string }[]
+    ).map((r) => ({
+      id: r.id,
+      projectId: r.project_id,
+      pid: r.pid,
+      lastActiveAt: r.last_active_at,
+    }))
     this.db
       .prepare(
         `UPDATE terminal_sessions

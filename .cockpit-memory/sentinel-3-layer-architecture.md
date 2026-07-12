@@ -1,13 +1,13 @@
 ---
 schema: 1
 name: sentinel-3-layer-architecture
-title: Proposed 3-layer sentinel architecture (not yet approved)
+title: Sentinel three-layer architecture
 class: architecture
 capturedAt: 2026-07-08T04:16:44.708Z
-gate: asked
-updatedAt: 2026-07-08T04:16:44.708Z
+gate: save
+updatedAt: 2026-07-12T06:30:00.000Z
 ---
 
-AI proposed a 3-layer nöbetçi (sentinel) architecture: Layer 1 — deterministic sensors (LogIntelligenceService, exit codes, checks, quota, always-on, LLM-free); Layer 2 — Hermes oneshot triage (only fires when a signal crosses threshold, read-only diagnosis, never self-intervenes); Layer 3 — notification + chat handoff (app-shell level toast + click opens HermesWidget with preloaded context). Each notification must carry a 'next action'. Baz hasn't confirmed this architecture yet.
+Sentinel uses three layers: (1) always-on deterministic, LLM-free sensors; (2) bounded V4 Flash triage only after a persisted thresholded signal; (3) app/macOS delivery with a next action and Hermes chat handoff. Specialist Swarm completion summaries use V4 Pro after evidence is persisted. Healthy or unchanged operational-health sweeps never invoke a model, and self-discovered coding work is proposed for approval rather than started.
 
 Related: [[live-notification-requirement]], [[sentinel-anti-noise-gotcha]]

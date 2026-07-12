@@ -8,7 +8,6 @@ import {
   evaluateOperationalHealth,
   type OperationalHealthInput,
 } from '../shared/operational-health'
-import { sourceLabel } from '../src/lib/sentinelView'
 
 const NOW = Date.parse('2026-07-12T12:00:00.000Z')
 const isoAgo = (ms: number) => new Date(NOW - ms).toISOString()
@@ -57,7 +56,7 @@ const insight = (over: Partial<ErrorInsight> = {}): ErrorInsight => ({
   title: 'PRIVATE LOG TITLE',
   likelyCause: 'PRIVATE LOG CAUSE',
   suggestedAction: 'PRIVATE LOG ACTION',
-  suggestedAgent: 'backend',
+  suggestedAgent: 'claude',
   severity: 'low',
   matchedPattern: 'PRIVATE RAW ERROR PATTERN',
   createdAt: isoAgo(60_000),
@@ -159,7 +158,7 @@ function healthy(over: Partial<OperationalHealthInput> = {}): OperationalHealthI
 }
 
 describe('operational health evaluator', () => {
-  it('pins conservative cadence/age thresholds and gives the source a plain UI label', () => {
+  it('pins conservative cadence and age thresholds', () => {
     expect(OPERATIONAL_HEALTH_POLICY).toMatchObject({
       sweepIntervalMs: 30 * 60_000,
       digestIntervalMs: 24 * 60 * 60_000,
@@ -167,7 +166,6 @@ describe('operational health evaluator', () => {
       parkedCardMs: 24 * 60 * 60_000,
       staleApprovalMs: 60 * 60_000,
     })
-    expect(sourceLabel('operational-health')).toBe('operational health')
   })
 
   it('keeps ordinary dirty work, unavailable quota, and fresh queues quiet', () => {
@@ -190,7 +188,28 @@ describe('operational health evaluator', () => {
     expect(result.quota.unavailableProviders).toEqual(['codex'])
   })
 
-  it('finds actionable degradation across every deterministic sensor', () => {
+  it('warns at the low-quota and retained-review-terminal boundaries', () => {
+    const cards = Array.from({ length: 3 }, (_, index) =>
+      card({
+        id: `review-card-${index}`,
+        status: 'in_review',
+        terminalSessionId: `review-term-${index}`,
+      }),
+    )
+    const terminals = Array.from({ length: 3 }, (_, index) =>
+      terminal({ id: `review-term-${index}` }),
+    )
+    const result = evaluateOperationalHealth(
+      healthy({ quota: quota(90), swarm: { cards, terminals } }),
+    )
+
+    expect(result.anomalies.map((item) => item.code)).toEqual([
+      'quota-low:claude',
+      'swarm-review-terminal-pressure',
+    ])
+  })
+
+  it('finds cross-system degradation without duplicating event-owned log or Memory alerts', () => {
     const result = evaluateOperationalHealth(
       healthy({
         git: { ahead: 2, behind: 1, changedFiles: 4, conflicts: 2, detached: false },
@@ -246,15 +265,17 @@ describe('operational health evaluator', () => {
         'swarm-worker-stuck',
         'swarm-parked-stale',
         'orphan-unverified',
-        'logs-critical',
-        'logs-recurring-high',
         'approval-stale',
-        'memory-capture-error',
         'memory-capture-stuck',
         'sensor-unavailable:git',
       ]),
     )
     expect(result.anomalies.some((item) => item.severity === 'alert')).toBe(true)
+    expect(result.anomalies.map((item) => item.code)).not.toEqual(
+      expect.arrayContaining(['logs-critical', 'logs-recurring-high', 'memory-capture-error']),
+    )
+    expect(result.logs).toMatchObject({ recentCritical: 1, recurringHigh: 1 })
+    expect(result.memory.errors).toBe(1)
     expect(result.memory.conflicts).toBe(3)
     expect(result.processes.reapedRecent).toBe(1)
   })

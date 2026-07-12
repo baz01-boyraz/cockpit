@@ -33,6 +33,8 @@ import { MemoryAutoCapture } from './MemoryAutoCapture'
 import { MemoryConsolidator } from './MemoryConsolidator'
 import { MemoryCurationService } from './MemoryCurationService'
 import { MemoryLifecycleSentinel } from './MemoryLifecycleSentinel'
+import { OperationalHealthService } from './OperationalHealthService'
+import { OperationalHealthStateStore } from './OperationalHealthStateStore'
 import { registerMemoryExitCapture } from './memoryExitTrigger'
 import { SwarmService } from './SwarmService'
 import { SentinelService, type SentinelNotifier } from './SentinelService'
@@ -128,6 +130,8 @@ export class Services {
   readonly memoryCuration: MemoryCurationService
   /** Thresholded, content-free Memory queue/audit/review health sensors. */
   readonly memoryLifecycle: MemoryLifecycleSentinel
+  /** Scheduled content-free cross-system snapshot and change-only delivery. */
+  readonly operationalHealth: OperationalHealthService
   readonly swarm: SwarmService
   /** Always-on deterministic signal layer: sensors → dedup → feed + notify. */
   readonly sentinel: SentinelService
@@ -359,6 +363,20 @@ export class Services {
       // interpret and publish exactly one manager notification.
       this.swarmCompletion,
     )
+    this.operationalHealth = new OperationalHealthService({
+      state: new OperationalHealthStateStore(this.db),
+      sentinel: this.sentinel,
+      projects: this.projects,
+      git: this.git,
+      usage: this.agentUsage,
+      swarm: this.swarm,
+      terminals: this.terminals,
+      logs: this.logs,
+      approvals: this.approvals,
+      captures: this.memoryCaptureQueue,
+      reviews: this.memoryReviews,
+      audit: this.audit,
+    })
     // Forget a pane's TUI-mode state once it exits, so session ids never leak.
     opts.events.onTyped('terminal:exit', ({ sessionId }) => this.tuiState.delete(sessionId))
 
@@ -421,6 +439,10 @@ export class Services {
     // days (or never) gets a fire-and-forget sweep. Fully isolated so it can
     // never block or crash startup.
     this.scheduleCurationSweeps()
+    // Cross-system health starts only after every sensor dependency exists. Its
+    // first healthy run anchors the digest cadence silently; subsequent ticks
+    // wake Flash only for a new anomaly or the due daily digest.
+    this.operationalHealth.start()
   }
 
   /** Age threshold before a project's memory hub is re-swept (7 days). */
@@ -478,6 +500,13 @@ export class Services {
         // or ps failure declines the kill.
         if (!this.pidMatchesSession(row.pid, row.id)) {
           skippedUnverified += 1
+          this.audit.record({
+            projectId: row.projectId,
+            actor: 'system',
+            actionType: 'system.zombie_unverified',
+            summary: 'Possible orphaned terminal process was left untouched because identity was unverified',
+            payload: { pid: row.pid, sessionId: row.id, lastActiveAt: row.lastActiveAt },
+          })
           continue
         }
         // Our recent, identity-verified orphan is still alive — SIGTERM the pty
@@ -486,7 +515,7 @@ export class Services {
           process.kill(row.pid, 'SIGTERM')
           reaped += 1
           this.audit.record({
-            projectId: null,
+            projectId: row.projectId,
             actor: 'system',
             actionType: 'system.zombie_reaped',
             summary: `Reaped orphaned terminal pid ${row.pid} left running by a previous session`,
@@ -713,6 +742,7 @@ export class Services {
     this.closing = true
     this.memoryAutoCapture.stop()
     this.memoryLifecycle.dispose()
+    this.operationalHealth.stop()
     this.cardOutput.clear()
     this.swarmCompletion.clear()
     // Fire-and-forget: the process is quitting; closing the socket is best-effort.

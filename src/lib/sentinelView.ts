@@ -19,6 +19,7 @@ const SOURCE_LABELS: Record<SentinelSource, string> = {
   council: 'council',
   'swarm-completion': 'swarm completion',
   'memory-lifecycle': 'memory health',
+  'operational-health': 'operational health',
 }
 
 export function sourceLabel(source: SentinelSource): string {

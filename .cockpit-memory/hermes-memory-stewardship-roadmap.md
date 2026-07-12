@@ -5,7 +5,7 @@ title: Hermes Memory + Sentinel Stewardship roadmap
 class: decision
 capturedAt: 2026-07-11T23:10:24.000Z
 gate: save
-updatedAt: 2026-07-12T05:17:51.000Z
+updatedAt: 2026-07-12T06:30:00.000Z
 ---
 
 cockpiT first tightens memory correctness, then expands Hermes/Sentinel into a proactive steward: sensors watch, Hermes judges meaningful signals, notifications reach the right channel, and durable outcomes return to memory.
@@ -29,31 +29,31 @@ cockpiT first tightens memory correctness, then expands Hermes/Sentinel into a p
    - Combine the existing lexical name/hook score with semantic retrieval or reranking.
    - Preserve positive-match-only behavior, strict note/character caps, source paths, and the rule that unrelated recent notes never pad a prompt.
    - Add bilingual and synonym-heavy retrieval evaluations using real project queries.
-   - **Result:** local exact-token + bilingual concept reranking needs no embedding/model call. The untouched holdout stays clean; synthetic Top-3 is 62/62 with 0/10 false no-match injection, and redacted Turkish dogfood is 7/7 Top-1 plus one correct no-match.
+   - **Result:** model-free exact-token + bilingual concept reranking passed synthetic Top-3 62/62, false-match 0/10, and Turkish dogfood Top-1 7/7 plus one correct no-match.
 
 2. **Bullet-level duplicate detection — complete (2026-07-11)**
    - Compare a new observation against atomic bullets/facts inside an existing note, not only the whole accumulated body.
    - Prevent a merge from appending a near-identical bullet.
    - Add long-note, threshold-boundary, and repeated-capture regression tests.
-   - **Result:** reconcile scores paragraphs/list items independently, ignores dates/navigation, and skips facts at the inclusive `0.82` boundary. Merge is byte-idempotent, repeated captures write no note/ledger entry, and Turkish tokens remain intact.
+   - **Result:** reconcile scores atomic facts, ignores dates/navigation, and dedups at `0.82`; merges are byte-idempotent and repeated captures create no note/ledger churn.
 
 3. **Controlled conflict trust policy — complete (2026-07-11)**
    - Remove silent conflict overwrite as the default behavior.
    - Make the effective policy consistent across backend gate, renderer trust mode, Hermes instructions, and user-facing copy.
    - Preserve before/after provenance and require an explicit human decision or a narrowly defined, auditable policy for destructive replacement.
-   - **Result:** policy v2 excludes conflicts from every auto-commit mode. Owner choices are explicit; Hermes needs a closed evidence basis, plain rationale, and concrete evidence. Recency is rejected. Delegated replacements are stale-checked, ledgered, and audited; ambiguity stays pending with plain UI copy.
+   - **Result:** policy v2 never auto-commits conflicts. Delegated replacement requires closed evidence, rationale, stale-check, ledger, and audit; ambiguity stays pending.
 
 4. **One-time cleanup of bloated notes — complete (2026-07-12)**
    - Snapshot first, then dry-run a bullet-level dedup/merge pass over oversized and repetitive notes.
    - Produce a reviewable report before applying changes; use soft-delete only and verify wikilinks afterward.
    - Do not turn cleanup output into fresh memory observations or re-ingest the memory protocol itself.
-   - **Result:** snapshot `2026-07-12T05-01-41-495Z-6b8a3a5c` captured all 126 notes before the committed dry-run report. Nine repetitive notes were canonically compacted with no deletion/archive: 208,006 → 136,505 bytes, repeated facts 66 → 0, oversized notes 4 → 0. No link target disappeared and no unresolved target was introduced.
+   - **Result:** snapshot `2026-07-12T05-01-41-495Z-6b8a3a5c` covered all 126 notes. Nine repetitive notes were compacted without deletion: 208,006 → 136,505 bytes, duplicate facts 66 → 0, oversized notes 4 → 0; links stayed valid.
 
 5. **Code/documentation consistency — complete (2026-07-12)**
    - Reconcile stale comments, charter text, AGENTS instructions, UI copy, and memory notes with the behavior actually enforced by code.
    - Mark superseded facts clearly instead of leaving contradictory statements as equally current.
    - Add focused contract tests for the trust policy and memory-first delivery rules.
-   - **Result:** shared policy now pins Hermes main=V4 Pro and mechanical=V4 Flash; callers cannot promote distillation. Empty hubs still receive lookup contracts, mock/backend policy versions match, and stale Claude-only/native-channel claims were replaced with current behavior across code, charter, plans, and canonical notes.
+   - **Result:** shared policy pins main=V4 Pro and mechanical=V4 Flash; callers cannot promote distillation. Empty-hub lookup, mock/backend policy, code, charter, plans, and canonical notes now agree.
 
 ### Phase 2 — Hermes/Sentinel operational stewardship
 
@@ -61,18 +61,19 @@ cockpiT first tightens memory correctness, then expands Hermes/Sentinel into a p
    - Convert the existing completion event into a structured, persisted signal.
    - Gather bounded evidence: card/spec, diff stat, checks, branch/worktree state, and notable output or failure markers.
    - Ask Hermes for a short manager summary only after deterministic evidence exists, then deliver it through app toast/macOS with a direct review or chat action.
-   - **Result:** successful cards persist bounded evidence before tool-less V4 Pro summaries, with recovery, fallback, dedup, app/macOS delivery, and Review/Ask actions. Nonzero exits keep their failure path.
+   - **Result:** successful cards persist bounded evidence before tool-less V4 Pro summaries, with recovery, fallback, dedup, app/macOS delivery, and Review/Ask actions; failures keep their existing path.
 
 7. **Memory lifecycle events as Sentinel sources — complete (2026-07-12)**
    - Raise structured signals for capture retry exhaustion, distiller failure, review-queue backlog, unresolved conflicts, curation failure/staleness, write-gate rejection spikes, and memory-contract compliance misses.
    - Deduplicate and threshold these events so normal queue activity stays quiet.
    - Let recurring, verified failures become charter-gated gotcha candidates; never write raw errors or secrets directly into memory.
-   - **Result:** `memory-lifecycle` observes durable queue/audit/review facts. Conservative thresholds surface exhaustion, repeated failures, queue pressure, reject/compliance spikes, and real staleness; empty hubs and isolated events stay quiet. Only counts, age, and closed failure categories reach Sentinel—never content, paths, or raw errors.
+   - **Result:** `memory-lifecycle` thresholds durable queue/audit/review facts; empty hubs and isolated events stay quiet. Sentinel receives only counts, age, and closed failure categories—never content, paths, or raw errors.
 
-8. **Scheduled operational health sweep**
+8. **Scheduled operational health sweep — complete (2026-07-12)**
    - Build a cheap deterministic snapshot of git state, quota, stuck/parked Swarm work, orphaned processes, recent log/error patterns, pending approvals, and memory queue health.
    - Invoke Hermes only when the snapshot contains an anomaly or when a scheduled digest is due.
    - Persist last-run/result metadata, prevent overlapping runs, and notify only on state change or actionable degradation.
+   - **Result:** every 30 minutes, content-free sensors persist one bounded V20 row per project. Atomic claims prevent overlap; healthy/unchanged runs cost no model call, transient misses wait for confirmation, and changed anomalies or due digest reach `operational-health` → V4 Flash. Existing log/Memory alerts are counted, not duplicated.
 
 ### Later phase — same architecture, new channels
 

@@ -88,7 +88,7 @@ describe('boot reconciliation', () => {
     // seam), then flip them to exited. Both must precede any other DB work.
     const first = rec.calls[0]
     expect(first.method).toBe('all')
-    expect(first.sql).toContain('SELECT id, pid, last_active_at FROM terminal_sessions')
+    expect(first.sql).toContain('SELECT id, project_id, pid, last_active_at FROM terminal_sessions')
     const second = rec.calls[1]
     expect(second.method).toBe('run')
     expect(second.sql).toContain('UPDATE terminal_sessions')
@@ -125,8 +125,8 @@ describe('boot reconciliation', () => {
 describe('zombie-audit seam (A4)', () => {
   it('captures pid + lastActiveAt of the rows about to be reconciled, before the flip', () => {
     const staleRows = [
-      { id: 't1', pid: 4242, last_active_at: '2026-07-09T00:00:00.000Z' },
-      { id: 't2', pid: null, last_active_at: '2026-07-09T00:00:00.000Z' },
+      { id: 't1', project_id: 'p1', pid: 4242, last_active_at: '2026-07-09T00:00:00.000Z' },
+      { id: 't2', project_id: 'p1', pid: null, last_active_at: '2026-07-09T00:00:00.000Z' },
     ]
     const rec = makeRecordingDb({
       all: (sql) => (sql.includes('pid, last_active_at') ? staleRows : []),
@@ -138,8 +138,8 @@ describe('zombie-audit seam (A4)', () => {
     const mgr = new TerminalManager(rec.db, events, projects, vi.fn(), vi.fn(), integrationDir)
 
     expect(mgr.reconciledStaleSessions).toEqual([
-      { id: 't1', pid: 4242, lastActiveAt: '2026-07-09T00:00:00.000Z' },
-      { id: 't2', pid: null, lastActiveAt: '2026-07-09T00:00:00.000Z' },
+      { id: 't1', projectId: 'p1', pid: 4242, lastActiveAt: '2026-07-09T00:00:00.000Z' },
+      { id: 't2', projectId: 'p1', pid: null, lastActiveAt: '2026-07-09T00:00:00.000Z' },
     ])
     // The capture SELECT must precede the reconcile UPDATE, so the pids reflect
     // the previous process's claim (not the post-flip 'exited' state).

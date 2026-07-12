@@ -104,4 +104,22 @@ describe('OperationalHealthStateStore', () => {
     expect(rec.callsFor('run', "status = 'idle'")).toHaveLength(2)
     expect(rec.calls.some((call) => /DELETE/i.test(call.sql))).toBe(false)
   })
+
+  it('fails closed when a persisted result is corrupt JSON', () => {
+    const rec = makeRecordingDb({
+      get: () => ({
+        project_id: 'p1',
+        status: 'running',
+        last_run_at: AT,
+        last_result_json: '{broken',
+        last_fingerprint: 'healthy',
+        last_notified_fingerprint: null,
+        last_notified_at: null,
+        last_digest_at: AT,
+        updated_at: AT,
+      }),
+    })
+    const store = new OperationalHealthStateStore(rec.db)
+    expect(store.claim('p1', AT)?.lastResult).toBeNull()
+  })
 })
