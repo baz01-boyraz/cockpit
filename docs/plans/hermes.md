@@ -76,7 +76,7 @@ yazılmıyor, var olanı Hermes'e açıyoruz.
 | `read_memory_recent` / `write_memory_summary` | `memoryWriteSchema` (`schemas.ts:203-207`, body ≤500.000 char) | — |
 | `get_pending_memory_reviews` / `resolve_memory_review` | scoped review schema + Hermes-only delegated-conflict extension | accept/edit/discard; conflicts require basis+rationale+evidence |
 | `subscribe_card_output(cardId)` | **Yeni, küçük plumbing** | `TerminalManager`'ın PTY stream'ini, sadece o kart running olduğu sürece, Hermes'e tee eder. 7/24 global izleme değil — sadece o an dispatch edilen tek görev. |
-| user-defined cron/scheduled task | hermes-agent'ın **kendi** scheduled-task desteği | Built-in operational health is separate: cockpiT runs its own deterministic 30-minute sensor cadence |
+| user-defined cron/scheduled task | cockpiT `AutomationService` + V21 durable state | App owns time/claims; Flash gets a content-free snapshot and harmless tool allowlist. Native Hermes cron is intentionally excluded because oneshot/cron auto-bypasses soft approvals. |
 
 OpenRouter API key: sadece child process env değişkeni olarak taşınır, asla komut stringine
 girmez (v1'deki karar aynen geçerli, `SecretStore`/`safeStorage` deseni). `shared/redaction.ts`
@@ -391,10 +391,12 @@ Somut tasarım:
    var olan "Awaiting your approval" banner'ında görünüyor (aynı UI, yeni bir approval kind).
    Baz Approve'a basınca, main process **doğrudan** (Hermes'e geri dönmeden) `create_swarm_card`
    + `start_swarm_card`'ı çalıştırıyor — tıpkı `git_push` onayının çalışma şekli gibi.
-3. **Tetikleyici ayrımı (2026-07-12 güncel):** user-defined jobs later use Hermes cron, while
-   cockpiT's built-in `OperationalHealthService` owns the 30-minute deterministic system sweep.
-   It persists a bounded snapshot first and wakes Flash only for a changed actionable anomaly
-   or a due daily digest; healthy/unchanged runs make no model call.
+3. **Tetikleyici ayrımı (2026-07-12 güncel):** cockpiT's built-in
+   `OperationalHealthService` owns the 30-minute deterministic system sweep; app-owned
+   `AutomationService` owns the visible daily briefing and user schedules. The sweep persists
+   a bounded snapshot first and wakes Flash only for a changed actionable anomaly. A due
+   automation gets one separate, bounded Flash verdict; healthy/unchanged sweep runs make no
+   model call and no second implicit digest exists.
 4. **`AGENTS.md`'ye eklenecek:** "insan senden istedi" (Faz 4 akışı, create+start doğrudan) ile
    "kendi başına fark ettim" (Faz 6 akışı, mutlaka propose+onay bekle) ayrımı — Hermes bu ikisini
    asla karıştırmamalı.
@@ -433,11 +435,33 @@ Somut tasarım:
   parked Swarm work, verified orphan-process audit facts, grouped error counts, stale approvals,
   and Memory queue/review counts every 30 minutes. Sensors are isolated and content-free.
 - V20 keeps one row per project with last run/result, actionable fingerprint, notification and
-  digest cadence, plus an atomic overlap claim. A stale claim recovers after ten minutes.
+  a legacy digest-cadence column, plus an atomic overlap claim. A stale claim recovers after ten
+  minutes.
 - Existing Log Intelligence and Memory lifecycle alerts are counted but never duplicated. A
   one-off sensor miss is quiet; a repeated blind spot becomes a change-only Sentinel notice.
-- First healthy boot anchors the 24-hour digest silently. Only changed actionable degradation or
-  a due digest reaches the standard `operational-health` Sentinel → V4 Flash path.
+- Only changed actionable degradation reaches the standard `operational-health` Sentinel → V4
+  Flash path. The former hidden 24-hour digest cadence remains schema-compatible in V20 but is
+  retired; the visible Item 9 automation below is the single daily-delivery owner.
+
+#### Faz 6 safe daily automations (2026-07-12)
+
+- V21 `automation_jobs` stores one project-scoped lifecycle row per job: friendly schedule,
+  next/last run, bounded result/error, enabled state, and an atomic overlap claim. A stale claim
+  recovers after ten minutes; built-in daily jobs are idempotent and cannot be deleted.
+- Every project gets one visible 09:00 `Daily briefing`. The Automations view shows plain-language
+  create, last/next/result, run/retry, pause/resume, and delete controls; cron expressions never
+  cross IPC or appear in UI.
+- `HermesAutomationRunner` explicitly selects V4 Flash, ignores project rules, and exposes only
+  the harmless `todo` toolset—no cockpit MCP, terminal, files, code execution, browser, or
+  computer-use. The owner instruction is fenced as reference data and the health snapshot is
+  content-free.
+- Results persist before any delivery. A specialist `stage` → `publishStaged` path reuses the
+  one Flash verdict instead of triggering generic triage again, and sends the manager note to
+  app/macOS. A report-worthy finding may propose a Swarm card only through
+  `propose_open_swarm_card`; it never starts work itself.
+- Native `hermes cron` is deliberately not the authority boundary: its non-interactive mode
+  auto-bypasses soft command approvals and can load broader toolsets. cockpiT owns the clock and
+  state; Hermes only interprets bounded evidence.
 
 ### Faz 7 — Hermes chat widget — TAMAMLANDI (2026-07-05)
 

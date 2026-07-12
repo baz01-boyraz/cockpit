@@ -10,6 +10,7 @@ import { z } from 'zod'
 import { ROLE_IDS, SPEC_IDS, type Role, type Spec } from './agent-taxonomy'
 import { SENTINEL_OUTCOMES } from './sentinel'
 import { MEMORY_BRAIN_SCOPES, MEMORY_TRUST_MODES } from './memory-policy'
+import { AUTOMATION_POLICY } from './automation'
 
 export const approvalActionTypeSchema = z.enum([
   'git_push',
@@ -642,3 +643,36 @@ export const dismissInsightSchema = z.object({
 // Account usage is global to the developer's CLI auth, not project-scoped, so
 // the request carries no payload. We still validate it to reject stray input.
 export const agentUsageRequestSchema = z.union([z.undefined(), z.object({}).strict()])
+
+// --- safe app-owned Hermes automations -----------------------------------
+
+export const automationScheduleSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('daily'),
+    time: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, 'Use a 24-hour time like 09:00.'),
+  }),
+  z.object({
+    kind: z.literal('interval'),
+    minutes: z
+      .number()
+      .int()
+      .min(AUTOMATION_POLICY.minIntervalMinutes)
+      .max(AUTOMATION_POLICY.maxIntervalMinutes),
+  }),
+])
+
+export const automationCreateSchema = z.object({
+  projectId: z.string().min(1),
+  name: z.string().trim().min(1).max(80),
+  instruction: z.string().trim().min(1).max(AUTOMATION_POLICY.maxInstructionChars),
+  schedule: automationScheduleSchema,
+})
+
+export const automationJobActionSchema = z.object({
+  projectId: z.string().min(1),
+  jobId: z.string().min(1).max(240),
+})
+
+export const automationToggleSchema = automationJobActionSchema.extend({
+  enabled: z.boolean(),
+})

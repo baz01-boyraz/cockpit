@@ -20,6 +20,7 @@ import {
   SCHEMA_V18,
   SCHEMA_V19,
   SCHEMA_V20,
+  SCHEMA_V21,
 } from './schema'
 
 export type Db = BetterSqlite3.Database
@@ -51,6 +52,7 @@ const MIGRATIONS: Migration[] = [
   { version: 18, name: 'council_session_status', sql: SCHEMA_V18 },
   { version: 19, name: 'memory_brain_settings', sql: SCHEMA_V19 },
   { version: 20, name: 'operational_health_state', sql: SCHEMA_V20 },
+  { version: 21, name: 'automation_jobs', sql: SCHEMA_V21 },
 ]
 
 /** Exported for migration contract tests and diagnostics. */

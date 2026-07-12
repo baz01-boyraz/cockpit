@@ -5,7 +5,7 @@ title: Hermes Memory + Sentinel Stewardship roadmap
 class: decision
 capturedAt: 2026-07-11T23:10:24.000Z
 gate: save
-updatedAt: 2026-07-12T06:30:00.000Z
+updatedAt: 2026-07-12T12:02:04.000Z
 ---
 
 cockpiT first tightens memory correctness, then expands Hermes/Sentinel into a proactive steward: sensors watch, Hermes judges meaningful signals, notifications reach the right channel, and durable outcomes return to memory.
@@ -71,15 +71,16 @@ cockpiT first tightens memory correctness, then expands Hermes/Sentinel into a p
 
 8. **Scheduled operational health sweep — complete (2026-07-12)**
    - Build a cheap deterministic snapshot of git state, quota, stuck/parked Swarm work, orphaned processes, recent log/error patterns, pending approvals, and memory queue health.
-   - Invoke Hermes only when the snapshot contains an anomaly or when a scheduled digest is due.
+   - Invoke Hermes only when the snapshot contains an anomaly; the later visible daily schedule owns digest delivery.
    - Persist last-run/result metadata, prevent overlapping runs, and notify only on state change or actionable degradation.
-   - **Result:** every 30 minutes, content-free sensors persist one bounded V20 row per project. Atomic claims prevent overlap; healthy/unchanged runs cost no model call, transient misses wait for confirmation, and changed anomalies or due digest reach `operational-health` → V4 Flash. Existing log/Memory alerts are counted, not duplicated.
+   - **Result:** every 30 minutes, content-free sensors persist one bounded V20 row per project. Atomic claims prevent overlap; healthy/unchanged runs cost no model call, transient misses wait for confirmation, and changed anomalies reach `operational-health` → V4 Flash. Item 9 moved the daily digest to one visible, pausable 09:00 job so the two layers cannot double-notify.
 
 ### Later phase — same architecture, new channels
 
-9. **Daily digest and Hermes-managed cron jobs**
+9. **Daily digest and Hermes-managed cron jobs — complete (2026-07-12)**
    - Manage idempotent schedules with visible last-run, next-run, result, retry, and disable controls.
    - Keep risky actions behind the existing approval boundary; cron may observe and propose but must not silently perform destructive work.
+   - **Result:** cockpiT owns a durable V21 schedule table, atomic overlap/stale-run claims, and one idempotent 09:00 daily briefing per project. The Automations view exposes plain-language create, last/next/result, run/retry, pause/resume, and safe delete controls with no cron syntax. V4 Flash receives only the content-free health snapshot through a harmless `todo` allowlist; results persist before delivery, app/macOS publication spends no second triage call, and any suggested Swarm work lands in the existing approval queue instead of starting. Native Hermes cron is deliberately not the execution boundary because its non-interactive mode auto-bypasses soft approvals.
 
 10. **Phone delivery**
     - Add a channel-neutral notification outbox first, then a sender-authenticated Telegram/mobile adapter.

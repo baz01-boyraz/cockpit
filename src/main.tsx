@@ -17,6 +17,7 @@ import './styles/council-verdict.css'
 import './styles/hermes.css'
 import './styles/audit.css'
 import './styles/sentinel.css'
+import './styles/automations.css'
 import { App } from './App'
 
 createRoot(document.getElementById('root')!).render(

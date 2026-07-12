@@ -1,5 +1,6 @@
 import { useStore, type View } from '../store/useStore'
 import {
+  IconAutomation,
   IconBranch,
   IconChevron,
   IconCouncil,
@@ -25,6 +26,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { view: 'dashboard', label: 'Dashboard', Icon: IconDashboard },
+  { view: 'automations', label: 'Automations', Icon: IconAutomation },
   { view: 'terminals', label: 'Terminals', Icon: IconTerminal },
   { view: 'git', label: 'Git', Icon: IconGit },
   { view: 'swarm', label: 'Swarm', Icon: IconSwarm },

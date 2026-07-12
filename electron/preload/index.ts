@@ -86,6 +86,15 @@ const api: CockpitApi = {
     decide: (approvalId, approve) => invoke(IPC.approvalsDecide, { approvalId, approve }),
     onChange: (cb) => subscribe(IPC.evtApprovalsChanged, () => cb()),
   },
+  automations: {
+    list: (projectId) => invoke(IPC.automationList, { projectId }),
+    create: (input) => invoke(IPC.automationCreate, input),
+    setEnabled: (projectId, jobId, enabled) =>
+      invoke(IPC.automationToggle, { projectId, jobId, enabled }),
+    run: (projectId, jobId) => invoke(IPC.automationRun, { projectId, jobId }),
+    remove: (projectId, jobId) => invoke(IPC.automationRemove, { projectId, jobId }),
+    onChange: (cb) => subscribe(IPC.evtAutomationsChanged, cb),
+  },
   router: {
     route: (projectId, query) => invoke(IPC.routerRoute, { projectId, query }),
   },

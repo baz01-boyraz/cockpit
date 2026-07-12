@@ -564,3 +564,29 @@ CREATE TABLE IF NOT EXISTS operational_health_state (
   updated_at                 TEXT NOT NULL
 );
 `
+
+/** V21 — durable app-owned Hermes automations. The scheduler stores only the
+ * owner's bounded instruction and bounded/redacted manager result. */
+export const SCHEMA_V21 = /* sql */ `
+CREATE TABLE IF NOT EXISTS automation_jobs (
+  id            TEXT PRIMARY KEY,
+  project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  instruction   TEXT NOT NULL,
+  kind          TEXT NOT NULL,
+  schedule_json TEXT NOT NULL,
+  system        INTEGER NOT NULL DEFAULT 0,
+  enabled       INTEGER NOT NULL DEFAULT 1,
+  state         TEXT NOT NULL DEFAULT 'scheduled',
+  next_run_at   TEXT NOT NULL,
+  last_run_at   TEXT,
+  last_status   TEXT NOT NULL DEFAULT 'never',
+  last_result   TEXT,
+  last_error    TEXT,
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_automation_jobs_due
+  ON automation_jobs(enabled, state, next_run_at);
+`

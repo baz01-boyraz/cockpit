@@ -24,6 +24,11 @@ import type {
 } from '@shared/domain'
 import type { CockpitApi, SystemInfo, Unsubscribe } from '@shared/ipc'
 import {
+  dailyDigestId,
+  nextAutomationRun,
+  type AutomationJob,
+} from '@shared/automation'
+import {
   councilSpecVerdictKind,
   COUNCIL_SEATS,
   normalizeCouncilResult,
@@ -106,6 +111,63 @@ const githubState = new Map<string, GitHubRepositoryStatus>()
 const mockSecrets = new Map<string, string>()
 /** Browser-preview Hermes chat turn counter, per project (reset on clear). */
 const mockHermesChats = new Map<string, number>()
+
+/** Browser-preview automation state. It mirrors the safe app-owned scheduler,
+ * while keeping preview interactions instant and deterministic. */
+const mockAutomations = new Map<string, AutomationJob[]>()
+const automationListeners = new Set<(event: { projectId: string }) => void>()
+
+function automationsFor(projectId: string): AutomationJob[] {
+  const existing = mockAutomations.get(projectId)
+  if (existing) return existing
+  const at = now()
+  const dailySchedule = { kind: 'daily' as const, time: '09:00' }
+  const watchSchedule = { kind: 'interval' as const, minutes: 360 }
+  const seeded: AutomationJob[] = [
+    {
+      id: dailyDigestId(projectId),
+      projectId,
+      name: 'Daily briefing',
+      instruction: 'Give me a concise daily manager briefing from project health.',
+      kind: 'digest',
+      schedule: dailySchedule,
+      system: true,
+      enabled: true,
+      state: 'scheduled',
+      nextRunAt: nextAutomationRun(dailySchedule, at),
+      lastRunAt: at,
+      lastStatus: 'ok',
+      lastResult: 'Everything is calm. No action needs your attention today.',
+      lastError: null,
+      createdAt: at,
+      updatedAt: at,
+    },
+    {
+      id: `automation:memory-pulse:${projectId}`,
+      projectId,
+      name: 'Memory pulse',
+      instruction: 'Tell me only when memory capture or review pressure needs attention.',
+      kind: 'watch',
+      schedule: watchSchedule,
+      system: false,
+      enabled: true,
+      state: 'scheduled',
+      nextRunAt: nextAutomationRun(watchSchedule, at),
+      lastRunAt: at,
+      lastStatus: 'ok',
+      lastResult: 'Memory is healthy. Hermes stayed quiet.',
+      lastError: null,
+      createdAt: at,
+      updatedAt: at,
+    },
+  ]
+  mockAutomations.set(projectId, seeded)
+  return seeded
+}
+
+function notifyAutomations(projectId: string): void {
+  for (const listener of automationListeners) listener({ projectId })
+}
 
 /** Browser-preview sentinel feed, seeded lazily per project so the signal layer
  *  (Faz A) renders one alert + one notice without a backend. */
@@ -1070,6 +1132,72 @@ export function createMockApi(): CockpitApi {
       onChange: (cb) => {
         approvalListeners.add(cb)
         return (() => approvalListeners.delete(cb)) as Unsubscribe
+      },
+    },
+    automations: {
+      list: async (projectId) => automationsFor(projectId).map((job) => ({ ...job })),
+      create: async (input) => {
+        const at = now()
+        const created: AutomationJob = {
+          id: id('auto'),
+          projectId: input.projectId,
+          name: input.name.trim(),
+          instruction: input.instruction.trim(),
+          kind: 'watch',
+          schedule: input.schedule,
+          system: false,
+          enabled: true,
+          state: 'scheduled',
+          nextRunAt: nextAutomationRun(input.schedule, at),
+          lastRunAt: null,
+          lastStatus: 'never',
+          lastResult: null,
+          lastError: null,
+          createdAt: at,
+          updatedAt: at,
+        }
+        automationsFor(input.projectId).push(created)
+        notifyAutomations(input.projectId)
+        return { ...created }
+      },
+      setEnabled: async (projectId, jobId, enabled) => {
+        const found = automationsFor(projectId).find((job) => job.id === jobId)
+        if (!found || found.state === 'running') return null
+        const at = now()
+        found.enabled = enabled
+        found.state = enabled ? 'scheduled' : 'paused'
+        found.updatedAt = at
+        if (enabled) found.nextRunAt = nextAutomationRun(found.schedule, at)
+        notifyAutomations(projectId)
+        return { ...found }
+      },
+      run: async (projectId, jobId) => {
+        const found = automationsFor(projectId).find((job) => job.id === jobId)
+        if (!found || !found.enabled || found.state === 'running') return null
+        const at = now()
+        found.state = 'scheduled'
+        found.lastStatus = 'ok'
+        found.lastRunAt = at
+        found.lastResult = found.kind === 'digest'
+          ? 'Everything is calm. No action needs your attention today.'
+          : 'Hermes checked the signal. Nothing needs your attention.'
+        found.lastError = null
+        found.nextRunAt = nextAutomationRun(found.schedule, at)
+        found.updatedAt = at
+        notifyAutomations(projectId)
+        return { ...found }
+      },
+      remove: async (projectId, jobId) => {
+        const jobs = automationsFor(projectId)
+        const found = jobs.find((job) => job.id === jobId)
+        if (!found || found.system) return false
+        mockAutomations.set(projectId, jobs.filter((job) => job.id !== jobId))
+        notifyAutomations(projectId)
+        return true
+      },
+      onChange: (cb) => {
+        automationListeners.add(cb)
+        return (() => automationListeners.delete(cb)) as Unsubscribe
       },
     },
     router: { route: async (_projectId, query) => classifyRoute(query) },

@@ -45,11 +45,11 @@ describe('AutomationStateStore', () => {
       }),
     })
     const store = new AutomationStateStore(rec.db)
-    expect(store.claim('auto-1', AT, false)).toMatchObject({ id: 'auto-1', state: 'running' })
+    expect(store.claim('p1', 'auto-1', AT, false)).toMatchObject({ id: 'auto-1', state: 'running' })
     expect(rec.callsFor('run', 'UPDATE automation_jobs')[0].sql).toContain("state != 'running'")
 
     changes = 0
-    expect(store.claim('auto-1', AT, false)).toBeNull()
+    expect(store.claim('p1', 'auto-1', AT, false)).toBeNull()
   })
 
   it('persists the bounded result before returning a job to scheduled state', () => {
@@ -62,7 +62,7 @@ describe('AutomationStateStore', () => {
       }),
     })
     const store = new AutomationStateStore(rec.db)
-    store.complete('auto-1', {
+    store.complete('p1', 'auto-1', {
       at: AT,
       nextRunAt: '2026-07-12T20:00:00.000Z',
       result: 'All clear',

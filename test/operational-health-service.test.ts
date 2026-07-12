@@ -139,13 +139,13 @@ function harness() {
 }
 
 describe('OperationalHealthService', () => {
-  it('persists a healthy first run, anchors the digest cadence, and spends no model signal', async () => {
+  it('persists a healthy first run and spends no model signal', async () => {
     const h = harness()
     const result = await h.service.runProject('p1')
 
     expect(result?.fingerprint).toBe('healthy')
     expect(h.state.completions).toHaveLength(1)
-    expect(h.state.current?.lastDigestAt).toBe(new Date(BASE).toISOString())
+    expect(h.state.current?.lastDigestAt).toBeNull()
     expect(h.reports).toHaveLength(0)
   })
 
@@ -181,19 +181,14 @@ describe('OperationalHealthService', () => {
     expect(h.reports).toHaveLength(2)
   })
 
-  it('runs one daily digest only after the anchored cadence becomes due', async () => {
+  it('leaves daily delivery to the visible automation schedule', async () => {
     const h = harness()
     await h.service.runProject('p1')
-    h.setNow(BASE + OPERATIONAL_HEALTH_POLICY.digestIntervalMs + 1)
+    h.setNow(BASE + OPERATIONAL_HEALTH_POLICY.lookbackMs + 1)
     await h.service.runProject('p1')
     await h.service.runProject('p1')
 
-    expect(h.reports).toHaveLength(1)
-    expect(h.reports[0]).toMatchObject({
-      title: 'Operational health digest',
-      source: 'operational-health',
-      severity: 'notice',
-    })
+    expect(h.reports).toHaveLength(0)
   })
 
   it('isolates sensor failure, waits for a repeat, and never leaks the raw exception', async () => {

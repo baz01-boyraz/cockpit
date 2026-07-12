@@ -40,31 +40,31 @@ class FakeStore {
     this.jobs.push(created)
     return created
   })
-  claim = vi.fn((id: string) => {
+  claim = vi.fn((_projectId: string, id: string, _at: string, _force: boolean) => {
     if (this.running.has(id)) return null
     const found = this.jobs.find((item) => item.id === id)
     if (!found || !found.enabled) return null
     this.running.add(id)
     return { ...found, state: 'running' as const, lastStatus: 'running' as const }
   })
-  complete = vi.fn((id: string, input: { at: string; nextRunAt: string; result: string }) => {
+  complete = vi.fn((_projectId: string, id: string, input: { at: string; nextRunAt: string; result: string }) => {
     this.running.delete(id)
     const found = this.jobs.find((item) => item.id === id)!
     Object.assign(found, { state: 'scheduled', lastStatus: 'ok', lastRunAt: input.at, lastResult: input.result, nextRunAt: input.nextRunAt })
     return found
   })
-  fail = vi.fn((id: string, input: { at: string; nextRunAt: string; error: string }) => {
+  fail = vi.fn((_projectId: string, id: string, input: { at: string; nextRunAt: string; error: string }) => {
     this.running.delete(id)
     const found = this.jobs.find((item) => item.id === id)!
     Object.assign(found, { state: 'scheduled', lastStatus: 'error', lastRunAt: input.at, lastError: input.error, nextRunAt: input.nextRunAt })
     return found
   })
-  setEnabled = vi.fn((id: string, enabled: boolean) => {
+  setEnabled = vi.fn((_projectId: string, id: string, enabled: boolean, _at: string) => {
     const found = this.jobs.find((item) => item.id === id)!
     Object.assign(found, { enabled, state: enabled ? 'scheduled' : 'paused' })
     return found
   })
-  remove = vi.fn((id: string) => {
+  remove = vi.fn((_projectId: string, id: string) => {
     const found = this.jobs.find((item) => item.id === id)
     if (found?.system) return false
     this.jobs = this.jobs.filter((item) => item.id !== id)
@@ -75,12 +75,7 @@ class FakeStore {
 function harness(result: Partial<AutomationInterpretation> = {}) {
   const store = new FakeStore()
   const order: string[] = []
-  store.complete.mockImplementation((...args: Parameters<FakeStore['complete']>) => {
-    order.push('persist')
-    return FakeStore.prototype.complete?.apply(store, args) as never
-  })
-  // Restore a direct implementation because class-field methods have no prototype body.
-  store.complete.mockReset().mockImplementation((id, input) => {
+  store.complete.mockImplementation((_projectId, id, input) => {
     order.push('persist')
     store.running.delete(id)
     const found = store.jobs.find((item) => item.id === id)!
@@ -103,12 +98,22 @@ function harness(result: Partial<AutomationInterpretation> = {}) {
     projects: { list: () => [{ id: 'p1', path: '/project' }] },
     health: { inspect: vi.fn(async () => snapshot()) },
     runner: { interpret: vi.fn(async () => interpretation) },
-    sentinel: { report: vi.fn((input) => { order.push('report'); reports.push(input); return {} as never }) },
+    sentinel: {
+      stage: vi.fn((input) => {
+        order.push('stage')
+        reports.push(input)
+        return { id: 'signal-1' } as never
+      }),
+      publishStaged: vi.fn(() => {
+        order.push('publish')
+        return {} as never
+      }),
+    },
     approvals: { request: vi.fn((input) => { order.push('approval'); approvals.push(input); return {} as never }) },
     now: () => AT,
     schedule,
   })
-  return { service, store, reports, approvals, order, schedule }
+  return { service, store, reports, approvals, order, schedule, health: service['deps'].health }
 }
 
 describe('AutomationService', () => {
@@ -123,10 +128,24 @@ describe('AutomationService', () => {
     expect(h.schedule.clearInterval).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps app startup and timer ticks safe when durable state is temporarily unavailable', async () => {
+    const h = harness()
+    h.store.ensureDailyDigest.mockImplementationOnce(() => {
+      throw new Error('disk temporarily unavailable')
+    })
+    expect(() => h.service.start()).not.toThrow()
+
+    h.store.due.mockImplementationOnce(() => {
+      throw new Error('read temporarily unavailable')
+    })
+    await expect(h.service.tick()).resolves.toBeUndefined()
+    h.service.stop()
+  })
+
   it('persists before delivering the daily digest even when the project is healthy', async () => {
     const h = harness()
     await h.service.runNow('p1', 'auto-1')
-    expect(h.order).toEqual(['persist', 'report'])
+    expect(h.order).toEqual(['persist', 'stage', 'publish'])
     expect(h.reports[0]).toMatchObject({ source: 'automation', severity: 'notice' })
   })
 
@@ -143,7 +162,7 @@ describe('AutomationService', () => {
       proposal: { title: 'Inspect the queue', body: 'Evidence only.', reason: 'Stable pressure.' },
     })
     await h.service.runNow('p1', 'auto-1')
-    expect(h.order).toEqual(['persist', 'report', 'approval'])
+    expect(h.order).toEqual(['persist', 'stage', 'publish', 'approval'])
     expect(h.approvals[0]).toMatchObject({
       actionType: 'propose_open_swarm_card',
       payload: { title: 'Inspect the queue', body: 'Evidence only.' },
@@ -158,10 +177,11 @@ describe('AutomationService', () => {
     expect(h.store.complete).not.toHaveBeenCalled()
 
     h.store.running.clear()
-    const health = (h.service as unknown as { deps: { health: { inspect: ReturnType<typeof vi.fn> } } }).deps.health
+    const health = h.health as { inspect: ReturnType<typeof vi.fn> }
     health.inspect.mockRejectedValue(new Error('PRIVATE FAILURE /secret/path'))
     await h.service.runNow('p1', 'auto-1')
     expect(h.store.fail).toHaveBeenCalledWith(
+      'p1',
       'auto-1',
       expect.objectContaining({ error: expect.not.stringContaining('/secret/path') }),
     )
@@ -176,8 +196,8 @@ describe('AutomationService', () => {
     expect(h.store.create).toHaveBeenCalled()
     h.service.setEnabled('p1', 'auto-1', false)
     h.service.setEnabled('p1', 'auto-1', true)
-    expect(h.store.setEnabled).toHaveBeenNthCalledWith(1, 'auto-1', false, iso())
-    expect(h.store.setEnabled).toHaveBeenNthCalledWith(2, 'auto-1', true, iso())
+    expect(h.store.setEnabled).toHaveBeenNthCalledWith(1, 'p1', 'auto-1', false, iso())
+    expect(h.store.setEnabled).toHaveBeenNthCalledWith(2, 'p1', 'auto-1', true, iso())
     expect(h.service.remove('p1', 'auto-1')).toBe(false)
   })
 })

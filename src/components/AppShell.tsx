@@ -8,6 +8,7 @@ import { SentinelToasts } from './SentinelToasts'
 import { HermesWidget } from './HermesWidget'
 import { IconBolt } from './icons'
 import { DashboardPanel } from '../panels/DashboardPanel'
+import { AutomationsPanel } from '../panels/AutomationsPanel'
 import { TerminalsPanel } from '../panels/TerminalsPanel'
 import { GitPanel } from '../panels/GitPanel'
 import { SwarmPanel } from '../panels/SwarmPanel'
@@ -44,6 +45,7 @@ export function AppShell() {
         <TopBar />
         <main className="shell__main scroll-y">
           {view === 'dashboard' && <DashboardPanel />}
+          {view === 'automations' && <AutomationsPanel />}
           <section
             className={`viewSlot viewSlot--terminals ${
               view === 'terminals' ? 'viewSlot--active' : 'viewSlot--hidden'

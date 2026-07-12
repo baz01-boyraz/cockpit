@@ -35,6 +35,8 @@ import { MemoryCurationService } from './MemoryCurationService'
 import { MemoryLifecycleSentinel } from './MemoryLifecycleSentinel'
 import { OperationalHealthService } from './OperationalHealthService'
 import { OperationalHealthStateStore } from './OperationalHealthStateStore'
+import { AutomationService } from './AutomationService'
+import { AutomationStateStore } from './AutomationStateStore'
 import { registerMemoryExitCapture } from './memoryExitTrigger'
 import { SwarmService } from './SwarmService'
 import { SentinelService, type SentinelNotifier } from './SentinelService'
@@ -45,6 +47,7 @@ import { HermesChecksService } from './hermes/HermesChecksService'
 import { HermesChatService } from './hermes/HermesChatService'
 import { HermesTriageService } from './hermes/HermesTriageService'
 import { HermesCompletionSummaryService } from './hermes/HermesCompletionSummaryService'
+import { HermesAutomationRunner } from './hermes/HermesAutomationRunner'
 import { SwarmCompletionSteward } from './SwarmCompletionSteward'
 import { AppScreenshotService } from './hermes/AppScreenshotService'
 import { NamedAgentsService } from './NamedAgentsService'
@@ -101,6 +104,8 @@ export class Services {
   readonly hermesTriage: HermesTriageService
   /** Pro seat that interprets already-persisted successful Swarm evidence. */
   readonly hermesCompletion: HermesCompletionSummaryService
+  /** Flash seat with a harmless tool allowlist for bounded automation verdicts. */
+  readonly hermesAutomation: HermesAutomationRunner
   readonly review: ReviewService
   readonly council: CouncilService
   /** Bounded read-only repository evidence boundary for Council analysis. */
@@ -132,6 +137,8 @@ export class Services {
   readonly memoryLifecycle: MemoryLifecycleSentinel
   /** Scheduled content-free cross-system snapshot and change-only delivery. */
   readonly operationalHealth: OperationalHealthService
+  /** App-owned scheduler; Hermes interprets but never executes its advice. */
+  readonly automation: AutomationService
   readonly swarm: SwarmService
   /** Always-on deterministic signal layer: sensors → dedup → feed + notify. */
   readonly sentinel: SentinelService
@@ -377,6 +384,16 @@ export class Services {
       reviews: this.memoryReviews,
       audit: this.audit,
     })
+    this.hermesAutomation = new HermesAutomationRunner()
+    this.automation = new AutomationService({
+      store: new AutomationStateStore(this.db),
+      projects: this.projects,
+      health: this.operationalHealth,
+      runner: this.hermesAutomation,
+      sentinel: this.sentinel,
+      approvals: this.approvals,
+      changed: (projectId) => opts.events.emitTyped('automations:changed', { projectId }),
+    })
     // Forget a pane's TUI-mode state once it exits, so session ids never leak.
     opts.events.onTyped('terminal:exit', ({ sessionId }) => this.tuiState.delete(sessionId))
 
@@ -440,9 +457,10 @@ export class Services {
     // never block or crash startup.
     this.scheduleCurationSweeps()
     // Cross-system health starts only after every sensor dependency exists. Its
-    // first healthy run anchors the digest cadence silently; subsequent ticks
-    // wake Flash only for a new anomaly or the due daily digest.
+    // healthy/unchanged ticks remain silent; only a changed anomaly wakes its
+    // signal path. The visible AutomationService below owns daily delivery.
     this.operationalHealth.start()
+    this.automation.start()
   }
 
   /** Age threshold before a project's memory hub is re-swept (7 days). */
@@ -743,6 +761,7 @@ export class Services {
     this.memoryAutoCapture.stop()
     this.memoryLifecycle.dispose()
     this.operationalHealth.stop()
+    this.automation.stop()
     this.cardOutput.clear()
     this.swarmCompletion.clear()
     // Fire-and-forget: the process is quitting; closing the socket is best-effort.

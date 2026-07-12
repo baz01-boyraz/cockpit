@@ -33,6 +33,7 @@ import type { CompletionReport } from './completion-report'
 import type { Assignment } from './agent-taxonomy'
 import type { NamedAgentSummary } from './named-agents'
 import type { SentinelOutcome, SentinelSignal } from './sentinel'
+import type { AutomationCreateInput, AutomationJob } from './automation'
 import type { SecretKind } from './schemas'
 import type {
   AgentType,
@@ -116,6 +117,12 @@ export const IPC = {
   approvalsRequest: 'approvals:request',
   approvalsDecide: 'approvals:decide',
 
+  automationList: 'automation:list',
+  automationCreate: 'automation:create',
+  automationToggle: 'automation:toggle',
+  automationRun: 'automation:run',
+  automationRemove: 'automation:remove',
+
   routerRoute: 'router:route',
   chatAsk: 'chat:ask',
   hermesChatAsk: 'hermesChat:ask',
@@ -183,6 +190,7 @@ export const IPC = {
   evtTerminalData: 'evt:terminal:data',
   evtTerminalExit: 'evt:terminal:exit',
   evtApprovalsChanged: 'evt:approvals:changed',
+  evtAutomationsChanged: 'evt:automations:changed',
   evtLogsChanged: 'evt:logs:changed',
   evtAppUpdateChanged: 'evt:appUpdate:changed',
   evtSwarmCardCompleted: 'evt:swarm:cardCompleted',
@@ -358,6 +366,15 @@ export interface CockpitApi {
     }): Promise<ApprovalRequest>
     decide(approvalId: string, approve: boolean): Promise<ApprovalRequest>
     onChange(cb: () => void): Unsubscribe
+  }
+  automations: {
+    /** Human-readable schedules only; cron syntax never crosses this surface. */
+    list(projectId: string): Promise<AutomationJob[]>
+    create(input: AutomationCreateInput): Promise<AutomationJob>
+    setEnabled(projectId: string, jobId: string, enabled: boolean): Promise<AutomationJob | null>
+    run(projectId: string, jobId: string): Promise<AutomationJob | null>
+    remove(projectId: string, jobId: string): Promise<boolean>
+    onChange(cb: (event: { projectId: string }) => void): Unsubscribe
   }
   router: {
     route(projectId: string, query: string): Promise<RouterResult>
@@ -717,6 +734,11 @@ export interface IpcResultMap {
   approvalsList: R<CockpitApi['approvals']['list']>
   approvalsRequest: R<CockpitApi['approvals']['request']>
   approvalsDecide: R<CockpitApi['approvals']['decide']>
+  automationList: R<CockpitApi['automations']['list']>
+  automationCreate: R<CockpitApi['automations']['create']>
+  automationToggle: R<CockpitApi['automations']['setEnabled']>
+  automationRun: R<CockpitApi['automations']['run']>
+  automationRemove: R<CockpitApi['automations']['remove']>
 
   routerRoute: R<CockpitApi['router']['route']>
   chatAsk: R<CockpitApi['chat']['ask']>

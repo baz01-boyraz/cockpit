@@ -47,8 +47,6 @@ interface OperationalHealthDependencies {
   schedule?: OperationalHealthSchedule
 }
 
-type ReportKind = 'anomaly' | 'digest'
-
 /**
  * Scheduled cross-system steward. Deterministic sensors always run first and a
  * bounded result is persisted before Sentinel is asked to deliver/triage it.
@@ -129,12 +127,14 @@ export class OperationalHealthService {
           ? `${decision.kind}:${snapshot.fingerprint}`
           : null,
         notifiedAt: decision.kind ? at : null,
-        digestAt: decision.digestAt,
+        // Kept null for V20 row compatibility. The visible automation schedule
+        // now owns daily briefing cadence and its pause/resume state.
+        digestAt: null,
       })
 
       if (decision.kind) {
         try {
-          this.deps.sentinel.report(this.reportInput(snapshot, decision.kind))
+          this.deps.sentinel.report(this.reportInput(snapshot))
         } catch {
           // Sentinel's public contract already swallows, but structural fakes
           // and future implementations cannot endanger the completed snapshot.
@@ -155,10 +155,20 @@ export class OperationalHealthService {
     }
   }
 
+  /** Fresh content-free evidence for a user-scheduled automation. This does not
+   * mutate the health cadence/fingerprint or emit a second Sentinel signal. */
+  async inspect(projectId: string): Promise<OperationalHealthSnapshot | null> {
+    try {
+      return await this.snapshot(projectId, new Date(this.now()).toISOString())
+    } catch {
+      return null
+    }
+  }
+
   private async snapshot(projectId: string, checkedAt: string): Promise<OperationalHealthSnapshot> {
     const unavailable = new Set<OperationalHealthSensor>()
     const since = new Date(
-      Date.parse(checkedAt) - OPERATIONAL_HEALTH_POLICY.digestIntervalMs,
+      Date.parse(checkedAt) - OPERATIONAL_HEALTH_POLICY.lookbackMs,
     ).toISOString()
 
     const [rawGit, quota, swarm, processes, logs, approvals, memory] = await Promise.all([
@@ -225,7 +235,7 @@ export class OperationalHealthService {
   private deliveryDecision(
     previous: OperationalHealthState,
     snapshot: OperationalHealthSnapshot,
-  ): { kind: ReportKind | null; digestAt: string | null } {
+  ): { kind: 'anomaly' | null } {
     const onlySensorBlindSpots =
       snapshot.anomalies.length > 0 &&
       snapshot.anomalies.every((item) => item.code.startsWith('sensor-unavailable:'))
@@ -240,51 +250,30 @@ export class OperationalHealthService {
       snapshot.anomalies.length > 0 &&
       snapshot.fingerprint !== previous.lastFingerprint &&
       !onlySensorBlindSpots
-    const checkedMs = Date.parse(snapshot.checkedAt)
-    const digestMs = previous.lastDigestAt ? Date.parse(previous.lastDigestAt) : Number.NaN
-    const firstCadence = previous.lastDigestAt === null || Number.isNaN(digestMs)
-    const digestDue =
-      !firstCadence &&
-      !Number.isNaN(checkedMs) &&
-      checkedMs - digestMs >= OPERATIONAL_HEALTH_POLICY.digestIntervalMs
-
-    // First run anchors the daily clock without waking Hermes just to announce
-    // a healthy boot. A real first-run anomaly still reports immediately.
+    // Daily briefings are owned by the visible, pausable automation schedule.
+    // This lower-level sweep reports only genuine health-state changes, so the
+    // owner can never receive two separate daily digests for the same evidence.
     if (hasChangedAnomaly || repeatedBlindSpot) {
-      return { kind: 'anomaly', digestAt: firstCadence || digestDue ? snapshot.checkedAt : null }
+      return { kind: 'anomaly' }
     }
-    if (digestDue) return { kind: 'digest', digestAt: snapshot.checkedAt }
-    if (firstCadence) {
-      return { kind: null, digestAt: snapshot.checkedAt }
-    }
-    return { kind: null, digestAt: null }
+    return { kind: null }
   }
 
-  private reportInput(
-    snapshot: OperationalHealthSnapshot,
-    kind: ReportKind,
-  ): SentinelReportInput {
-    const isDigest = kind === 'digest'
+  private reportInput(snapshot: OperationalHealthSnapshot): SentinelReportInput {
     const alert = snapshot.anomalies.some((item) => item.severity === 'alert')
     const issueSummary = snapshot.anomalies
       .slice(0, 3)
       .map((item) => item.summary)
       .join(' ')
-    const summary = isDigest
-      ? snapshot.anomalies.length
-        ? `Daily check found ${snapshot.anomalies.length} actionable issue(s). ${issueSummary}`
-        : 'Daily check completed: monitored systems are healthy.'
-      : `${snapshot.anomalies.length} actionable health change(s) detected. ${issueSummary}`
+    const summary = `${snapshot.anomalies.length} actionable health change(s) detected. ${issueSummary}`
     return {
       projectId: snapshot.projectId,
       source: 'operational-health',
       severity: alert ? 'alert' : 'notice',
-      title: isDigest ? 'Operational health digest' : 'Operational health needs attention',
+      title: 'Operational health needs attention',
       summary,
       context: this.compactContext(snapshot),
-      dedupKey: isDigest
-        ? `operational-health:digest:${snapshot.checkedAt.slice(0, 10)}`
-        : `operational-health:${snapshot.fingerprint}`,
+      dedupKey: `operational-health:${snapshot.fingerprint}`,
     }
   }
 

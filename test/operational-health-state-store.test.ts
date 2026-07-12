@@ -8,7 +8,7 @@ const AT = '2026-07-12T12:00:00.000Z'
 
 describe('OperationalHealthStateStore', () => {
   it('ships V20 as a project-scoped, bounded operational-state row', () => {
-    expect(DATABASE_SCHEMA_VERSION).toBe(20)
+    expect(DATABASE_SCHEMA_VERSION).toBe(21)
     expect(SCHEMA_V20).toContain('CREATE TABLE IF NOT EXISTS operational_health_state')
     expect(SCHEMA_V20).toContain('project_id')
     expect(SCHEMA_V20).toContain('PRIMARY KEY')

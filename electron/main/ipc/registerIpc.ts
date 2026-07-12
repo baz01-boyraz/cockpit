@@ -11,6 +11,9 @@ import type { ApprovalActionType } from '@shared/domain'
 import {
   addProjectInputSchema,
   agentUsageRequestSchema,
+  automationCreateSchema,
+  automationJobActionSchema,
+  automationToggleSchema,
   approvalDecisionSchema,
   createTerminalInputSchema,
   gitCommitInputSchema,
@@ -266,6 +269,26 @@ export function registerIpc(services: Services): void {
   handle('approvalsDecide', (p) => {
     const { approvalId, approve } = approvalDecisionSchema.parse(p)
     return services.approvals.decide(approvalId, approve)
+  })
+
+  // --- safe app-owned automations ---
+  handle('automationList', (p) =>
+    services.automation.list(projectIdSchema.parse(p).projectId),
+  )
+  handle('automationCreate', (p) =>
+    services.automation.create(automationCreateSchema.parse(p)),
+  )
+  handle('automationToggle', (p) => {
+    const { projectId, jobId, enabled } = automationToggleSchema.parse(p)
+    return services.automation.setEnabled(projectId, jobId, enabled)
+  })
+  handle('automationRun', (p) => {
+    const { projectId, jobId } = automationJobActionSchema.parse(p)
+    return services.automation.runNow(projectId, jobId)
+  })
+  handle('automationRemove', (p) => {
+    const { projectId, jobId } = automationJobActionSchema.parse(p)
+    return services.automation.remove(projectId, jobId)
   })
 
   // --- router ---

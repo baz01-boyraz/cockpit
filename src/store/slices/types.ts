@@ -36,6 +36,7 @@ import type { CouncilAnalysisEgressPolicy } from '@shared/council-evidence'
 
 export type View =
   | 'dashboard'
+  | 'automations'
   | 'terminals'
   | 'git'
   | 'swarm'

@@ -161,7 +161,7 @@ describe('operational health evaluator', () => {
   it('pins conservative cadence and age thresholds', () => {
     expect(OPERATIONAL_HEALTH_POLICY).toMatchObject({
       sweepIntervalMs: 30 * 60_000,
-      digestIntervalMs: 24 * 60 * 60_000,
+      lookbackMs: 24 * 60 * 60_000,
       stuckWorkerMs: 20 * 60_000,
       parkedCardMs: 24 * 60 * 60_000,
       staleApprovalMs: 60 * 60_000,

@@ -26,6 +26,7 @@ export type SentinelSource =
   | 'swarm-completion'
   | 'memory-lifecycle'
   | 'operational-health'
+  | 'automation'
 
 /**
  * The Hermes enrichment verdict — normally cheap async triage, and also the

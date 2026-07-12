@@ -16,7 +16,8 @@ import type { ReviewItem } from './memory-review'
  */
 export const OPERATIONAL_HEALTH_POLICY = {
   sweepIntervalMs: 30 * 60_000,
-  digestIntervalMs: 24 * 60 * 60_000,
+  /** Lookback for slow health sensors. The visible 09:00 automation owns digest delivery. */
+  lookbackMs: 24 * 60 * 60_000,
   staleRunMs: 10 * 60_000,
   stuckWorkerMs: 20 * 60_000,
   parkedCardMs: 24 * 60 * 60_000,

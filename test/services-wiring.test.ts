@@ -151,6 +151,7 @@ const EXPECTED_SERVICE_FIELDS = [
   'chat',
   'hermesChat',
   'hermesTriage',
+  'hermesAutomation',
   'review',
   'council',
   'memory',
@@ -165,6 +166,7 @@ const EXPECTED_SERVICE_FIELDS = [
   'memoryCuration',
   'memoryLifecycle',
   'operationalHealth',
+  'automation',
   'swarm',
   'sentinel',
   'namedAgents',
@@ -361,6 +363,7 @@ describe('Services — shutdown', () => {
     const terminalsKill = vi.spyOn(services.terminals, 'killAll')
     const chatKill = vi.spyOn(services.hermesChat, 'killAll')
     const triageKill = vi.spyOn(services.hermesTriage, 'killAll')
+    const automationKill = vi.spyOn(services.hermesAutomation, 'killAll')
     const autoCaptureStop = vi.spyOn(services.memoryAutoCapture, 'stop')
 
     expect(() => services!.shutdown()).not.toThrow()
@@ -368,6 +371,7 @@ describe('Services — shutdown', () => {
     expect(terminalsKill).toHaveBeenCalledOnce()
     expect(chatKill).toHaveBeenCalledOnce()
     expect(triageKill).toHaveBeenCalledOnce()
+    expect(automationKill).toHaveBeenCalledOnce()
     expect(autoCaptureStop).toHaveBeenCalledOnce()
     expect(close).toHaveBeenCalledOnce()
 
@@ -377,6 +381,7 @@ describe('Services — shutdown', () => {
     expect(closeOrder).toBeGreaterThan(terminalsKill.mock.invocationCallOrder[0])
     expect(closeOrder).toBeGreaterThan(chatKill.mock.invocationCallOrder[0])
     expect(closeOrder).toBeGreaterThan(triageKill.mock.invocationCallOrder[0])
+    expect(closeOrder).toBeGreaterThan(automationKill.mock.invocationCallOrder[0])
   })
 
   it('is idempotent — a second shutdown() is a no-op', () => {

@@ -23,6 +23,18 @@ export const IconDashboard = (p: IconProps) => (
   </svg>
 )
 
+/** Orbiting clock: calm background stewardship, distinct from terminals/jobs. */
+export const IconAutomation = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="6.5" />
+    <path d="M12 8.2v4l2.7 1.6" />
+    <path d="M4.5 7.3A9 9 0 0 1 18 4.5" />
+    <path d="m17.9 2.9.2 3.4-3.4.2" />
+    <path d="M19.5 16.7A9 9 0 0 1 6 19.5" />
+    <path d="m6.1 21.1-.2-3.4 3.4-.2" />
+  </svg>
+)
+
 export const IconTerminal = (p: IconProps) => (
   <svg {...base(p)}>
     <rect x="3.5" y="5" width="17" height="14" rx="2.2" />
