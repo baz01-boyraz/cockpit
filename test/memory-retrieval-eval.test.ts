@@ -20,6 +20,7 @@ import {
 } from '@shared/memory-eval'
 
 const fixturePath = resolve('test/fixtures/memory/retrieval-corpus.json')
+const realRedactedFixturePath = resolve('test/fixtures/memory/retrieval-real-redacted.json')
 const manifestScript = resolve('scripts/diagnostics/memory-manifest.mjs')
 const retrievalScript = resolve('scripts/diagnostics/memory-retrieval-baseline.ts')
 const viteNode = resolve('node_modules/vite-node/vite-node.mjs')
@@ -27,6 +28,10 @@ const tempRoots: string[] = []
 
 function loadCorpus(): MemoryEvalCorpus {
   return JSON.parse(readFileSync(fixturePath, 'utf8')) as MemoryEvalCorpus
+}
+
+function loadRealRedactedCorpus(): MemoryEvalCorpus {
+  return JSON.parse(readFileSync(realRedactedFixturePath, 'utf8')) as MemoryEvalCorpus
 }
 
 function inventory(root: string): string[] {
@@ -48,8 +53,11 @@ describe('Memory R0 retrieval corpus', () => {
     expect(corpus.cases).toHaveLength(72)
     expect(corpus.cases.filter((item) => item.language === 'en')).toHaveLength(36)
     expect(corpus.cases.filter((item) => item.language === 'tr')).toHaveLength(36)
-    expect(corpus.cases.filter((item) => item.split === 'tune')).toHaveLength(36)
-    expect(corpus.cases.filter((item) => item.split === 'holdout')).toHaveLength(36)
+    // New semantic cases are honest tune/regression probes. The original 30
+    // holdout labels remain untouched; cases authored with this ranker are not
+    // misrepresented as blind evaluation data merely to keep the split even.
+    expect(corpus.cases.filter((item) => item.split === 'tune')).toHaveLength(42)
+    expect(corpus.cases.filter((item) => item.split === 'holdout')).toHaveLength(30)
     expect(new Set(corpus.cases.map((item) => item.id)).size).toBe(72)
   })
 
@@ -66,10 +74,24 @@ describe('Memory R0 retrieval corpus', () => {
     expect(first.noMatchFalseInjections).toBe(0)
     const semanticCases = first.cases.filter((item) => item.category === 'semantic')
     expect(semanticCases).toHaveLength(12)
-    expect(semanticCases.every((item) => item.top3Hit)).toBe(true)
+    expect(semanticCases.every((item) => item.top1Hit)).toBe(true)
+    expect(semanticCases.every((item) => item.returned.length === 1)).toBe(true)
     // The current ranker has no lifecycle filter. R0 must expose this gap rather
     // than hide it; M5 is where the metric is driven to zero.
     expect(first.unsafeSelections.length).toBeGreaterThan(0)
+  })
+
+  it('retrieves redacted notes from real Turkish project-query shapes', () => {
+    const corpus = loadRealRedactedCorpus()
+    expect(validateMemoryEvalCorpus(corpus)).toEqual([])
+
+    const report = evaluateMemoryRetrievalCorpus(corpus)
+    const matchedCases = report.cases.filter((item) => item.category !== 'no_match')
+    expect(report.caseCount).toBe(8)
+    expect(report.sourceKind).toBe('local-redacted')
+    expect(matchedCases.every((item) => item.top1Hit)).toBe(true)
+    expect(report.noMatchFalseInjections).toBe(0)
+    expect(report.unsafeSelections).toEqual([])
   })
 
   it('rejects malformed labels and never includes query or hook prose in a report', () => {
@@ -156,7 +178,7 @@ describe('Memory R0 retrieval corpus', () => {
 
     expect(report.top1HitRate).toBe(0)
     expect(report.top3HitRate).toBe(0)
-    expect(report.misses).toHaveLength(50)
+    expect(report.misses).toHaveLength(62)
     expect(report.noMatchFalseInjections).toBe(10)
     expect(report.unsafeSelections.length).toBeGreaterThan(0)
   })

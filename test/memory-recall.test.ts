@@ -112,6 +112,32 @@ describe('rankNotes', () => {
     )
     expect(ranked).toEqual([])
   })
+
+  it('does not confuse an unrelated word prefix with task completion', () => {
+    const ranked = rankNotes(
+      'bitcoin market result',
+      [
+        {
+          name: 'swarm-completion-notification-gap',
+          hook: 'A successful task completion needs a manager summary.',
+        },
+      ],
+      3,
+    )
+    expect(ranked).toEqual([])
+  })
+
+  it('drops an incidental hook-only word from a longer semantic query', () => {
+    const ranked = rankNotes(
+      'doldurulmamış kutuları kabul etmeyen oturum açma ekranı',
+      [
+        { name: 'login-form-validation', hook: 'Giriş formu boş alanları reddeder.' },
+        { name: 'terminal-capture', hook: 'Terminal oturum capture işaretçisi.' },
+      ],
+      3,
+    )
+    expect(ranked.map((note) => note.name)).toEqual(['login-form-validation'])
+  })
 })
 
 describe('composeMemoryPointerBlock', () => {

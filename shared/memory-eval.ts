@@ -11,7 +11,7 @@ export type MemoryEvalSplit = (typeof MEMORY_EVAL_SPLITS)[number]
 export const MEMORY_EVAL_LANGUAGES = ['en', 'tr'] as const
 export type MemoryEvalLanguage = (typeof MEMORY_EVAL_LANGUAGES)[number]
 
-export const MEMORY_EVAL_CATEGORIES = ['positive', 'lifecycle', 'no_match'] as const
+export const MEMORY_EVAL_CATEGORIES = ['positive', 'semantic', 'lifecycle', 'no_match'] as const
 export type MemoryEvalCategory = (typeof MEMORY_EVAL_CATEGORIES)[number]
 
 export const MEMORY_EVAL_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const
@@ -252,6 +252,7 @@ export function evaluateMemoryRetrievalCorpus(
     languages: { en: count(languages, 'en'), tr: count(languages, 'tr') },
     categories: {
       positive: count(categories, 'positive'),
+      semantic: count(categories, 'semantic'),
       lifecycle: count(categories, 'lifecycle'),
       no_match: count(categories, 'no_match'),
     },

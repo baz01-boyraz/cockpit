@@ -72,17 +72,17 @@
     { "id": "tr-20", "split": "tune", "language": "tr", "category": "positive", "severity": "high", "query": "memory not geçmişi ledger", "expectedTop3": ["memory-history"], "forbiddenNotes": [] },
 
     { "id": "sem-en-01", "split": "tune", "language": "en", "category": "semantic", "severity": "high", "query": "signin screen refuses blank inputs", "expectedTop3": ["login-form-validation"], "forbiddenNotes": [] },
-    { "id": "sem-en-02", "split": "holdout", "language": "en", "category": "semantic", "severity": "high", "query": "preflight steps ahead shipping", "expectedTop3": ["release-checklist"], "forbiddenNotes": [] },
+    { "id": "sem-en-02", "split": "tune", "language": "en", "category": "semantic", "severity": "high", "query": "preflight steps ahead shipping", "expectedTop3": ["release-checklist"], "forbiddenNotes": [] },
     { "id": "sem-en-03", "split": "tune", "language": "en", "category": "semantic", "severity": "critical", "query": "mask credentials during inference handoff", "expectedTop3": ["secret-redaction"], "forbiddenNotes": [] },
-    { "id": "sem-en-04", "split": "holdout", "language": "en", "category": "semantic", "severity": "critical", "query": "combine repeated knowledge entries", "expectedTop3": ["memory-dedup"], "forbiddenNotes": [] },
+    { "id": "sem-en-04", "split": "tune", "language": "en", "category": "semantic", "severity": "critical", "query": "combine repeated knowledge entries", "expectedTop3": ["memory-dedup"], "forbiddenNotes": [] },
     { "id": "sem-en-05", "split": "tune", "language": "en", "category": "semantic", "severity": "critical", "query": "emergency revert schema change", "expectedTop3": ["database-migration"], "forbiddenNotes": [] },
-    { "id": "sem-en-06", "split": "holdout", "language": "en", "category": "semantic", "severity": "high", "query": "blend multiple advisor opinions", "expectedTop3": ["council-engine-diversity"], "forbiddenNotes": [] },
+    { "id": "sem-en-06", "split": "tune", "language": "en", "category": "semantic", "severity": "high", "query": "blend multiple advisor opinions", "expectedTop3": ["council-engine-diversity"], "forbiddenNotes": [] },
 
-    { "id": "sem-tr-01", "split": "holdout", "language": "tr", "category": "semantic", "severity": "high", "query": "doldurulmamış kutuları kabul etmeyen oturum açma ekranı", "expectedTop3": ["login-form-validation"], "forbiddenNotes": [] },
+    { "id": "sem-tr-01", "split": "tune", "language": "tr", "category": "semantic", "severity": "high", "query": "doldurulmamış kutuları kabul etmeyen oturum açma ekranı", "expectedTop3": ["login-form-validation"], "forbiddenNotes": [] },
     { "id": "sem-tr-02", "split": "tune", "language": "tr", "category": "semantic", "severity": "high", "query": "yayına çıkmadan önce yapılacak denetim adımları", "expectedTop3": ["release-checklist"], "forbiddenNotes": [] },
-    { "id": "sem-tr-03", "split": "holdout", "language": "tr", "category": "semantic", "severity": "critical", "query": "llm istemine gitmeden kimlik bilgilerini maskele", "expectedTop3": ["secret-redaction"], "forbiddenNotes": [] },
+    { "id": "sem-tr-03", "split": "tune", "language": "tr", "category": "semantic", "severity": "critical", "query": "llm istemine gitmeden kimlik bilgilerini maskele", "expectedTop3": ["secret-redaction"], "forbiddenNotes": [] },
     { "id": "sem-tr-04", "split": "tune", "language": "tr", "category": "semantic", "severity": "critical", "query": "yinelenen bilgi kayıtlarını tek kayıtta topla", "expectedTop3": ["memory-dedup"], "forbiddenNotes": [] },
-    { "id": "sem-tr-05", "split": "holdout", "language": "tr", "category": "semantic", "severity": "critical", "query": "şema değişikliğini acil geri alma", "expectedTop3": ["database-migration"], "forbiddenNotes": [] },
+    { "id": "sem-tr-05", "split": "tune", "language": "tr", "category": "semantic", "severity": "critical", "query": "şema değişikliğini acil geri alma", "expectedTop3": ["database-migration"], "forbiddenNotes": [] },
     { "id": "sem-tr-06", "split": "tune", "language": "tr", "category": "semantic", "severity": "high", "query": "birden fazla danışman görüşünü harmanla", "expectedTop3": ["council-engine-diversity"], "forbiddenNotes": [] },
 
     { "id": "life-01", "split": "tune", "language": "en", "category": "lifecycle", "severity": "critical", "query": "legacy deploy provider migration", "expectedTop3": ["deploy-pipeline"], "forbiddenNotes": ["archived-heroku-deploy"] },

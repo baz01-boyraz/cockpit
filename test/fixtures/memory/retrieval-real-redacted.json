@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "sourceKind": "local-redacted",
+  "notes": [
+    {
+      "name": "memory-ux-overhaul",
+      "hook": "Autopilot left existing technical Memory review cards queued, forcing the user to babysit them.",
+      "status": "active",
+      "eligible": true
+    },
+    {
+      "name": "hermes-memory-stewardship-roadmap",
+      "hook": "Tighten memory correctness, then let Hermes and Sentinel monitor Swarm, logs, errors, cron health, and notifications.",
+      "status": "active",
+      "eligible": true
+    },
+    {
+      "name": "hermes-jarvis-plan",
+      "hook": "One background Hermes engine reaches the app and a sender-restricted phone or Telegram channel.",
+      "status": "active",
+      "eligible": true
+    },
+    {
+      "name": "sentinel-3-layer-architecture",
+      "hook": "Deterministic sensors detect errors and quota anomalies; Hermes triages meaningful signals and notifications open chat with context.",
+      "status": "active",
+      "eligible": true
+    },
+    {
+      "name": "memory-reconcile-dedup-gotcha",
+      "hook": "Whole-note duplicate similarity misses repeated bullets in long notes and causes memory bloat.",
+      "status": "active",
+      "eligible": true
+    },
+    {
+      "name": "memory-trust-modes",
+      "hook": "Memory conflict decisions follow explicit trust modes and must not silently overwrite facts.",
+      "status": "active",
+      "eligible": true
+    },
+    {
+      "name": "live-notification-requirement",
+      "hook": "Tab-independent bottom-right notifications report bugs and errors and open Hermes chat with context.",
+      "status": "active",
+      "eligible": true
+    },
+    {
+      "name": "swarm-completion-notification-gap",
+      "hook": "A successful Swarm completion needs a proactive Hermes manager summary instead of manual checking.",
+      "status": "active",
+      "eligible": true
+    }
+  ],
+  "cases": [
+    {
+      "id": "real-tr-01",
+      "split": "tune",
+      "language": "tr",
+      "category": "positive",
+      "severity": "high",
+      "query": "memory ekranında çok fazla teknik review sorusu var neyi approve edeceğimi anlamıyorum",
+      "expectedTop3": ["memory-ux-overhaul"],
+      "forbiddenNotes": []
+    },
+    {
+      "id": "real-tr-02",
+      "split": "tune",
+      "language": "tr",
+      "category": "positive",
+      "severity": "critical",
+      "query": "Hermes swarm memory log error kota ve cron sağlığını izleyip sorun olunca bana bildirsin",
+      "expectedTop3": ["hermes-memory-stewardship-roadmap"],
+      "forbiddenNotes": []
+    },
+    {
+      "id": "real-tr-03",
+      "split": "tune",
+      "language": "tr",
+      "category": "semantic",
+      "severity": "high",
+      "query": "swarm başarıyla bitince hermes sonucu okuyup kısa bir yönetici özeti göndersin",
+      "expectedTop3": ["swarm-completion-notification-gap"],
+      "forbiddenNotes": []
+    },
+    {
+      "id": "real-tr-04",
+      "split": "tune",
+      "language": "tr",
+      "category": "semantic",
+      "severity": "critical",
+      "query": "uzun memory notlarında aynı maddeler tekrar tekrar ekleniyor madde bazında duplicate yakala",
+      "expectedTop3": ["memory-reconcile-dedup-gotcha"],
+      "forbiddenNotes": []
+    },
+    {
+      "id": "real-tr-05",
+      "split": "tune",
+      "language": "tr",
+      "category": "semantic",
+      "severity": "critical",
+      "query": "conflictlerde daha kontrollü güven politikası olsun",
+      "expectedTop3": ["memory-trust-modes"],
+      "forbiddenNotes": []
+    },
+    {
+      "id": "real-tr-06",
+      "split": "tune",
+      "language": "tr",
+      "category": "semantic",
+      "severity": "high",
+      "query": "uygulamada hangi sekmede olursam olayım hata çıkınca sağ altta bildirim göster ve tıklayınca hermes chat aç",
+      "expectedTop3": ["live-notification-requirement"],
+      "forbiddenNotes": []
+    },
+    {
+      "id": "real-tr-07",
+      "split": "tune",
+      "language": "tr",
+      "category": "positive",
+      "severity": "high",
+      "query": "telefondan telegram ile hermese görev göndereyim mac başında olmayayım",
+      "expectedTop3": ["hermes-jarvis-plan"],
+      "forbiddenNotes": []
+    },
+    {
+      "id": "real-tr-none-01",
+      "split": "tune",
+      "language": "tr",
+      "category": "no_match",
+      "severity": "medium",
+      "query": "ekşi maya ekmeğinin fırın sıcaklığı",
+      "expectedTop3": [],
+      "forbiddenNotes": [],
+      "expectNoMatch": true
+    }
+  ]
+}

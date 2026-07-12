@@ -2,8 +2,9 @@
 
 > Frozen: 2026-07-11
 > Scope: measurement and safety contracts only
-> Product behavior changed: no
-> User Memory notes changed: no
+> R0 product behavior changed: no
+> Additive retrieval gate: 2026-07-11 (historical R0 comparison retained below)
+> R0 user Memory notes changed: no
 
 This document fixes the meaning of the Council and Memory quality measurements used by
 `docs/plans/council-memory-quality-roadmap.md`. Later cards may improve a score, but they may
@@ -20,12 +21,18 @@ node node_modules/vite-node/vite-node.mjs \
   scripts/diagnostics/memory-retrieval-baseline.ts \
   --input test/fixtures/memory/retrieval-corpus.json --pretty
 
+node node_modules/vite-node/vite-node.mjs \
+  scripts/diagnostics/memory-retrieval-baseline.ts \
+  --input test/fixtures/memory/retrieval-real-redacted.json --pretty
+
 node scripts/diagnostics/memory-manifest.mjs \
   --hub .cockpit-memory --pretty
 ```
 
-All three commands are read-only. Their reports contain case ids, note slugs, labels, hashes
+All four commands are read-only. Their reports contain case ids, note slugs, labels, hashes
 and counts; they do not emit Memory note bodies, Council seat prose, verdict prose, or prompts.
+The retrieval commands reproduce the current additive corpora; section 4.3 keeps the original
+60-case R0 numbers separately so improving the ranker cannot rewrite its historical baseline.
 
 The human-reviewed real Council label set lives at
 `.dev-cockpit/evals/council-real-redacted.json`. The entire directory is gitignored because
@@ -43,6 +50,9 @@ node scripts/diagnostics/council-baseline.mjs \
   belong in them.
 - `tune` cases may guide implementation. `holdout` labels must not be inspected to tune a
   prompt/ranker and must not change merely because an implementation misses them.
+- Semantic paraphrase cases added alongside the hybrid ranker are explicitly `tune` regression
+  probes. The original 30 holdout cases and labels remain unchanged; authored examples are not
+  presented as blind holdout evidence.
 - A label correction needs a short reason in the changing commit and an independent reread of
   the fixture. Adding a case is preferred to weakening an existing expectation.
 - A Council required signal is an outcome label, not a magic wording requirement. A forbidden
@@ -126,15 +136,30 @@ screenshots. They are not product regressions introduced by R0.
 
 ### 4.3 Synthetic Memory retrieval contract
 
+Historical R0 comparison, before hybrid query expansion:
+
 - 60 cases: 30 Turkish / 30 English and 30 tune / 30 holdout.
 - 40 ordinary positive, 10 lifecycle, and 10 no-match cases.
 - Top-1: 42/50 (0.84). Top-3: 50/50 (1.00). Severity-weighted top-3: 1.00.
 - No-match false injections: 0/10.
 - Unsafe top-three selections: 24 — 8 archived, 8 superseded, 4 conflicted, 4 expired.
 
-The 1.00 top-3 score is therefore not a clean bill of health. The current lexical ranker finds
-the desired note but has no lifecycle gate, so it can also inject unsafe context. M5 must drive
-unsafe selections to zero without regressing no-match precision or holdout relevance.
+Current additive hybrid gate:
+
+- 72 cases: 36 Turkish / 36 English; 42 tune / the original 30 untouched holdout.
+- 40 ordinary positive, 12 semantic tune regressions, 10 lifecycle, and 10 no-match cases.
+- Top-1: 54/62 (0.871). Top-3: 62/62 (1.00). Severity-weighted top-3: 1.00.
+- Every semantic regression returns its expected note first and returns no second/padded note.
+- No-match false injections: 0/10.
+- Unsafe top-three selections: 18 — 6 archived, 4 superseded, 4 conflicted, 4 expired.
+- A separate 8-case, redacted real-Turkish-query dogfood fixture records 7/7 top-1 hits plus
+  one correct no-match, with zero unsafe selections. These are transparent tune regressions,
+  not a claim of blind production accuracy.
+
+The 1.00 top-3 score is still not a clean bill of health. The deterministic hybrid ranker now
+handles bounded English/Turkish paraphrases without a model call, but ranker inputs do not yet
+carry lifecycle eligibility. M5 must drive unsafe selections to zero without regressing
+no-match precision or the original holdout relevance.
 
 ### 4.4 Current Memory hub manifest
 
