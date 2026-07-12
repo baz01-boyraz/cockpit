@@ -111,7 +111,12 @@ describe('MemoryCurationService.sweep', () => {
 
     await expect(svc.sweep('p1')).resolves.toBeNull()
     expect(deps.created).toHaveLength(0)
-    expect(deps.audited).toHaveLength(0)
+    expect(deps.audited).toContainEqual(
+      expect.objectContaining({
+        actionType: 'memory.curation_failed',
+        payload: { stage: 'parse' },
+      }),
+    )
   })
 
   it('records a zero-proposal sweep for a healthy hub ([] output)', async () => {
@@ -136,7 +141,12 @@ describe('MemoryCurationService.sweep', () => {
 
     await expect(svc.sweep('p1')).resolves.toBeNull()
     expect(deps.created).toHaveLength(0)
-    expect(deps.audited).toHaveLength(0)
+    expect(deps.audited).toContainEqual(
+      expect.objectContaining({
+        actionType: 'memory.curation_failed',
+        payload: { stage: 'runner' },
+      }),
+    )
   })
 
   it('returns null for an empty hub without calling the model', async () => {

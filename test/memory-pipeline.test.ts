@@ -253,11 +253,27 @@ describe('MemoryPipeline.capture', () => {
   })
 
   it('propagates a distiller error without writing', async () => {
-    const failing = { distill: vi.fn(async () => ({ observations: [], nextOffset: 0, error: 'claude failed' })) } as unknown as MemoryDistiller
-    const pipe = new MemoryPipeline(memory, fakeLedger().svc, fakeReviews().svc, failing)
+    const failing = { distill: vi.fn(async () => ({ observations: [], nextOffset: 0, error: 'invalid JSON with AKIAIOSFODNN7EXAMPLE' })) } as unknown as MemoryDistiller
+    const audit = fakeAudit()
+    const pipe = new MemoryPipeline(
+      memory,
+      fakeLedger().svc,
+      fakeReviews().svc,
+      failing,
+      undefined,
+      undefined,
+      audit.svc,
+    )
     const res = await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
-    expect(res.error).toBe('claude failed')
+    expect(res.error).toContain('invalid JSON')
     expect(res.committed).toBe(0)
+    expect(audit.records).toContainEqual(
+      expect.objectContaining({
+        actionType: 'memory.distiller_failed',
+        payload: { failureKind: 'parse' },
+      }),
+    )
+    expect(JSON.stringify(audit.records)).not.toContain('AKIAIOSFODNN7EXAMPLE')
   })
 
   it('routes a user-scope fact to the global Baz brain, not the project hub (Phase 6)', async () => {

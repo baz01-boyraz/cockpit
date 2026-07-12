@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { MemoryCaptureQueue } from '../electron/main/services/MemoryCaptureQueue'
 import type { Db } from '../electron/main/db/Database'
 
@@ -107,13 +107,20 @@ describe('MemoryCaptureQueue', () => {
 
   it('retries on failure then gives up at the attempt ceiling', () => {
     const { db } = makeQueueDb()
-    const q = new MemoryCaptureQueue(db)
+    const observer = { captureFailed: vi.fn() }
+    const q = new MemoryCaptureQueue(db, observer)
     const job = q.enqueue(input)
     q.fail(job.id, 'boom') // 1 → queued
     expect(q.list('p1')[0].status).toBe('queued')
     q.fail(job.id, 'boom') // 2 → queued
     q.fail(job.id, 'boom') // 3 → error
     expect(q.list('p1')[0].status).toBe('error')
+    expect(observer.captureFailed).toHaveBeenCalledTimes(3)
+    expect(observer.captureFailed.mock.calls[2][0]).toMatchObject({
+      projectId: 'p1',
+      attempts: 3,
+      status: 'error',
+    })
   })
 
   it('recovers a job stuck processing after a crash', () => {

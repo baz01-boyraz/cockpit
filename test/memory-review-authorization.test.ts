@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Db } from '../electron/main/db/Database'
 import { MemoryReviewService } from '../electron/main/services/MemoryReviewService'
 import { BAZ_GLOBAL_BRAIN, projectBrain } from '../shared/memory-ledger'
@@ -120,5 +120,33 @@ describe('MemoryReviewService brain authorization', () => {
       alsoTrash: 'duplicate-note',
       alsoTrashContent: '# Duplicate note\n\nOriginal duplicate content.',
     })
+  })
+
+  it('emits content-free queue changes and isolates a broken observer', () => {
+    const seen = vi.fn()
+    reviews.subscribe(() => {
+      throw new Error('observer failed')
+    })
+    reviews.subscribe(seen)
+    const item = reviews.create({
+      ...proposal(projectBrain('proj-a'), 'observed-note'),
+      originProjectId: 'proj-a',
+    })
+    reviews.markResolvedFor('proj-a', 'project', item.id, 'accepted')
+
+    expect(seen).toHaveBeenCalledTimes(2)
+    expect(seen.mock.calls[0][0]).toEqual({
+      type: 'queued',
+      brain: projectBrain('proj-a'),
+      kind: 'new',
+      originProjectId: 'proj-a',
+    })
+    expect(seen.mock.calls[1][0]).toEqual({
+      type: 'resolved',
+      brain: projectBrain('proj-a'),
+      kind: 'new',
+      originProjectId: 'proj-a',
+    })
+    expect(JSON.stringify(seen.mock.calls)).not.toContain('# observed-note')
   })
 })
