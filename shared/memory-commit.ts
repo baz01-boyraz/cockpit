@@ -12,7 +12,11 @@ import {
 } from './memory-note-schema'
 import { normalizeNoteName } from './wikilink'
 import type { Observation } from './memory-observation'
-import type { Reconciled } from './memory-reconcile'
+import {
+  DUPLICATE_SIMILARITY,
+  noteFactSimilarity,
+  type Reconciled,
+} from './memory-reconcile'
 
 export type GateOutcome = 'commit' | 'review' | 'skip'
 
@@ -90,6 +94,12 @@ export function mergeObservationIntoNote(
 ): { slug: string; content: string } {
   const slug = normalizeNoteName(obs.targetSlug)
   if (!slug) throw new Error(`Observation targetSlug is not a valid slug: ${obs.targetSlug}`)
+  // Defense in depth: reconciliation normally skips this write first, but a
+  // stale caller or concurrent proposal must still never append the same fact.
+  // Returning the original bytes also keeps updatedAt and the ledger honest.
+  if (noteFactSimilarity(obs.body, existingContent) >= DUPLICATE_SIMILARITY) {
+    return { slug, content: existingContent }
+  }
   const { frontmatter, body } = parseNote(existingContent)
   const nextFront: NoteFrontmatter = frontmatter
     ? { ...frontmatter, updatedAt: opts.now }

@@ -148,8 +148,8 @@ describe('MemoryPipeline.capture', () => {
         (_, index) =>
           `- (2026-06-01) unrelatedtopic${index} component${index} behavior${index} remains documented separately`,
       ),
-      `- (2026-07-01) ${repeatedFact}`,
       'Related: [[ipc-contract]]',
+      `- (2026-07-01) ${repeatedFact}`,
     ].join('\n')
     memory.write('p1', 'router-placement', longBody)
     const ledger = fakeLedger()

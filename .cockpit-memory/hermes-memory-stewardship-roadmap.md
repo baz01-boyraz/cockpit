@@ -5,7 +5,7 @@ title: Hermes Memory + Sentinel Stewardship roadmap
 class: decision
 capturedAt: 2026-07-11T23:10:24.000Z
 gate: save
-updatedAt: 2026-07-12T03:39:46.000Z
+updatedAt: 2026-07-12T04:38:25.000Z
 ---
 
 cockpiT will first tighten memory correctness, then expand Hermes/Sentinel into a proactive operational steward: deterministic sensors watch continuously, Hermes judges only meaningful signals, the owner is notified through the right channel, and durable outcomes return to memory.
@@ -34,10 +34,11 @@ cockpiT will first tighten memory correctness, then expand Hermes/Sentinel into 
    - Add bilingual and synonym-heavy retrieval evaluations using real project queries.
    - **Result:** deterministic exact-token + bilingual concept reranking is implemented without remote embeddings or model calls. The 72-case synthetic gate includes 12 explicit semantic tune regressions; all return one correct note, Top-3 is 62/62, and no-match false injection is 0/10. The original 30 holdout labels remain untouched. A separate redacted real-Turkish-query dogfood set passes 7/7 task queries at Top-1 plus one correct no-match.
 
-2. **Bullet-level duplicate detection**
+2. **Bullet-level duplicate detection — complete (2026-07-11)**
    - Compare a new observation against atomic bullets/facts inside an existing note, not only the whole accumulated body.
    - Prevent a merge from appending a near-identical bullet.
    - Add long-note, threshold-boundary, and repeated-capture regression tests.
+   - **Result:** reconcile now measures the strongest match across individual paragraphs/list items plus a backwards-compatible combined candidate. Dated bullets and `Related:` navigation do not dilute the score; exact and near-duplicate facts at the inclusive `0.82` boundary are skipped. Merge has its own byte-idempotent guard, repeated captures create no write/ledger entry, and Turkish fact tokens remain intact.
 
 3. **Controlled conflict trust policy**
    - Remove silent conflict overwrite as the default behavior.

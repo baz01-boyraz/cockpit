@@ -89,14 +89,14 @@ describe('mergeObservationIntoNote', () => {
       'alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november'
     const existingFact = `${shared} papa quebec`
     const incomingFact = `${shared} oscar`
-    const existing = buildNoteFromObservation(
-      obs({
-        body: [
-          'A separate original fact about the routing subsystem.',
-          `- (2026-07-01) ${existingFact}`,
-        ].join('\n'),
-      }),
+    const base = buildNoteFromObservation(
+      obs({ body: 'A separate original fact about the routing subsystem.' }),
       { now: '2026-07-01T00:00:00.000Z', gate: 'save' },
+    ).content
+    const existing = mergeObservationIntoNote(
+      base,
+      obs({ isNew: false, body: existingFact }),
+      { now: '2026-07-02T00:00:00.000Z', gate: 'save' },
     ).content
 
     const merged = mergeObservationIntoNote(

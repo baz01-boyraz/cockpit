@@ -139,8 +139,9 @@ the code as authority:
 10. Human UI writes and accepted Hermes writes can bypass the same validation/ledger path
     used by `MemoryPipeline`.
 11. Curation “archive” acceptance currently re-saves identical content; it does not archive.
-12. Dedup compares an incoming fact with a whole accumulated body using Jaccard similarity,
-    then merges by blindly appending. Idempotency degrades as notes gain bullets.
+12. Before the 2026-07-11 fix, dedup compared an incoming fact with a whole accumulated body
+    and merged by blindly appending. Capture-time atomic comparison and byte-idempotent merge
+    now close that growth path; existing bloat still needs the snapshot-first cleanup pass.
 13. The capture watcher automatically mines Claude sessions, but there is no explicit,
     audited source-coverage policy for Hermes, Codex, Swarm outcomes, Council decisions,
     files or artifacts.
@@ -870,6 +871,10 @@ output never becomes a note; failure telemetry contains no content/secrets.
 ### M3 — Fact-level deduplication, idempotent merge and contradiction handling (L)
 
 **Goal:** stop note growth and conflict mistakes at the reconciliation layer.
+
+**Progress (2026-07-11):** atomic paragraph/list-item comparison, inclusive threshold tests,
+Unicode-safe tokenization and a byte-idempotent merge guard are implemented for new captures.
+Typed support/supersede/contradiction outcomes and the dry-run cleanup analyzer remain open.
 
 **Work:**
 

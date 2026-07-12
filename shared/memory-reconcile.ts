@@ -23,20 +23,20 @@ export interface Reconciled {
   decision: ReconcileDecision
   /** The slug the change applies to (normalized). */
   targetSlug: string
-  /** Similarity (0..1) to the matched existing note, if any. */
+  /** Highest similarity (0..1) to the matched note or one atomic fact inside it. */
   similarity: number
   /** The existing note's full content, when a match was found. */
   existingContent: string | null
 }
 
-/** Above this body similarity, an observation is treated as already known. */
+/** At or above this fact similarity, an observation is treated as already known. */
 export const DUPLICATE_SIMILARITY = 0.82
 
 /** Tokenize into a lowercase word set for Jaccard similarity. */
 function tokenSet(text: string): Set<string> {
   const words = text
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
     .split(/\s+/)
     .filter((w) => w.length > 2)
@@ -59,6 +59,65 @@ function bodyOf(content: string): string {
   return parseNote(content).body
 }
 
+const LIST_ITEM_RE = /^(?:[-*+]\s+|\d+[.)]\s+)(.*)$/
+const DATED_BULLET_RE = /^\(\d{4}-\d{2}-\d{2}\)\s*/
+const RELATED_RE = /^related\s*:/i
+const HEADING_RE = /^#{1,6}\s+/
+
+/**
+ * Split a note into atomic comparison candidates. Each prose paragraph and
+ * every Markdown list item are independent facts; wrapped lines stay
+ * with their fact. `Related:` is navigation, not knowledge. A combined candidate
+ * preserves the old whole-body behavior for short prose notes, while the atomic
+ * candidates prevent a large history from diluting one repeated bullet.
+ */
+export function noteFactSegments(content: string): string[] {
+  const atomic: string[] = []
+  let current: string[] = []
+
+  const flush = (): void => {
+    const fact = current.join(' ').replace(DATED_BULLET_RE, '').trim()
+    if (fact) atomic.push(fact)
+    current = []
+  }
+
+  for (const rawLine of bodyOf(content).replace(/\r\n/g, '\n').split('\n')) {
+    const line = rawLine.trim()
+    if (!line) {
+      flush()
+      continue
+    }
+    if (RELATED_RE.test(line)) {
+      flush()
+      continue
+    }
+    if (HEADING_RE.test(line)) {
+      flush()
+      continue
+    }
+    const item = LIST_ITEM_RE.exec(line)
+    if (item) {
+      flush()
+      current.push(item[1])
+      continue
+    }
+    current.push(line)
+  }
+  flush()
+
+  const combined = atomic.join(' ').trim()
+  return [...new Set([combined, ...atomic].filter(Boolean))]
+}
+
+/** Highest observation similarity across a note's whole and atomic fact candidates. */
+export function noteFactSimilarity(observationBody: string, noteContent: string): number {
+  let best = 0
+  for (const fact of noteFactSegments(noteContent)) {
+    best = Math.max(best, textSimilarity(observationBody, fact))
+  }
+  return best
+}
+
 /**
  * Decide how an observation lands in the hub. Deterministic; does not mutate.
  */
@@ -72,7 +131,7 @@ export function reconcile(
   const bySlug = docs.find((d) => normalizeNoteName(d.name) === targetSlug)
 
   if (bySlug) {
-    const similarity = textSimilarity(obs.body, bodyOf(bySlug.content))
+    const similarity = noteFactSimilarity(obs.body, bySlug.content)
     if (similarity >= dupThreshold) {
       return { decision: 'duplicate', targetSlug, similarity, existingContent: bySlug.content }
     }
@@ -87,7 +146,7 @@ export function reconcile(
   // No slug match — but guard against a near-duplicate filed under another slug.
   let best: { doc: MemoryDoc; sim: number } | null = null
   for (const doc of docs) {
-    const sim = textSimilarity(obs.body, bodyOf(doc.content))
+    const sim = noteFactSimilarity(obs.body, doc.content)
     if (!best || sim > best.sim) best = { doc, sim }
   }
   if (best && best.sim >= dupThreshold) {
