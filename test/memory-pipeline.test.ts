@@ -352,6 +352,39 @@ describe('MemoryPipeline.resolveReview', () => {
     expect(reviews.items.get('stale-review')?.status).toBe('pending')
   })
 
+  it('refuses duplicate cleanup when the duplicate changed after the proposal', () => {
+    const survivor = '# Canonical\n\nThe canonical fact.'
+    const duplicate = '# Duplicate\n\nThe original duplicate.'
+    const changedDuplicate = '# Duplicate\n\nA newer detail that must not be lost.'
+    memory.write('p1', 'canonical', survivor)
+    memory.write('p1', 'duplicate', duplicate)
+    const reviews = fakeReviews()
+    reviews.items.set('merge-cleanup', {
+      id: 'merge-cleanup',
+      brain: projectBrain('p1'),
+      kind: 'maintenance',
+      slug: 'canonical',
+      title: 'Merge duplicate: duplicate → canonical',
+      proposedContent: '# Canonical\n\nThe combined fact.',
+      reason: 'Curation — merge: same idea',
+      existingContent: survivor,
+      sourceId: null,
+      operation: 'merge',
+      alsoTrash: 'duplicate',
+      alsoTrashContent: duplicate,
+      status: 'pending',
+      createdAt: 't',
+      resolvedAt: null,
+    })
+    memory.write('p1', 'duplicate', changedDuplicate)
+    const pipe = new MemoryPipeline(memory, fakeLedger().svc, reviews.svc, stubDistiller([]))
+
+    expect(() => pipe.resolveReview('p1', 'project', 'merge-cleanup', 'accept')).toThrow(/duplicate memory changed/i)
+    expect(memory.read('p1', 'canonical')?.content).toBe(survivor)
+    expect(memory.read('p1', 'duplicate')?.content).toBe(changedDuplicate)
+    expect(reviews.items.get('merge-cleanup')?.status).toBe('pending')
+  })
+
   it('refuses to resolve another project review through the caller project', async () => {
     const reviews = fakeReviews()
     const pipe = new MemoryPipeline(memory, fakeLedger().svc, reviews.svc, stubDistiller([obs({ decision: 'ask' })]))

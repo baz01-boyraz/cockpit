@@ -83,6 +83,35 @@ describe('presentMemoryReview', () => {
     expect(isBatchCleanup(review)).toBe(false)
   })
 
+  it('explains an ordinary memory update without model or pipeline language', () => {
+    const review = item({
+      kind: 'merge',
+      title: 'Router placement update',
+      reason: 'model confidence 0.71; reconcile=merge',
+      existingContent: '# Router placement\n\nThe router was renderer-only.',
+      proposedContent: '# Router placement\n\nThe router is shared by both processes.',
+    })
+
+    const view = presentMemoryReview(review)
+
+    expect(view.title).toBe('Update “Router placement”?')
+    expect(view.rationale).toBe('A recent session found a detail that belongs with this memory.')
+    expect(view.rationale).not.toMatch(/model|reconcile/i)
+    expect(view.acceptLabel).toBe('Add detail')
+  })
+
+  it('recognizes an older archive row from its curation reason alone', () => {
+    const review = item({
+      kind: 'maintenance',
+      title: 'Old cleanup suggestion',
+      reason: 'Curation — archive: no longer active',
+      existingContent: '# Old note\n\nA retired implementation detail.',
+    })
+
+    expect(presentMemoryReview(review).acceptLabel).toBe('Archive note')
+    expect(isBatchCleanup(review)).toBe(true)
+  })
+
   it('summarizes a mixed inbox into human-sized groups', () => {
     const reviews = [
       item({ id: 'a', kind: 'maintenance', title: 'Archive stale note: old', slug: 'old' }),
