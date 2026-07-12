@@ -16,6 +16,7 @@ import {
   type CouncilResult,
   type CouncilSeatOutput,
 } from '../shared/council'
+import { COUNCIL_STAGE_BUDGETS } from '../shared/council-stages'
 import {
   buildChairmanPrompt,
   buildRankingPrompt,
@@ -100,6 +101,9 @@ describe('buildSeatPrompt', () => {
     expect(prompt).toContain('UNTRUSTED DATA')
     expect(prompt).toContain('Cite the exact file and line')
     expect(prompt).toContain('Use the shared money helper.')
+    expect(prompt).toContain('FINDING 1:')
+    expect(prompt).toContain('BASIS: EVIDENCE / INFERENCE / UNKNOWN')
+    expect(prompt).toContain('Maximum 4 findings')
   })
 
   it('fences the spec and switches to the spec-sentence evidence rule in spec mode', () => {
@@ -110,6 +114,7 @@ describe('buildSeatPrompt', () => {
       projectName: 'x',
       question: null,
       specText: 'Add caching to the gateway. It should be fast.',
+      responseLanguage: 'tr',
     })
     expect(prompt.match(/==F==/g)).toHaveLength(3)
     expect(prompt).toContain('Add caching to the gateway')
@@ -117,6 +122,7 @@ describe('buildSeatPrompt', () => {
     expect(prompt).toContain('Quote the exact sentence')
     expect(prompt).toContain('buildable AS WRITTEN')
     expect(prompt).not.toContain('The author describes the task as')
+    expect(prompt).toContain('Human prose language: Turkish (tr)')
   })
 
   it('appends the builder deliverables only for the builder seat', () => {
@@ -163,6 +169,8 @@ describe('buildRankingPrompt', () => {
     )
     expect(prompt).toContain('COLLECTIVE GAP')
     expect(prompt).toContain('FINAL RANKING:')
+    expect(prompt).toContain('STRONGEST CONTRIBUTION:')
+    expect(prompt).toContain('FACTUALITY FLAGS:')
     expect(prompt).toContain('### Response A')
     expect(prompt).toContain('alpha take')
     expect(prompt).toContain('code change')
@@ -503,12 +511,22 @@ describe('chairman prompts', () => {
     const prompt = buildChairmanPrompt({
       question: 'q',
       seats,
-      rankings: [{ seatId: 'contrarian', text: 'the ranking said things', parsed: [] }],
+      rankings: [{
+        seatId: 'contrarian',
+        text: 'ranking essay that must not be copied',
+        parsed: ['Response A'],
+        strongestContribution: 'Response A — found the rollback gap.',
+        collectiveGap: 'Nobody tested recovery.',
+        factualityFlags: ['Response B cites no file.'],
+      }],
+      aggregate: [{ seatId: 'builder', averageRank: 1.2, count: 3 }],
       memoryBlock: 'COCKPIT PROJECT MEMORY\nThe router belongs in shared/.',
     })
     expect(prompt).toContain('### Contrarian')
     expect(prompt).not.toContain('unreachable')
-    expect(prompt).toContain('the ranking said things')
+    expect(prompt).not.toContain('ranking essay that must not be copied')
+    expect(prompt).toContain('Nobody tested recovery.')
+    expect(prompt).toContain('Builder — average rank 1.20')
     expect(prompt).toContain('### 🎯 Verdict')
     expect(prompt).toContain('### ➡️ Next step')
     expect(prompt).toContain('The router belongs in shared/.')
@@ -519,6 +537,7 @@ describe('chairman prompts', () => {
       question: null,
       seats: seatOutputs(),
       rankings: [],
+      aggregate: [],
       fenceTag: '==SPEC==',
       specText: 'draft spec body',
       memoryBlock: 'COCKPIT PROJECT MEMORY\nLanding pages use copper accents.',
@@ -535,5 +554,36 @@ describe('chairman prompts', () => {
     expect(prompt).toContain('QUESTION:')
     expect(prompt).toContain('WHY:')
     expect(prompt).toContain('RECOMMENDED:')
+  })
+
+  it('hard-caps worst-case chairman input while preserving fences and instructions', () => {
+    const hugeSeats = seatOutputs().map((seat) => ({
+      ...seat,
+      text: `FINDING 1: ${'finding '.repeat(5_000)}`,
+    }))
+    const prompt = buildSpecChairmanPrompt({
+      question: 'question '.repeat(2_000),
+      seats: hugeSeats,
+      rankings: Array.from({ length: 10 }, (_, index) => ({
+        seatId: 'contrarian' as const,
+        text: 'essay '.repeat(2_000),
+        parsed: ['Response A'],
+        strongestContribution: `Response A — ${'strong '.repeat(500)}`,
+        collectiveGap: `gap-${index} ${'missing '.repeat(500)}`,
+        factualityFlags: [`flag-${index} ${'verify '.repeat(500)}`],
+      })),
+      aggregate: [{ seatId: 'builder', averageRank: 1, count: 5 }],
+      fenceTag: '==SPEC-BUDGET==',
+      specText: 'spec '.repeat(20_000),
+      memoryBlock: 'memory '.repeat(2_000),
+      responseLanguage: 'en',
+    })
+
+    expect(prompt.length).toBeLessThanOrEqual(
+      COUNCIL_STAGE_BUDGETS.chairman.inputChars,
+    )
+    expect(prompt.match(/==SPEC-BUDGET==/g)).toHaveLength(3)
+    expect(prompt).toContain('No preamble before the first heading.')
+    expect(prompt).toContain('Human prose language: English (en)')
   })
 })

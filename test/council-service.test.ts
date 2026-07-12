@@ -17,6 +17,7 @@ import {
   type NormalizedCouncilResult,
 } from '../shared/council'
 import type { Db } from '../electron/main/db/Database'
+import { COUNCIL_STAGE_BUDGETS } from '../shared/council-stages'
 
 /** A spec-mode-aware fake engine: OpenRouter and Codex always throw (no key /
  *  second CLI absent) so their seats must fall back; every claude call answers.
@@ -236,6 +237,90 @@ describe('CouncilService — spec mode orchestration', () => {
       expect(scorecard[i].averageRank).toBeGreaterThanOrEqual(scorecard[i - 1].averageRank)
     }
     expect(scorecard.every((e) => e.sessions === 2)).toBe(true)
+  })
+
+  it('enforces structured stage budgets and Turkish human prose instructions end to end', async () => {
+    const calls: Array<{ prompt: string; maxTokens: number | undefined }> = []
+    const engine = {
+      call: vi.fn(
+        async (
+          _spec: { engine: string },
+          prompt: string,
+          opts: { maxTokens?: number },
+        ) => {
+          calls.push({ prompt, maxTokens: opts.maxTokens })
+          if (prompt.startsWith('You are the Chairman')) {
+            return [
+              '### ⚖️ Consensus & Disagreement',
+              'Ortak görüş. ' + 'uzun '.repeat(3_000),
+              '### 🎯 Verdict',
+              'APPROVED',
+              'Görev uygulanabilir.',
+              '### 📋 Refined Spec',
+              '**Goal** Memory sistemini sadeleştir.\n' + 'detay '.repeat(6_000),
+            ].join('\n')
+          }
+          if (prompt.startsWith('You are a member of an LLM Council. Below')) {
+            return [
+              `Long ranking essay that must disappear. ${'essay '.repeat(1_000)}`,
+              'STRONGEST CONTRIBUTION: Response A — En önemli migration riskini buldu.',
+              'COLLECTIVE GAP: Hiçbir yanıt crash recovery testini tanımlamadı.',
+              'FACTUALITY FLAGS:',
+              '- Response B kaynak göstermedi.',
+              'FINAL RANKING:',
+              '1. Response A',
+              '2. Response B',
+              '3. Response C',
+              '4. Response D',
+              '5. Response E',
+            ].join('\n')
+          }
+          return Array.from({ length: 8 }, (_, index) => [
+            `FINDING ${index + 1}: ${'bulgu '.repeat(120)}`,
+            `IMPACT: ${'etki '.repeat(100)}`,
+            `RECOMMENDATION: ${'öneri '.repeat(100)}`,
+            'BASIS: EVIDENCE',
+            `EVIDENCE: src/memory-${index}.ts:42`,
+          ].join('\n')).join('\n\n')
+        },
+      ),
+    } as unknown as EngineRunner
+    const parts = makeStore()
+    const service = new CouncilService(makeProjects(), makeAudit(), engine, parts.store)
+
+    const result = await service.run('prj_1', {
+      mode: 'spec',
+      specText:
+        'Memory sistemini daha sade ve guvenilir yapmak icin migration ve rollback kurallarini tanimla.',
+    })
+
+    expect(result.responseLanguage).toBe('tr')
+    expect(result.seats.every((seat) => seat.text.length <= COUNCIL_STAGE_BUDGETS.seat.outputChars))
+      .toBe(true)
+    expect(
+      result.rankings.every(
+        (ranking) => ranking.text.length <= COUNCIL_STAGE_BUDGETS.ranking.outputChars,
+      ),
+    ).toBe(true)
+    expect(result.rankings[0]).toMatchObject({
+      collectiveGap: 'Hiçbir yanıt crash recovery testini tanımlamadı.',
+      factualityFlags: ['Response B kaynak göstermedi.'],
+    })
+    expect(result.verdict!.length).toBeLessThanOrEqual(
+      COUNCIL_STAGE_BUDGETS.chairman.outputChars,
+    )
+    expect(calls).toHaveLength(11)
+    expect(calls.every((call) => call.prompt.includes('Human prose language: Turkish (tr)')))
+      .toBe(true)
+    expect(calls.slice(0, 5).every((call) => call.maxTokens === COUNCIL_STAGE_BUDGETS.seat.maxTokens))
+      .toBe(true)
+    expect(calls.slice(5, 10).every((call) => call.maxTokens === COUNCIL_STAGE_BUDGETS.ranking.maxTokens))
+      .toBe(true)
+    expect(calls[10].maxTokens).toBe(COUNCIL_STAGE_BUDGETS.chairman.maxTokens)
+    expect(calls[10].prompt.length).toBeLessThanOrEqual(
+      COUNCIL_STAGE_BUDGETS.chairman.inputChars,
+    )
+    expect(calls[10].prompt).not.toContain('Long ranking essay that must disappear.')
   })
 })
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildClaudeArgs } from '@shared/claude-run'
-import { buildCodexArgs, type EngineSpec } from '@shared/engines'
+import { ENGINE_CAPABILITIES, buildCodexArgs, type EngineSpec } from '@shared/engines'
 import {
   EngineRunner,
   type CliRunner,
@@ -74,6 +74,12 @@ describe('EngineRunner — CLI branches', () => {
     expect(calls[0].bin.endsWith('codex')).toBe(true)
     expect(calls[0].args).toEqual(buildCodexArgs('ship it', { model: 'gpt-5-codex' }))
   })
+
+  it('models CLI output budgets honestly as prompt targets, not provider enforcement', () => {
+    expect(ENGINE_CAPABILITIES.claude.outputTokenLimit).toBe('prompt-target-only')
+    expect(ENGINE_CAPABILITIES.codex.outputTokenLimit).toBe('prompt-target-only')
+    expect(ENGINE_CAPABILITIES.openrouter.outputTokenLimit).toBe('provider-enforced')
+  })
 })
 
 describe('EngineRunner.killAll — orphan CLI child cleanup (A2)', () => {
@@ -143,7 +149,7 @@ describe('EngineRunner — openrouter branch', () => {
     }
     const service = new EngineRunner(fakeSecrets(SECRET), forbiddenCli, fetchImpl)
 
-    const out = await service.call(spec, 'what is 2+2', OPTS)
+    const out = await service.call(spec, 'what is 2+2', { ...OPTS, maxTokens: 321 })
 
     expect(out).toBe('the answer')
     expect(seen[0].url).toBe('https://openrouter.ai/api/v1/chat/completions')
@@ -155,6 +161,7 @@ describe('EngineRunner — openrouter branch', () => {
     }
     expect(body.model).toBe('deepseek/deepseek-chat')
     expect(body.messages).toEqual([{ role: 'user', content: 'what is 2+2' }])
+    expect((body as { max_tokens?: number }).max_tokens).toBe(321)
   })
 
   it('returns a friendly "add a key" error when none is stored', async () => {
