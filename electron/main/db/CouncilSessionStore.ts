@@ -1,10 +1,16 @@
 import { randomUUID } from 'node:crypto'
-import type { CouncilMode, CouncilResult } from '@shared/council'
+import {
+  councilSpecVerdictKind,
+  normalizeCouncilResult,
+  type CouncilIntentMode,
+  type CouncilResultLike,
+  type NormalizedCouncilResult,
+} from '@shared/council'
 import type { Db } from './Database'
 
 /**
- * Persistence for Council v2 sessions (schema V11). Every completed run is kept
- * as history — even a failed one — so the aggregate rankings feed a
+ * Persistence for versioned Council sessions (schema V11). Every completed run
+ * is kept as history — even a failed one — so the aggregate rankings feed a
  * cross-session scorecard. The store owns row↔object mapping only; the pure
  * scorecard math lives in `shared/council` (`computeScorecard`). Mirrors the
  * hand-rolled `db.prepare` style of MemoryLedgerService — cockpiT keeps its data
@@ -13,16 +19,16 @@ import type { Db } from './Database'
 export interface CouncilSessionInput {
   projectId: string
   cardId: string | null
-  mode: CouncilMode
+  mode: CouncilIntentMode
   question: string | null
-  result: CouncilResult
+  result: CouncilResultLike
 }
 
 /** The identity a run knows up front, before any seat has answered (A6). */
 export interface CouncilSessionPending {
   projectId: string
   cardId: string | null
-  mode: CouncilMode
+  mode: CouncilIntentMode
   question: string | null
 }
 
@@ -36,10 +42,10 @@ export interface CouncilSession {
   id: string
   projectId: string
   cardId: string | null
-  mode: CouncilMode
+  mode: CouncilIntentMode
   question: string | null
-  result: CouncilResult
-  verdictKind: string | null
+  result: NormalizedCouncilResult
+  verdictKind: 'approved' | 'needs_clarification' | null
   status: CouncilSessionStatus
   createdAt: string
 }
@@ -63,7 +69,35 @@ interface SessionRow {
  * empty CouncilResult, never `{}`. A run that crashes mid-flight leaves exactly
  * this shape behind, which honestly reads as "0 seats, no verdict".
  */
-function pendingPlaceholder(mode: CouncilMode): CouncilResult {
+function pendingPlaceholder(mode: CouncilIntentMode): CouncilResultLike {
+  const stats = { seatsRun: 0, seatsFailed: 0, filesReviewed: 0, durationMs: 0 }
+  if (mode === 'analysis') {
+    return {
+      schemaVersion: 3,
+      ok: false,
+      mode,
+      responseLanguage: 'und',
+      decision: {
+        kind: 'failed',
+        summary: 'Council run in progress.',
+        why: null,
+        questions: [],
+        keyFindings: [],
+        dissent: [],
+      },
+      primaryArtifact: null,
+      execution: { stats },
+      evidence: {
+        seats: [],
+        rankings: [],
+        aggregate: [],
+        labelToSeat: {},
+        rawChairman: null,
+      },
+      error: 'Council run in progress.',
+      sessionId: null,
+    }
+  }
   return {
     ok: false,
     mode,
@@ -74,7 +108,7 @@ function pendingPlaceholder(mode: CouncilMode): CouncilResult {
     verdict: null,
     specVerdict: null,
     error: 'Council run in progress.',
-    stats: { seatsRun: 0, seatsFailed: 0, filesReviewed: 0, durationMs: 0 },
+    stats,
     sessionId: null,
   }
 }
@@ -87,12 +121,25 @@ function toStatus(raw: string | null): CouncilSessionStatus {
 
 /** Parse a stored result blob defensively — a corrupt row must not sink a read
  *  (the scorecard scans many rows). Returns null so the caller can skip it. */
-function parseResult(json: string): CouncilResult | null {
+function parseResult(json: string): NormalizedCouncilResult | null {
   try {
-    return JSON.parse(json) as CouncilResult
+    return normalizeCouncilResult(JSON.parse(json))
   } catch {
     return null
   }
+}
+
+function withSessionId(
+  result: CouncilResultLike,
+  sessionId: string,
+  expectedMode?: CouncilIntentMode,
+): CouncilResultLike {
+  const stored = { ...result, sessionId } as CouncilResultLike
+  const normalized = normalizeCouncilResult(stored)
+  if (!normalized || (expectedMode !== undefined && normalized.mode !== expectedMode)) {
+    throw new Error('Council result does not satisfy the versioned persistence contract.')
+  }
+  return stored
 }
 
 function toSession(row: SessionRow): CouncilSession | null {
@@ -102,10 +149,13 @@ function toSession(row: SessionRow): CouncilSession | null {
     id: row.id,
     projectId: row.project_id,
     cardId: row.card_id,
-    mode: row.mode as CouncilMode,
+    mode: result.mode,
     question: row.question,
     result,
-    verdictKind: row.verdict_kind,
+    // Never trust the denormalized column as an authorization signal: legacy
+    // or malformed rows may contain an old/misclassified value. The normalized
+    // result is the source of truth, and analysis can never become a spec gate.
+    verdictKind: councilSpecVerdictKind(result),
     status: toStatus(row.status),
     createdAt: row.created_at,
   }
@@ -122,7 +172,7 @@ export class CouncilSessionStore {
    */
   insertPending(input: CouncilSessionPending): string {
     const id = randomUUID()
-    const placeholder: CouncilResult = { ...pendingPlaceholder(input.mode), sessionId: id }
+    const placeholder = withSessionId(pendingPlaceholder(input.mode), id, input.mode)
     this.db
       .prepare(
         `INSERT INTO council_sessions
@@ -146,8 +196,8 @@ export class CouncilSessionStore {
    * to `final`. The stored blob carries the row's own id as `sessionId`. A no-op
    * against an unknown/already-final id (0 rows changed) is harmless.
    */
-  finalize(id: string, result: CouncilResult): void {
-    const stored: CouncilResult = { ...result, sessionId: id }
+  finalize(id: string, result: CouncilResultLike): void {
+    const stored = withSessionId(result, id)
     this.db
       .prepare(
         `UPDATE council_sessions
@@ -157,7 +207,7 @@ export class CouncilSessionStore {
       .run({
         id,
         resultJson: JSON.stringify(stored),
-        verdictKind: stored.specVerdict?.kind ?? null,
+        verdictKind: councilSpecVerdictKind(stored),
       })
   }
 
@@ -181,7 +231,7 @@ export class CouncilSessionStore {
    */
   insert(input: CouncilSessionInput): string {
     const id = randomUUID()
-    const stored: CouncilResult = { ...input.result, sessionId: id }
+    const stored = withSessionId(input.result, id, input.mode)
     this.db
       .prepare(
         `INSERT INTO council_sessions
@@ -195,7 +245,7 @@ export class CouncilSessionStore {
         mode: input.mode,
         question: input.question,
         resultJson: JSON.stringify(stored),
-        verdictKind: stored.specVerdict?.kind ?? null,
+        verdictKind: councilSpecVerdictKind(stored),
         createdAt: new Date().toISOString(),
       })
     return id

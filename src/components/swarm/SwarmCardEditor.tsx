@@ -107,7 +107,11 @@ export function SwarmCardEditor({
   const specResult =
     council.result && council.result.cardId === card.id ? council.result.result : null
   const specVerdict = specResult?.specVerdict ?? null
-  const refinedSpec = specResult?.verdict ? extractRefinedSpec(specResult.verdict) : null
+  const refinedSpec = specResult?.primaryArtifact?.kind === 'refinedSpec'
+    ? specResult.primaryArtifact.content
+    : specResult?.verdict
+      ? extractRefinedSpec(specResult.verdict)
+      : null
   const canApply = refinedSpec !== null && Boolean(specResult?.sessionId) && !busy
   /** Council-approved once a session is linked (persisted) or just applied. */
   const approved = applied || card.councilSessionId !== null

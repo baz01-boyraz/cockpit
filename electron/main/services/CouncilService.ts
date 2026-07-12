@@ -10,6 +10,8 @@ import {
   anonymizeSeats,
   computeAggregateRankings,
   computeScorecard,
+  councilSpecVerdictKind,
+  normalizeCouncilResult,
   parseRankingFromText,
   parseSpecVerdict,
   type AggregateRank,
@@ -543,9 +545,10 @@ export class CouncilService {
     // Faz A: a spec gate that comes back needs_clarification is a `notice` — the
     // draft can't proceed to a builder until the author answers. Fire-and-forget;
     // report() never throws. `question` is the already-redacted card title/body.
-    if (mode === 'spec' && withId.specVerdict?.kind === 'needs_clarification') {
+    if (councilSpecVerdictKind(withId) === 'needs_clarification') {
       const subject = question ?? (cardId ? `card ${cardId}` : 'the draft spec')
-      const questions = withId.specVerdict.questions
+      const questions =
+        normalizeCouncilResult(withId)?.decision.questions.map((item) => item.question) ?? []
       this.sentinel?.report({
         projectId,
         severity: 'notice',
@@ -574,7 +577,7 @@ export class CouncilService {
         ...result.stats,
         mode: result.mode,
         ok: result.ok,
-        verdictKind: result.specVerdict?.kind ?? null,
+        verdictKind: councilSpecVerdictKind(result),
       },
     })
   }

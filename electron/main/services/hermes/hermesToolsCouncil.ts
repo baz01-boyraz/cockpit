@@ -1,9 +1,10 @@
 import { councilRefineSpecSchema } from '@shared/schemas'
 import {
   COUNCIL_SEATS,
+  councilSpecVerdictKind,
   extractRefinedSpec,
+  normalizeCouncilResult,
   type AggregateRank,
-  type CouncilResult,
   type CouncilTone,
 } from '@shared/council'
 import type { HermesTool, HermesToolContext } from './hermesToolTypes'
@@ -61,12 +62,33 @@ interface CompactCouncilPayload {
  * ONE place seat prose is dropped — only the gate decision, questions, refined
  * spec, a ranking one-liner, and the sessionId cross back to Hermes.
  */
-function compactCouncilPayload(result: CouncilResult): CompactCouncilPayload {
+function compactCouncilPayload(value: unknown): CompactCouncilPayload {
+  const result = normalizeCouncilResult(value)
+  if (!result) {
+    return {
+      verdictKind: 'synthesis-failed',
+      questions: [],
+      refinedSpec: null,
+      ranking: formatCouncilRanking([]),
+      sessionId: null,
+      error: 'Council returned an invalid result envelope.',
+    }
+  }
+
   const verdictKind = councilVerdictKind(result)
-  const refinedSpec = result.verdict ? (extractRefinedSpec(result.verdict) ?? result.verdict.trim()) : null
+  const refinedSpec = result.mode === 'spec'
+    ? result.primaryArtifact?.kind === 'refinedSpec'
+      ? result.primaryArtifact.content
+      : result.verdict
+        ? (extractRefinedSpec(result.verdict) ?? result.verdict.trim())
+        : null
+    : null
   const base: CompactCouncilPayload = {
     verdictKind,
-    questions: result.specVerdict?.kind === 'needs_clarification' ? result.specVerdict.questions : [],
+    questions:
+      verdictKind === 'NEEDS_CLARIFICATION'
+        ? result.decision.questions.map((question) => question.question)
+        : [],
     refinedSpec,
     ranking: formatCouncilRanking(result.aggregate),
     sessionId: result.sessionId,
@@ -74,9 +96,10 @@ function compactCouncilPayload(result: CouncilResult): CompactCouncilPayload {
   return result.error ? { ...base, error: result.error } : base
 }
 
-function councilVerdictKind(result: CouncilResult): CouncilVerdictKind {
-  if (result.specVerdict?.kind === 'approved') return 'APPROVED'
-  if (result.specVerdict?.kind === 'needs_clarification') return 'NEEDS_CLARIFICATION'
+function councilVerdictKind(value: unknown): CouncilVerdictKind {
+  const kind = councilSpecVerdictKind(value)
+  if (kind === 'approved') return 'APPROVED'
+  if (kind === 'needs_clarification') return 'NEEDS_CLARIFICATION'
   return 'synthesis-failed'
 }
 

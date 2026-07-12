@@ -102,7 +102,19 @@ const councilSessions: CouncilSessionReader = {
     id === 's1'
       ? {
           projectId: 'p1',
-          result: { specVerdict: { kind: 'approved', questions: [] } } as unknown as CouncilResult,
+          result: {
+            ok: true,
+            mode: 'spec',
+            seats: [],
+            rankings: [],
+            aggregate: [],
+            labelToSeat: {},
+            verdict: '### Verdict\nAPPROVED',
+            specVerdict: { kind: 'approved', questions: [] },
+            error: null,
+            stats: { seatsRun: 1, seatsFailed: 0, filesReviewed: 0, durationMs: 1 },
+            sessionId: 's1',
+          } satisfies CouncilResult,
         }
       : null,
 }

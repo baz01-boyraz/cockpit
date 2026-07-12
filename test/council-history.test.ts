@@ -31,6 +31,13 @@ describe('council history presentation', () => {
     ).toEqual({ tone: 'final', label: 'Reviewed' })
   })
 
+  it('labels a completed analysis explicitly instead of presenting it as a diff review', () => {
+    expect(councilHistoryPresentation(summary({ mode: 'analysis' }))).toEqual({
+      tone: 'final',
+      label: 'Analyzed',
+    })
+  })
+
   it('distinguishes approved, clarification, and genuinely failed sessions', () => {
     expect(councilHistoryPresentation(summary({ verdictKind: 'approved' })).tone).toBe('approved')
     expect(

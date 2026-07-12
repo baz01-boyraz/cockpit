@@ -1,5 +1,5 @@
 import { cockpit } from '../../lib/cockpit'
-import type { CouncilResult } from '@shared/council'
+import { normalizeCouncilResult, type CouncilResult } from '@shared/council'
 import { buildClarificationContinuation } from '@shared/council-display'
 import type { CouncilRunView, CouncilSlice, SliceCreator } from './types'
 
@@ -57,11 +57,14 @@ export const createCouncilSlice: SliceCreator<CouncilSlice> = (set, get) => ({
     }
     set({ councilProjectId: projectId, councilConvening: true, councilActive: run, councilNotice: null })
     try {
-      const result = await cockpit().council.run(projectId, {
+      const rawResult = await cockpit().council.run(projectId, {
         mode: 'spec',
         spec: trimmed,
         question: run.title,
       })
+      const result = normalizeCouncilResult(rawResult) ?? councilFailure(
+        new Error('Council returned an invalid result envelope.'),
+      )
       // A council can outlive a project switch — never paint a stale verdict.
       if (get().activeProjectId !== projectId) return
       set({
@@ -120,11 +123,14 @@ export const createCouncilSlice: SliceCreator<CouncilSlice> = (set, get) => ({
     }
     set({ councilProjectId: projectId, councilConvening: true, councilActive: run, councilNotice: null })
     try {
-      const result = await cockpit().council.run(projectId, {
+      const rawResult = await cockpit().council.run(projectId, {
         mode: 'spec',
         spec: continuationSpec,
         question: active.title,
       })
+      const result = normalizeCouncilResult(rawResult) ?? councilFailure(
+        new Error('Council returned an invalid result envelope.'),
+      )
       if (get().activeProjectId !== projectId) return
       set({
         councilActive: { ...run, id: result.sessionId ?? run.id, result },
@@ -154,7 +160,14 @@ export const createCouncilSlice: SliceCreator<CouncilSlice> = (set, get) => ({
       councilCardResult: { cardId, cardTitle, result: null, source: 'run' },
     })
     try {
-      const result = await cockpit().council.run(projectId, { mode: 'spec', spec: trimmed, cardId })
+      const rawResult = await cockpit().council.run(projectId, {
+        mode: 'spec',
+        spec: trimmed,
+        cardId,
+      })
+      const result = normalizeCouncilResult(rawResult) ?? councilFailure(
+        new Error('Council returned an invalid result envelope.'),
+      )
       if (get().activeProjectId !== projectId) return
       set({
         councilConveningCardId: null,
@@ -180,7 +193,8 @@ export const createCouncilSlice: SliceCreator<CouncilSlice> = (set, get) => ({
       return
     }
     try {
-      const result = await cockpit().council.session(projectId, sessionId)
+      const rawResult = await cockpit().council.session(projectId, sessionId)
+      const result = normalizeCouncilResult(rawResult)
       if (get().activeProjectId !== projectId || !result) return
       // A rehydrate must not steal the wide surface from a fresh run of another card.
       if (get().councilConveningCardId !== null) return

@@ -23,7 +23,12 @@ import type {
   TerminalSession,
 } from '@shared/domain'
 import type { CockpitApi, SystemInfo, Unsubscribe } from '@shared/ipc'
-import type { CouncilResult, CouncilSessionSummary, ScorecardEntry } from '@shared/council'
+import {
+  councilSpecVerdictKind,
+  type CouncilResult,
+  type CouncilSessionSummary,
+  type ScorecardEntry,
+} from '@shared/council'
 import type { OutcomeScorecard } from '@shared/outcomes'
 import { buildSignal, composeSignalCardSpec, type SentinelSignal } from '@shared/sentinel'
 import { resolveChatModel } from '@shared/chat-models'
@@ -1044,7 +1049,7 @@ export function createMockApi(): CockpitApi {
         // refuses with `{ gated: true }` unless the developer overrides via skipGate.
         const approved =
           card.councilSessionId !== null &&
-          mockCouncilSessionDetail(card.councilSessionId)?.specVerdict?.kind === 'approved'
+          councilSpecVerdictKind(mockCouncilSessionDetail(card.councilSessionId)) === 'approved'
         if (!approved && !skipGate) return { gated: true }
         if (cards.filter((c) => c.status === 'in_progress').length >= 3) {
           throw new Error('Concurrency cap reached (3) — park or finish a running card first.')

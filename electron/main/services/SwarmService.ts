@@ -11,7 +11,11 @@ import {
 import { buildWorkerCommand, HUB_POINTER_CAP } from '@shared/swarm-worker'
 import { rankNotes } from '@shared/memory-recall'
 import { projectBrain } from '@shared/memory-ledger'
-import { composeCouncilBrief, type CouncilResult } from '@shared/council'
+import {
+  composeCouncilBrief,
+  councilSpecVerdictKind,
+  type CouncilResultLike,
+} from '@shared/council'
 import {
   assignmentLabel,
   assignmentPrompt,
@@ -99,7 +103,7 @@ export interface DoneSignalOps {
 export interface CouncilSessionReader {
   /** `projectId` is part of the slice so the brief loader can scope-check the
    *  (renderer/tool-supplied) session id against the card's own project. */
-  get(id: string): { projectId: string; result: CouncilResult } | null
+  get(id: string): { projectId: string; result: CouncilResultLike } | null
 }
 
 /**
@@ -943,7 +947,7 @@ export class SwarmService {
     try {
       const session = this.councilSessions.get(card.councilSessionId)
       if (!session || session.projectId !== card.projectId) return null
-      return session.result.specVerdict?.kind ?? null
+      return councilSpecVerdictKind(session.result)
     } catch {
       return null
     }

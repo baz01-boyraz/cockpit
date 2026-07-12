@@ -1,6 +1,6 @@
 # Council + Memory Quality Roadmap
 
-> Status: IN EXECUTION · R0 + C1 + M1a COMPLETE · Created 2026-07-11
+> Status: IN EXECUTION · R0 + C1 + C2a + M1a COMPLETE · Created 2026-07-11
 > Scope: Council output quality/efficiency/usability + Brain/Memory correctness,
 > retrieval and product UX
 > Governing docs: `docs/DESIGN.md`, `docs/MEMORY-CHARTER.md`,
@@ -459,6 +459,18 @@ screenshots at three desktop widths.
 ---
 
 ### C2 — Council v3 result contract, intent and hard output budgets (L)
+
+> **C2a completed 2026-07-11; C2b and the remaining C2c work stay pending.** A strict,
+> bounded `CouncilResultV3` envelope now separates decision, primary artifact, execution and
+> raw evidence. One defensive adapter dual-reads unversioned/v2 and v3 results without rewriting
+> old session blobs; malformed/unknown versions fail closed. The session store, renderer/export,
+> Hermes compact payload, Swarm gate/brief, audit/outcome source and mock path all consume that
+> normalized contract. `analysis` is a persisted intent but can never satisfy a spec gate, even
+> if a corrupt decision or denormalized DB column says `approved`; analysis crash markers also use
+> a readable v3 pending envelope. Full tests/coverage, typecheck, lint, production build and all
+> seven Playwright journeys passed. C2b still owns prompts, structured parsers, language behavior
+> and generation/input budgets; the remaining C2c work owns explicit mode selection and final
+> producer/IPC adoption.
 
 **Goal:** make concision and intent part of the domain model rather than a prompt suggestion.
 

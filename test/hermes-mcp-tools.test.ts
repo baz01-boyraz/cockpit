@@ -5,7 +5,7 @@ import { HermesChecksService } from '../electron/main/services/hermes/HermesChec
 import { createHermesTools, type HermesTool, type HermesToolContext } from '../electron/main/services/hermes/hermesTools'
 import type { BoardColumn, CardStatus, KanbanCard } from '../shared/kanban'
 import type { AgentUsageReport, ApprovalRequest, ErrorInsight, GitSnapshot, LogEvent } from '../shared/domain'
-import type { CouncilResult } from '../shared/council'
+import type { CouncilResult, CouncilResultV3 } from '../shared/council'
 import type { DiffStat } from '../shared/review'
 import type { MemoryHubSnapshot, MemoryNote } from '../shared/memory-hub'
 import type { ReviewItem } from '../shared/memory-review'
@@ -134,6 +134,40 @@ function makeCouncilResult(over: Partial<CouncilResult> = {}): CouncilResult {
     error: null,
     stats: { seatsRun: 5, seatsFailed: 0, filesReviewed: 0, durationMs: 10 },
     sessionId: 'sess-1',
+    ...over,
+  }
+}
+
+function makeCouncilV3(over: Partial<CouncilResultV3> = {}): CouncilResultV3 {
+  return {
+    schemaVersion: 3,
+    ok: true,
+    mode: 'spec',
+    responseLanguage: 'en',
+    decision: {
+      kind: 'approved',
+      summary: 'The task is buildable.',
+      why: null,
+      questions: [],
+      keyFindings: [],
+      dissent: [],
+    },
+    primaryArtifact: {
+      kind: 'refinedSpec',
+      content: '**Goal**: Ship v3\n**Acceptance criteria**: no Markdown parsing required',
+    },
+    execution: {
+      stats: { seatsRun: 5, seatsFailed: 0, filesReviewed: 0, durationMs: 10 },
+    },
+    evidence: {
+      seats: [],
+      rankings: [],
+      aggregate: [{ seatId: 'builder', averageRank: 1.2, count: 3 }],
+      labelToSeat: {},
+      rawChairman: 'Chairman prose without a Refined Spec heading.',
+    },
+    error: null,
+    sessionId: 'sess-v3',
     ...over,
   }
 }
@@ -631,6 +665,45 @@ describe('Hermes MCP tools — the scoped tool set', () => {
       expect(result.verdictKind).toBe('NEEDS_CLARIFICATION')
       expect(result.questions).toEqual(['What scope?', 'Which environment?'])
       expect(result.sessionId).toBe('sess-1')
+    })
+
+    it('reads a v3 approved spec from its structured artifact, not chairman Markdown', async () => {
+      const council: HermesToolContext['council'] = {
+        run: async () => makeCouncilV3() as unknown as CouncilResult,
+        scorecard: () => [],
+      }
+      const { ctx } = makeContext({ council })
+      const result = (await toolNamed(ctx, 'council_refine_spec').run({
+        projectId: 'p1',
+        spec: 'ship v3',
+      })) as Record<string, unknown>
+
+      expect(result).toMatchObject({
+        verdictKind: 'APPROVED',
+        refinedSpec: '**Goal**: Ship v3\n**Acceptance criteria**: no Markdown parsing required',
+        sessionId: 'sess-v3',
+      })
+    })
+
+    it('never promotes a v3 analysis result into Hermes spec-gate approval', async () => {
+      const council: HermesToolContext['council'] = {
+        run: async () =>
+          makeCouncilV3({
+            mode: 'analysis',
+            decision: { ...makeCouncilV3().decision, kind: 'approved' },
+            primaryArtifact: { kind: 'analysisReport', content: 'Repository report.' },
+          }) as unknown as CouncilResult,
+        scorecard: () => [],
+      }
+      const { ctx } = makeContext({ council })
+      const result = (await toolNamed(ctx, 'council_refine_spec').run({
+        projectId: 'p1',
+        spec: 'analyze the repository',
+      })) as Record<string, unknown>
+
+      expect(result.verdictKind).toBe('synthesis-failed')
+      expect(result.questions).toEqual([])
+      expect(result.refinedSpec).toBeNull()
     })
 
     it('synthesis-failed: a run with no parseable gate degrades cleanly, not as clarification', async () => {

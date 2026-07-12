@@ -1259,6 +1259,48 @@ describe('SwarmService council spec gate (Finding 1)', () => {
     expect(deps.audits).toContain('swarm.start_card')
   })
 
+  it('never lets an analysis result clear the spec gate, even with an approved decision token', async () => {
+    const store = makeStore([
+      { id: 'a', status: 'todo', position: POSITION_GAP, council_session_id: 'analysis_1' },
+    ])
+    const deps = makeDeps()
+    const analysis = {
+      schemaVersion: 3,
+      ok: true,
+      mode: 'analysis',
+      responseLanguage: 'en',
+      decision: {
+        kind: 'approved',
+        summary: 'Repository analysis complete.',
+        why: null,
+        questions: [],
+        keyFindings: [],
+        dissent: [],
+      },
+      primaryArtifact: { kind: 'analysisReport', content: 'Read-only report.' },
+      execution: {
+        stats: { seatsRun: 5, seatsFailed: 0, filesReviewed: 8, durationMs: 10 },
+      },
+      evidence: {
+        seats: [],
+        rankings: [],
+        aggregate: [],
+        labelToSeat: {},
+        rawChairman: null,
+      },
+      error: null,
+      sessionId: 'analysis_1',
+    }
+    const svc = buildGated(store, deps, {
+      get: (id) => (id === 'analysis_1' ? { projectId: 'p1', result: analysis } : null),
+    })
+
+    const result = await svc.startCard({ projectId: 'p1', cardId: 'a' })
+
+    expect(result).toEqual({ gated: true })
+    expect(deps.spawned).toHaveLength(0)
+  })
+
   it('a cross-project session does NOT clear the gate (scope guard)', async () => {
     const store = makeStore([
       { id: 'a', status: 'todo', position: POSITION_GAP, council_session_id: 'sess_1' },

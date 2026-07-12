@@ -9,7 +9,13 @@ import {
   type CouncilSessionPending,
   type CouncilSessionStatus,
 } from '../electron/main/db/CouncilSessionStore'
-import type { CouncilResult } from '../shared/council'
+import {
+  councilSpecVerdictKind,
+  normalizeCouncilResult,
+  type CouncilResult,
+  type CouncilResultLike,
+  type NormalizedCouncilResult,
+} from '../shared/council'
 import type { Db } from '../electron/main/db/Database'
 
 /** A spec-mode-aware fake engine: OpenRouter and Codex always throw (no key /
@@ -58,7 +64,7 @@ interface FakeRow {
   cardId: string | null
   mode: CouncilSessionInput['mode']
   question: string | null
-  result: CouncilResult | null
+  result: NormalizedCouncilResult | null
   status: CouncilSessionStatus
 }
 
@@ -66,6 +72,11 @@ function makeStore() {
   const rows: FakeRow[] = []
   const inserted: CouncilSessionInput[] = []
   let seq = 0
+  const storedResult = (result: CouncilResultLike, sessionId: string): NormalizedCouncilResult => {
+    const normalized = normalizeCouncilResult({ ...result, sessionId })
+    if (!normalized) throw new Error('Fake CouncilSessionStore received an invalid result')
+    return normalized
+  }
   const store = {
     insertPending: (input: CouncilSessionPending) => {
       seq += 1
@@ -73,11 +84,11 @@ function makeStore() {
       rows.push({ ...input, id, result: null, status: 'pending' })
       return id
     },
-    finalize: (id: string, result: CouncilResult) => {
+    finalize: (id: string, result: CouncilResultLike) => {
       const row = rows.find((r) => r.id === id)
       if (!row) return
       // The real store stamps the row's own id into the stored blob's sessionId.
-      row.result = { ...result, sessionId: id }
+      row.result = storedResult(result, id)
       row.status = 'final'
       inserted.push({
         projectId: row.projectId,
@@ -90,7 +101,7 @@ function makeStore() {
     insert: (input: CouncilSessionInput) => {
       seq += 1
       const id = `sess-${seq}`
-      rows.push({ ...input, id, result: { ...input.result, sessionId: id }, status: 'final' })
+      rows.push({ ...input, id, result: storedResult(input.result, id), status: 'final' })
       inserted.push(input)
       return id
     },
@@ -106,7 +117,10 @@ function makeStore() {
     },
     listRecent: (projectId: string) =>
       rows
-        .filter((r): r is FakeRow & { result: CouncilResult } => r.projectId === projectId && !!r.result)
+        .filter(
+          (r): r is FakeRow & { result: NormalizedCouncilResult } =>
+            r.projectId === projectId && !!r.result,
+        )
         .map((r) => ({
           id: r.id,
           projectId: r.projectId,
@@ -114,7 +128,7 @@ function makeStore() {
           mode: r.mode,
           question: r.question,
           result: r.result,
-          verdictKind: r.result.specVerdict?.kind ?? null,
+          verdictKind: councilSpecVerdictKind(r.result),
           status: r.status,
           createdAt: 'now',
         })),
@@ -128,7 +142,7 @@ function makeStore() {
         mode: row.mode,
         question: row.question,
         result: row.result,
-        verdictKind: row.result.specVerdict?.kind ?? null,
+        verdictKind: councilSpecVerdictKind(row.result),
         status: row.status,
         createdAt: 'now',
       }
@@ -207,7 +221,7 @@ describe('CouncilService — spec mode orchestration', () => {
     expect(inserted).toHaveLength(1)
     expect(inserted[0].cardId).toBe('card_1')
     expect(inserted[0].mode).toBe('spec')
-    expect(inserted[0].result.specVerdict?.kind).toBe('needs_clarification')
+    expect(councilSpecVerdictKind(inserted[0].result)).toBe('needs_clarification')
   })
 
   it('merges recent sessions into a best-first scorecard', async () => {
@@ -640,6 +654,41 @@ describe('CouncilSessionStore — pending lifecycle (A6)', () => {
     expect(fetched?.result.ok).toBe(false)
     expect(fetched?.result.aggregate).toEqual([])
     expect(fetched?.result.sessionId).toBe(id)
+  })
+
+  it('uses a valid v3 placeholder for an analysis run so crash markers remain readable', () => {
+    const { db } = fakeDb()
+    const store = new CouncilSessionStore(db)
+
+    const id = store.insertPending({
+      projectId: 'prj_1',
+      cardId: null,
+      mode: 'analysis',
+      question: 'Inspect memory architecture',
+    })
+
+    expect(store.get(id)).toMatchObject({
+      mode: 'analysis',
+      status: 'pending',
+      verdictKind: null,
+      result: { schemaVersion: 3, mode: 'analysis', specVerdict: null },
+    })
+  })
+
+  it('refuses malformed completed results before they reach storage', () => {
+    const { db, rows } = fakeDb()
+    const store = new CouncilSessionStore(db)
+
+    expect(() =>
+      store.insert({
+        projectId: 'prj_1',
+        cardId: null,
+        mode: 'spec',
+        question: null,
+        result: {} as CouncilResult,
+      }),
+    ).toThrow(/persistence contract/i)
+    expect(rows).toHaveLength(0)
   })
 
   it('finalize replaces the placeholder and flips the row to final', () => {

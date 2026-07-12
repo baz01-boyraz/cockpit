@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { CouncilResult } from '../shared/council'
+import type { CouncilResult, CouncilResultV3 } from '../shared/council'
 import {
   buildClarificationContinuation,
   buildCouncilDisplay,
@@ -24,6 +24,39 @@ function result(overrides: Partial<CouncilResult> = {}): CouncilResult {
     stats: { seatsRun: 5, seatsFailed: 0, filesReviewed: 0, durationMs: 1200 },
     sessionId: 'session-1',
     ...overrides,
+  }
+}
+
+function analysisResult(): CouncilResultV3 {
+  return {
+    schemaVersion: 3,
+    ok: true,
+    mode: 'analysis',
+    responseLanguage: 'tr',
+    decision: {
+      kind: 'analysis_complete',
+      summary: 'Memory yazma ve retrieval yolları birbirinden kopuk.',
+      why: 'Üç ayrı servis aynı policy kararını tekrar ediyor.',
+      questions: [],
+      keyFindings: ['Tek normalize sınırı eksik.'],
+      dissent: [],
+    },
+    primaryArtifact: {
+      kind: 'analysisReport',
+      content: '# Repository Analysis\n\nStructured artifact; no verdict heading required.',
+    },
+    evidence: {
+      seats: [],
+      rankings: [],
+      aggregate: [],
+      labelToSeat: {},
+      rawChairman: 'RAW evidence that must not become the primary artifact.',
+    },
+    execution: {
+      stats: { seatsRun: 5, seatsFailed: 0, filesReviewed: 12, durationMs: 500 },
+    },
+    error: null,
+    sessionId: 'analysis-1',
   }
 }
 
@@ -137,6 +170,19 @@ describe('buildCouncilDisplay', () => {
       label: 'FAILED',
       why: 'Chairman timed out.',
     })
+  })
+
+  it('renders a v3 analysis from structured decision/artifact fields without a spec gate', () => {
+    const display = buildCouncilDisplay(analysisResult())
+
+    expect(display).toMatchObject({
+      kind: 'reviewed',
+      label: 'REVIEWED',
+      why: 'Memory yazma ve retrieval yolları birbirinden kopuk.',
+      refinedSpec: null,
+      chairmanAnalysis: '# Repository Analysis\n\nStructured artifact; no verdict heading required.',
+    })
+    expect(display.questions).toEqual([])
   })
 })
 
@@ -274,6 +320,21 @@ describe('Council report artifacts', () => {
       label: 'Copy decision',
       text: 'Chairman timed out.',
     })
+  })
+
+  it('copies and exports the v3 primary artifact instead of raw chairman evidence', () => {
+    const analysis = analysisResult()
+    const primary = primaryCouncilArtifact(analysis)
+    const report = serializeCouncilReport(analysis, { title: 'Memory system' })
+
+    expect(primary).toEqual({
+      kind: 'decision',
+      label: 'Copy analysis report',
+      text: '# Repository Analysis\n\nStructured artifact; no verdict heading required.',
+    })
+    expect(report).toContain('- Mode: `analysis`')
+    expect(report).toContain('Structured artifact; no verdict heading required.')
+    expect(report).not.toContain('RAW evidence that must not become the primary artifact.')
   })
 
   it('serializes one deterministic Markdown report with actual engines and no duplicated refined spec', () => {

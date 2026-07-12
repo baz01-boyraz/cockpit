@@ -144,6 +144,30 @@ describe('normalizeCouncilResult', () => {
     expect(normalizeCouncilResult(null)).toBeNull()
     expect(normalizeCouncilResult({ schemaVersion: 3, mode: 'analysis' })).toBeNull()
     expect(normalizeCouncilResult({ ok: true, mode: 'spec', seats: [] })).toBeNull()
+    expect(normalizeCouncilResult({ ...legacy(), schemaVersion: 99 })).toBeNull()
+    expect(normalizeCouncilResult({ ...v3(), responseLanguage: '' })).toBeNull()
+    expect(normalizeCouncilResult({ ...v3(), evidence: {} })).toBeNull()
+    expect(
+      normalizeCouncilResult({
+        ...v3(),
+        execution: { ...v3().execution, memoryContext: {} },
+      }),
+    ).toBeNull()
+    expect(
+      normalizeCouncilResult({
+        ...v3(),
+        primaryArtifact: { kind: 'refinedSpec', content: 'Wrong intent.' },
+      }),
+    ).toBeNull()
+  })
+
+  it('strips a stray legacy spec verdict from non-spec modes', () => {
+    const normalized = normalizeCouncilResult(
+      legacy({ mode: 'diff', specVerdict: { kind: 'approved', questions: [] } }),
+    )
+
+    expect(normalized?.specVerdict).toBeNull()
+    expect(councilSpecVerdictKind(normalized)).toBeNull()
   })
 })
 
@@ -255,9 +279,11 @@ describe('CouncilSessionStore compatibility adapter', () => {
       }),
     )
 
-    const result = store.get('v3-1')?.result
+    const session = store.get('v3-1')
+    const result = session?.result
     expect(result?.mode).toBe('analysis')
     expect(result?.specVerdict).toBeNull()
     expect(councilSpecVerdictKind(result)).toBeNull()
+    expect(session?.verdictKind).toBeNull()
   })
 })

@@ -11,7 +11,7 @@
  * `src/**\/*.test.ts` include.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { CouncilResult } from '@shared/council'
+import type { CouncilResult, CouncilResultV3 } from '@shared/council'
 
 const run = vi.fn<(...args: never[]) => Promise<CouncilResult>>()
 const session = vi.fn<(...args: never[]) => Promise<CouncilResult | null>>()
@@ -41,6 +41,36 @@ function makeResult(over: Partial<CouncilResult> = {}): CouncilResult {
   }
 }
 
+function makeV3Result(): CouncilResultV3 {
+  return {
+    schemaVersion: 3,
+    ok: true,
+    mode: 'spec',
+    responseLanguage: 'en',
+    decision: {
+      kind: 'approved',
+      summary: 'Ready to build.',
+      why: null,
+      questions: [],
+      keyFindings: [],
+      dissent: [],
+    },
+    primaryArtifact: { kind: 'refinedSpec', content: '**Goal** Build from v3.' },
+    execution: {
+      stats: { seatsRun: 5, seatsFailed: 0, filesReviewed: 0, durationMs: 10 },
+    },
+    evidence: {
+      seats: [],
+      rankings: [],
+      aggregate: [],
+      labelToSeat: {},
+      rawChairman: null,
+    },
+    error: null,
+    sessionId: 'sess-v3',
+  }
+}
+
 beforeEach(() => {
   run.mockReset()
   session.mockReset()
@@ -64,6 +94,18 @@ describe('council slice — standalone run', () => {
     expect(s.councilActive?.id).toBe('sess-1')
     expect(s.councilActive?.result?.sessionId).toBe('sess-1')
     expect(s.councilNotice).toBeTruthy()
+  })
+
+  it('normalizes a v3 envelope before any renderer consumer reads it', async () => {
+    run.mockResolvedValue(makeV3Result() as unknown as CouncilResult)
+
+    await useStore.getState().conveneCouncil('prj_1', 'Build from v3')
+
+    expect(useStore.getState().councilActive?.result).toMatchObject({
+      schemaVersion: 3,
+      specVerdict: { kind: 'approved' },
+      primaryArtifact: { kind: 'refinedSpec', content: '**Goal** Build from v3.' },
+    })
   })
 
   it('a convened verdict survives a same-project reset (the vanishing-verdict guard)', async () => {

@@ -29,6 +29,9 @@ export type CouncilTone =
 /** What the council is judging. `diff` = a change set, `spec` = a draft task spec. */
 export type CouncilMode = 'diff' | 'spec'
 
+/** Persisted/result intent. `analysis` is read-only and can never pass a spec gate. */
+export type CouncilIntentMode = CouncilMode | 'analysis'
+
 /**
  * One council seat: a lens (its mode-neutral core identity prompt) bound to an
  * engine. `fallbacks` are tried in order when an engine call throws, so a seat
@@ -172,7 +175,7 @@ export type CouncilSessionStatus = 'pending' | 'final' | 'failed'
 export interface CouncilSessionSummary {
   id: string
   cardId: string | null
-  mode: CouncilMode
+  mode: CouncilIntentMode
   /** The card title/body that grounded the run, already redacted at persist. */
   question: string | null
   verdictKind: 'approved' | 'needs_clarification' | null
@@ -209,10 +212,77 @@ export interface CouncilClarificationAnswer {
   answer: string
 }
 
+export const COUNCIL_RESULT_SCHEMA_VERSION = 3 as const
+
+export const COUNCIL_DECISION_KINDS = [
+  'approved',
+  'needs_clarification',
+  'changes_requested',
+  'review_complete',
+  'analysis_complete',
+  'failed',
+] as const
+export type CouncilDecisionKind = (typeof COUNCIL_DECISION_KINDS)[number]
+
+export interface CouncilDecision {
+  kind: CouncilDecisionKind
+  summary: string
+  why: string | null
+  questions: CouncilClarification[]
+  keyFindings: string[]
+  dissent: string[]
+}
+
+export const COUNCIL_PRIMARY_ARTIFACT_KINDS = [
+  'refinedSpec',
+  'analysisReport',
+  'diffVerdict',
+] as const
+export type CouncilResultArtifactKind = (typeof COUNCIL_PRIMARY_ARTIFACT_KINDS)[number]
+
+export interface CouncilResultArtifact {
+  kind: CouncilResultArtifactKind
+  content: string
+}
+
+export interface CouncilEvidenceV3 {
+  seats: CouncilSeatOutput[]
+  rankings: CouncilRanking[]
+  aggregate: AggregateRank[]
+  labelToSeat: Record<string, CouncilTone>
+  /** Raw chairman output is evidence/debug material, never the primary artifact. */
+  rawChairman: string | null
+}
+
+export interface CouncilExecutionV3 {
+  stats: CouncilStats
+  memoryContext?: MemoryContextReceipt
+}
+
+/** Strict write contract introduced by Council v3. */
+export interface CouncilResultV3 {
+  schemaVersion: typeof COUNCIL_RESULT_SCHEMA_VERSION
+  ok: boolean
+  mode: CouncilIntentMode
+  /** BCP-47-ish language tag; `und` means not declared/detected. */
+  responseLanguage: string
+  decision: CouncilDecision
+  primaryArtifact: CouncilResultArtifact | null
+  execution: CouncilExecutionV3
+  evidence: CouncilEvidenceV3
+  error: string | null
+  sessionId: string | null
+}
+
 /** The full council session, rendered as seats → peer rankings → verdict. */
 export interface CouncilResult {
+  /** Missing means persisted v2. Normalized reads always populate 2 or 3. */
+  schemaVersion?: 2 | typeof COUNCIL_RESULT_SCHEMA_VERSION
   ok: boolean
-  mode: CouncilMode
+  mode: CouncilIntentMode
+  responseLanguage?: string
+  decision?: CouncilDecision
+  primaryArtifact?: CouncilResultArtifact | null
   seats: CouncilSeatOutput[]
   rankings: CouncilRanking[]
   aggregate: AggregateRank[]
@@ -233,6 +303,21 @@ export interface CouncilResult {
   sessionId: string | null
   /** Automatic project-memory delivery receipt for this council run. */
   memoryContext?: MemoryContextReceipt
+  /** Present on normalized reads so v3 raw evidence remains a named layer. */
+  evidence?: CouncilEvidenceV3
+  execution?: CouncilExecutionV3
+}
+
+export type CouncilResultLike = CouncilResult | CouncilResultV3
+
+/** One safe read model shared by every v2/v3 consumer. */
+export interface NormalizedCouncilResult extends CouncilResult {
+  schemaVersion: 2 | typeof COUNCIL_RESULT_SCHEMA_VERSION
+  responseLanguage: string
+  decision: CouncilDecision
+  primaryArtifact: CouncilResultArtifact | null
+  evidence: CouncilEvidenceV3
+  execution: CouncilExecutionV3
 }
 
 /**
@@ -466,6 +551,513 @@ export function extractRefinedSpec(verdict: string): string | null {
   return text.length > 0 ? text : null
 }
 
+export const COUNCIL_V3_LIMITS = {
+  summaryChars: 600,
+  whyChars: 1_200,
+  questions: 3,
+  questionChars: 600,
+  keyFindings: 12,
+  dissent: 5,
+  findingChars: 800,
+  primaryArtifactChars: 12_000,
+  rawChairmanChars: 16_000,
+} as const
+
+const COUNCIL_BOUNDARY_TRUNCATION = '…[truncated]'
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function boundedText(value: unknown, cap: number): string {
+  if (typeof value !== 'string') return ''
+  const text = value.trim()
+  if (text.length <= cap) return text
+  return `${text.slice(0, Math.max(0, cap - COUNCIL_BOUNDARY_TRUNCATION.length))}${COUNCIL_BOUNDARY_TRUNCATION}`
+}
+
+function nullableBoundedText(value: unknown, cap: number): string | null {
+  if (value === null || value === undefined) return null
+  const text = boundedText(value, cap)
+  return text || null
+}
+
+function councilMode(value: unknown): CouncilIntentMode | null {
+  return value === 'spec' || value === 'diff' || value === 'analysis' ? value : null
+}
+
+function decisionKind(value: unknown): CouncilDecisionKind | null {
+  return typeof value === 'string' && (COUNCIL_DECISION_KINDS as readonly string[]).includes(value)
+    ? (value as CouncilDecisionKind)
+    : null
+}
+
+function artifactKind(value: unknown): CouncilResultArtifactKind | null {
+  return typeof value === 'string' &&
+    (COUNCIL_PRIMARY_ARTIFACT_KINDS as readonly string[]).includes(value)
+    ? (value as CouncilResultArtifactKind)
+    : null
+}
+
+function tone(value: unknown): CouncilTone | null {
+  return typeof value === 'string' && (COUNCIL_SEAT_IDS as readonly string[]).includes(value)
+    ? (value as CouncilTone)
+    : null
+}
+
+function engine(value: unknown): EngineSpec | null {
+  const item = record(value)
+  if (!item) return null
+  if (item.engine !== 'claude' && item.engine !== 'codex' && item.engine !== 'openrouter') return null
+  if (typeof item.model !== 'string') return null
+  return { engine: item.engine, model: item.model }
+}
+
+function seats(value: unknown): CouncilSeatOutput[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((candidate) => {
+    const item = record(candidate)
+    const id = tone(item?.id)
+    const actualEngine = engine(item?.engine)
+    if (!item || !id || !actualEngine || typeof item.label !== 'string' || typeof item.text !== 'string') {
+      return []
+    }
+    return [{
+      id,
+      label: boundedText(item.label, 120),
+      engine: actualEngine,
+      usedFallback: item.usedFallback === true,
+      text: boundedText(item.text, 16_000),
+      ok: item.ok === true,
+    }]
+  })
+}
+
+function rankings(value: unknown): CouncilRanking[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((candidate) => {
+    const item = record(candidate)
+    const seatId = tone(item?.seatId)
+    if (!item || !seatId || typeof item.text !== 'string' || !Array.isArray(item.parsed)) return []
+    return [{
+      seatId,
+      text: boundedText(item.text, 8_000),
+      parsed: item.parsed
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => boundedText(entry, 80))
+        .filter(Boolean)
+        .slice(0, 10),
+    }]
+  })
+}
+
+function aggregates(value: unknown): AggregateRank[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((candidate) => {
+    const item = record(candidate)
+    const seatId = tone(item?.seatId)
+    if (
+      !item ||
+      !seatId ||
+      typeof item.averageRank !== 'number' ||
+      !Number.isFinite(item.averageRank) ||
+      typeof item.count !== 'number' ||
+      !Number.isFinite(item.count)
+    ) return []
+    return [{ seatId, averageRank: item.averageRank, count: Math.max(0, Math.floor(item.count)) }]
+  })
+}
+
+function labels(value: unknown): Record<string, CouncilTone> {
+  const source = record(value)
+  if (!source) return {}
+  const out: Record<string, CouncilTone> = {}
+  for (const [label, rawTone] of Object.entries(source)) {
+    const seatId = tone(rawTone)
+    if (seatId && label.length <= 40) out[label] = seatId
+  }
+  return out
+}
+
+function normalizedStats(value: unknown): CouncilStats | null {
+  const item = record(value)
+  if (!item) return null
+  const fields = ['seatsRun', 'seatsFailed', 'filesReviewed', 'durationMs'] as const
+  if (fields.some((field) => typeof item[field] !== 'number' || !Number.isFinite(item[field]))) return null
+  return {
+    seatsRun: Math.max(0, Math.floor(item.seatsRun as number)),
+    seatsFailed: Math.max(0, Math.floor(item.seatsFailed as number)),
+    filesReviewed: Math.max(0, Math.floor(item.filesReviewed as number)),
+    durationMs: Math.max(0, Math.floor(item.durationMs as number)),
+  }
+}
+
+const MEMORY_CONTEXT_SURFACES = new Set([
+  'claude_chat',
+  'hermes_chat',
+  'council_spec',
+  'council_diff',
+  'swarm_worker',
+  'terminal_claude',
+  'terminal_codex',
+  'review_diff',
+  'review_text',
+])
+
+function normalizedMemoryContext(value: unknown): MemoryContextReceipt | null | undefined {
+  if (value === undefined) return undefined
+  const item = record(value)
+  if (
+    !item ||
+    typeof item.contextId !== 'string' ||
+    typeof item.surface !== 'string' ||
+    !MEMORY_CONTEXT_SURFACES.has(item.surface) ||
+    (item.status !== 'ready' && item.status !== 'empty' && item.status !== 'unavailable') ||
+    (item.delivery !== 'lookup' && item.delivery !== 'inline' && item.delivery !== 'none') ||
+    !Array.isArray(item.notes) ||
+    typeof item.characters !== 'number' ||
+    !Number.isFinite(item.characters)
+  ) return null
+
+  const notes = item.notes.flatMap((candidate) => {
+    const note = record(candidate)
+    if (
+      !note ||
+      typeof note.name !== 'string' ||
+      typeof note.path !== 'string' ||
+      typeof note.updatedAt !== 'string' ||
+      typeof note.truncated !== 'boolean'
+    ) return []
+    return [{
+      name: boundedText(note.name, 200),
+      path: boundedText(note.path, 500),
+      updatedAt: boundedText(note.updatedAt, 100),
+      truncated: note.truncated,
+    }]
+  }).slice(0, 10)
+  if (notes.length !== item.notes.length) return null
+
+  return {
+    contextId: boundedText(item.contextId, 200),
+    surface: item.surface as MemoryContextReceipt['surface'],
+    status: item.status,
+    delivery: item.delivery,
+    notes,
+    characters: Math.max(0, Math.floor(item.characters)),
+    ...(record(item.evidence)
+      ? { evidence: item.evidence as unknown as NonNullable<MemoryContextReceipt['evidence']> }
+      : {}),
+  }
+}
+
+function clarification(value: unknown, index: number): CouncilClarification | null {
+  if (typeof value === 'string') {
+    const question = boundedText(value, COUNCIL_V3_LIMITS.questionChars)
+    return question
+      ? { id: `question-${index + 1}`, question, why: null, recommendedAnswer: null }
+      : null
+  }
+  const item = record(value)
+  if (!item) return null
+  const question = boundedText(item.question, COUNCIL_V3_LIMITS.questionChars)
+  if (!question) return null
+  return {
+    id: boundedText(item.id, 120) || `question-${index + 1}`,
+    question,
+    why: nullableBoundedText(item.why, COUNCIL_V3_LIMITS.questionChars),
+    recommendedAnswer: nullableBoundedText(
+      item.recommendedAnswer,
+      COUNCIL_V3_LIMITS.questionChars,
+    ),
+  }
+}
+
+function decisionQuestions(value: unknown): CouncilClarification[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .slice(0, COUNCIL_V3_LIMITS.questions)
+    .map(clarification)
+    .filter((item): item is CouncilClarification => item !== null)
+}
+
+function boundedStringArray(value: unknown, count: number): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => boundedText(item, COUNCIL_V3_LIMITS.findingChars))
+    .filter(Boolean)
+    .slice(0, count)
+}
+
+function normalizedDecision(value: unknown): CouncilDecision | null {
+  const item = record(value)
+  const kind = decisionKind(item?.kind)
+  if (!item || !kind) return null
+  const summary = boundedText(item.summary, COUNCIL_V3_LIMITS.summaryChars)
+  if (!summary) return null
+  return {
+    kind,
+    summary,
+    why: nullableBoundedText(item.why, COUNCIL_V3_LIMITS.whyChars),
+    questions: decisionQuestions(item.questions),
+    keyFindings: boundedStringArray(item.keyFindings, COUNCIL_V3_LIMITS.keyFindings),
+    dissent: boundedStringArray(item.dissent, COUNCIL_V3_LIMITS.dissent),
+  }
+}
+
+function normalizedArtifact(value: unknown): CouncilResultArtifact | null | undefined {
+  if (value === null) return null
+  const item = record(value)
+  const kind = artifactKind(item?.kind)
+  if (!item || !kind) return undefined
+  const content = boundedText(item.content, COUNCIL_V3_LIMITS.primaryArtifactChars)
+  return content ? { kind, content } : undefined
+}
+
+function legacySummary(result: CouncilResult, kind: CouncilDecisionKind): string {
+  if (result.error?.trim()) return boundedText(result.error, COUNCIL_V3_LIMITS.summaryChars)
+  const lines = (result.verdict ?? '')
+    .split('\n')
+    .map((line) => line.replace(/^#{1,6}\s+/, '').trim())
+    .filter(Boolean)
+    .filter((line) => !/^(APPROVED|NEEDS[_\s-]?CLARIFICATION)$/i.test(line))
+  return boundedText(lines[0] ?? kind.replace(/_/g, ' '), COUNCIL_V3_LIMITS.summaryChars)
+}
+
+function legacyDecision(result: CouncilResult): CouncilDecision {
+  const specKind = result.mode === 'spec' ? result.specVerdict?.kind ?? null : null
+  const kind: CouncilDecisionKind = !result.ok
+    ? 'failed'
+    : specKind ?? (result.mode === 'diff' ? 'review_complete' : 'analysis_complete')
+  const guided = result.specVerdict?.clarifications
+  const rawQuestions = guided && guided.length > 0
+    ? guided
+    : result.specVerdict?.questions ?? []
+  return {
+    kind,
+    summary: legacySummary(result, kind),
+    why: null,
+    questions: decisionQuestions(rawQuestions),
+    keyFindings: [],
+    dissent: [],
+  }
+}
+
+function legacyArtifact(result: CouncilResult): CouncilResultArtifact | null {
+  if (!result.verdict) return null
+  if (result.mode === 'spec') {
+    const refined = extractRefinedSpec(result.verdict)
+    return refined ? { kind: 'refinedSpec', content: boundedText(refined, COUNCIL_V3_LIMITS.primaryArtifactChars) } : null
+  }
+  if (result.mode === 'diff') {
+    return { kind: 'diffVerdict', content: boundedText(result.verdict, COUNCIL_V3_LIMITS.primaryArtifactChars) }
+  }
+  return { kind: 'analysisReport', content: boundedText(result.verdict, COUNCIL_V3_LIMITS.primaryArtifactChars) }
+}
+
+function validNullableString(value: unknown): boolean {
+  return value === null || typeof value === 'string'
+}
+
+function normalizeLegacy(value: Record<string, unknown>): NormalizedCouncilResult | null {
+  const mode = councilMode(value.mode)
+  const stats = normalizedStats(value.stats)
+  if (
+    typeof value.ok !== 'boolean' ||
+    !mode ||
+    mode === 'analysis' ||
+    !Array.isArray(value.seats) ||
+    !Array.isArray(value.rankings) ||
+    !Array.isArray(value.aggregate) ||
+    !record(value.labelToSeat) ||
+    !validNullableString(value.verdict) ||
+    !validNullableString(value.error) ||
+    !validNullableString(value.sessionId) ||
+    !stats
+  ) return null
+
+  const rawSpec = value.specVerdict
+  let specVerdict: CouncilResult['specVerdict'] = null
+  if (mode === 'spec' && rawSpec !== null && rawSpec !== undefined) {
+    const item = record(rawSpec)
+    if (!item || (item.kind !== 'approved' && item.kind !== 'needs_clarification')) return null
+    const questions = Array.isArray(item.questions)
+      ? item.questions
+          .filter((question): question is string => typeof question === 'string')
+          .map((question) => boundedText(question, COUNCIL_V3_LIMITS.questionChars))
+          .filter(Boolean)
+          .slice(0, COUNCIL_V3_LIMITS.questions)
+      : []
+    const clarifications = decisionQuestions(item.clarifications)
+    specVerdict = {
+      kind: item.kind,
+      questions,
+      ...(clarifications.length > 0 ? { clarifications } : {}),
+    }
+  }
+
+  const memoryContext = normalizedMemoryContext(value.memoryContext)
+  if (memoryContext === null) return null
+  const base: CouncilResult = {
+    ok: value.ok,
+    mode,
+    seats: seats(value.seats),
+    rankings: rankings(value.rankings),
+    aggregate: aggregates(value.aggregate),
+    labelToSeat: labels(value.labelToSeat),
+    verdict: nullableBoundedText(value.verdict, COUNCIL_V3_LIMITS.rawChairmanChars),
+    specVerdict,
+    error: nullableBoundedText(value.error, COUNCIL_V3_LIMITS.whyChars),
+    stats,
+    sessionId:
+      typeof value.sessionId === 'string' ? boundedText(value.sessionId, 200) : null,
+    ...(memoryContext ? { memoryContext } : {}),
+  }
+  const decision = legacyDecision(base)
+  const primaryArtifact = legacyArtifact(base)
+  const evidence: CouncilEvidenceV3 = {
+    seats: base.seats,
+    rankings: base.rankings,
+    aggregate: base.aggregate,
+    labelToSeat: base.labelToSeat,
+    rawChairman: base.verdict,
+  }
+  const execution: CouncilExecutionV3 = {
+    stats,
+    ...(base.memoryContext ? { memoryContext: base.memoryContext } : {}),
+  }
+  return {
+    ...base,
+    schemaVersion: 2,
+    responseLanguage:
+      typeof value.responseLanguage === 'string' && value.responseLanguage.trim()
+        ? boundedText(value.responseLanguage, 32)
+        : 'und',
+    decision,
+    primaryArtifact,
+    evidence,
+    execution,
+  }
+}
+
+function normalizeV3(value: Record<string, unknown>): NormalizedCouncilResult | null {
+  const mode = councilMode(value.mode)
+  const decisionRaw = record(value.decision)
+  const decision = normalizedDecision(decisionRaw)
+  const artifact = normalizedArtifact(value.primaryArtifact)
+  const executionRaw = record(value.execution)
+  const evidenceRaw = record(value.evidence)
+  const stats = normalizedStats(executionRaw?.stats)
+  if (
+    value.schemaVersion !== COUNCIL_RESULT_SCHEMA_VERSION ||
+    typeof value.ok !== 'boolean' ||
+    !mode ||
+    typeof value.responseLanguage !== 'string' ||
+    !value.responseLanguage.trim() ||
+    !decisionRaw ||
+    !decision ||
+    !validNullableString(decisionRaw.why) ||
+    !Array.isArray(decisionRaw.questions) ||
+    !Array.isArray(decisionRaw.keyFindings) ||
+    !Array.isArray(decisionRaw.dissent) ||
+    artifact === undefined ||
+    (artifact !== null &&
+      ((mode === 'spec' && artifact.kind !== 'refinedSpec') ||
+        (mode === 'diff' && artifact.kind !== 'diffVerdict') ||
+        (mode === 'analysis' && artifact.kind !== 'analysisReport'))) ||
+    !executionRaw ||
+    !evidenceRaw ||
+    !stats ||
+    !Array.isArray(evidenceRaw.seats) ||
+    !Array.isArray(evidenceRaw.rankings) ||
+    !Array.isArray(evidenceRaw.aggregate) ||
+    !record(evidenceRaw.labelToSeat) ||
+    !validNullableString(evidenceRaw.rawChairman) ||
+    (executionRaw.memoryContext !== undefined && !record(executionRaw.memoryContext)) ||
+    !validNullableString(value.error) ||
+    !validNullableString(value.sessionId)
+  ) return null
+
+  const normalizedEvidence: CouncilEvidenceV3 = {
+    seats: seats(evidenceRaw.seats),
+    rankings: rankings(evidenceRaw.rankings),
+    aggregate: aggregates(evidenceRaw.aggregate),
+    labelToSeat: labels(evidenceRaw.labelToSeat),
+    rawChairman: nullableBoundedText(
+      evidenceRaw.rawChairman,
+      COUNCIL_V3_LIMITS.rawChairmanChars,
+    ),
+  }
+  const memoryContext = normalizedMemoryContext(executionRaw.memoryContext)
+  if (memoryContext === null) return null
+  const execution: CouncilExecutionV3 = {
+    stats,
+    ...(memoryContext ? { memoryContext } : {}),
+  }
+  const specVerdict: CouncilResult['specVerdict'] =
+    mode === 'spec' && (decision.kind === 'approved' || decision.kind === 'needs_clarification')
+      ? {
+          kind: decision.kind,
+          questions: decision.questions.map((question) => question.question),
+          ...(decision.questions.length > 0 ? { clarifications: decision.questions } : {}),
+        }
+      : null
+  const verdict = normalizedEvidence.rawChairman ?? artifact?.content ?? null
+
+  return {
+    schemaVersion: COUNCIL_RESULT_SCHEMA_VERSION,
+    ok: value.ok,
+    mode,
+    responseLanguage: boundedText(value.responseLanguage, 32),
+    decision,
+    primaryArtifact: artifact,
+    seats: normalizedEvidence.seats,
+    rankings: normalizedEvidence.rankings,
+    aggregate: normalizedEvidence.aggregate,
+    labelToSeat: normalizedEvidence.labelToSeat,
+    verdict,
+    specVerdict,
+    error: nullableBoundedText(value.error, COUNCIL_V3_LIMITS.whyChars),
+    stats,
+    sessionId:
+      typeof value.sessionId === 'string' ? boundedText(value.sessionId, 200) : null,
+    ...(memoryContext ? { memoryContext } : {}),
+    evidence: normalizedEvidence,
+    execution,
+  }
+}
+
+/** Parse and normalize either an unversioned/v2 blob or the strict v3 envelope. */
+export function normalizeCouncilResult(value: unknown): NormalizedCouncilResult | null {
+  const item = record(value)
+  if (!item) return null
+  if (
+    item.schemaVersion !== undefined &&
+    item.schemaVersion !== 2 &&
+    item.schemaVersion !== COUNCIL_RESULT_SCHEMA_VERSION
+  ) return null
+  return item.schemaVersion === COUNCIL_RESULT_SCHEMA_VERSION
+    ? normalizeV3(item)
+    : normalizeLegacy(item)
+}
+
+/** Only a real spec-mode decision can enter the Swarm/outcome spec-gate path. */
+export function councilSpecVerdictKind(
+  value: unknown,
+): 'approved' | 'needs_clarification' | null {
+  const result = normalizeCouncilResult(value)
+  if (!result || result.mode !== 'spec') return null
+  return result.decision.kind === 'approved' || result.decision.kind === 'needs_clarification'
+    ? result.decision.kind
+    : null
+}
+
+export function isApprovedCouncilSpec(value: unknown): boolean {
+  return councilSpecVerdictKind(value) === 'approved'
+}
+
 /**
  * A worker "was in the meeting" — the total brief is hard-capped so a runaway
  * verdict or seat reply can never balloon the pty opening prompt (the same
@@ -482,7 +1074,9 @@ const COUNCIL_BRIEF_TRUNCATION = '…[truncated]'
  * — neither a verdict nor a single OK seat. Pure: the caller feeds it a stored
  * CouncilResult.
  */
-export function composeCouncilBrief(result: CouncilResult): string | null {
+export function composeCouncilBrief(value: unknown): string | null {
+  const result = normalizeCouncilResult(value)
+  if (!result || !isApprovedCouncilSpec(result)) return null
   const okSeats = result.seats.filter((s) => s.ok)
   if (!result.verdict && okSeats.length === 0) return null
 
@@ -490,7 +1084,12 @@ export function composeCouncilBrief(result: CouncilResult): string | null {
     "COUNCIL BRIEF — this task's spec was reviewed by an LLM council; build with these conclusions in mind.",
   ]
 
-  const conclusions = (result.verdict ? extractRefinedSpec(result.verdict) : null) ?? result.verdict?.trim() ?? null
+  const conclusions =
+    (result.primaryArtifact?.kind === 'refinedSpec'
+      ? result.primaryArtifact.content
+      : result.verdict
+        ? extractRefinedSpec(result.verdict)
+        : null) ?? result.verdict?.trim() ?? null
   if (conclusions) parts.push('', conclusions)
 
   const seatText = (id: CouncilTone): string | null => {

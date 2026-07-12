@@ -21,6 +21,7 @@ export function councilHistoryPresentation(
   if (summary.verdictKind === 'needs_clarification') {
     return { tone: 'clarify', label: 'Needs input' }
   }
+  if (summary.mode === 'analysis') return { tone: 'final', label: 'Analyzed' }
   return { tone: 'final', label: 'Reviewed' }
 }
 

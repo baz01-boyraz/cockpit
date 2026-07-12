@@ -1,8 +1,10 @@
 import {
-  extractRefinedSpec,
+  councilSpecVerdictKind,
+  normalizeCouncilResult,
   type CouncilClarification,
   type CouncilClarificationAnswer,
   type CouncilResult,
+  type NormalizedCouncilResult,
 } from './council'
 
 export type CouncilDisplayKind = 'approved' | 'clarify' | 'failed' | 'reviewed'
@@ -46,6 +48,25 @@ export interface CouncilReportOptions {
 
 const normalize = (text: string): string => text.replace(/\s+/g, ' ').trim()
 
+const INVALID_COUNCIL_RESULT: CouncilResult = {
+  ok: false,
+  mode: 'diff',
+  seats: [],
+  rankings: [],
+  aggregate: [],
+  labelToSeat: {},
+  verdict: null,
+  specVerdict: null,
+  error: 'The stored Council result is invalid or unreadable.',
+  stats: { seatsRun: 0, seatsFailed: 0, filesReviewed: 0, durationMs: 0 },
+  sessionId: null,
+}
+
+/** Every display/export path enters through the same defensive v2/v3 adapter. */
+function displayResult(value: unknown): NormalizedCouncilResult {
+  return normalizeCouncilResult(value) ?? normalizeCouncilResult(INVALID_COUNCIL_RESULT)!
+}
+
 const stripInlineMarkdown = (text: string): string =>
   normalize(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))
 
@@ -87,8 +108,9 @@ function withoutHeadingSection(text: string, name: RegExp): string | null {
   return value || null
 }
 
-function verdictWhy(result: CouncilResult): string {
+function verdictWhy(result: NormalizedCouncilResult): string {
   if (!result.ok) return result.error?.trim() || 'The council could not produce a reliable verdict.'
+  if (result.schemaVersion === 3) return result.decision.summary
   if (!result.verdict) return 'The council finished without a chairman summary.'
 
   const section = headingSection(result.verdict, /verdict/i)
@@ -136,13 +158,15 @@ function acceptanceItems(text: string | null): string[] {
   return bullets.length > 0 ? bullets : [stripInlineMarkdown(text)].filter(Boolean)
 }
 
-/** Convert a raw CouncilResult into the verdict-first facts the UI needs. */
-export function buildCouncilDisplay(result: CouncilResult): CouncilDisplayModel {
+/** Convert any persisted v2/new v3 result into verdict-first UI facts. */
+export function buildCouncilDisplay(value: unknown): CouncilDisplayModel {
+  const result = displayResult(value)
+  const gate = councilSpecVerdictKind(result)
   const kind: CouncilDisplayKind = !result.ok
     ? 'failed'
-    : result.specVerdict?.kind === 'approved'
+    : gate === 'approved'
       ? 'approved'
-      : result.specVerdict?.kind === 'needs_clarification'
+      : gate === 'needs_clarification'
         ? 'clarify'
         : 'reviewed'
   const label =
@@ -153,19 +177,22 @@ export function buildCouncilDisplay(result: CouncilResult): CouncilDisplayModel 
         : kind === 'failed'
           ? 'FAILED'
           : 'REVIEWED'
-  const refinedSpec = result.verdict ? extractRefinedSpec(result.verdict) : null
-  const chairmanAnalysis = result.verdict
-    ? withoutHeadingSection(result.verdict, /refined spec/i)
-    : null
-  const questions = (result.specVerdict?.questions ?? []).slice(0, 3)
-  const clarifications = result.specVerdict?.clarifications?.slice(0, 3) ?? questions.map(
-    (question, index): CouncilClarification => ({
-      id: `question-${index + 1}`,
-      question,
-      why: null,
-      recommendedAnswer: null,
-    }),
-  )
+  const refinedSpec =
+    result.mode === 'spec' && result.primaryArtifact?.kind === 'refinedSpec'
+      ? result.primaryArtifact.content
+      : null
+  const chairmanAnalysis = result.schemaVersion === 3
+    ? result.primaryArtifact?.kind === 'analysisReport' ||
+      result.primaryArtifact?.kind === 'diffVerdict'
+      ? result.primaryArtifact.content
+      : result.evidence.rawChairman
+        ? withoutHeadingSection(result.evidence.rawChairman, /refined spec/i)
+        : null
+    : result.verdict
+      ? withoutHeadingSection(result.verdict, /refined spec/i)
+      : null
+  const clarifications = result.decision.questions.slice(0, 3)
+  const questions = clarifications.map((item) => item.question)
 
   return {
     kind,
@@ -183,7 +210,8 @@ export function buildCouncilDisplay(result: CouncilResult): CouncilDisplayModel 
 }
 
 /** The smallest useful artifact for the run's current outcome. */
-export function primaryCouncilArtifact(result: CouncilResult): CouncilPrimaryArtifact {
+export function primaryCouncilArtifact(value: unknown): CouncilPrimaryArtifact {
+  const result = displayResult(value)
   const display = buildCouncilDisplay(result)
   if (display.kind === 'approved') {
     return {
@@ -199,6 +227,18 @@ export function primaryCouncilArtifact(result: CouncilResult): CouncilPrimaryArt
       text: display.questions.map((question, index) => `${index + 1}. ${question}`).join('\n'),
     }
   }
+  if (display.kind === 'reviewed' && result.primaryArtifact) {
+    return {
+      kind: 'decision',
+      label:
+        result.primaryArtifact.kind === 'analysisReport'
+          ? 'Copy analysis report'
+          : result.primaryArtifact.kind === 'diffVerdict'
+            ? 'Copy diff verdict'
+            : 'Copy refined spec',
+      text: result.primaryArtifact.content,
+    }
+  }
   return {
     kind: 'decision',
     label: 'Copy decision',
@@ -206,7 +246,7 @@ export function primaryCouncilArtifact(result: CouncilResult): CouncilPrimaryArt
   }
 }
 
-function reportEngine(engine: CouncilResult['seats'][number]['engine']): string {
+function reportEngine(engine: NormalizedCouncilResult['seats'][number]['engine']): string {
   return `${engine.engine} · ${engine.model || 'default'}`
 }
 
@@ -217,9 +257,10 @@ function reportTitle(title?: string): string {
 
 /** Stable, DOM-independent Markdown export for one complete Council session. */
 export function serializeCouncilReport(
-  result: CouncilResult,
+  value: unknown,
   options: CouncilReportOptions = {},
 ): string {
+  const result = displayResult(value)
   const display = buildCouncilDisplay(result)
   const lines = [
     reportTitle(options.title),
@@ -298,7 +339,8 @@ export function serializeCouncilReport(
 }
 
 /** A filesystem-safe deterministic name for the Markdown export. */
-export function councilReportFilename(result: CouncilResult, fallbackId = 'session'): string {
+export function councilReportFilename(value: unknown, fallbackId = 'session'): string {
+  const result = displayResult(value)
   const source = result.sessionId ?? fallbackId
   const safe = source.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '')
   return `council-report-${safe || 'session'}.md`

@@ -6,7 +6,7 @@ import type { ReviewResult } from '@shared/review'
 import type { CompletionReport } from '@shared/completion-report'
 import { formatCompletionSummary } from '@shared/completion-report'
 import type { CouncilResult, ScorecardEntry } from '@shared/council'
-import { COUNCIL_SEATS } from '@shared/council'
+import { COUNCIL_SEATS, normalizeCouncilResult } from '@shared/council'
 import { IconCheck, IconShieldSearch, IconWarning, IconX } from '../components/icons'
 import { ReviewFindings, reviewFailure } from '../components/ReviewFindings'
 import { CouncilVerdict } from '../components/CouncilVerdict'
@@ -345,10 +345,13 @@ export function SwarmPanel() {
       void loadScorecard()
       const question = [card.title, card.body].filter(Boolean).join('\n\n')
       try {
-        const result = await cockpit().council.run(projectId, {
+        const rawResult = await cockpit().council.run(projectId, {
           dir: card.worktreePath ?? undefined,
           question: question || undefined,
         })
+        const result = normalizeCouncilResult(rawResult) ?? councilFailure(
+          new Error('Council returned an invalid result envelope.'),
+        )
         // A council can outlive a project switch — never paint a stale result.
         if (useStore.getState().activeProjectId !== projectId) return
         setCardReview({ kind: 'council', cardTitle: card.title, result })

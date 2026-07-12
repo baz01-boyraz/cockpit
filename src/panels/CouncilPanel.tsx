@@ -26,7 +26,9 @@ import { IconCheck, IconCouncil, IconDownload, IconSend, IconWarning, IconX } fr
 /** A persisted session's headline for the active-run surface when it is browsed. */
 function sessionTitle(summary: CouncilSessionSummary): string {
   if (summary.question && summary.question.trim().length > 0) return summary.question
-  return summary.mode === 'spec' ? 'Spec-gate deliberation' : 'Diff-review deliberation'
+  if (summary.mode === 'spec') return 'Spec-gate deliberation'
+  if (summary.mode === 'analysis') return 'Repository analysis'
+  return 'Diff-review deliberation'
 }
 
 /**
