@@ -20,6 +20,7 @@ import { cockpit, isMockBackend } from '../lib/cockpit'
 import { sourceLabel, toHermesOpener } from '../lib/sentinelView'
 import { IconBolt, IconX } from './icons'
 import type { SentinelSignal } from '@shared/sentinel'
+import { completionCardId } from '@shared/swarm-completion'
 
 /** How long a `notice` toast lingers before auto-dismissing. Alerts never auto-dismiss. */
 const NOTICE_TTL_MS = 12_000
@@ -31,6 +32,7 @@ export function SentinelToasts() {
   const openHermesWith = useStore((s) => s.openHermesWith)
   const markSignalsSeen = useStore((s) => s.markSignalsSeen)
   const bumpSentinelUnseen = useStore((s) => s.bumpSentinelUnseen)
+  const setView = useStore((s) => s.setView)
 
   const [toasts, setToasts] = useState<SentinelSignal[]>([])
   const [expanded, setExpanded] = useState(false)
@@ -113,6 +115,12 @@ export function SentinelToasts() {
     dismiss(signal.id)
   }
 
+  const reviewCard = (signal: SentinelSignal) => {
+    setView('swarm')
+    void markSignalsSeen([signal.id])
+    dismiss(signal.id)
+  }
+
   if (toasts.length === 0) return null
 
   const visible = expanded ? toasts : toasts.slice(0, MAX_VISIBLE)
@@ -145,6 +153,15 @@ export function SentinelToasts() {
           <p className="sentinelToast__title">{signal.triage?.headline ?? signal.title}</p>
           <p className="sentinelToast__summary">{signal.triage?.action ?? signal.summary}</p>
           <div className="sentinelToast__actions">
+            {completionCardId(signal) && (
+              <button
+                type="button"
+                className="sentinelToast__ask"
+                onClick={() => reviewCard(signal)}
+              >
+                Review card
+              </button>
+            )}
             <button
               type="button"
               className="sentinelToast__ask"

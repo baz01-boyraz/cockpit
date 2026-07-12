@@ -123,6 +123,17 @@ export interface DiffStatReader {
  */
 export type SwarmNotifier = (input: { title: string; body: string }) => void
 
+/** Successful-completion epilogue; kept structural so Swarm never depends on a model. */
+export interface CompletionSteward {
+  track(sessionId: string): void
+  discard(sessionId: string): void
+  complete(input: {
+    projectId: string
+    sessionId: string | null
+    report: CompletionReport
+  }): Promise<void>
+}
+
 /** Parallel cards ceiling (plan D6). Raise only after Gate 6 passes at 4. */
 export const RUNNING_CAP = 3
 
@@ -179,6 +190,8 @@ export class SwarmService {
     /** Automatic project-memory gateway. Production always wires this; the
      * filename-only hub path remains a compatibility fallback for tests. */
     private readonly memoryContexts?: MemoryContextProvider,
+    /** Optional persisted-evidence → Hermes Pro completion epilogue. */
+    private readonly completionSteward?: CompletionSteward,
   ) {
     // 6.4: any card still in_progress at construction is an orphan — its
     // worker died with the previous app instance (TerminalManager already
@@ -328,10 +341,12 @@ export class SwarmService {
       // no-op for it) and the card stays Running across the handoff.
       this.doneSignal?.arm(projectPath, worktree.path)
       const session = this.spawnWorker(projectId, card, worktree, assignments, nextStep, this.councilBriefFor(card))
+      this.completionSteward?.track(session.id)
       this.db
         .prepare(`UPDATE kanban_cards SET terminal_session_id = ?, pipeline_step = ?, updated_at = ? WHERE id = ?`)
         .run(session.id, nextStep, nowIso(), card.id)
       if (card.terminalSessionId) {
+        this.completionSteward?.discard(card.terminalSessionId)
         try {
           this.terminals.kill(card.terminalSessionId)
         } catch {
@@ -360,7 +375,7 @@ export class SwarmService {
     })
     // The transition is now durable; announcing it (event + notification) is a
     // best-effort epilogue that must never unwind the move above.
-    void this.announceCompletion(projectId, card.id, card.title)
+    void this.announceCompletion(projectId, card.id, card.title, card.terminalSessionId, true)
   }
 
   /**
@@ -454,6 +469,7 @@ export class SwarmService {
     // and the fact is recorded on the audit line either way.
     const councilBrief = this.councilBriefFor(card)
     const session = this.spawnWorker(input.projectId, card, worktree, assignments, step, councilBrief)
+    this.completionSteward?.track(session.id)
 
     const now = nowIso()
     this.db
@@ -608,6 +624,7 @@ export class SwarmService {
     const next = moveCardInList(cards, card.id, 'parked', 0, 'service', nowIso())
     this.persistChanges(cards, next)
     if (card.terminalSessionId) {
+      this.completionSteward?.discard(card.terminalSessionId)
       try {
         this.terminals.kill(card.terminalSessionId)
       } catch {
@@ -645,6 +662,7 @@ export class SwarmService {
     // cleanly — raise a `notice` so it surfaces beyond the silent board move. A
     // clean (0) exit is the normal path and stays quiet. Fire-and-forget.
     if (exitCode !== 0) {
+      this.completionSteward?.discard(sessionId)
       this.sentinel?.report({
         projectId: row.project_id,
         severity: 'notice',
@@ -656,7 +674,13 @@ export class SwarmService {
     }
     // Same best-effort announcement as the done-signal path — the card is
     // already in In review; the notification is an epilogue, never a gate.
-    void this.announceCompletion(row.project_id, row.id, row.title)
+    void this.announceCompletion(
+      row.project_id,
+      row.id,
+      row.title,
+      sessionId,
+      exitCode === 0,
+    )
   }
 
   /**
@@ -668,13 +692,28 @@ export class SwarmService {
   async completionReport(projectId: string, cardId: string): Promise<CompletionReport> {
     const card = this.cardOrThrow(projectId, cardId)
     let diffStat: DiffStat | null = null
-    if (card.worktreePath && this.review) {
+    let worktreeState: CompletionReport['worktreeState'] = 'unavailable'
+    let worktreePresent = false
+    if (card.worktreePath) {
+      try {
+        worktreePresent = this.worktrees.exists(card.worktreePath)
+        if (!worktreePresent) worktreeState = 'missing'
+      } catch {
+        worktreeState = 'unavailable'
+      }
+    }
+    if (card.worktreePath && worktreePresent && this.review) {
       try {
         diffStat = await this.review.diffStat(projectId, { dir: card.worktreePath })
+        worktreeState =
+          diffStat.files > 0 || diffStat.insertions > 0 || diffStat.deletions > 0
+            ? 'changed'
+            : 'clean'
       } catch {
         // A non-repo/removed worktree degrades to no diff stat — the report is
         // still worth returning (title, branch, acceptance criteria).
         diffStat = null
+        worktreeState = 'unavailable'
       }
     }
     return {
@@ -682,6 +721,7 @@ export class SwarmService {
       title: card.title,
       branch: card.branch,
       diffStat,
+      worktreeState,
       acceptance: extractAcceptanceCriteria(card.body),
       hasCouncilSpec: card.councilSessionId !== null,
       finishedAt: card.updatedAt,
@@ -689,16 +729,32 @@ export class SwarmService {
   }
 
   /**
-   * Fire the `swarm:cardCompleted` renderer event and a macOS notification for a
-   * freshly-reviewable card. Wholly best-effort: the diff stat, the event, and
-   * the notification are each isolated so a slow git call or an unsupported
-   * Notification host can never surface as a thrown board transition.
+   * Fire the immediate `swarm:cardCompleted` activity event for a freshly
+   * reviewable card. Successful cards then delegate persisted evidence + Pro
+   * publication to the optional steward; failures/degraded builds keep the old
+   * deterministic macOS fallback. Every epilogue stays isolated from the board
+   * transition that already completed.
    */
-  private async announceCompletion(projectId: string, cardId: string, title: string): Promise<void> {
+  private async announceCompletion(
+    projectId: string,
+    cardId: string,
+    title: string,
+    sessionId: string | null,
+    successful: boolean,
+  ): Promise<void> {
     try {
       const report = await this.completionReport(projectId, cardId)
       const summary = formatCompletionSummary(report)
       this.events.emitTyped('swarm:cardCompleted', { projectId, cardId, title, summary })
+      if (successful && this.completionSteward) {
+        try {
+          await this.completionSteward.complete({ projectId, sessionId, report })
+          return
+        } catch {
+          // A malformed optional collaborator falls through to the deterministic
+          // native notification; the completion is never silently lost.
+        }
+      }
       try {
         this.notifier?.({ title: 'Swarm — ready for review', body: summary })
       } catch {

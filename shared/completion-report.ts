@@ -22,6 +22,8 @@ export interface CompletionReport {
   /** Cheap `+N −M · K files` delta over the card's worktree, or null when the
    *  card has no worktree (or the tree could not be read). */
   diffStat: CompletionDiffStat | null
+  /** Deterministic state of the card's isolated tree at completion time. */
+  worktreeState: 'changed' | 'clean' | 'missing' | 'unavailable'
   /** Acceptance criteria pulled from the card body's refined-spec section. */
   acceptance: string[]
   /** Whether the card was gated by the LLM council's spec meeting. */

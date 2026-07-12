@@ -252,6 +252,7 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
         title: 'Add the widget',
         branch: 'swarm/add-the-widget-1a2b',
         diffStat: { files: 3, insertions: 42, deletions: 7 },
+        worktreeState: 'changed',
         acceptance: ['It renders', 'It has a test'],
         hasCouncilSpec: true,
         finishedAt: 't2',

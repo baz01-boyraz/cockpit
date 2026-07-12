@@ -17,6 +17,7 @@ const SOURCE_LABELS: Record<SentinelSource, string> = {
   'worker-exit': 'worker exit',
   approval: 'approval',
   council: 'council',
+  'swarm-completion': 'swarm completion',
 }
 
 export function sourceLabel(source: SentinelSource): string {

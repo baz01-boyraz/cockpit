@@ -45,6 +45,17 @@ export type SentinelMemorySink = Pick<MemoryHubService, 'write' | 'list'>
  */
 export type SentinelNotifier = (input: { title: string; body: string }) => void
 
+export interface SentinelReportInput {
+  projectId: string
+  severity: SentinelSignal['severity']
+  source: SentinelSignal['source']
+  title: string
+  summary: string
+  context?: string | null
+  /** Optional machine identity; never replaces the human-facing title. */
+  dedupKey?: string
+}
+
 interface SignalRow {
   id: string
   project_id: string
@@ -84,7 +95,7 @@ const RETRIAGE_SWEEP_WINDOW_MS = 48 * 60 * 60_000
 const RETRIAGE_SWEEP_LIMIT = 50
 
 /**
- * The sentinel: an always-on, LLM-FREE signal layer (Faz A). Sensors call
+ * The sentinel: an always-on deterministic signal layer (Faz A). Sensors call
  * {@link report} fire-and-forget; the service dedups against a per-fingerprint
  * cooldown, persists the survivor, emits `sentinel:alert` to the renderer, and
  * (for `alert` severity only) fires a macOS notification.
@@ -132,7 +143,8 @@ export class SentinelService {
        VALUES (@id, @projectId, @severity, @source, @title, @summary, @context, @fingerprint, @status, @createdAt)`,
     )
     this.triageStmt = this.db.prepare(
-      'UPDATE sentinel_signals SET triage = @triage WHERE id = @id',
+      `UPDATE sentinel_signals SET triage = @triage
+       WHERE id = @id AND project_id = @projectId AND triage IS NULL`,
     )
     // Track H4: in-flight triage is volatile (a fire-and-forget child on a hot
     // path), so a signal recorded just before a crash/quit can be left with a
@@ -150,20 +162,95 @@ export class SentinelService {
    * (isolated: a throwing notifier can never unwind the persisted signal). Any
    * unexpected internal failure logs and returns null; this method never throws.
    */
-  report(input: {
-    projectId: string
-    severity: SentinelSignal['severity']
-    source: SentinelSignal['source']
-    title: string
-    summary: string
-    context?: string | null
-  }): SentinelSignal | null {
+  report(input: SentinelReportInput): SentinelSignal | null {
+    const persisted = this.persist(input, 'sentinel:report')
+    if (!persisted) return null
+    const { signal, recent } = persisted
+
+    this.events.emitTyped('sentinel:alert', signal)
+
+    // Track H3: this persisted row is the Nth occurrence of its dedup key.
+    const occurrences = recent.length + 1
+    if (occurrences >= GOTCHA_RECURRENCE_THRESHOLD && !this.gotchaFired.has(signal.fingerprint)) {
+      this.gotchaFired.add(signal.fingerprint)
+      this.routeRecurrenceGotcha(signal, occurrences)
+    }
+
+    if (signal.severity === 'alert') this.notify(signal.title, signal.summary)
+
+    // Standard notice/alert signals use the cheap Flash triager. A deliberately
+    // staged completion bypasses this method and is interpreted by Pro instead.
+    if (this.triager && (signal.severity === 'notice' || signal.severity === 'alert')) {
+      void this.enrich(signal)
+    }
+    return signal
+  }
+
+  /**
+   * Persist without emitting, notifying, or invoking the generic Flash triager.
+   * Used when deterministic evidence must survive before an async specialist
+   * interprets it. A duplicate replay returns null before any paid model work.
+   */
+  stage(input: SentinelReportInput): SentinelSignal | null {
+    return this.persist(input, 'sentinel:stage')?.signal ?? null
+  }
+
+  /**
+   * Publish one staged row after its specialist enrichment exists. Project scope
+   * and `triage IS NULL` make this single-use; a replay cannot create a second
+   * toast or native notification. Notice severity is intentionally notified here
+   * because successful Swarm completion is an explicit Mac/app delivery event.
+   */
+  publishStaged(
+    projectId: string,
+    id: string,
+    triage: SentinelTriage,
+  ): SentinelSignal | null {
+    try {
+      const signal = this.get(projectId, id)
+      if (!signal) return null
+      if (signal.triage) return signal
+      const changes = this.triageStmt.run({
+        triage: JSON.stringify(triage),
+        id,
+        projectId,
+      }).changes
+      if (changes === 0) return this.get(projectId, id)
+      const enriched = { ...signal, triage }
+      this.events.emitTyped('sentinel:alert', enriched)
+      this.notify(triage.headline, triage.action)
+      return enriched
+    } catch (err) {
+      logFatal('sentinel:publishStaged', err)
+      return null
+    }
+  }
+
+  /** Oldest-first crash-recovery queue for specialist-owned staged signals. */
+  pendingStaged(source: SentinelSignal['source'], limit = 20): SentinelSignal[] {
+    try {
+      const bounded = Math.max(1, Math.min(100, Math.floor(limit)))
+      const rows = this.db
+        .prepare(
+          `SELECT * FROM sentinel_signals
+           WHERE source = ? AND triage IS NULL AND status = 'new'
+           ORDER BY created_at ASC LIMIT ?`,
+        )
+        .all(source, bounded) as SignalRow[]
+      return rows.map((row) => this.toSignal(row))
+    } catch (err) {
+      logFatal('sentinel:pendingStaged', err)
+      return []
+    }
+  }
+
+  private persist(
+    input: SentinelReportInput,
+    logScope: string,
+  ): { signal: SentinelSignal; recent: { fingerprint: string; createdAt: string }[] } | null {
     try {
       const now = nowIso()
-      // Central redaction (argos L1): sensor text persists, reaches the
-      // renderer, and — via triage — leaves the machine for OpenRouter. The
-      // log-intelligence sensor redacts at ingest, but scrubbing here covers
-      // every sensor (card titles, council questions) and every future one.
+      // Central redaction is the egress floor for every sensor and specialist.
       const signal = buildSignal({
         id: newId('sig'),
         projectId: input.projectId,
@@ -172,9 +259,9 @@ export class SentinelService {
         title: redactText(input.title),
         summary: redactText(input.summary),
         context: input.context ? redactText(input.context) : null,
+        dedupKey: input.dedupKey ? redactText(input.dedupKey) : undefined,
         createdAt: now,
       })
-
       const recent = this.db
         .prepare(
           `SELECT fingerprint, created_at AS createdAt FROM sentinel_signals
@@ -186,7 +273,6 @@ export class SentinelService {
         createdAt: string
       }[]
       if (shouldSuppress(recent, signal, now, SENTINEL_COOLDOWN_MS)) return null
-
       this.insertStmt.run({
         id: signal.id,
         projectId: signal.projectId,
@@ -199,43 +285,18 @@ export class SentinelService {
         status: signal.status,
         createdAt: signal.createdAt,
       })
-
-      this.events.emitTyped('sentinel:alert', signal)
-
-      // Track H3: this persisted row is the Nth occurrence of its dedup key
-      // (recent holds the prior same-fingerprint rows). At the threshold, the
-      // fact has recurred across enough separate cooldown windows to be a real
-      // pattern — route a charter-gated gotcha. `gotchaFired` keeps it once per
-      // key per process; the whole call is isolated so a routing failure never
-      // touches the persisted/emitted signal above.
-      const occurrences = recent.length + 1
-      if (occurrences >= GOTCHA_RECURRENCE_THRESHOLD && !this.gotchaFired.has(signal.fingerprint)) {
-        this.gotchaFired.add(signal.fingerprint)
-        this.routeRecurrenceGotcha(signal, occurrences)
-      }
-
-      if (signal.severity === 'alert') {
-        try {
-          this.notifier?.({ title: signal.title, body: signal.summary })
-        } catch {
-          // A host that refuses a notification must not break the persisted
-          // signal or the event fan-out above (mirrors announceCompletion).
-        }
-      }
-
-      // Faz B: after the spine has fully surfaced a notice/alert, hand it to the
-      // async triage seat fire-and-forget. `info` signals are feed-only and not
-      // worth a model call. enrich() owns all its own error handling, so `void`
-      // can never leak an unhandled rejection back onto this hot path.
-      if (this.triager && (signal.severity === 'notice' || signal.severity === 'alert')) {
-        void this.enrich(signal)
-      }
-      return signal
+      return { signal, recent }
     } catch (err) {
-      // Sensors are fire-and-forget: a failed signal write is logged and
-      // swallowed so the hot path (a log insert, a worker exit) is never at risk.
-      logFatal('sentinel:report', err)
+      logFatal(logScope, err)
       return null
+    }
+  }
+
+  private notify(title: string, body: string): void {
+    try {
+      this.notifier?.({ title, body })
+    } catch {
+      // A host that refuses notifications must never affect persisted state.
     }
   }
 
@@ -379,7 +440,15 @@ export class SentinelService {
       // (a) Persist the enrichment blob. A write failure must not stop the
       // re-emit below — the renderer still gets the enriched signal in-memory.
       try {
-        this.triageStmt.run({ triage: JSON.stringify(triage), id: signal.id })
+        const persisted = this.triageStmt.run({
+          triage: JSON.stringify(triage),
+          id: signal.id,
+          projectId: signal.projectId,
+        }).changes
+        // A live enrich and the boot recovery sweep can race for the same row.
+        // The scoped single-use UPDATE elects one publisher; the loser exits so
+        // a signal cannot produce duplicate toasts/gotcha routes.
+        if (persisted === 0) return
       } catch (err) {
         logFatal('sentinel:enrich:persist', err)
       }
@@ -558,6 +627,7 @@ export class SentinelService {
         .prepare(
           `SELECT * FROM sentinel_signals
            WHERE triage IS NULL AND (severity = 'notice' OR severity = 'alert')
+             AND source != 'swarm-completion'
              AND created_at >= ?
            ORDER BY created_at DESC LIMIT ?`,
         )

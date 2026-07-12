@@ -6,6 +6,7 @@ import { CockpitEvents } from '../electron/main/events'
 import { POSITION_GAP } from '../shared/kanban'
 import type { TerminalSession } from '../shared/domain'
 import type { SentinelSignal } from '../shared/sentinel'
+import type { CompletionReport } from '../shared/completion-report'
 import { makeRecordingDb } from './helpers/fakeDb'
 
 interface Row {
@@ -766,7 +767,7 @@ describe('SwarmService completion report + notify (Faz 2.5)', () => {
       complete(input: {
         projectId: string
         sessionId: string | null
-        report: import('../shared/completion-report').CompletionReport
+        report: CompletionReport
       }): Promise<void>
     },
   ) =>
@@ -819,8 +820,26 @@ describe('SwarmService completion report + notify (Faz 2.5)', () => {
     const svc = buildWithReport(store, makeDeps())
     const report = await svc.completionReport('p1', 'a')
     expect(report.diffStat).toBeNull()
+    expect(report.worktreeState).toBe('unavailable')
     expect(report.acceptance).toEqual([])
     expect(reviewStub.diffStat).not.toHaveBeenCalled()
+  })
+
+  it('distinguishes a missing worktree from a clean existing worktree', async () => {
+    const missingStore = makeStore([
+      { id: 'a', status: 'in_review', worktree_path: '/proj/wt/missing' },
+    ])
+    const missingDeps = makeDeps()
+    missingDeps.worktrees.exists.mockReturnValue(false)
+    const missing = await buildWithReport(missingStore, missingDeps).completionReport('p1', 'a')
+    expect(missing.worktreeState).toBe('missing')
+
+    const cleanStore = makeStore([
+      { id: 'b', status: 'in_review', worktree_path: '/proj/wt/clean' },
+    ])
+    reviewStub.diffStat.mockResolvedValueOnce({ files: 0, insertions: 0, deletions: 0 })
+    const clean = await buildWithReport(cleanStore, makeDeps()).completionReport('p1', 'b')
+    expect(clean.worktreeState).toBe('clean')
   })
 
   it('throws for a missing card', async () => {

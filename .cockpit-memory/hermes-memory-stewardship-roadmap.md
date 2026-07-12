@@ -57,10 +57,11 @@ cockpiT first tightens memory correctness, then expands Hermes/Sentinel into a p
 
 ### Phase 2 — Hermes/Sentinel operational stewardship
 
-6. **Hermes executive summary on successful Swarm completion**
+6. **Hermes executive summary on successful Swarm completion — complete (2026-07-12)**
    - Convert the existing completion event into a structured, persisted signal.
    - Gather bounded evidence: card/spec, diff stat, checks, branch/worktree state, and notable output or failure markers.
    - Ask Hermes for a short manager summary only after deterministic evidence exists, then deliver it through app toast/macOS with a direct review or chat action.
+   - **Result:** successful cards now stage a deduplicated `swarm-completion` Sentinel row before inference. A session-scoped 64 KiB tail is reduced to redacted valid JSON (≤1,900 chars) with card/spec, diff, observed checks, worktree state, and notable markers. Tool-less Hermes V4 Pro calls are serialized; invalid/unavailable Pro falls back to a deterministic summary, crash-staged rows resume on boot, and the final signal publishes once to app toast + macOS with Review card / Ask Hermes actions. Nonzero exits stay on the existing worker-failure path.
 
 7. **Memory lifecycle events as Sentinel sources**
    - Raise structured signals for capture retry exhaustion, distiller failure, review-queue backlog, unresolved conflicts, curation failure/staleness, write-gate rejection spikes, and memory-contract compliance misses.

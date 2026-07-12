@@ -1,7 +1,7 @@
 /**
  * The sentinel signal spine (Faz A) — the pure, dependency-free core of an
- * always-on, LLM-FREE signal layer. Sensors across the app (log intelligence,
- * swarm worker exits, approvals, council) emit structured {@link SentinelSignal}
+ * always-on deterministic signal layer. Sensors across the app (log intelligence,
+ * swarm completion/worker exits, approvals, council) emit structured {@link SentinelSignal}
  * facts; the main-process `SentinelService` dedups, persists, and pushes them to
  * the renderer plus (for alerts) a macOS notification.
  *
@@ -11,21 +11,26 @@
  *
  * Severity → delivery contract (the policy the service enforces):
  *   - `info`   → feed only (persisted + `sentinel:alert` event; no toast).
- *   - `notice` → feed + renderer toast.
+ *   - `notice` → feed + renderer toast (specialists may stage before one-shot delivery).
  *   - `alert`  → feed + toast + macOS notification.
- * A later phase adds LLM triage on top of this spine; the seams (source,
- * severity, fingerprint, context) are shaped for it, but NO LLM is called here.
+ * Optional LLM enrichment lives outside this pure module and is never load-bearing.
  */
 
 export type SentinelSeverity = 'info' | 'notice' | 'alert'
 
-export type SentinelSource = 'log-intelligence' | 'worker-exit' | 'approval' | 'council'
+export type SentinelSource =
+  | 'log-intelligence'
+  | 'worker-exit'
+  | 'approval'
+  | 'council'
+  | 'swarm-completion'
 
 /**
- * The Hermes triage verdict (Faz B) — a cheap async second opinion layered on top
- * of the LLM-free spine. It is an ENRICHMENT, never load-bearing: a signal is
- * fully persisted, emitted, and notified before triage runs, so a missing/slow/
- * wrong Hermes only ever leaves `triage` null and the spine behaves identically.
+ * The Hermes enrichment verdict — normally cheap async triage, and also the
+ * manager-shaped result attached to a staged successful completion. It is layered on top
+ * of the deterministic spine. It is never load-bearing: standard signals emit
+ * before generic triage, while specialist completions persist first and publish
+ * once with this enrichment (using a deterministic fallback when Hermes fails).
  */
 export interface SentinelTriage {
   /** false for noise / self-inflicted / duplicate-looking; true when it warrants attention. */
@@ -126,8 +131,10 @@ export function signalFingerprint(input: {
   projectId: string
   source: SentinelSource
   title: string
+  /** Stable event identity when a human-facing title may change. */
+  dedupKey?: string
 }): string {
-  return `${input.projectId}::${input.source}::${normalizeKey(input.title)}`
+  return `${input.projectId}::${input.source}::${normalizeKey(input.dedupKey ?? input.title)}`
 }
 
 /**
@@ -169,6 +176,7 @@ export function buildSignal(input: {
   title: string
   summary: string
   context?: string | null
+  dedupKey?: string
   createdAt: string
 }): SentinelSignal {
   const title = stripControls(input.title).trim().slice(0, TITLE_CAP)
@@ -187,6 +195,7 @@ export function buildSignal(input: {
       projectId: input.projectId,
       source: input.source,
       title: input.title,
+      dedupKey: input.dedupKey,
     }),
     status: 'new',
     createdAt: input.createdAt,

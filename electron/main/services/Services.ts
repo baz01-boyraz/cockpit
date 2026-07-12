@@ -41,6 +41,8 @@ import { HermesApprovalExecutor } from './hermes/HermesApprovalExecutor'
 import { HermesChecksService } from './hermes/HermesChecksService'
 import { HermesChatService } from './hermes/HermesChatService'
 import { HermesTriageService } from './hermes/HermesTriageService'
+import { HermesCompletionSummaryService } from './hermes/HermesCompletionSummaryService'
+import { SwarmCompletionSteward } from './SwarmCompletionSteward'
 import { AppScreenshotService } from './hermes/AppScreenshotService'
 import { NamedAgentsService } from './NamedAgentsService'
 import { SwarmWorktrees } from './SwarmWorktrees'
@@ -94,6 +96,8 @@ export class Services {
   readonly hermesChat: HermesChatService
   /** Faz B: the cheap DeepSeek seat that triages sentinel signals asynchronously. */
   readonly hermesTriage: HermesTriageService
+  /** Pro seat that interprets already-persisted successful Swarm evidence. */
+  readonly hermesCompletion: HermesCompletionSummaryService
   readonly review: ReviewService
   readonly council: CouncilService
   /** Bounded read-only repository evidence boundary for Council analysis. */
@@ -122,8 +126,10 @@ export class Services {
   /** Faz D: the weekly curation sweep — proposes archive/merge for stale notes. */
   readonly memoryCuration: MemoryCurationService
   readonly swarm: SwarmService
-  /** Always-on, LLM-free signal layer (Faz A): sensors → dedup → feed + notify. */
+  /** Always-on deterministic signal layer: sensors → dedup → feed + notify. */
   readonly sentinel: SentinelService
+  /** Durable success signal + bounded output + Pro summary coordinator. */
+  readonly swarmCompletion: SwarmCompletionSteward
   readonly namedAgents: NamedAgentsService
   /** Session-scoped terminal-output tap for the Hermes `subscribe_card_output` tool. */
   readonly cardOutput: CardOutputTracker
@@ -183,6 +189,12 @@ export class Services {
       this.memoryReviews,
       this.memory,
       this.memoryPolicy,
+    )
+    this.hermesCompletion = new HermesCompletionSummaryService()
+    this.swarmCompletion = new SwarmCompletionSteward(
+      opts.events,
+      this.sentinel,
+      this.hermesCompletion,
     )
     this.logs = new LogIntelligenceService(this.db, opts.events, this.sentinel)
     this.attachments = new AttachmentService(this.projects)
@@ -313,6 +325,9 @@ export class Services {
       this.memoryRecalls,
       // Real bounded note content reaches every worker prompt.
       this.memoryContexts,
+      // Successful completion: persist evidence first, then let Hermes Pro
+      // interpret and publish exactly one manager notification.
+      this.swarmCompletion,
     )
     // Forget a pane's TUI-mode state once it exits, so session ids never leak.
     opts.events.onTyped('terminal:exit', ({ sessionId }) => this.tuiState.delete(sessionId))
@@ -357,6 +372,10 @@ export class Services {
       swarm: this.swarm,
     })
     this.hermesApprovalExecutor.start()
+
+    // A crash between staging and Pro publication leaves a durable row. Resume
+    // those oldest-first, sequentially; failure keeps the feed evidence intact.
+    void this.swarmCompletion.resumePending()
 
     // The living brain: sweep idle Claude sessions into memory in the background
     // (docs/memory-imp.md Phase 4). Conservative defaults; all state is durable
@@ -664,15 +683,17 @@ export class Services {
     this.closing = true
     this.memoryAutoCapture.stop()
     this.cardOutput.clear()
+    this.swarmCompletion.clear()
     // Fire-and-forget: the process is quitting; closing the socket is best-effort.
     void this.hermesMcp.stop()
     // Kill orphaned CLI children BEFORE closing the DB (roadmap A2). Council seats
-    // (claude/codex) and the two Hermes execFile paths (chat up to 5min, triage
-    // 45s) otherwise reparent on quit and keep burning CPU/API spend until their
-    // own timeouts. All three killAll()s are best-effort and never throw.
+    // (claude/codex) and the three Hermes execFile paths (chat up to 5min, triage
+    // and completion summary 45s) otherwise reparent on quit and keep burning
+    // CPU/API spend until their own timeouts. All killAll()s are best-effort.
     this.engineRunner.killAll()
     this.hermesChat.killAll()
     this.hermesTriage.killAll()
+    this.hermesCompletion.killAll()
     // Kill terminals (flags TerminalManager so late pty events are ignored), then
     // close the DB. Order + flags prevent "database connection is not open".
     this.terminals.killAll()

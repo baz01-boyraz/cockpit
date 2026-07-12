@@ -1377,6 +1377,7 @@ export function createMockApi(): CockpitApi {
           title: card.title,
           branch: card.branch,
           diffStat: card.worktreePath ? { files: 3, insertions: 42, deletions: 7 } : null,
+          worktreeState: card.worktreePath ? ('changed' as const) : ('unavailable' as const),
           acceptance: extractAcceptanceCriteria(card.body),
           hasCouncilSpec: card.councilSessionId !== null,
           finishedAt: card.updatedAt,

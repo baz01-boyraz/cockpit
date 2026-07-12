@@ -12,6 +12,8 @@ import {
   COMPLETION_CONTEXT_CAP,
   buildCompletionEvidence,
   completionCardId,
+  deterministicCompletionTriage,
+  parseCompletionManagerResponse,
   parseCompletionEvidence,
   type CompletionEvidence,
 } from '../shared/swarm-completion'
@@ -44,6 +46,7 @@ describe('completion evidence', () => {
       'Type error: Property x does not exist',
       'uninteresting repaint line '.repeat(400),
       'npm run lint — passed',
+      'Error: leaked key AKIAIOSFODNN7EXAMPLE',
     ].join('\n')
     const evidence = buildCompletionEvidence(REPORT, noisy)
 
@@ -58,6 +61,8 @@ describe('completion evidence', () => {
     )
     expect(evidence.markers.join('\n')).toContain('24 tests passed')
     expect(evidence.markers.join('\n')).not.toContain('\u001b')
+    expect(evidence.context).not.toContain('AKIAIOSFODNN7EXAMPLE')
+    expect(evidence.context).toContain('[REDACTED]')
 
     const context = evidence.context
     expect(context.length).toBeLessThanOrEqual(COMPLETION_CONTEXT_CAP)
@@ -76,6 +81,60 @@ describe('completion evidence', () => {
     )
     expect(evidence.context.length).toBeLessThanOrEqual(COMPLETION_CONTEXT_CAP)
     expect(parseCompletionEvidence(evidence.context)?.card.id).toBe('c1')
+  })
+
+  it('rejects corrupt persisted evidence field-by-field and ignores non-completion targets', () => {
+    const valid = JSON.parse(buildCompletionEvidence(REPORT, '').context) as Record<string, unknown>
+    const invalid: unknown[] = [
+      null,
+      { ...valid, version: 2 },
+      { ...valid, card: null },
+      { ...valid, card: { ...(valid.card as object), id: 4 } },
+      { ...valid, card: { ...(valid.card as object), title: null } },
+      { ...valid, card: { ...(valid.card as object), branch: 7 } },
+      { ...valid, card: { ...(valid.card as object), hasCouncilSpec: 'yes' } },
+      { ...valid, card: { ...(valid.card as object), acceptance: [4] } },
+      { ...valid, worktreeState: 'mystery' },
+      { ...valid, checks: [{ name: 'deploy', status: 'passed' }] },
+      { ...valid, checks: [{ name: 'test', status: 'maybe' }] },
+      { ...valid, markers: [9] },
+      { ...valid, finishedAt: 9 },
+      { ...valid, changes: undefined },
+      { ...valid, changes: { files: '3', insertions: 2, deletions: 1 } },
+    ]
+    for (const value of invalid) expect(parseCompletionEvidence(JSON.stringify(value))).toBeNull()
+    expect(parseCompletionEvidence(null)).toBeNull()
+    expect(parseCompletionEvidence('{broken')).toBeNull()
+    expect(completionCardId({ source: 'worker-exit', context: JSON.stringify(valid) })).toBeNull()
+    expect(completionCardId({ source: 'swarm-completion', context: '{broken' })).toBeNull()
+  })
+
+  it('parses manager JSON defensively and covers every deterministic fallback tone', () => {
+    const now = '2026-07-12T02:00:00.000Z'
+    expect(parseCompletionManagerResponse('no json', now)).toBeNull()
+    expect(parseCompletionManagerResponse('{broken}', now)).toBeNull()
+    expect(parseCompletionManagerResponse('{"headline":"","action":"go"}', now)).toBeNull()
+    expect(parseCompletionManagerResponse('{"headline":4,"action":"go"}', now)).toBeNull()
+    const parsed = parseCompletionManagerResponse(
+      `prose {"headline":"ok\\u0007${'x'.repeat(300)}","action":"review"} tail`,
+      now,
+    )
+    expect(parsed?.headline).toHaveLength(160)
+    expect(parsed?.headline).not.toContain('\u0007')
+
+    const failed = deterministicCompletionTriage(
+      buildCompletionEvidence(REPORT, 'npm run typecheck — failed'),
+      now,
+    )
+    expect(failed.headline).toContain('typecheck')
+    expect(failed.action).toContain('rerun typecheck')
+    const passed = deterministicCompletionTriage(
+      buildCompletionEvidence(REPORT, '24 tests passed'),
+      now,
+    )
+    expect(passed.action).toContain('acceptance criteria')
+    const unknown = deterministicCompletionTriage(buildCompletionEvidence(REPORT, ''), now)
+    expect(unknown.action).toContain('not confirmed')
   })
 })
 
@@ -111,6 +170,64 @@ describe('HermesCompletionSummaryService', () => {
     const runner: HermesCompletionRunner = vi.fn(async () => ({ stdout: 'not json' }))
     const service = new HermesCompletionSummaryService(runner)
     await expect(service.summarize(buildCompletionEvidence(REPORT, ''))).resolves.toBeNull()
+    expect(runner).toHaveBeenCalledTimes(1)
+  })
+
+  it('serializes overlapping completions instead of skipping a Pro summary', async () => {
+    let releaseFirst!: () => void
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+    let calls = 0
+    const runner: HermesCompletionRunner = vi.fn(async () => {
+      calls += 1
+      if (calls === 1) await firstGate
+      return {
+        stdout: JSON.stringify({ headline: `summary ${calls}`, action: 'Review the card' }),
+      }
+    })
+    const service = new HermesCompletionSummaryService(runner)
+    const evidence = buildCompletionEvidence(REPORT, '')
+
+    const first = service.summarize(evidence)
+    const second = service.summarize(evidence)
+    await Promise.resolve()
+    expect(runner).toHaveBeenCalledTimes(1)
+    releaseFirst()
+
+    expect((await first)?.headline).toBe('summary 1')
+    expect((await second)?.headline).toBe('summary 2')
+    expect(runner).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops queued work and terminates a tracked child on shutdown', async () => {
+    let resolveRun!: (value: { stdout: string }) => void
+    let close!: () => void
+    const child = {
+      kill: vi.fn(() => true),
+      once: vi.fn((_event: string, cb: () => void) => {
+        close = cb
+      }),
+    }
+    const runner: HermesCompletionRunner = vi.fn(() => {
+      const promise = new Promise<{ stdout: string }>((resolve) => {
+        resolveRun = resolve
+      }) as Promise<{ stdout: string }> & { child: typeof child }
+      promise.child = child
+      return promise
+    })
+    const service = new HermesCompletionSummaryService(runner)
+    const evidence = buildCompletionEvidence(REPORT, '')
+    const active = service.summarize(evidence)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    service.killAll()
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM')
+    close()
+    resolveRun({ stdout: '{"headline":"done","action":"review"}' })
+    await active
+    await expect(service.summarize(evidence)).resolves.toBeNull()
     expect(runner).toHaveBeenCalledTimes(1)
   })
 })
@@ -211,7 +328,9 @@ describe('SwarmCompletionSteward', () => {
     })
     const sentinel = {
       stage: vi.fn(() => pending),
-      publishStaged: vi.fn(() => pending),
+      publishStaged: vi.fn(
+        (_projectId: string, _id: string, _triage: SentinelTriage) => pending,
+      ),
       pendingStaged: vi.fn(() => [pending]),
     }
     const summarizer = { summarize: vi.fn(async () => null) }
@@ -224,5 +343,61 @@ describe('SwarmCompletionSteward', () => {
     expect(fallback).toMatchObject({ reportWorthy: true, gotchaCandidate: false })
     expect(fallback.headline).toContain('Add the widget')
     expect(fallback.action).toMatch(/review/i)
+  })
+
+  it('bounds long tracked output, tolerates null sessions, and isolates collaborator failures', async () => {
+    const events = new CockpitEvents()
+    const staged = stagedSignal({
+      projectId: 'p1',
+      severity: 'notice',
+      source: 'swarm-completion',
+      title: 'Ready',
+      summary: 'ready',
+    })
+    const sentinel = {
+      stage: vi
+        .fn()
+        .mockReturnValueOnce(staged)
+        .mockReturnValueOnce(staged)
+        .mockImplementationOnce(() => {
+          throw new Error('disk unavailable')
+        }),
+      publishStaged: vi.fn(() => staged),
+      pendingStaged: vi
+        .fn()
+        .mockReturnValueOnce([
+          { ...staged, context: '{broken' },
+          { ...staged, id: 'sig_valid', context: buildCompletionEvidence(REPORT, '').context },
+        ])
+        .mockImplementationOnce(() => {
+          throw new Error('db unavailable')
+        }),
+    }
+    const summarizer = {
+      summarize: vi
+        .fn()
+        .mockResolvedValueOnce(MANAGER)
+        .mockRejectedValueOnce(new Error('model unavailable'))
+        .mockResolvedValue(MANAGER),
+    }
+    const steward = new SwarmCompletionSteward(events, sentinel, summarizer)
+    steward.track('large')
+    steward.track('large') // idempotent branch
+    events.emitTyped('terminal:data', {
+      sessionId: 'large',
+      data: `${'noise'.repeat(20_000)}\n24 tests passed`,
+      at: 't',
+    })
+    await steward.complete({ projectId: 'p1', sessionId: 'large', report: REPORT })
+    await steward.complete({ projectId: 'p1', sessionId: null, report: REPORT })
+    await expect(
+      steward.complete({ projectId: 'p1', sessionId: 'missing', report: REPORT }),
+    ).resolves.toBeUndefined()
+    steward.discard('missing')
+    steward.clear()
+
+    await steward.resumePending()
+    await expect(steward.resumePending()).resolves.toBeUndefined()
+    expect(sentinel.publishStaged).toHaveBeenCalled()
   })
 })

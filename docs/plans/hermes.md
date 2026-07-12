@@ -289,9 +289,14 @@ Bu, senin tarif ettiğin akışın tam karşılığı:
    değil — bu, o an verilen görevin canlı takibi).
 7. Done-signal gelince: Hermes `get_git_diff` ile diff'i okuyor, kendi review'unu yapıyor
    (`run_tests`, `run_typecheck`, gerekirse `take_app_screenshot`).
-8. Hermes sana (chat widget/telefon) ne olduğunu anlatıyor — başarılıysa özet, başarısızsa
+8. Buna ek olarak her başarılı kart, açık bir Hermes konuşması beklemeden, önce kalıcı ve
+   dedup'lı `swarm-completion` Sentinel sinyaline dönüşür. Kart/spec, diff, worktree durumu,
+   sadece o session'ın bounded çıktı marker'ları ve gözlemlenen check sonuçları redakte edilip
+   tool-less Hermes V4 Pro'ya verilir; yönetici özeti app toast + macOS'a gider. Pro yoksa
+   deterministik özet kullanılır; model tamamlanma bilgisinin taşınmasında load-bearing değildir.
+9. Hermes sana (chat widget/telefon) ne olduğunu anlatıyor — başarılıysa özet, başarısızsa
    neyin başarısız olduğu + önerisi.
-9. Hermes `write_memory_summary` ile bir özet düşüyor (Faz 5'in memory akışına bağlanıyor).
+10. Hermes `write_memory_summary` ile bir özet düşüyor (Faz 5'in memory akışına bağlanıyor).
 
 - **Test:** kota-var/kota-yok senaryoları, çoklu netleştirici soru akışı (mock), review adımının
   gerçekten `run_tests` vb. çağırdığını doğrulayan entegrasyon testi.
