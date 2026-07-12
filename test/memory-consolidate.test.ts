@@ -26,6 +26,48 @@ describe('analyzeConsolidation', () => {
     expect(report.oversized[0].slug).toBe('big')
   })
 
+  it('dry-runs repeated atomic facts inside one note without mutating it', () => {
+    const content = `# Swarm history
+
+- (2026-07-04) A cleanup pass snapshots the full memory hub before it changes any durable note.
+- A separate fact about worker completion remains useful and must stay.
+- (2026-07-06) A cleanup pass snapshots the full memory hub before it changes any durable note.
+
+Related: [[memory-hub]]`
+    const memory = doc('swarm-history', content)
+
+    const report = analyzeConsolidation([memory], { oversizeBytes: 100 })
+
+    expect(memory.content).toBe(content)
+    expect(report.repetitions).toEqual([
+      expect.objectContaining({
+        kind: 'repetition',
+        slug: 'swarm-history',
+        canonicalFact: 'A cleanup pass snapshots the full memory hub before it changes any durable note.',
+        repeatedFact: 'A cleanup pass snapshots the full memory hub before it changes any durable note.',
+        similarity: 1,
+      }),
+    ])
+  })
+
+  it('reports every repeated copy against one canonical fact', () => {
+    const repeated = 'The memory cleanup report is reviewable before any note is rewritten or archived.'
+    const report = analyzeConsolidation([
+      doc('history', `- ${repeated}\n- ${repeated}\n- ${repeated}\n- ${repeated}`),
+    ])
+
+    expect(report.repetitions).toHaveLength(3)
+    expect(report.repetitions.every((finding) => finding.canonicalFact === repeated)).toBe(true)
+  })
+
+  it('ignores tiny boilerplate and Related navigation when looking for repetitions', () => {
+    const report = analyzeConsolidation([
+      doc('small', '- keep safe\n- keep safe\n\nRelated: [[ghost]], [[ghost]]'),
+    ])
+
+    expect(report.repetitions).toEqual([])
+  })
+
   it('lists dangling links wanted by notes', () => {
     const report = analyzeConsolidation([doc('a', 'see [[ghost-note]] for details')])
     expect(report.dangling).toHaveLength(1)
@@ -38,6 +80,7 @@ describe('analyzeConsolidation', () => {
     const report = analyzeConsolidation(docs)
     expect(report.duplicates).toEqual([])
     expect(report.oversized).toEqual([])
+    expect(report.repetitions).toEqual([])
     expect(report.dangling).toEqual([])
   })
 

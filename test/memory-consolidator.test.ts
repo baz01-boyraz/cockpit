@@ -77,4 +77,19 @@ describe('MemoryConsolidator', () => {
     expect(res.queued).toBe(0)
     expect(res.report.duplicates).toEqual([])
   })
+
+  it('snapshots and reports in-note repetition without rewriting or queueing it', () => {
+    const repeated = 'A snapshot exists before the cleanup report can authorize any durable memory rewrite.'
+    const original = `# History\n\n- ${repeated}\n- A distinct fact remains.\n- ${repeated}`
+    memory.write('p1', 'history', original)
+    const reviews = fakeReviews()
+
+    const res = new MemoryConsolidator(memory, reviews.svc).consolidate('p1')
+
+    expect(res.snapshotId).toBeTruthy()
+    expect(res.report.repetitions).toHaveLength(1)
+    expect(res.queued).toBe(0)
+    expect(reviews.items).toEqual([])
+    expect(memory.read('p1', 'history')?.content).toBe(original)
+  })
 })
