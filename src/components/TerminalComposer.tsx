@@ -61,8 +61,9 @@ export function TerminalComposer({
   onSubmit,
 }: TerminalComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const sendingRef = useRef(false)
   const historyId = useId()
-  const storageKey = useMemo(() => historyKey(projectId, role), [projectId, role])
+  const storageKey = historyKey(projectId, role)
   const [draft, setDraft] = useState('')
   const [localHistory, setLocalHistory] = useState<string[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -112,7 +113,8 @@ export function TerminalComposer({
   }
 
   const submit = async () => {
-    if (sending) return
+    if (sendingRef.current) return
+    sendingRef.current = true
     setSending(true)
     setNotice(null)
     try {
@@ -129,6 +131,7 @@ export function TerminalComposer({
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not send input')
     } finally {
+      sendingRef.current = false
       setSending(false)
     }
   }
@@ -182,6 +185,9 @@ export function TerminalComposer({
   const placeholder = role === 'claude' || role === 'codex'
     ? 'Write a message — click anywhere to edit'
     : 'Type a command — click anywhere to edit'
+  const activeSuggestionId = historyOpen && suggestions[activeSuggestion]
+    ? `${historyId}-option-${activeSuggestion}`
+    : undefined
 
   return (
     <div className={`termcomposer ${historyOpen ? 'termcomposer--history' : ''}`}>
@@ -194,7 +200,8 @@ export function TerminalComposer({
           {suggestions.length > 0 ? (
             suggestions.map((suggestion, index) => (
               <button
-                key={`${suggestion}-${index}`}
+                key={suggestion}
+                id={`${historyId}-option-${index}`}
                 type="button"
                 role="option"
                 aria-selected={index === activeSuggestion}
@@ -226,6 +233,8 @@ export function TerminalComposer({
           className="termcomposer__input mono"
           aria-label="Terminal composer"
           aria-controls={historyOpen ? historyId : undefined}
+          aria-activedescendant={activeSuggestionId}
+          aria-autocomplete="list"
           aria-expanded={historyOpen}
           placeholder={placeholder}
           spellCheck={false}
