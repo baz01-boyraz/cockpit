@@ -73,6 +73,45 @@ describe('rankNotes', () => {
     const ranked = rankNotes('önbellek temizleme gerekli mi', tr, 2)
     expect(ranked[0].name).toBe('onbellek-temizleme')
   })
+
+  it('finds an English note through synonym-heavy paraphrasing', () => {
+    const semantic: RankableNote[] = [
+      { name: 'release-checklist', hook: 'Release verification checklist.' },
+      { name: 'secret-redaction', hook: 'Secret token redaction before prompts.' },
+      { name: 'usage-billing', hook: 'Usage and billing window math.' },
+    ]
+
+    expect(rankNotes('preflight steps ahead shipping', semantic, 3)[0]?.name).toBe(
+      'release-checklist',
+    )
+    expect(rankNotes('mask credentials during inference handoff', semantic, 3)[0]?.name).toBe(
+      'secret-redaction',
+    )
+  })
+
+  it('finds a Turkish note when the query uses different words for the same concepts', () => {
+    const semantic: RankableNote[] = [
+      { name: 'memory-dedup', hook: 'Tekrar eden hafıza kaydı birleştirme.' },
+      { name: 'database-migration', hook: 'Veritabanı migration rollback planı.' },
+      { name: 'artifact-report', hook: 'Artifact rapor referansı.' },
+    ]
+
+    expect(rankNotes('yinelenen bilgi kayıtlarını tek kayıtta topla', semantic, 3)[0]?.name).toBe(
+      'memory-dedup',
+    )
+    expect(rankNotes('şema değişikliğini acil geri alma', semantic, 3)[0]?.name).toBe(
+      'database-migration',
+    )
+  })
+
+  it('does not return a note for one weak semantic concept alone', () => {
+    const ranked = rankNotes(
+      'urgent credentials watercolor',
+      [{ name: 'secret-redaction', hook: 'Secret token redaction before prompts.' }],
+      3,
+    )
+    expect(ranked).toEqual([])
+  })
 })
 
 describe('composeMemoryPointerBlock', () => {

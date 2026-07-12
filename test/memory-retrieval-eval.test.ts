@@ -45,12 +45,12 @@ describe('Memory R0 retrieval corpus', () => {
     expect(validateMemoryEvalCorpus(corpus)).toEqual([])
     expect(corpus.schemaVersion).toBe(1)
     expect(corpus.sourceKind).toBe('synthetic')
-    expect(corpus.cases).toHaveLength(60)
-    expect(corpus.cases.filter((item) => item.language === 'en')).toHaveLength(30)
-    expect(corpus.cases.filter((item) => item.language === 'tr')).toHaveLength(30)
-    expect(corpus.cases.filter((item) => item.split === 'tune')).toHaveLength(30)
-    expect(corpus.cases.filter((item) => item.split === 'holdout')).toHaveLength(30)
-    expect(new Set(corpus.cases.map((item) => item.id)).size).toBe(60)
+    expect(corpus.cases).toHaveLength(72)
+    expect(corpus.cases.filter((item) => item.language === 'en')).toHaveLength(36)
+    expect(corpus.cases.filter((item) => item.language === 'tr')).toHaveLength(36)
+    expect(corpus.cases.filter((item) => item.split === 'tune')).toHaveLength(36)
+    expect(corpus.cases.filter((item) => item.split === 'holdout')).toHaveLength(36)
+    expect(new Set(corpus.cases.map((item) => item.id)).size).toBe(72)
   })
 
   it('records deterministic top-k, no-match, and lifecycle safety baselines', () => {
@@ -59,11 +59,14 @@ describe('Memory R0 retrieval corpus', () => {
     const second = evaluateMemoryRetrievalCorpus(corpus)
 
     expect(second).toEqual(first)
-    expect(first.caseCount).toBe(60)
-    expect(first.positiveCases).toBe(50)
+    expect(first.caseCount).toBe(72)
+    expect(first.positiveCases).toBe(62)
     expect(first.noMatchCases).toBe(10)
     expect(first.top3HitRate).toBeGreaterThan(0.8)
     expect(first.noMatchFalseInjections).toBe(0)
+    const semanticCases = first.cases.filter((item) => item.category === 'semantic')
+    expect(semanticCases).toHaveLength(12)
+    expect(semanticCases.every((item) => item.top3Hit)).toBe(true)
     // The current ranker has no lifecycle filter. R0 must expose this gap rather
     // than hide it; M5 is where the metric is driven to zero.
     expect(first.unsafeSelections.length).toBeGreaterThan(0)
@@ -174,7 +177,7 @@ describe('Memory R0 retrieval corpus', () => {
 
     expect(second).toBe(first)
     expect(readFileSync(fixturePath, 'utf8')).toBe(before)
-    expect(report.caseCount).toBe(60)
+    expect(report.caseCount).toBe(72)
     expect(report.noMatchFalseInjections).toBe(0)
     expect(first).not.toContain(loadCorpus().cases[0].query)
     expect(first).not.toContain(loadCorpus().notes[0].hook)
