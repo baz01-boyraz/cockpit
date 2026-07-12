@@ -18,6 +18,7 @@ export const MEMORY_CONTEXT_SURFACES = [
   'hermes_chat',
   'council_spec',
   'council_diff',
+  'council_analysis',
   'swarm_worker',
   'terminal_claude',
   'terminal_codex',

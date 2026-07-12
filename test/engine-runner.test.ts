@@ -94,6 +94,24 @@ describe('EngineRunner — CLI branches', () => {
     expect(calls[0].args).toEqual(buildCodexArgs('ship it', { model: 'gpt-5-codex' }))
     expect(calls[0].args).not.toContain('123')
   })
+
+  it('forwards the evidence-only boundary to both account CLI argument builders', async () => {
+    const claude = recordingCli('bounded claude')
+    const codex = recordingCli('bounded codex')
+    const claudeService = new EngineRunner(fakeSecrets(null), claude.runner)
+    const codexService = new EngineRunner(fakeSecrets(null), codex.runner)
+    const opts = { ...OPTS, evidenceOnly: true }
+
+    await claudeService.call({ engine: 'claude', model: 'opus' }, 'evidence', opts)
+    await codexService.call({ engine: 'codex', model: 'gpt-5-codex' }, 'evidence', opts)
+
+    expect(claude.calls[0].args).toEqual(
+      buildClaudeArgs('evidence', { model: 'opus', evidenceOnly: true }),
+    )
+    expect(codex.calls[0].args).toEqual(
+      buildCodexArgs('evidence', { model: 'gpt-5-codex', evidenceOnly: true }),
+    )
+  })
 })
 
 describe('EngineRunner.killAll — orphan CLI child cleanup (A2)', () => {

@@ -189,6 +189,66 @@ describe('CouncilEvidenceService security boundary', () => {
     expect(rendered.length).toBeLessThanOrEqual(COUNCIL_EVIDENCE_LIMITS.promptChars)
     expect(result.sources.some((source) => source.injectionSuspect)).toBe(true)
   })
+
+  it('reserves source capacity for memory receipts without reading their note bodies', async () => {
+    const root = fixture()
+    const service = new CouncilEvidenceService({ maxSources: 3 })
+    const result = await service.collect({
+      root,
+      query: 'memory source retrieval injected',
+      memoryReceipt: {
+        contextId: 'memctx-reserved',
+        surface: 'council_analysis',
+        status: 'ready',
+        delivery: 'inline',
+        notes: [
+          {
+            name: 'memory-charter',
+            path: '.cockpit-memory/memory-charter.md',
+            updatedAt: '2026-07-11T00:00:00.000Z',
+            truncated: false,
+          },
+        ],
+        characters: 120,
+      },
+    })
+
+    expect(result.sources).toHaveLength(3)
+    expect(result.sources.map((source) => source.kind)).toEqual([
+      'input',
+      'repository',
+      'memory',
+    ])
+    expect(result.sources.at(-1)?.content).toBeNull()
+  })
+
+  it('grounds the frozen Memory redesign question in the real repository contracts', async () => {
+    const service = new CouncilEvidenceService()
+    const result = await service.collect({
+      root: process.cwd(),
+      query: [
+        'Analyze the Brain Memory Markdown source of truth.',
+        'Verify the note schema and NOTE_CLASSES, LOOKUP_SURFACES, retrieval context, and canonical MEMORY.md.',
+      ].join(' '),
+    })
+    const repositorySources = result.sources.filter(
+      (source) => source.kind === 'repository',
+    )
+    const paths = repositorySources.map((source) => source.path)
+
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        'shared/memory-note-schema.ts',
+        'shared/memory-context.ts',
+      ]),
+    )
+    expect(repositorySources.find((source) => source.path === 'shared/memory-note-schema.ts')?.content)
+      .toMatch(/decision|gotcha|architecture/)
+    expect(repositorySources.find((source) => source.path === 'shared/memory-context.ts')?.content)
+      .toMatch(/MemoryContextSurface|LOOKUP_SURFACES/)
+    expect(result.repository.canonicalMemoryMdPresent).toBe(false)
+    expect(result.sources.some((source) => source.path?.startsWith('.cockpit-memory/'))).toBe(false)
+  })
 })
 
 describe('Council analysis claim provenance', () => {
@@ -237,6 +297,22 @@ describe('Council analysis claim provenance', () => {
     expect(report).toContain('.cockpit-memory/memory-charter.md')
     expect(report).toContain('Unverified inference')
     expect(report).not.toContain('note bodies')
+
+    const turkish = renderCouncilAnalysisReport({
+      claims,
+      pack: pack(),
+      responseLanguage: 'tr',
+      egress: {
+        policy: 'account-models',
+        consent: true,
+        allowedEngines: ['claude', 'codex'],
+        contentChars: 58,
+      },
+    })
+    expect(turkish).toContain('# Repository Analizi')
+    expect(turkish).toContain('## Kullanılan kaynaklar')
+    expect(turkish).toContain('Kaynak destekli')
+    expect(turkish).toContain('Doğrulanmamış çıkarım')
   })
 
   it('normalizes a bounded analysis evidence layer and rejects malformed packs', () => {
@@ -247,10 +323,52 @@ describe('Council analysis claim provenance', () => {
         policy: 'local-only',
         consent: false,
         allowedEngines: [],
-        contentChars: 58,
+        contentChars: 0,
       },
     })
     expect(normalized?.pack.sources).toHaveLength(3)
+    expect(normalized?.pack.sources.every((source) => source.content === null)).toBe(true)
+    expect(normalized?.pack.totalChars).toBe(0)
     expect(normalizeCouncilAnalysisEvidence({ pack: {}, claims: [], egress: {} })).toBeNull()
+  })
+
+  it('rejects dishonest egress receipts and unsafe source paths', () => {
+    const remoteWithoutConsent = {
+      pack: pack(),
+      claims: [],
+      egress: {
+        policy: 'account-models',
+        consent: false,
+        allowedEngines: ['claude', 'codex'],
+        contentChars: 58,
+      },
+    }
+    expect(normalizeCouncilAnalysisEvidence(remoteWithoutConsent)).toBeNull()
+    expect(normalizeCouncilAnalysisEvidence({
+      ...remoteWithoutConsent,
+      egress: {
+        policy: 'account-models',
+        consent: true,
+        allowedEngines: ['claude', 'codex', 'openrouter'],
+        contentChars: 58,
+      },
+    })).toBeNull()
+
+    const unsafe = pack()
+    unsafe.sources[1] = {
+      ...unsafe.sources[1],
+      path: '../outside.ts',
+      label: '/Users/example/outside.ts:1-4',
+    }
+    expect(normalizeCouncilAnalysisEvidence({
+      pack: unsafe,
+      claims: [],
+      egress: {
+        policy: 'local-only',
+        consent: false,
+        allowedEngines: [],
+        contentChars: 0,
+      },
+    })).toBeNull()
   })
 })

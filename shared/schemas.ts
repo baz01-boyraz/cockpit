@@ -213,7 +213,7 @@ export const reviewDiffStatSchema = z.object({
 export const councilRunSchema = z.object({
   projectId: z.string().min(1),
   model: z.string().min(1).max(120).optional(),
-  // Explicit intent; analysis fails closed in main until C3's evidence collector lands.
+  // Explicit intent; analysis is grounded by the bounded main-process collector.
   mode: z.enum(['diff', 'spec', 'analysis']).optional(),
   // Absolute path of a swarm worktree; main re-validates it sits inside the project.
   dir: z.string().min(1).max(1024).optional(),
@@ -230,6 +230,37 @@ export const councilRunSchema = z.object({
     .max(32)
     .regex(/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i)
     .optional(),
+  analysisEgress: z
+    .enum(['local-only', 'account-models', 'all-configured'])
+    .optional(),
+  analysisConsent: z.boolean().optional(),
+}).superRefine((value, ctx) => {
+  const hasAnalysisPolicy = value.analysisEgress !== undefined || value.analysisConsent !== undefined
+  if (value.mode !== 'analysis' && hasAnalysisPolicy) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['analysisEgress'],
+      message: 'Analysis data-sharing fields require analysis mode.',
+    })
+    return
+  }
+  if (value.mode !== 'analysis') return
+  const remote =
+    value.analysisEgress === 'account-models' || value.analysisEgress === 'all-configured'
+  if (remote && value.analysisConsent !== true) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['analysisConsent'],
+      message: 'Remote repository analysis requires explicit consent.',
+    })
+  }
+  if (!remote && value.analysisConsent === true) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['analysisConsent'],
+      message: 'Local-only analysis cannot record remote-data consent.',
+    })
+  }
 })
 
 export const memoryNameSchema = z.object({

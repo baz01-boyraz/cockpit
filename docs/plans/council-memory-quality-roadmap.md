@@ -1,6 +1,6 @@
 # Council + Memory Quality Roadmap
 
-> Status: IN EXECUTION · R0 + C1 + C2a–C2b + M1a COMPLETE · Created 2026-07-11
+> Status: IN EXECUTION · R0 + C1–C3 + M1a COMPLETE · Created 2026-07-11
 > Scope: Council output quality/efficiency/usability + Brain/Memory correctness,
 > retrieval and product UX
 > Governing docs: `docs/DESIGN.md`, `docs/MEMORY-CHARTER.md`,
@@ -555,6 +555,34 @@ for sessions already written in either version. Never rewrite old session blobs 
 ---
 
 ### C3 — Grounded repository-analysis mode and claim provenance (L)
+
+> **C3 completed 2026-07-11.** Council `analysis` is now a read-only, explicitly
+> consented repository-analysis path rather than an alias for spec refinement. The main process
+> builds one deterministic, bounded evidence pack with realpath/symlink containment, generated/
+> sensitive-path exclusions, binary and size limits, pre-egress redaction, stable repository/
+> manifest hashes and content-free Memory receipts. The frozen real-repository contract test
+> grounds the original Memory question in `shared/memory-note-schema.ts` and
+> `shared/memory-context.ts`, and confirms that canonical root `MEMORY.md` is absent.
+>
+> Every seat receives the same fenced evidence; account-backed Claude/Codex calls run in a
+> temporary empty working directory with evidence-only CLI restrictions, while OpenRouter is
+> available only under the separately consented all-configured policy. Local-only is the
+> default and makes zero model calls. Chairman claims use `input | repository | memory |
+> inference` provenance; missing, wrong-kind or unknown evidence references are downgraded to
+> inference. Provider errors remain private and all model outputs are redacted.
+>
+> The saved/IPC result is a receipt, not a repository corpus: source content and Memory bodies
+> are stripped, remote receipts retain cited metadata only, and the UI exposes compact
+> source-backed/inference counts, hashes, freshness identity and “Sources used” metadata. The
+> composer explains exactly what may leave the machine, requires per-run remote consent and
+> keeps analysis separate from code edits or Swarm authorization. Reports are bounded,
+> deterministic, selectable/exportable and localized for Turkish input.
+>
+> **Verified:** ESLint and both TypeScript projects pass; 116 Vitest files / 1,306 tests pass
+> with 86.75% statement/line and 85.40% branch coverage; production build passes; Playwright
+> passes 9/9 including zero-egress analysis and provenance UI; 1024/1280/1600 desktop layouts
+> were visually checked; Claude and Codex evidence-only argument sets parse against the actual
+> installed CLIs. C4 and all later Memory phases remain deliberately pending.
 
 **Goal:** make the original Memory task’s “inspect the repository, do not assume” request a
 real Council capability instead of letting tool-less seats hallucinate repository facts.

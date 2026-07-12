@@ -89,7 +89,11 @@ function makeParts(policy: CouncilAnalysisEgressPolicy) {
     listRecent: () => [],
     get: () => null,
   } as unknown as CouncilSessionStore
-  const call = vi.fn(async (engine: { engine: string }, prompt: string) => {
+  const call = vi.fn(async (
+    _engine: { engine: string },
+    prompt: string,
+    _opts: { cwd: string; evidenceOnly?: boolean },
+  ) => {
     if (prompt.startsWith('You are the Chairman of a repository-analysis Council')) {
       return [
         'CLAIM 1:',
@@ -140,7 +144,7 @@ function makeParts(policy: CouncilAnalysisEgressPolicy) {
     })),
   }
   const service = new CouncilService(
-    { get: () => ({ id: 'p1', name: 'cockpiT', path: '/tmp/cockpit' }) } as ProjectService,
+    { get: () => ({ id: 'p1', name: 'cockpiT', path: '/tmp/cockpit' }) } as unknown as ProjectService,
     { record: vi.fn() } as unknown as AuditLogService,
     { call } as unknown as EngineRunner,
     sessions,
@@ -187,11 +191,22 @@ describe('CouncilService grounded analysis', () => {
       { source: 'inference', verified: false, evidenceRefs: [] },
       { source: 'memory', verified: true, evidenceRefs: ['memory-001'] },
     ])
+    expect(result.evidence.analysis?.pack.sources.map((source) => source.id)).toEqual([
+      'repo-001',
+      'memory-001',
+    ])
+    expect(result.evidence.analysis?.pack.sources.every((source) => source.content === null))
+      .toBe(true)
+    expect(JSON.stringify(result)).not.toContain(
+      'export interface MemoryNoteMetadata { type: MemoryNoteType }',
+    )
     expect(parts.collect).toHaveBeenCalledTimes(1)
     // Five seats + five peer rankings + one chairman. Collection itself adds no model call.
     expect(parts.call).toHaveBeenCalledTimes(11)
     expect(parts.call.mock.calls.every(([engine]) => engine.engine !== 'openrouter')).toBe(true)
     expect(parts.call.mock.calls.every(([, prompt]) => prompt.includes('repo-001'))).toBe(true)
+    expect(parts.call.mock.calls.every(([, , opts]) => opts.evidenceOnly === true)).toBe(true)
+    expect(parts.call.mock.calls.every(([, , opts]) => opts.cwd !== '/tmp/cockpit')).toBe(true)
     expect(parts.inserted[0]).toMatchObject({ schemaVersion: 3, mode: 'analysis' })
   })
 
@@ -230,5 +245,19 @@ describe('CouncilService grounded analysis', () => {
     await parts.run(true)
 
     expect(parts.call.mock.calls.some(([engine]) => engine.engine === 'openrouter')).toBe(true)
+  })
+
+  it('keeps raw CLI failures private and reports only engines allowed by policy', async () => {
+    const parts = makeParts('account-models')
+    parts.call.mockRejectedValue({
+      stderr: 'provider failed at /Users/example/private with sk-secret-secret-secret',
+    })
+
+    const result = await parts.run(true)
+
+    expect(result.ok).toBe(false)
+    expect(JSON.stringify(result)).not.toContain('/Users/example/private')
+    expect(JSON.stringify(result)).not.toContain('sk-secret-secret-secret')
+    expect(result.seats.every((seat) => seat.engine.engine !== 'openrouter')).toBe(true)
   })
 })

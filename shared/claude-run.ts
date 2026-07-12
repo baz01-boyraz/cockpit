@@ -28,6 +28,11 @@ export interface ClaudeRunOptions {
    * verbatim — never glue instructions onto user content.
    */
   systemPrompt?: string
+  /**
+   * Prompt-only deliberation: disable project instructions, built-in tools,
+   * slash commands, browser integration, and configured MCP servers.
+   */
+  evidenceOnly?: boolean
 }
 
 /**
@@ -37,6 +42,18 @@ export interface ClaudeRunOptions {
  */
 export function buildClaudeArgs(prompt: string, opts: ClaudeRunOptions = {}): string[] {
   const args = ['--print', '--no-session-persistence']
+  if (opts.evidenceOnly) {
+    args.push(
+      '--safe-mode',
+      '--tools',
+      '',
+      '--disable-slash-commands',
+      '--no-chrome',
+      '--strict-mcp-config',
+      '--mcp-config',
+      '{"mcpServers":{}}',
+    )
+  }
   const model = opts.model?.trim()
   if (model) args.push('--model', model)
   const systemPrompt = opts.systemPrompt?.trim()

@@ -120,11 +120,19 @@ function withSessionId(
   result: CouncilResultLike,
   sessionId: string,
   expectedMode?: CouncilIntentMode,
+  allowUngroundedAnalysis = false,
 ): CouncilResultV3 {
   const stored = { ...result, sessionId } as CouncilResultLike
   const normalized = normalizeCouncilResult(stored)
   if (!normalized || (expectedMode !== undefined && normalized.mode !== expectedMode)) {
     throw new Error('Council result does not satisfy the versioned persistence contract.')
+  }
+  if (
+    normalized.mode === 'analysis' &&
+    !normalized.evidence.analysis &&
+    !allowUngroundedAnalysis
+  ) {
+    throw new Error('Completed Council analysis requires grounded analysis evidence.')
   }
   // Reads remain dual-version, but every NEW write crosses this one strict v3
   // gateway. A legacy-shaped internal caller is upgraded in memory; historical
@@ -173,7 +181,12 @@ export class CouncilSessionStore {
    */
   insertPending(input: CouncilSessionPending): string {
     const id = randomUUID()
-    const placeholder = withSessionId(pendingPlaceholder(input.mode), id, input.mode)
+    const placeholder = withSessionId(
+      pendingPlaceholder(input.mode),
+      id,
+      input.mode,
+      true,
+    )
     this.db
       .prepare(
         `INSERT INTO council_sessions

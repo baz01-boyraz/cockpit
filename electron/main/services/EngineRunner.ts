@@ -16,6 +16,8 @@ export interface EngineCallOpts {
   maxBuffer: number
   /** Provider-enforced only where the engine capability says so. */
   maxTokens?: number
+  /** Disable local/MCP/browser tools so the model can use only supplied evidence. */
+  evidenceOnly?: boolean
 }
 
 /** Injectable so tests never spawn a real CLI (mirrors CouncilService). */
@@ -146,9 +148,23 @@ export class EngineRunner {
   async call(spec: EngineSpec, prompt: string, opts: EngineCallOpts): Promise<string> {
     switch (spec.engine) {
       case 'claude':
-        return this.runCli(resolveBin('claude'), buildClaudeArgs(prompt, { model: spec.model }), opts)
+        return this.runCli(
+          resolveBin('claude'),
+          buildClaudeArgs(prompt, {
+            model: spec.model,
+            evidenceOnly: opts.evidenceOnly,
+          }),
+          opts,
+        )
       case 'codex':
-        return this.runCli(resolveBin('codex'), buildCodexArgs(prompt, { model: spec.model }), opts)
+        return this.runCli(
+          resolveBin('codex'),
+          buildCodexArgs(prompt, {
+            model: spec.model,
+            evidenceOnly: opts.evidenceOnly,
+          }),
+          opts,
+        )
       case 'openrouter':
         return this.runOpenRouter(spec, prompt, opts)
       default: {

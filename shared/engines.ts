@@ -109,9 +109,34 @@ export function engineLabel(spec: EngineSpec): string {
  * A model id that fails ENGINE_MODEL_RE is ignored (the CLI default is used) and
  * never reaches argv — the same shape gate `buildWorkerCommand` applies.
  */
-export function buildCodexArgs(prompt: string, opts: { model?: string } = {}): string[] {
+export function buildCodexArgs(
+  prompt: string,
+  opts: { model?: string; evidenceOnly?: boolean } = {},
+): string[] {
   const model = opts.model?.trim() ?? ''
   const useModel = model.length > 0 && ENGINE_MODEL_RE.test(model)
+  const evidenceOnly = opts.evidenceOnly
+    ? [
+        '--ignore-user-config',
+        '--ignore-rules',
+        '--disable',
+        'shell_tool',
+        '--disable',
+        'unified_exec',
+        '--disable',
+        'shell_snapshot',
+        '--disable',
+        'apps',
+        '--disable',
+        'plugins',
+        '--disable',
+        'browser_use',
+        '--disable',
+        'computer_use',
+        '--disable',
+        'multi_agent',
+      ]
+    : []
   return [
     'exec',
     '--skip-git-repo-check',
@@ -120,6 +145,7 @@ export function buildCodexArgs(prompt: string, opts: { model?: string } = {}): s
     '--ephemeral',
     '--color',
     'never',
+    ...evidenceOnly,
     ...(useModel ? ['-m', model] : []),
     prompt,
   ]

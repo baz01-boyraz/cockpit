@@ -72,11 +72,12 @@ export const createCouncilSlice: SliceCreator<CouncilSlice> = (set, get) => ({
   conveneCouncil: async (projectId, spec, options = {}) => {
     const trimmed = spec.trim()
     if (!trimmed || get().councilConvening) return
+    const mode = options.mode ?? 'spec'
     const run: CouncilRunView = {
       id: `local-${Date.now()}`,
       title: runTitle(trimmed),
       spec: trimmed,
-      mode: 'spec',
+      mode,
       responseLanguage: options.responseLanguage,
       result: null,
       at: Date.now(),
@@ -84,14 +85,21 @@ export const createCouncilSlice: SliceCreator<CouncilSlice> = (set, get) => ({
     set({ councilProjectId: projectId, councilConvening: true, councilActive: run, councilNotice: null })
     try {
       const rawResult = await cockpit().council.run(projectId, {
-        mode: 'spec',
+        mode,
         spec: trimmed,
         question: run.title,
         responseLanguage: options.responseLanguage,
+        analysisEgress: options.analysisEgress,
+        analysisConsent: options.analysisConsent,
       })
-      const result = normalizeCouncilResult(rawResult) ?? councilFailure(
-        new Error('Council returned an invalid result envelope.'),
-      )
+      const normalized = normalizeCouncilResult(rawResult)
+      const result = normalized?.mode === mode
+        ? normalized
+        : councilFailure(
+            new Error('Council returned an invalid or mismatched result envelope.'),
+            mode,
+            options.responseLanguage,
+          )
       // A council can outlive a project switch — never paint a stale verdict.
       if (get().activeProjectId !== projectId) return
       set({
@@ -102,17 +110,21 @@ export const createCouncilSlice: SliceCreator<CouncilSlice> = (set, get) => ({
           result,
         },
         councilConvening: false,
-        councilNotice: 'Council finished deliberating.',
+        councilNotice:
+          mode === 'analysis'
+            ? 'Repository analysis finished.'
+            : 'Council finished deliberating.',
       })
     } catch (err: unknown) {
       if (get().activeProjectId !== projectId) return
       set({
         councilActive: {
           ...run,
-          result: councilFailure(err, 'spec', options.responseLanguage),
+          result: councilFailure(err, mode, options.responseLanguage),
         },
         councilConvening: false,
-        councilNotice: 'Council run failed.',
+        councilNotice:
+          mode === 'analysis' ? 'Repository analysis failed.' : 'Council run failed.',
       })
     }
   },

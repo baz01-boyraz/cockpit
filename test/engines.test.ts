@@ -56,4 +56,36 @@ describe('buildCodexArgs', () => {
     const args = buildCodexArgs(prompt, { model: 'gpt-5-codex' })
     expect(args[args.length - 1]).toBe(prompt)
   })
+
+  it('can disable repository discovery and tool surfaces for evidence-only calls', () => {
+    const args = buildCodexArgs('bounded evidence', {
+      model: 'gpt-5-codex',
+      evidenceOnly: true,
+    })
+
+    expect(args).toEqual([
+      ...DEFAULT_ARGS,
+      '--ignore-user-config',
+      '--ignore-rules',
+      '--disable',
+      'shell_tool',
+      '--disable',
+      'unified_exec',
+      '--disable',
+      'shell_snapshot',
+      '--disable',
+      'apps',
+      '--disable',
+      'plugins',
+      '--disable',
+      'browser_use',
+      '--disable',
+      'computer_use',
+      '--disable',
+      'multi_agent',
+      '-m',
+      'gpt-5-codex',
+      'bounded evidence',
+    ])
+  })
 })

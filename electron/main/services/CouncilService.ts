@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto'
-import { resolve, sep } from 'node:path'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve, sep } from 'node:path'
 import { sanitizeDiff, type SanitizedDiff } from '@shared/diff-sanitize'
 import { resolveChatModel } from '@shared/chat-models'
 import { redactText } from '@shared/redaction'
-import type { EngineSpec } from '@shared/engines'
+import type { EngineId, EngineSpec } from '@shared/engines'
 import {
   CHAIRMAN,
   COUNCIL_SEATS,
@@ -32,7 +34,24 @@ import {
   type NormalizedCouncilResult,
   type ScorecardEntry,
 } from '@shared/council'
-import { buildChairmanPrompt, buildRankingPrompt, buildSeatPrompt, buildSpecChairmanPrompt } from '@shared/council-prompts'
+import {
+  buildAnalysisChairmanPrompt,
+  buildAnalysisSeatPrompt,
+  buildChairmanPrompt,
+  buildRankingPrompt,
+  buildSeatPrompt,
+  buildSpecChairmanPrompt,
+  renderAnalysisMemoryHooks,
+} from '@shared/council-prompts'
+import {
+  parseCouncilAnalysisClaims,
+  renderCouncilAnalysisReport,
+  renderCouncilEvidencePack,
+  type CouncilAnalysisEgressPolicy,
+  type CouncilAnalysisEgressReceipt,
+  type CouncilClaim,
+  type CouncilEvidencePack,
+} from '@shared/council-evidence'
 import {
   COUNCIL_STAGE_BUDGETS,
   detectCouncilResponseLanguage,
@@ -47,6 +66,7 @@ import type { CouncilSessionStore } from '../db/CouncilSessionStore'
 import { collectDiffInputs } from './ReviewService'
 import type { AuditLogService } from './AuditLogService'
 import type { EngineCallOpts, EngineRunner } from './EngineRunner'
+import type { CouncilEvidenceCollector } from './CouncilEvidenceService'
 import type { MemoryHubService } from './MemoryHubService'
 import type { MemoryRecallService } from './MemoryRecallService'
 import type { ProjectService } from './ProjectService'
@@ -156,6 +176,12 @@ function decisionQuestions(
   }))
 }
 
+function analysisAllowedEngines(policy: CouncilAnalysisEgressPolicy): EngineId[] {
+  if (policy === 'local-only') return []
+  if (policy === 'account-models') return ['claude', 'codex']
+  return ['claude', 'codex', 'openrouter']
+}
+
 export interface CouncilRunOpts {
   mode?: CouncilIntentMode
   dir?: string
@@ -166,6 +192,10 @@ export interface CouncilRunOpts {
   model?: string
   /** Internal/domain override; C2c owns exposing a validated IPC/UI selector. */
   responseLanguage?: string
+  /** Repository-content egress policy for analysis; defaults to zero-call local collection. */
+  analysisEgress?: CouncilAnalysisEgressPolicy
+  /** Required whenever analysis evidence may reach an external model provider. */
+  analysisConsent?: boolean
 }
 
 /**
@@ -201,6 +231,8 @@ export class CouncilService {
     /** Automatic task-memory gateway. Production always wires this; the legacy
      *  listHooks collaborator remains as a backwards-compatible test fallback. */
     private readonly memoryContexts?: MemoryContextProvider,
+    /** C3's deterministic, read-only repository evidence boundary. */
+    private readonly evidence?: CouncilEvidenceCollector,
   ) {
     this.sweepStalePending()
   }
@@ -240,21 +272,8 @@ export class CouncilService {
     const question = rawQuestion ? redactText(rawQuestion) : null
     const cardId = opts.cardId ?? null
 
-    // C2c exposes analysis as a first-class intent, but C3 owns the bounded,
-    // repository-grounded evidence collector. Until that collector exists we
-    // fail closed before reserving a row or calling an engine; a tool-less model
-    // must never fabricate repository findings and label them as analysis.
     if (intent === 'analysis') {
-      const responseLanguage = detectCouncilResponseLanguage(
-        `${question ?? ''}\n${opts.specText ?? ''}`,
-        opts.responseLanguage,
-      )
-      return this.earlyError(
-        intent,
-        'Repository analysis requires grounded repository evidence from the C3 collector; no engine was called and no result was persisted.',
-        started,
-        responseLanguage,
-      )
+      return this.runAnalysis(projectId, project, question, cardId, opts, started)
     }
     const mode: CouncilMode = intent
 
@@ -414,7 +433,7 @@ export class CouncilService {
   private reservePending(
     projectId: string,
     cardId: string | null,
-    mode: CouncilMode,
+    mode: CouncilIntentMode,
     question: string | null,
   ): string | null {
     try {
@@ -544,20 +563,25 @@ export class CouncilService {
     prompt: string,
     claudeOverride: string | null,
     callOpts: EngineCallOpts,
+    allowedEngines?: ReadonlySet<EngineId>,
   ): Promise<CouncilSeatOutput> {
     const primary = this.withOverride(seat.engine, claudeOverride)
-    const chain = [primary, ...(seat.fallbacks ?? [])]
-    let primaryErr: unknown = new Error('call failed')
+    const configured = [primary, ...(seat.fallbacks ?? [])]
+    const chain = allowedEngines
+      ? configured.filter((candidate) => allowedEngines.has(candidate.engine))
+      : configured
+    let primaryErr: unknown = new Error('No engine is allowed by the analysis data-egress policy.')
     for (let index = 0; index < chain.length; index += 1) {
       const engine = chain[index]
       try {
-        const raw = await this.engine.call(engine, prompt, callOpts)
+        const output = await this.engine.call(engine, prompt, callOpts)
+        const raw = allowedEngines ? redactText(output) : output
         const normalized = normalizeCouncilSeatText(raw, { builder: seat.id === 'builder' })
         return {
           id: seat.id,
           label: seat.label,
           engine,
-          usedFallback: index > 0,
+          usedFallback: configured.indexOf(engine) > 0,
           text: normalized.text,
           ok: normalized.text.length > 0,
           ...(normalized.findings.length > 0 ? { findings: normalized.findings } : {}),
@@ -570,13 +594,16 @@ export class CouncilService {
       }
     }
     const failure = normalizeCouncilSeatText(
-      `This seat could not be reached (${errText(primaryErr)}).`,
+      allowedEngines
+        ? 'This seat could not be reached under the selected data-sharing policy.'
+        : `This seat could not be reached (${errText(primaryErr)}).`,
     )
+    const failureEngine = chain[0] ?? primary
     return {
       id: seat.id,
       label: seat.label,
-      engine: primary,
-      usedFallback: false,
+      engine: failureEngine,
+      usedFallback: configured.indexOf(failureEngine) > 0,
       text: failure.text,
       ok: false,
     }
@@ -592,20 +619,28 @@ export class CouncilService {
   private async runRankings(
     seats: readonly CouncilSeatOutput[],
     okSeats: readonly CouncilSeatOutput[],
-    mode: CouncilMode,
+    mode: CouncilIntentMode,
     callOpts: EngineCallOpts,
     memoryBlock?: string | null,
     responseLanguage = 'und',
+    fenceTag?: string,
   ): Promise<{ rankings: CouncilRanking[]; aggregate: AggregateRank[]; labelToSeat: Record<string, CouncilTone> }> {
     if (okSeats.length < 2) return { rankings: [], aggregate: [], labelToSeat: {} }
 
     const { anonymized, labelToSeat } = anonymizeSeats(seats, shuffledOrder(okSeats.length))
-    const rankingPrompt = buildRankingPrompt(anonymized, mode, memoryBlock, responseLanguage)
+    const rankingPrompt = buildRankingPrompt(
+      anonymized,
+      mode,
+      memoryBlock,
+      responseLanguage,
+      fenceTag,
+    )
     const settled = await Promise.all(
       okSeats.map(async (s): Promise<CouncilRanking | null> => {
         try {
           // A seat ranks through the engine it actually succeeded on.
-          const raw = await this.engine.call(s.engine, rankingPrompt, callOpts)
+          const output = await this.engine.call(s.engine, rankingPrompt, callOpts)
+          const raw = mode === 'analysis' ? redactText(output) : output
           if (raw.length === 0) return null
           const normalized = normalizeCouncilRankingText(raw)
           return {
@@ -632,13 +667,384 @@ export class CouncilService {
   ): Promise<string | null> {
     for (const engine of [CHAIRMAN.engine, ...CHAIRMAN.fallbacks]) {
       try {
-        const text = await this.engine.call(engine, prompt, callOpts)
+        const text = redactText(await this.engine.call(engine, prompt, callOpts))
         return text.length > 0 ? normalizeCouncilChairmanText(text, mode) : null
       } catch {
         // Try the next engine; no verdict after the chain is degraded, not fatal.
       }
     }
     return null
+  }
+
+  private async runAnalysisChairman(
+    prompt: string,
+    callOpts: EngineCallOpts,
+    allowedEngines: ReadonlySet<EngineId>,
+  ): Promise<string | null> {
+    const chain = [CHAIRMAN.engine, ...CHAIRMAN.fallbacks]
+      .filter((candidate) => allowedEngines.has(candidate.engine))
+    for (const engine of chain) {
+      try {
+        const text = redactText(await this.engine.call(engine, prompt, callOpts))
+        return text.trim()
+          ? boundedCouncilText(text, COUNCIL_V3_LIMITS.rawChairmanChars)
+          : null
+      } catch {
+        // Try the next allowed account engine; raw provider errors stay private.
+      }
+    }
+    return null
+  }
+
+  private async runAnalysis(
+    projectId: string,
+    project: { name: string; path: string },
+    question: string | null,
+    cardId: string | null,
+    opts: CouncilRunOpts,
+    started: number,
+  ): Promise<NormalizedCouncilResult> {
+    const request = redactText(opts.specText?.trim() || question || '')
+    const responseLanguage = detectCouncilResponseLanguage(
+      `${question ?? ''}\n${request}`,
+      opts.responseLanguage,
+    )
+    if (!request) {
+      return this.earlyError(
+        'analysis',
+        'Repository analysis needs a concrete question or request.',
+        started,
+        responseLanguage,
+      )
+    }
+    const policy = opts.analysisEgress ?? 'local-only'
+    if (policy !== 'local-only' && opts.analysisConsent !== true) {
+      return this.earlyError(
+        'analysis',
+        'Explicit consent is required before bounded repository evidence can be sent to model providers.',
+        started,
+        responseLanguage,
+      )
+    }
+    if (!this.evidence) {
+      return this.earlyError(
+        'analysis',
+        'Repository analysis requires grounded repository evidence from the evidence collector; no engine was called and no result was persisted.',
+        started,
+        responseLanguage,
+      )
+    }
+
+    const automaticMemory = this.memoryContexts?.forTask({
+      projectId,
+      surface: 'council_analysis',
+      query: `${question ?? ''}\n${request}`.trim(),
+    }) ?? null
+    let evidencePack: CouncilEvidencePack
+    try {
+      evidencePack = await this.evidence.collect({
+        root: project.path,
+        query: request,
+        ...(automaticMemory?.receipt ? { memoryReceipt: automaticMemory.receipt } : {}),
+      })
+    } catch {
+      return this.earlyError(
+        'analysis',
+        'Repository evidence could not be collected safely; no model was called and nothing was persisted.',
+        started,
+        responseLanguage,
+      )
+    }
+    const allowedEngines = analysisAllowedEngines(policy)
+    const egress: CouncilAnalysisEgressReceipt = {
+      policy,
+      consent: policy === 'local-only' ? false : true,
+      allowedEngines,
+      contentChars:
+        policy === 'local-only'
+          ? 0
+          : evidencePack.totalChars + (automaticMemory?.block.length ?? 0),
+    }
+    const pendingId = this.reservePending(projectId, cardId, 'analysis', question)
+    if (policy === 'local-only') {
+      const report = renderCouncilAnalysisReport({
+        claims: [],
+        pack: evidencePack,
+        responseLanguage,
+        egress,
+      })
+      return this.persistAndRecord(
+        projectId,
+        pendingId,
+        cardId,
+        'analysis',
+        question,
+        this.buildAnalysisResult({
+          ok: true,
+          seats: [],
+          rankings: [],
+          aggregate: [],
+          labelToSeat: {},
+          rawChairman: null,
+          claims: [],
+          evidencePack,
+          egress,
+          report,
+          error: null,
+          started,
+          responseLanguage,
+          memoryContext: automaticMemory,
+        }),
+      )
+    }
+
+    let isolatedCwd: string
+    try {
+      isolatedCwd = await mkdtemp(join(tmpdir(), 'cockpit-council-analysis-'))
+    } catch {
+      const report = renderCouncilAnalysisReport({
+        claims: [],
+        pack: evidencePack,
+        responseLanguage,
+        egress,
+      })
+      return this.persistAndRecord(
+        projectId,
+        pendingId,
+        cardId,
+        'analysis',
+        question,
+        this.buildAnalysisResult({
+          ok: false,
+          seats: [],
+          rankings: [],
+          aggregate: [],
+          labelToSeat: {},
+          rawChairman: null,
+          claims: [],
+          evidencePack,
+          egress,
+          report,
+          error: 'Council could not create an isolated prompt-only analysis workspace.',
+          started,
+          responseLanguage,
+          memoryContext: automaticMemory,
+        }),
+      )
+    }
+
+    try {
+      const baseCallOpts = {
+        cwd: isolatedCwd,
+        timeout: CALL_TIMEOUT_MS,
+        maxBuffer: CALL_MAX_BUFFER,
+        evidenceOnly: true,
+      }
+      const seatCallOpts: EngineCallOpts = {
+        ...baseCallOpts,
+        maxTokens: COUNCIL_STAGE_BUDGETS.seat.maxTokens,
+      }
+      const rankingCallOpts: EngineCallOpts = {
+        ...baseCallOpts,
+        maxTokens: COUNCIL_STAGE_BUDGETS.ranking.maxTokens,
+      }
+      const chairmanCallOpts: EngineCallOpts = {
+        ...baseCallOpts,
+        maxTokens: COUNCIL_STAGE_BUDGETS.chairman.maxTokens,
+      }
+      const allowedSet = new Set<EngineId>(allowedEngines)
+      const fenceTag = `====COCKPIT-UNTRUSTED-ANALYSIS-${randomUUID()}====`
+      const claudeOverride = opts.model ? resolveChatModel(opts.model).id : null
+      const seatPrompt = (seat: CouncilSeat) =>
+        buildAnalysisSeatPrompt(seat, {
+          question: request,
+          evidencePack,
+          fenceTag,
+          memoryBlock: automaticMemory?.block,
+          responseLanguage,
+        })
+      const seats = await Promise.all(
+        COUNCIL_SEATS.map((seat) =>
+          this.runSeat(seat, seatPrompt(seat), claudeOverride, seatCallOpts, allowedSet),
+        ),
+      )
+      const okSeats = seats.filter((seat) => seat.ok)
+      if (okSeats.length === 0) {
+        const report = renderCouncilAnalysisReport({
+          claims: [],
+          pack: evidencePack,
+          responseLanguage,
+          egress,
+        })
+        return this.persistAndRecord(
+          projectId,
+          pendingId,
+          cardId,
+          'analysis',
+          question,
+          this.buildAnalysisResult({
+            ok: false,
+            seats,
+            rankings: [],
+            aggregate: [],
+            labelToSeat: {},
+            rawChairman: null,
+            claims: [],
+            evidencePack,
+            egress,
+            report,
+            error: 'Every allowed Council seat failed to respond.',
+            started,
+            responseLanguage,
+            memoryContext: automaticMemory,
+          }),
+        )
+      }
+      const analysisContext = [
+        renderCouncilEvidencePack(evidencePack, fenceTag),
+        renderAnalysisMemoryHooks(automaticMemory?.block, fenceTag),
+      ]
+        .filter((value): value is string => Boolean(value?.trim()))
+        .join('\n\n')
+      const { rankings, aggregate, labelToSeat } = await this.runRankings(
+        seats,
+        okSeats,
+        'analysis',
+        rankingCallOpts,
+        analysisContext,
+        responseLanguage,
+        fenceTag,
+      )
+      const chairmanPrompt = buildAnalysisChairmanPrompt({
+        question: request,
+        seats,
+        rankings,
+        aggregate,
+        evidencePack,
+        fenceTag,
+        memoryBlock: automaticMemory?.block,
+        responseLanguage,
+      })
+      const rawChairman = await this.runAnalysisChairman(
+        chairmanPrompt,
+        chairmanCallOpts,
+        allowedSet,
+      )
+      const claims = rawChairman
+        ? parseCouncilAnalysisClaims(rawChairman, evidencePack)
+        : []
+      const ok = claims.length > 0
+      const error = ok ? null : 'Council could not produce any provenance-checked analysis claim.'
+      const report = renderCouncilAnalysisReport({
+        claims,
+        pack: evidencePack,
+        responseLanguage,
+        egress,
+      })
+      return this.persistAndRecord(
+        projectId,
+        pendingId,
+        cardId,
+        'analysis',
+        question,
+        this.buildAnalysisResult({
+          ok,
+          seats,
+          rankings,
+          aggregate,
+          labelToSeat,
+          rawChairman,
+          claims,
+          evidencePack,
+          egress,
+          report,
+          error,
+          started,
+          responseLanguage,
+          memoryContext: automaticMemory,
+        }),
+      )
+    } finally {
+      await rm(isolatedCwd, { recursive: true, force: true }).catch(() => undefined)
+    }
+  }
+
+  private buildAnalysisResult(input: {
+    ok: boolean
+    seats: CouncilSeatOutput[]
+    rankings: CouncilRanking[]
+    aggregate: AggregateRank[]
+    labelToSeat: Record<string, CouncilTone>
+    rawChairman: string | null
+    claims: CouncilClaim[]
+    evidencePack: CouncilEvidencePack
+    egress: CouncilAnalysisEgressReceipt
+    report: string
+    error: string | null
+    started: number
+    responseLanguage: string
+    memoryContext?: MemoryContextEnvelope | null
+  }): CouncilResultV3 {
+    const seatsRun = input.seats.filter((seat) => seat.ok).length
+    const repositoryFiles = new Set(
+      input.evidencePack.sources
+        .filter((source) => source.kind === 'repository')
+        .map((source) => source.path),
+    ).size
+    const localSummary = input.responseLanguage.toLocaleLowerCase().startsWith('tr')
+      ? 'Repository kanıtları yerel olarak toplandı; model sentezi çalıştırılmadı.'
+      : 'Repository evidence was collected locally; no model synthesis was run.'
+    const summary = input.ok
+      ? input.claims.find((claim) => claim.verified)?.text ??
+        localSummary
+      : input.error ?? 'Repository analysis failed.'
+    return {
+      schemaVersion: COUNCIL_RESULT_SCHEMA_VERSION,
+      ok: input.ok,
+      mode: 'analysis',
+      responseLanguage: input.responseLanguage,
+      decision: {
+        kind: input.ok ? 'analysis_complete' : 'failed',
+        summary: boundedCouncilText(summary, COUNCIL_V3_LIMITS.summaryChars),
+        why: null,
+        questions: [],
+        keyFindings: uniqueCouncilText(
+          input.claims.map((claim) => claim.text),
+          COUNCIL_V3_LIMITS.keyFindings,
+        ),
+        dissent: uniqueCouncilText(
+          input.claims.filter((claim) => !claim.verified).map((claim) => claim.text),
+          COUNCIL_V3_LIMITS.dissent,
+        ),
+      },
+      primaryArtifact: {
+        kind: 'analysisReport',
+        content: boundedCouncilText(input.report, COUNCIL_V3_LIMITS.primaryArtifactChars),
+      },
+      execution: {
+        stats: {
+          seatsRun,
+          seatsFailed: input.seats.length - seatsRun,
+          filesReviewed: repositoryFiles,
+          durationMs: Date.now() - input.started,
+        },
+        ...(input.memoryContext?.receipt ? { memoryContext: input.memoryContext.receipt } : {}),
+      },
+      evidence: {
+        seats: input.seats,
+        rankings: input.rankings,
+        aggregate: input.aggregate,
+        labelToSeat: input.labelToSeat,
+        rawChairman: input.rawChairman,
+        analysis: {
+          pack: input.evidencePack,
+          claims: input.claims,
+          egress: input.egress,
+        },
+      },
+      error: input.error,
+      sessionId: null,
+    }
   }
 
   private buildResult(input: {
@@ -785,7 +1191,7 @@ export class CouncilService {
     projectId: string,
     pendingId: string | null,
     cardId: string | null,
-    mode: CouncilMode,
+    mode: CouncilIntentMode,
     question: string | null,
     result: CouncilResultV3,
   ): NormalizedCouncilResult {

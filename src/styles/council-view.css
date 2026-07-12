@@ -56,6 +56,18 @@
   color: var(--text-muted);
   background: var(--surface-inset);
   text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
+}
+.councilView__intentOption:not(:disabled):hover {
+  border-color: var(--border-strong);
+}
+.councilView__intentOption:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .councilView__intentOption strong {
   color: var(--text);
@@ -107,6 +119,115 @@
 .councilView__input:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.councilView__egress {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--surface-inset) 82%, var(--glacier-wash));
+}
+.councilView__egressHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.councilView__egressSelect {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 620;
+}
+.councilView__egressSelect select {
+  min-height: 30px;
+  max-width: 100%;
+  padding: 4px 26px 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  background: var(--surface-1);
+  font: inherit;
+  font-weight: 520;
+}
+.councilView__egressSelect select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.councilView__egressBadge {
+  flex-shrink: 0;
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-faint);
+  background: var(--surface-2);
+  font: 650 var(--fs-micro) / 1.2 var(--font-mono);
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+.councilView__egressBadge--local-only {
+  border-color: color-mix(in srgb, var(--signal) 28%, var(--border));
+  color: var(--signal);
+  background: var(--signal-dim);
+}
+.councilView__egressBadge--account-models,
+.councilView__egressBadge--all-configured {
+  border-color: color-mix(in srgb, var(--warning) 28%, var(--border));
+  color: var(--warning);
+  background: var(--warning-wash);
+}
+.councilView__egressNote,
+.councilView__egressLimit {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+.councilView__egressNote strong {
+  color: var(--signal);
+  font-weight: 650;
+}
+.councilView__egressLimit {
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+}
+.councilView__consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--warning) 24%, var(--border));
+  border-radius: var(--r-sm);
+  background: var(--warning-wash);
+  cursor: pointer;
+}
+.councilView__consent input {
+  width: 15px;
+  height: 15px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+.councilView__consent > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.councilView__consent strong {
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 620;
+}
+.councilView__consent small {
+  color: var(--text-muted);
+  font-size: var(--fs-micro);
+  line-height: 1.45;
 }
 
 .councilView__composeFoot {
@@ -786,6 +907,18 @@
   }
 }
 
+/* Keep Council's primary run action out of the fixed notification lane on
+ * compact desktop windows. The rest of the composer remains full-width. */
+@media (min-width: 761px) and (max-width: 1320px) {
+  .councilView__composeFoot {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .councilView__convene {
+    min-width: 220px;
+  }
+}
+
 @media (max-width: 760px) {
   .councilView__composeTop {
     align-items: stretch;
@@ -797,6 +930,14 @@
   }
   .councilView__intentGrid {
     grid-template-columns: 1fr;
+  }
+  .councilView__egressHead,
+  .councilView__egressSelect {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .councilView__egressBadge {
+    align-self: flex-start;
   }
   .councilView__composeFoot,
   .councilView__composeMeta {

@@ -32,6 +32,7 @@ import type {
   CouncilIntentMode,
   NormalizedCouncilResult,
 } from '@shared/council'
+import type { CouncilAnalysisEgressPolicy } from '@shared/council-evidence'
 
 export type View =
   | 'dashboard'
@@ -158,7 +159,12 @@ export interface CouncilSlice {
   conveneCouncil: (
     projectId: string,
     spec: string,
-    options?: { responseLanguage?: string },
+    options?: {
+      mode?: Extract<CouncilIntentMode, 'spec' | 'analysis'>
+      responseLanguage?: string
+      analysisEgress?: CouncilAnalysisEgressPolicy
+      analysisConsent?: boolean
+    },
   ) => Promise<void>
   /** Re-run the active spec with the author's guided clarification answers. */
   continueCouncil: (

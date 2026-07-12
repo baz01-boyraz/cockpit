@@ -92,6 +92,117 @@
   text-wrap: pretty;
 }
 
+/* Repository-analysis provenance: metadata is visible; collected source bodies
+ * remain confined to the evidence contract and never render into the DOM. */
+.councilProvenance {
+  display: flex;
+  width: min(100%, 82ch);
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid color-mix(in srgb, var(--glacier-400) 24%, var(--border));
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--surface-inset) 88%, var(--glacier-wash));
+}
+.councilProvenance__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.councilProvenance__head h4 {
+  margin: 3px 0 0;
+  color: var(--text);
+  font-size: var(--fs-h3);
+  font-weight: 680;
+}
+.councilProvenance__policy {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  font: 600 var(--fs-micro) / 1.2 var(--font-mono);
+}
+.councilProvenance__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.councilProvenance__stats span {
+  padding: 5px 8px;
+  border: 1px solid var(--border-faint);
+  border-radius: var(--r-sm);
+  color: var(--text-faint);
+  background: var(--surface-1);
+  font-size: var(--fs-micro);
+}
+.councilProvenance__stats strong {
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+.councilProvenance__sources {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+}
+.councilProvenance__sources li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-faint);
+  border-radius: var(--r-sm);
+  background: var(--surface-1);
+}
+.councilProvenance__sources li > code {
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: var(--glacier-300);
+  background: var(--glacier-wash);
+  font-size: var(--fs-micro);
+}
+.councilProvenance__sources li > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.councilProvenance__sources strong {
+  overflow: hidden;
+  color: var(--text);
+  font: 560 var(--fs-xs) / 1.35 var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.councilProvenance__sources small,
+.councilProvenance__empty {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  line-height: 1.45;
+}
+.councilProvenance__freshness {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px var(--sp-3);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border-faint);
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+}
+.councilProvenance__freshness code,
+.councilProvenance__freshness strong {
+  color: var(--text-muted);
+  font-size: inherit;
+  font-weight: 600;
+}
+
 /* The one section a human must act on before opening any analysis. */
 .councilAction {
   width: min(100%, 72ch);

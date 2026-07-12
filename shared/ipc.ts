@@ -17,6 +17,7 @@ import type {
   NormalizedCouncilResult,
   ScorecardEntry,
 } from './council'
+import type { CouncilAnalysisEgressPolicy } from './council-evidence'
 import type { OutcomeScorecard } from './outcomes'
 import type { MemoryHubSnapshot, MemoryNote } from './memory-hub'
 import type { MemoryHealth } from './memory-health'
@@ -401,6 +402,8 @@ export interface CockpitApi {
         spec?: string
         cardId?: string
         responseLanguage?: string
+        analysisEgress?: CouncilAnalysisEgressPolicy
+        analysisConsent?: boolean
       },
     ): Promise<NormalizedCouncilResult>
     /**

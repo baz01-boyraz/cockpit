@@ -166,7 +166,7 @@ function sanitizeFileContent(diff: string, cap: number): { content: string; trun
   return { content: kept.join('\n'), truncated: true }
 }
 
-function findSuspects(path: string, content: string): InjectionSuspect[] {
+export function findInjectionSuspects(path: string, content: string): InjectionSuspect[] {
   const out: InjectionSuspect[] = []
   for (const line of content.split('\n')) {
     if (isDiffMetaLine(line)) continue
@@ -218,7 +218,7 @@ export function sanitizeDiff(inputs: DiffFileInput[]): SanitizedDiff {
     const { content, truncated } = sanitizeFileContent(input.diff, cap)
     if (truncated && cap < PER_FILE_CHAR_CAP) truncatedTotal = true
     budget -= content.length
-    injectionSuspects.push(...findSuspects(input.path, content))
+    injectionSuspects.push(...findInjectionSuspects(input.path, content))
     files.push({ path: input.path, content, truncated, untracked: Boolean(input.untracked) })
   }
 

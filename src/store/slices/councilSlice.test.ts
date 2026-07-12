@@ -152,7 +152,12 @@ describe('council slice — standalone run', () => {
   })
 
   it('forwards explicit analysis intent and its data-egress consent without inference', async () => {
-    run.mockResolvedValue(makeV3Result() as unknown as CouncilResult)
+    run.mockResolvedValue({
+      ...makeV3Result(),
+      mode: 'analysis',
+      decision: { ...makeV3Result().decision, kind: 'analysis_complete' },
+      primaryArtifact: { kind: 'analysisReport', content: 'Grounded report.' },
+    } as unknown as CouncilResult)
     const convene = useStore.getState().conveneCouncil as unknown as (
       projectId: string,
       request: string,

@@ -23,6 +23,26 @@ test('Council composer labels intent honestly and exposes output language', asyn
   await expect(page.getByRole('checkbox', { name: /I consent to sending bounded/ })).toBeVisible()
 })
 
+test('local repository analysis discloses zero egress and cited-source metadata', async ({ page }) => {
+  await gotoApp(page)
+  await openView(page, 'council')
+
+  await page.getByRole('button', { name: /Analyze repository/ }).click()
+  await page
+    .locator('#council-spec')
+    .fill('Assess the Council persistence and renderer boundaries')
+  await page.getByRole('button', { name: 'Collect local evidence' }).click()
+
+  await expect(page.getByText(/Local repository evidence inventory is ready/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Copy analysis report' })).toBeVisible()
+  await page.getByText('How Council reached this').click()
+  const provenance = page.getByLabel('Analysis evidence provenance')
+  await expect(provenance.getByRole('heading', { name: 'Sources used' })).toBeVisible()
+  await expect(provenance.getByText('Local evidence only')).toBeVisible()
+  await expect(provenance.getByText('electron/main/services/CouncilService.ts')).toBeVisible()
+  await expect(provenance).not.toContainText('Bounded browser-preview evidence excerpt.')
+})
+
 test('Council report is selectable, copyable, exportable, and rendered once', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
     origin: 'http://localhost:3000',

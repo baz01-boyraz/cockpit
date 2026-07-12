@@ -2393,7 +2393,9 @@
    Driven by AppUpdateService → store.appUpdate. Animate transform/opacity only.
    ---------------------------------------------------------------------------- */
 .updateToast {
-  pointer-events: auto;
+  /* The visual card must not create a dead rectangle over page CTAs. Only its
+     actual controls opt back into hit-testing below. */
+  pointer-events: none;
   width: 320px;
   padding: var(--sp-4);
   display: flex;
@@ -2462,6 +2464,7 @@
 }
 
 .updateToast__close {
+  pointer-events: auto;
   display: grid;
   place-items: center;
   width: 22px;
@@ -2501,6 +2504,7 @@
 
 /* quiet secondary — the toast must not compete with the page's primary CTA */
 .updateToast__action {
+  pointer-events: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2574,7 +2578,8 @@
   gap: var(--sp-2);
 }
 .sentinelToast {
-  pointer-events: auto;
+  /* Notification prose is click-through; close/action controls remain live. */
+  pointer-events: none;
   position: relative;
   width: 320px;
   padding: var(--sp-3) var(--sp-4) var(--sp-3) calc(var(--sp-4) + 4px);
@@ -2634,6 +2639,7 @@
 }
 .sentinelToast--notice .sentinelToast__source { color: var(--ember-200); }
 .sentinelToast__close {
+  pointer-events: auto;
   display: grid;
   place-items: center;
   width: 20px;
@@ -2675,6 +2681,7 @@
   margin-top: 3px;
 }
 .sentinelToast__ask {
+  pointer-events: auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -2698,6 +2705,7 @@
 .sentinelToast__ask:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
 .sentinelToast__ask:active { transform: translateY(0) scale(0.99); }
 .sentinelToast__dismiss {
+  pointer-events: auto;
   height: 30px;
   padding: 0 10px;
   border: none;

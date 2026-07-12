@@ -33,6 +33,12 @@ import {
   type ScorecardEntry,
 } from '@shared/council'
 import { detectCouncilResponseLanguage } from '@shared/council-stages'
+import {
+  renderCouncilAnalysisReport,
+  type CouncilAnalysisEgressPolicy,
+  type CouncilClaim,
+  type CouncilEvidencePack,
+} from '@shared/council-evidence'
 import type { OutcomeScorecard } from '@shared/outcomes'
 import { buildSignal, composeSignalCardSpec, type SentinelSignal } from '@shared/sentinel'
 import { resolveChatModel } from '@shared/chat-models'
@@ -493,6 +499,8 @@ function mockCouncilSessionDetail(sessionId: string): CouncilResult | null {
       return mockSpecCouncil()
     case 'mock-council-diff':
       return mockDiffCouncil()
+    case 'mock-council-analysis':
+      return mockAnalysisCouncil('en', 'account-models', true)
     case 'mock-council-interrupted':
       return mockInterruptedCouncil()
     default:
@@ -506,36 +514,189 @@ function normalizedMockCouncil(result: CouncilResult | CouncilResultV3): Normali
   return normalized
 }
 
-function mockAnalysisUnavailable(
+function mockAnalysisCouncil(
   responseLanguage: string,
+  policy: CouncilAnalysisEgressPolicy,
+  consent: boolean,
 ): NormalizedCouncilResult {
+  const hash = 'b8f36f4b3f3f137cc96d888b794f5a92cefdad2bcd1df97cdcf808f676ca5d35'
+  const pack: CouncilEvidencePack = {
+    schemaVersion: 1,
+    repository: {
+      workspaceHash: hash,
+      manifestHash: hash,
+      headRef: 'main@fe9e992',
+      filesVisited: 84,
+      filesRead: 20,
+      canonicalMemoryMdPresent: false,
+    },
+    sources: [
+      {
+        id: 'input-001',
+        kind: 'input',
+        label: 'Analysis question',
+        path: null,
+        content: 'Assess the Council persistence and renderer boundaries.',
+        startLine: null,
+        endLine: null,
+        sha256: hash,
+        updatedAt: null,
+        truncated: false,
+        injectionSuspect: false,
+      },
+      {
+        id: 'repo-001',
+        kind: 'repository',
+        label: 'electron/main/services/CouncilService.ts:1-42',
+        path: 'electron/main/services/CouncilService.ts',
+        content: 'Bounded browser-preview evidence excerpt.',
+        startLine: 1,
+        endLine: 42,
+        sha256: hash,
+        updatedAt: null,
+        truncated: true,
+        injectionSuspect: false,
+      },
+      {
+        id: 'repo-002',
+        kind: 'repository',
+        label: 'src/panels/CouncilPanel.tsx:52-140',
+        path: 'src/panels/CouncilPanel.tsx',
+        content: 'Bounded browser-preview renderer excerpt.',
+        startLine: 52,
+        endLine: 140,
+        sha256: hash,
+        updatedAt: null,
+        truncated: true,
+        injectionSuspect: false,
+      },
+      {
+        id: 'memory-001',
+        kind: 'memory',
+        label: '.cockpit-memory/council-persistent-store-slice.md',
+        path: '.cockpit-memory/council-persistent-store-slice.md',
+        content: null,
+        startLine: null,
+        endLine: null,
+        sha256: null,
+        updatedAt: now(),
+        truncated: false,
+        injectionSuspect: false,
+      },
+    ],
+    unknowns: ['Runtime behavior and production model availability were not executed.'],
+    totalChars: 0,
+    truncated: false,
+  }
+  pack.totalChars = pack.sources.reduce(
+    (total, source) => total + (source.content?.length ?? 0),
+    0,
+  )
+  const remote = policy !== 'local-only'
+  if (remote && !consent) {
+    return normalizedMockCouncil({
+      schemaVersion: 3,
+      ok: false,
+      mode: 'analysis',
+      responseLanguage,
+      decision: {
+        kind: 'failed',
+        summary: 'Explicit consent is required before repository evidence can leave this device.',
+        why: null,
+        questions: [],
+        keyFindings: [],
+        dissent: [],
+      },
+      primaryArtifact: null,
+      execution: {
+        stats: { seatsRun: 0, seatsFailed: 0, filesReviewed: 0, durationMs: 0 },
+      },
+      evidence: {
+        seats: [],
+        rankings: [],
+        aggregate: [],
+        labelToSeat: {},
+        rawChairman: null,
+      },
+      error: 'Analysis consent was not granted.',
+      sessionId: null,
+    })
+  }
+  const claims: CouncilClaim[] = remote
+    ? [
+        {
+          id: 'claim-001',
+          source: 'repository',
+          text: 'Council execution and renderer responsibilities are separated across service and panel boundaries.',
+          evidenceRefs: ['repo-001', 'repo-002'],
+          verified: true,
+        },
+        {
+          id: 'claim-002',
+          source: 'inference',
+          text: 'A smaller evidence pack should reduce synthesis noise, but production impact still needs measurement.',
+          evidenceRefs: [],
+          verified: false,
+        },
+      ]
+    : []
+  const allowedEngines =
+    policy === 'local-only'
+      ? []
+      : policy === 'account-models'
+        ? (['claude', 'codex'] as const)
+        : (['claude', 'codex', 'openrouter'] as const)
+  const analysis = {
+    pack,
+    claims,
+    egress: {
+      policy,
+      consent: remote ? consent : false,
+      allowedEngines: [...allowedEngines],
+      contentChars: remote ? pack.totalChars : 0,
+    },
+  }
+  const report = renderCouncilAnalysisReport({
+    claims,
+    pack,
+    responseLanguage,
+    egress: analysis.egress,
+  })
+  const base = mockSpecCouncilApproved()
   return normalizedMockCouncil({
     schemaVersion: 3,
-    ok: false,
+    ok: true,
     mode: 'analysis',
     responseLanguage,
     decision: {
-      kind: 'failed',
-      summary: 'Grounded repository analysis is not available yet.',
+      kind: 'analysis_complete',
+      summary: remote
+        ? 'Grounded repository analysis is ready, with source provenance separated from inference.'
+        : 'Local repository evidence inventory is ready; no model synthesis was run.',
       why: null,
       questions: [],
-      keyFindings: [],
+      keyFindings: claims.map((claim) => claim.text),
       dissent: [],
     },
-    primaryArtifact: null,
+    primaryArtifact: { kind: 'analysisReport', content: report },
     execution: {
-      stats: { seatsRun: 0, seatsFailed: 0, filesReviewed: 0, durationMs: 0 },
+      stats: {
+        seatsRun: remote ? 5 : 0,
+        seatsFailed: 0,
+        filesReviewed: 2,
+        durationMs: remote ? 1600 : 180,
+      },
     },
     evidence: {
-      seats: [],
-      rankings: [],
-      aggregate: [],
-      labelToSeat: {},
+      seats: remote ? base.seats : [],
+      rankings: remote ? base.rankings : [],
+      aggregate: remote ? base.aggregate : [],
+      labelToSeat: remote ? base.labelToSeat : {},
       rawChairman: null,
+      analysis,
     },
-    error:
-      'Repository analysis requires grounded repository evidence from the C3 collector; no engine was called and no result was persisted.',
-    sessionId: null,
+    error: null,
+    sessionId: 'mock-council-analysis',
   })
 }
 
@@ -1361,11 +1522,13 @@ export function createMockApi(): CockpitApi {
         await new Promise((r) => setTimeout(r, 1600))
         const mode = opts?.mode ?? 'diff'
         if (mode === 'analysis') {
-          return mockAnalysisUnavailable(
+          return mockAnalysisCouncil(
             detectCouncilResponseLanguage(
               `${opts?.question ?? ''}\n${opts?.spec ?? ''}`,
               opts?.responseLanguage,
             ),
+            opts?.analysisEgress ?? 'local-only',
+            opts?.analysisConsent ?? false,
           )
         }
         if (mode !== 'spec') return normalizedMockCouncil(mockDiffCouncil())
@@ -1386,6 +1549,17 @@ export function createMockApi(): CockpitApi {
       // Recent persisted sessions as content-free headers — a mix of gate
       // outcomes + run statuses so a later consumer has something plausible.
       sessions: async (): Promise<CouncilSessionSummary[]> => [
+        {
+          id: 'mock-council-analysis',
+          cardId: null,
+          mode: 'analysis',
+          question: 'Assess the Council persistence and renderer boundaries',
+          verdictKind: null,
+          status: 'final',
+          ok: true,
+          seatsRun: 5,
+          createdAt: now(),
+        },
         {
           id: 'mock-council-spec-approved',
           cardId: 'card_cache',

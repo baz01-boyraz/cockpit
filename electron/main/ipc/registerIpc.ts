@@ -290,8 +290,8 @@ export function registerIpc(services: Services): void {
 
   // --- council (multi-engine LLM-Council: seats → peer rankings → verdict) ---
   handle('councilRun', (p) => {
-    const { projectId, model, mode, dir, question, spec, cardId, responseLanguage } = councilRunSchema.parse(p)
-    return services.council.run(projectId, { model, mode, dir, question, specText: spec, cardId, responseLanguage })
+    const { projectId, model, mode, dir, question, spec, cardId, responseLanguage, analysisEgress, analysisConsent } = councilRunSchema.parse(p)
+    return services.council.run(projectId, { model, mode, dir, question, specText: spec, cardId, responseLanguage, analysisEgress, analysisConsent })
   })
   handle('councilScorecard', (p) =>
     services.council.scorecard(councilScorecardSchema.parse(p).projectId),

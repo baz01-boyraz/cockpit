@@ -9,6 +9,7 @@ import type {
   ScorecardEntry,
 } from '@shared/council'
 import { COUNCIL_SEATS } from '@shared/council'
+import type { CouncilAnalysisEgressPolicy } from '@shared/council-evidence'
 import { councilHistoryPresentation, visibleCouncilSessions } from '@shared/council-history'
 import {
   buildCouncilDisplay,
@@ -68,6 +69,10 @@ export function CouncilPanel() {
   const [showAllHistory, setShowAllHistory] = useState(false)
   const [composerOpen, setComposerOpen] = useState(true)
   const [responseLanguage, setResponseLanguage] = useState<'auto' | 'tr' | 'en'>('auto')
+  const [intent, setIntent] = useState<Extract<CouncilIntentMode, 'spec' | 'analysis'>>('spec')
+  const [analysisEgress, setAnalysisEgress] =
+    useState<CouncilAnalysisEgressPolicy>('local-only')
+  const [analysisConsent, setAnalysisConsent] = useState(false)
 
   // Persisted history + cross-session standings, both project-scoped. A stale
   // list from another project must never flash under a new one.
@@ -98,6 +103,9 @@ export function CouncilPanel() {
     setScorecard(null)
     setShowAllHistory(false)
     setResponseLanguage('auto')
+    setIntent('spec')
+    setAnalysisEgress('local-only')
+    setAnalysisConsent(false)
     setComposerOpen(useStore.getState().councilActive === null)
     void loadHistory()
   }, [projectId, resetCouncil, loadHistory])
@@ -112,11 +120,27 @@ export function CouncilPanel() {
 
   const handleConvene = useCallback(() => {
     if (!projectId || !spec.trim()) return
+    if (intent === 'analysis' && analysisEgress !== 'local-only' && !analysisConsent) return
     void conveneCouncil(projectId, spec, {
+      mode: intent,
       responseLanguage: responseLanguage === 'auto' ? undefined : responseLanguage,
+      ...(intent === 'analysis'
+        ? {
+            analysisEgress,
+            analysisConsent: analysisEgress === 'local-only' ? false : analysisConsent,
+          }
+        : {}),
     })
     setComposerOpen(false)
-  }, [projectId, spec, responseLanguage, conveneCouncil])
+  }, [
+    projectId,
+    spec,
+    intent,
+    responseLanguage,
+    analysisEgress,
+    analysisConsent,
+    conveneCouncil,
+  ])
 
   const handleContinue = useCallback(
     (answers: CouncilClarificationAnswer[]) => {
@@ -171,7 +195,10 @@ export function CouncilPanel() {
     }
   }
 
-  const canConvene = Boolean(projectId) && spec.trim().length > 0 && !convening
+  const remoteAnalysisNeedsConsent =
+    intent === 'analysis' && analysisEgress !== 'local-only' && !analysisConsent
+  const canConvene =
+    Boolean(projectId) && spec.trim().length > 0 && !convening && !remoteAnalysisNeedsConsent
   const busy = active !== null && active.result === null
   const display = active?.result ? buildCouncilDisplay(active.result) : null
   const journeyPhase: CouncilJourneyPhase = busy
@@ -237,8 +264,9 @@ export function CouncilPanel() {
             <label className="councilView__composeHead" htmlFor="council-spec">
               <span className="eyebrow">ask council</span>
               <span className="councilView__composeHint">
-                Paste your request. You will get one clear outcome: a ready brief or up to three
-                questions you can answer on this page.
+                {intent === 'analysis'
+                  ? 'Describe what you want investigated. Council will collect a small, relevant evidence pack and make source quality visible.'
+                  : 'Paste your request. You will get one clear outcome: a ready brief or up to three questions you can answer on this page.'}
               </span>
             </label>
             {active && (
@@ -256,15 +284,21 @@ export function CouncilPanel() {
             <div className="councilView__intentGrid">
               <button
                 type="button"
-                className="councilView__intentOption councilView__intentOption--on"
-                aria-pressed="true"
+                className={`councilView__intentOption ${intent === 'spec' ? 'councilView__intentOption--on' : ''}`}
+                aria-pressed={intent === 'spec'}
+                onClick={() => setIntent('spec')}
               >
                 <strong>Refine request</strong>
                 <small>Turn a draft into one build-ready brief.</small>
               </button>
-              <button type="button" className="councilView__intentOption" disabled>
+              <button
+                type="button"
+                className={`councilView__intentOption ${intent === 'analysis' ? 'councilView__intentOption--on' : ''}`}
+                aria-pressed={intent === 'analysis'}
+                onClick={() => setIntent('analysis')}
+              >
                 <strong>Analyze repository</strong>
-                <small>Grounded analysis ships next with verified repository evidence.</small>
+                <small>Investigate with bounded evidence and claim-level provenance.</small>
               </button>
               <button type="button" className="councilView__intentOption" disabled>
                 <strong>Review change</strong>
@@ -275,7 +309,11 @@ export function CouncilPanel() {
           <textarea
             id="council-spec"
             className="councilView__input"
-            placeholder="Paste a draft spec, a design, or a question for the council to deliberate on…"
+            placeholder={
+              intent === 'analysis'
+                ? 'What should Council investigate in this repository? Include the decision you need to make…'
+                : 'Paste a draft spec, a design, or a question for the council to deliberate on…'
+            }
             value={spec}
             onChange={(e) => setSpec(e.target.value)}
             onKeyDown={onKeyDown}
@@ -283,6 +321,56 @@ export function CouncilPanel() {
             spellCheck={false}
             disabled={!projectId}
           />
+          {intent === 'analysis' && (
+            <div className="councilView__egress">
+              <div className="councilView__egressHead">
+                <label className="councilView__egressSelect">
+                  <span>Repository data sharing</span>
+                  <select
+                    aria-label="Repository data sharing"
+                    value={analysisEgress}
+                    onChange={(event) => {
+                      setAnalysisEgress(event.target.value as CouncilAnalysisEgressPolicy)
+                      setAnalysisConsent(false)
+                    }}
+                  >
+                    <option value="local-only">Local evidence only</option>
+                    <option value="account-models">Claude + Codex accounts</option>
+                    <option value="all-configured">All configured models</option>
+                  </select>
+                </label>
+                <span className={`councilView__egressBadge councilView__egressBadge--${analysisEgress}`}>
+                  {analysisEgress === 'local-only' ? 'zero egress' : 'consent required'}
+                </span>
+              </div>
+              {analysisEgress === 'local-only' ? (
+                <p className="councilView__egressNote">
+                  <strong>No repository content leaves this device.</strong> Council collects a
+                  redacted source inventory locally; no model synthesis runs in this mode.
+                </p>
+              ) : (
+                <label className="councilView__consent">
+                  <input
+                    type="checkbox"
+                    checked={analysisConsent}
+                    onChange={(event) => setAnalysisConsent(event.target.checked)}
+                  />
+                  <span>
+                    <strong>I consent to sending bounded, redacted repository evidence</strong>
+                    <small>
+                      {analysisEgress === 'account-models'
+                        ? 'This run may send the bounded evidence pack, short relevant Memory hooks, and Council stage outputs to Claude and Codex through your signed-in account CLIs.'
+                        : 'This run may send the bounded evidence pack, short relevant Memory hooks, and Council stage outputs to Claude, Codex, and configured OpenRouter models.'}
+                    </small>
+                  </span>
+                </label>
+              )}
+              <p className="councilView__egressLimit">
+                Sensitive files, lockfiles, symlinks, secrets, absolute paths, and raw memory note
+                bodies are excluded before analysis.
+              </p>
+            </div>
+          )}
           <div className="councilView__composeFoot">
             <div className="councilView__composeMeta">
               <span className="councilView__kbd">
@@ -310,7 +398,15 @@ export function CouncilPanel() {
               onClick={handleConvene}
               disabled={!canConvene}
             >
-              {convening ? 'Council is reviewing…' : 'Review my request'}
+              {convening
+                ? intent === 'analysis'
+                  ? 'Council is analyzing…'
+                  : 'Council is reviewing…'
+                : intent === 'analysis'
+                  ? analysisEgress === 'local-only'
+                    ? 'Collect local evidence'
+                    : 'Analyze repository'
+                  : 'Review my request'}
             </button>
           </div>
           {!projectId && (
@@ -355,7 +451,9 @@ export function CouncilPanel() {
                 <strong>{convening ? 'Council is reviewing your request.' : 'Opening the saved decision.'}</strong>
                 <span>
                   {convening
-                    ? 'You do not need to do anything yet. You can leave this page; the result will stay here.'
+                    ? active.mode === 'analysis'
+                      ? 'Council is collecting bounded evidence and checking every claim against its source. You can leave this page; the result will stay here.'
+                      : 'You do not need to do anything yet. You can leave this page; the result will stay here.'
                     : 'This should take only a moment.'}
                 </span>
               </div>
@@ -422,7 +520,11 @@ export function CouncilPanel() {
                   <summary className="councilDisclosure__summary">
                     <span>
                       <strong>How Council reached this</strong>
-                      <small>Chairman reasoning, refined spec, five seats, and peer rankings</small>
+                      <small>
+                        {active.mode === 'analysis'
+                          ? 'Sources, claim provenance, evidence freshness, five seats, and peer rankings'
+                          : 'Chairman reasoning, refined spec, five seats, and peer rankings'}
+                      </small>
                     </span>
                   </summary>
                   <div className="councilEvidence__body">

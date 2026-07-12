@@ -14,6 +14,7 @@ import {
   normalizeCouncilResult,
   type CouncilResult,
   type CouncilResultLike,
+  type CouncilResultV3,
   type NormalizedCouncilResult,
 } from '../shared/council'
 import type { Db } from '../electron/main/db/Database'
@@ -841,6 +842,52 @@ describe('CouncilSessionStore — pending lifecycle (A6)', () => {
         result: {} as CouncilResult,
       }),
     ).toThrow(/persistence contract/i)
+    expect(rows).toHaveLength(0)
+  })
+
+  it('refuses a completed analysis result without grounded analysis evidence', () => {
+    const { db, rows } = fakeDb()
+    const store = new CouncilSessionStore(db)
+    const ungrounded: CouncilResultV3 = {
+      schemaVersion: 3,
+      ok: true,
+      mode: 'analysis',
+      responseLanguage: 'en',
+      decision: {
+        kind: 'analysis_complete',
+        summary: 'A claim without collected evidence.',
+        why: null,
+        questions: [],
+        keyFindings: [],
+        dissent: [],
+      },
+      primaryArtifact: {
+        kind: 'analysisReport',
+        content: '# Repository analysis\n\nA claim without collected evidence.',
+      },
+      execution: {
+        stats: { seatsRun: 5, seatsFailed: 0, filesReviewed: 1, durationMs: 10 },
+      },
+      evidence: {
+        seats: [],
+        rankings: [],
+        aggregate: [],
+        labelToSeat: {},
+        rawChairman: null,
+      },
+      error: null,
+      sessionId: null,
+    }
+
+    expect(() =>
+      store.insert({
+        projectId: 'prj_1',
+        cardId: null,
+        mode: 'analysis',
+        question: 'Inspect the repository',
+        result: ungrounded,
+      }),
+    ).toThrow(/grounded analysis evidence/i)
     expect(rows).toHaveLength(0)
   })
 

@@ -16,6 +16,10 @@
  */
 import type { EngineSpec } from './engines'
 import type { MemoryContextReceipt } from './memory-context'
+import {
+  normalizeCouncilAnalysisEvidence,
+  type CouncilAnalysisEvidence,
+} from './council-evidence'
 
 /** The five seat lenses. Tone drives the render hue; id crosses IPC. `builder`
  *  replaces v1's `executor` — the seat that will actually implement the work. */
@@ -277,6 +281,8 @@ export interface CouncilEvidenceV3 {
   labelToSeat: Record<string, CouncilTone>
   /** Raw chairman output is evidence/debug material, never the primary artifact. */
   rawChairman: string | null
+  /** Present only on grounded C3 repository-analysis results. */
+  analysis?: CouncilAnalysisEvidence
 }
 
 export interface CouncilExecutionV3 {
@@ -780,6 +786,7 @@ const MEMORY_CONTEXT_SURFACES = new Set([
   'hermes_chat',
   'council_spec',
   'council_diff',
+  'council_analysis',
   'swarm_worker',
   'terminal_claude',
   'terminal_codex',
@@ -1031,6 +1038,7 @@ function normalizeV3(value: Record<string, unknown>): NormalizedCouncilResult | 
   const executionRaw = record(value.execution)
   const evidenceRaw = record(value.evidence)
   const stats = normalizedStats(executionRaw?.stats)
+  const analysisEvidence = normalizeCouncilAnalysisEvidence(evidenceRaw?.analysis)
   if (
     value.schemaVersion !== COUNCIL_RESULT_SCHEMA_VERSION ||
     typeof value.ok !== 'boolean' ||
@@ -1056,6 +1064,8 @@ function normalizeV3(value: Record<string, unknown>): NormalizedCouncilResult | 
     !Array.isArray(evidenceRaw.aggregate) ||
     !record(evidenceRaw.labelToSeat) ||
     !validNullableString(evidenceRaw.rawChairman) ||
+    (mode === 'analysis' && evidenceRaw.analysis !== undefined && !analysisEvidence) ||
+    (mode !== 'analysis' && evidenceRaw.analysis !== undefined) ||
     (executionRaw.memoryContext !== undefined && !record(executionRaw.memoryContext)) ||
     !validNullableString(value.error) ||
     !validNullableString(value.sessionId)
@@ -1070,6 +1080,7 @@ function normalizeV3(value: Record<string, unknown>): NormalizedCouncilResult | 
       evidenceRaw.rawChairman,
       COUNCIL_V3_LIMITS.rawChairmanChars,
     ),
+    ...(analysisEvidence ? { analysis: analysisEvidence } : {}),
   }
   const memoryContext = normalizedMemoryContext(executionRaw.memoryContext)
   if (memoryContext === null) return null

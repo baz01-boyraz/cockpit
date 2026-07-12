@@ -4,6 +4,7 @@ import type {
   CouncilResult,
   CouncilTone,
 } from '@shared/council'
+import type { CouncilAnalysisEvidence } from '@shared/council-evidence'
 import { engineLabel } from '@shared/engines'
 import {
   buildCouncilDisplay,
@@ -178,12 +179,14 @@ export function CouncilVerdict({
 /** Chairman prose, refined spec, seats, and rankings — evidence, never the primary task. */
 export function CouncilVerdictEvidence({ result }: { result: CouncilResult }) {
   const display = buildCouncilDisplay(result)
+  const analysis = result.evidence?.analysis
   const peerRankings = result.rankings
     .map((ranking, index) => `Ranking ${index + 1} — ${ranking.seatId}\n${ranking.text}`)
     .join('\n\n')
 
   return (
     <div className="councilEvidenceContents">
+      {analysis && <CouncilAnalysisProvenance analysis={analysis} />}
       <div className="council__disclosures">
         {display.chairmanAnalysis && (
           <details className="councilDisclosure">
@@ -283,5 +286,80 @@ export function CouncilVerdictEvidence({ result }: { result: CouncilResult }) {
         </details>
       )}
     </div>
+  )
+}
+
+function analysisEgressLabel(analysis: CouncilAnalysisEvidence): string {
+  if (analysis.egress.policy === 'local-only') return 'Local evidence only'
+  if (analysis.egress.policy === 'account-models') return 'Claude + Codex accounts'
+  return 'All configured models'
+}
+
+/** Compact provenance surface. Source bodies remain deliberately hidden. */
+function CouncilAnalysisProvenance({ analysis }: { analysis: CouncilAnalysisEvidence }) {
+  const citedIds = new Set(analysis.claims.flatMap((claim) => claim.evidenceRefs))
+  const sources =
+    analysis.egress.policy === 'local-only'
+      ? analysis.pack.sources
+      : analysis.pack.sources.filter((source) => citedIds.has(source.id))
+  const verifiedClaims = analysis.claims.filter((claim) => claim.verified).length
+  const inferenceClaims = analysis.claims.length - verifiedClaims
+
+  return (
+    <section className="councilProvenance" aria-label="Analysis evidence provenance">
+      <div className="councilProvenance__head">
+        <div>
+          <div className="eyebrow">grounding</div>
+          <h4>Sources used</h4>
+        </div>
+        <span className="councilProvenance__policy">{analysisEgressLabel(analysis)}</span>
+      </div>
+      <div className="councilProvenance__stats" aria-label="Evidence quality summary">
+        <span>
+          <strong>{verifiedClaims}</strong> source-backed {verifiedClaims === 1 ? 'claim' : 'claims'}
+        </span>
+        <span>
+          <strong>{inferenceClaims}</strong> unverified {inferenceClaims === 1 ? 'inference' : 'inferences'}
+        </span>
+        <span>
+          <strong>{sources.length}</strong> {sources.length === 1 ? 'source' : 'sources'} cited
+        </span>
+      </div>
+      {sources.length > 0 ? (
+        <ul className="councilProvenance__sources">
+          {sources.map((source) => (
+            <li key={source.id}>
+              <code>{source.id}</code>
+              <span>
+                <strong>{source.path ?? source.label}</strong>
+                <small>
+                  {source.kind}
+                  {source.startLine !== null && source.endLine !== null
+                    ? ` · lines ${source.startLine}–${source.endLine}`
+                    : ''}
+                  {source.sha256 ? ` · sha256 ${source.sha256.slice(0, 12)}` : ''}
+                  {source.truncated ? ' · bounded excerpt' : ''}
+                  {source.injectionSuspect ? ' · instruction-like text flagged' : ''}
+                </small>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="councilProvenance__empty">No source was cited by a source-backed claim.</p>
+      )}
+      <div className="councilProvenance__freshness">
+        <span>
+          Manifest <code>{analysis.pack.repository.manifestHash.slice(0, 12)}</code>
+        </span>
+        <span>
+          Head <code>{analysis.pack.repository.headRef ?? 'unknown'}</code>
+        </span>
+        <span>
+          Canonical MEMORY.md{' '}
+          <strong>{analysis.pack.repository.canonicalMemoryMdPresent ? 'present' : 'absent'}</strong>
+        </span>
+      </div>
+    </section>
   )
 }

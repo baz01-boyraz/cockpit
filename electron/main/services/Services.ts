@@ -47,6 +47,7 @@ import { SwarmWorktrees } from './SwarmWorktrees'
 import { SwarmDoneSignal } from './SwarmDoneSignal'
 import { ReviewService } from './ReviewService'
 import { CouncilService } from './CouncilService'
+import { CouncilEvidenceService } from './CouncilEvidenceService'
 import { OutcomeService } from './OutcomeService'
 import { EngineRunner } from './EngineRunner'
 import { CouncilSessionStore } from '../db/CouncilSessionStore'
@@ -95,6 +96,8 @@ export class Services {
   readonly hermesTriage: HermesTriageService
   readonly review: ReviewService
   readonly council: CouncilService
+  /** Bounded read-only repository evidence boundary for Council analysis. */
+  readonly councilEvidence: CouncilEvidenceService
   /** Track G4: the read-only judgment scorecard — derives outcomes from the
    *  audit trail + council/recall/signal read models, never a new judgment. */
   readonly outcomes: OutcomeService
@@ -211,6 +214,7 @@ export class Services {
     // have no other view of it).
     this.globalMemory = new MemoryHubService(this.projects, join(opts.userDataDir, 'baz-memory'))
     this.engineRunner = new EngineRunner(this.secrets)
+    this.councilEvidence = new CouncilEvidenceService()
     this.council = new CouncilService(
       this.projects,
       this.audit,
@@ -220,6 +224,7 @@ export class Services {
       this.memory,
       this.memoryRecalls,
       this.memoryContexts,
+      this.councilEvidence,
     )
     // Track G4: the judgment scorecard read model. It DERIVES outcomes — card
     // fates from the append-only audit trail, verdicts from the shared session

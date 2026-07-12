@@ -49,4 +49,27 @@ describe('buildClaudeArgs', () => {
       prompt,
     ])
   })
+
+  it('can run evidence-only with project instructions, built-in tools, and MCP disabled', () => {
+    const args = buildClaudeArgs('bounded evidence', {
+      model: 'opus',
+      evidenceOnly: true,
+    })
+
+    expect(args).toEqual([
+      '--print',
+      '--no-session-persistence',
+      '--safe-mode',
+      '--tools',
+      '',
+      '--disable-slash-commands',
+      '--no-chrome',
+      '--strict-mcp-config',
+      '--mcp-config',
+      '{"mcpServers":{}}',
+      '--model',
+      'opus',
+      'bounded evidence',
+    ])
+  })
 })
