@@ -35,6 +35,29 @@ describe('signalFingerprint', () => {
     expect(signalFingerprint(base)).not.toBe(signalFingerprint({ ...base, title: 'y' }))
   })
 
+  it('can key a recurring display title by an explicit event identity', () => {
+    const first = signalFingerprint({
+      projectId: 'p1',
+      source: 'swarm-completion',
+      title: 'Ready for review · Add the widget',
+      dedupKey: 'card:c1:2026-07-12T01:00:00.000Z',
+    })
+    const replay = signalFingerprint({
+      projectId: 'p1',
+      source: 'swarm-completion',
+      title: 'A translated title that should not change identity',
+      dedupKey: 'card:c1:2026-07-12T01:00:00.000Z',
+    })
+    const rerun = signalFingerprint({
+      projectId: 'p1',
+      source: 'swarm-completion',
+      title: 'Ready for review · Add the widget',
+      dedupKey: 'card:c1:2026-07-12T02:00:00.000Z',
+    })
+    expect(replay).toBe(first)
+    expect(rerun).not.toBe(first)
+  })
+
   it('does not let a project id bleed into the source field (delimited)', () => {
     // Without a delimiter, ("ab","c") and ("a","bc") would collide.
     const left = signalFingerprint({ projectId: 'ab', source: 'council', title: 't' })
@@ -116,6 +139,25 @@ describe('buildSignal', () => {
     expect(sig.title).toBe('Build failed')
     expect(sig.fingerprint).toBe(
       signalFingerprint({ projectId: 'p1', source: 'log-intelligence', title: '  Build failed  ' }),
+    )
+  })
+
+  it('uses dedupKey for identity without exposing it in the display title', () => {
+    const sig = buildSignal({
+      ...base,
+      source: 'swarm-completion',
+      title: 'Ready for review · Add the widget',
+      summary: '3 files changed',
+      dedupKey: 'card:c1:t1',
+    })
+    expect(sig.title).toBe('Ready for review · Add the widget')
+    expect(sig.fingerprint).toBe(
+      signalFingerprint({
+        projectId: 'p1',
+        source: 'swarm-completion',
+        title: 'Ready for review · Add the widget',
+        dedupKey: 'card:c1:t1',
+      }),
     )
   })
 

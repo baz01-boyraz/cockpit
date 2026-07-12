@@ -11,6 +11,7 @@ function makeReport(over: Partial<CompletionReport> = {}): CompletionReport {
     title: 'Add the widget',
     branch: 'swarm/add-the-widget-1a2b',
     diffStat: { files: 3, insertions: 42, deletions: 7 },
+    worktreeState: 'changed',
     acceptance: ['It renders', 'It validates input', 'It has a test', 'It logs errors'],
     hasCouncilSpec: true,
     finishedAt: '2026-07-07T00:00:00.000Z',

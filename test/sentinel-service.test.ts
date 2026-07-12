@@ -143,8 +143,10 @@ function makeDb() {
             return { changes: 0 }
           }
           if (sql.startsWith('UPDATE sentinel_signals SET triage')) {
-            const p = arg as { triage: string | null; id: string }
-            const r = rows.find((x) => x.id === p.id)
+            const p = arg as { triage: string | null; id: string; projectId?: string }
+            const r = rows.find(
+              (x) => x.id === p.id && (p.projectId === undefined || x.project_id === p.projectId),
+            )
             if (r) {
               r.triage = p.triage
               return { changes: 1 }
@@ -176,6 +178,16 @@ function makeDb() {
           return undefined
         },
         all: (...args: unknown[]) => {
+          // Crash recovery for deliberately staged, not-yet-published signals.
+          if (sql.includes('WHERE source = ?') && sql.includes('triage IS NULL')) {
+            const [source, limit] = args as [string, number]
+            return rows
+              .filter((r) => r.source === source && r.triage === null && r.status === 'new')
+              .slice()
+              .sort((a, b) => (a.created_at < b.created_at ? -1 : 1))
+              .slice(0, limit)
+              .map((r) => ({ ...r }))
+          }
           // H4 retriage sweep: untriaged recent notice/alert rows.
           if (sql.includes('triage IS NULL')) {
             const [cutoff, limit] = args as [string, number]
@@ -301,6 +313,94 @@ describe('SentinelService.report', () => {
     expect(() =>
       expect(svc.report({ projectId: 'p1', severity: 'info', source: 'council', title: 't', summary: 's' })).toBeNull(),
     ).not.toThrow()
+  })
+})
+
+describe('SentinelService staged delivery', () => {
+  it('persists a completion signal silently, then publishes the same enriched row once', async () => {
+    const store = makeDb()
+    const events = new CockpitEvents()
+    const alerts = captureAlerts(events)
+    const notifier = vi.fn()
+    const triager = { triage: vi.fn(async () => triageVerdict()) }
+    const svc = new SentinelService(store.db, events, notifier, triager)
+
+    const staged = svc.stage({
+      projectId: 'p1',
+      severity: 'notice',
+      source: 'swarm-completion',
+      title: 'Ready for review · Add the widget',
+      summary: '"Add the widget" ready for review — +42 −7 across 3 files',
+      context: '{"version":1,"card":{"id":"c1"}}',
+      dedupKey: 'card:c1:2026-07-12T01:00:00.000Z',
+    })!
+
+    expect(store.rows).toHaveLength(1)
+    expect(alerts).toHaveLength(0)
+    expect(notifier).not.toHaveBeenCalled()
+    expect(triager.triage).not.toHaveBeenCalled()
+
+    const manager = triageVerdict({
+      headline: 'Widget is ready; verification is still unknown',
+      action: 'Open the card and review the three-file diff',
+    })
+    const published = svc.publishStaged('p1', staged.id, manager)
+
+    expect(published?.id).toBe(staged.id)
+    expect(published?.triage).toEqual(manager)
+    expect(store.rows[0].triage).toBe(JSON.stringify(manager))
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0].id).toBe(staged.id)
+    expect(alerts[0].triage).toEqual(manager)
+    expect(notifier).toHaveBeenCalledWith({
+      title: manager.headline,
+      body: manager.action,
+    })
+    await flush()
+    expect(triager.triage).not.toHaveBeenCalled()
+  })
+
+  it('deduplicates staged event replays before any model work and scopes publish by project', () => {
+    const store = makeDb()
+    const svc = new SentinelService(store.db, new CockpitEvents())
+    const input = {
+      projectId: 'p1',
+      severity: 'notice' as const,
+      source: 'swarm-completion' as const,
+      title: 'Ready for review · Add the widget',
+      summary: 'ready',
+      dedupKey: 'card:c1:t1',
+    }
+    const first = svc.stage(input)!
+    expect(svc.stage({ ...input, title: 'Different display wording' })).toBeNull()
+    expect(svc.publishStaged('foreign-project', first.id, triageVerdict())).toBeNull()
+    expect(store.rows[0].triage).toBeNull()
+  })
+
+  it('lists only unpublished staged completion rows for crash recovery', () => {
+    const store = makeDb()
+    const svc = new SentinelService(store.db, new CockpitEvents())
+    const first = svc.stage({
+      projectId: 'p1',
+      severity: 'notice',
+      source: 'swarm-completion',
+      title: 'First',
+      summary: 'ready',
+      dedupKey: 'card:c1:t1',
+    })!
+    svc.stage({
+      projectId: 'p2',
+      severity: 'notice',
+      source: 'swarm-completion',
+      title: 'Second',
+      summary: 'ready',
+      dedupKey: 'card:c2:t1',
+    })
+    svc.publishStaged('p1', first.id, triageVerdict())
+
+    expect(svc.pendingStaged('swarm-completion', 10).map((signal) => signal.projectId)).toEqual([
+      'p2',
+    ])
   })
 })
 

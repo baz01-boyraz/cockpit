@@ -760,6 +760,15 @@ describe('SwarmService completion report + notify (Faz 2.5)', () => {
     store: ReturnType<typeof makeStore>,
     deps: ReturnType<typeof makeDeps>,
     notifier?: (input: { title: string; body: string }) => void,
+    completionSteward?: {
+      track(sessionId: string): void
+      discard(sessionId: string): void
+      complete(input: {
+        projectId: string
+        sessionId: string | null
+        report: import('../shared/completion-report').CompletionReport
+      }): Promise<void>
+    },
   ) =>
     new SwarmService(
       store.db,
@@ -775,6 +784,10 @@ describe('SwarmService completion report + notify (Faz 2.5)', () => {
       undefined,
       reviewStub,
       notifier,
+      undefined,
+      undefined,
+      undefined,
+      completionSteward,
     )
 
   it('computes a report on demand: branch, diff stat, acceptance, council flag', async () => {
@@ -794,6 +807,7 @@ describe('SwarmService completion report + notify (Faz 2.5)', () => {
       cardId: 'a',
       branch: 'swarm/a',
       diffStat: { files: 3, insertions: 42, deletions: 7 },
+      worktreeState: 'changed',
       acceptance: ['renders', 'tested'],
       hasCouncilSpec: true,
     })
@@ -838,6 +852,62 @@ describe('SwarmService completion report + notify (Faz 2.5)', () => {
     expect(completed[0].summary).toContain('ready for review')
     expect(notifier.mock.calls[0][0]).toMatchObject({ title: 'Swarm — ready for review' })
     expect(notifier.mock.calls[0][0].body).toBe(completed[0].summary)
+  })
+
+  it('tracks a successful worker and delegates Pro stewardship without a duplicate native pop', async () => {
+    const store = makeStore([{ id: 'a', status: 'todo', title: 'Add the widget' }])
+    const deps = makeDeps()
+    const notifier = vi.fn()
+    const steward = {
+      track: vi.fn(),
+      discard: vi.fn(),
+      complete: vi.fn(async () => undefined),
+    }
+    const svc = buildWithReport(store, deps, notifier, steward)
+
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
+    expect(steward.track).toHaveBeenCalledWith('term_1')
+    deps.events.emitTyped('terminal:exit', {
+      sessionId: 'term_1',
+      projectId: 'p1',
+      role: 'claude',
+      exitCode: 0,
+      signal: null,
+    })
+
+    await vi.waitFor(() => expect(steward.complete).toHaveBeenCalledTimes(1))
+    expect(steward.complete).toHaveBeenCalledWith({
+      projectId: 'p1',
+      sessionId: 'term_1',
+      report: expect.objectContaining({ cardId: 'a', worktreeState: 'changed' }),
+    })
+    expect(notifier).not.toHaveBeenCalled()
+    expect(steward.discard).not.toHaveBeenCalled()
+  })
+
+  it('keeps nonzero exits on the deterministic failure path and frees their output tail', async () => {
+    const store = makeStore([{ id: 'a', status: 'todo', title: 'Add the widget' }])
+    const deps = makeDeps()
+    const notifier = vi.fn()
+    const steward = {
+      track: vi.fn(),
+      discard: vi.fn(),
+      complete: vi.fn(async () => undefined),
+    }
+    const svc = buildWithReport(store, deps, notifier, steward)
+
+    await svc.startCard({ projectId: 'p1', cardId: 'a', skipGate: true })
+    deps.events.emitTyped('terminal:exit', {
+      sessionId: 'term_1',
+      projectId: 'p1',
+      role: 'claude',
+      exitCode: 2,
+      signal: null,
+    })
+
+    await vi.waitFor(() => expect(notifier).toHaveBeenCalledTimes(1))
+    expect(steward.complete).not.toHaveBeenCalled()
+    expect(steward.discard).toHaveBeenCalledWith('term_1')
   })
 
   it('a throwing notifier never breaks the transition', async () => {
