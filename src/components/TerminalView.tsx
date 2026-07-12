@@ -1,13 +1,14 @@
-import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import type { TerminalAttachment, TerminalSession } from '@shared/domain'
 import { OSC_COMMAND } from '@shared/command-blocks'
-import { isTerminalCopyShortcut } from '@shared/terminal-ux'
+import { buildTerminalComposerSubmission, isTerminalCopyShortcut } from '@shared/terminal-ux'
 import { cockpit } from '../lib/cockpit'
 import { CommandBlockDecorations } from '../lib/commandBlocks'
 import { useSessionBlocks } from '../store/blockStore'
 import { BlocksView } from './BlocksView'
+import { TerminalComposer } from './TerminalComposer'
 import {
   IMAGE_ACCEPT,
   MAX_IMAGE_BYTES,
@@ -70,6 +71,10 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
   // Block capture lives app-level in blockStore (survives pane unmounts);
   // this pane only renders its session's published snapshots.
   const blocks = useSessionBlocks(session.id)
+  const capturedHistory = useMemo(
+    () => blocks.slice().reverse().map((block) => block.command).filter(Boolean),
+    [blocks],
+  )
 
   const resetDrag = () => {
     dragDepthRef.current = 0
@@ -247,6 +252,21 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
   const clearCurrentInput = () => {
     void cockpit().terminals.write(session.id, '\x15')
     termRef.current?.focus()
+  }
+
+  const submitComposerDraft = async (draft: string): Promise<boolean> => {
+    const term = termRef.current
+    const submission = buildTerminalComposerSubmission(
+      draft,
+      term?.modes.bracketedPasteMode ?? false,
+    )
+    if (!submission) return false
+
+    setMode('stream')
+    await cockpit().terminals.write(session.id, submission.data)
+    term?.scrollToBottom()
+    setAtLiveOutput(true)
+    return true
   }
 
   const sendAttachmentPath = async (target: TerminalAttachment) => {
@@ -511,6 +531,13 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
         )}
       </div>
 
+      <TerminalComposer
+        projectId={session.projectId}
+        role={session.role}
+        capturedHistory={capturedHistory}
+        onSubmit={submitComposerDraft}
+      />
+
       <input
         ref={fileInputRef}
         className="termview__file"
@@ -522,7 +549,6 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
           if (file) void saveImage(file)
         }}
       />
-
     </div>
   )
 }
