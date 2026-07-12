@@ -65,6 +65,26 @@ describe('MemoryDistiller', () => {
     )
   })
 
+  it('does not let a capture caller silently promote mechanical work to the main model', async () => {
+    const runner: DistillRunner = vi.fn(async () => goodReply)
+    const d = new MemoryDistiller(stubProjects(dir), new TranscriptReader(), runner)
+    const forged = {
+      projectId: 'p1',
+      transcriptPath: path,
+      projectSlugs: [],
+      userSlugs: [],
+      model: 'deepseek/deepseek-v4-pro',
+    }
+
+    await d.distill(forged)
+
+    expect(runner).toHaveBeenCalledWith(
+      dir,
+      expect.any(String),
+      'deepseek/deepseek-v4-flash',
+    )
+  })
+
   it('short-circuits an empty transcript without calling the model', async () => {
     writeFileSync(path, line({ type: 'summary', summary: 'nothing' }))
     const runner = vi.fn(async () => goodReply)
