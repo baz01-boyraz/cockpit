@@ -179,8 +179,6 @@ export function buildMemoryContext(input: {
   docs: readonly MemoryDoc[]
   limits?: Partial<MemoryContextLimits>
 }): MemoryContextEnvelope {
-  if (input.docs.length === 0) return emptyContext(input.contextId, input.surface)
-
   if (LOOKUP_SURFACES.has(input.surface)) {
     const block = lookupInstruction(input.surface)
     return {
@@ -188,13 +186,15 @@ export function buildMemoryContext(input: {
       receipt: {
         contextId: input.contextId,
         surface: input.surface,
-        status: 'ready',
+        status: input.docs.length > 0 ? 'ready' : 'empty',
         delivery: 'lookup',
         notes: [],
         characters: block.length,
       },
     }
   }
+
+  if (input.docs.length === 0) return emptyContext(input.contextId, input.surface)
 
   const limits: MemoryContextLimits = {
     ...DEFAULT_MEMORY_CONTEXT_LIMITS,

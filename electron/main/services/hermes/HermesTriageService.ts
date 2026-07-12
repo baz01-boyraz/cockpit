@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { promisify } from 'node:util'
 import { buildHermesArgs } from '@shared/hermes-run'
+import { HERMES_BACKGROUND_MODEL } from '@shared/hermes-model-policy'
 import {
   buildTriagePrompt,
   parseTriageResponse,
@@ -18,7 +19,7 @@ const execFileAsync = promisify(execFile)
  * — exactly right for a fire-and-forget enrichment that must never cost the owner
  * real money or block the spine. Passed as `-m <model>` via buildHermesArgs.
  */
-export const HERMES_TRIAGE_MODEL = 'deepseek/deepseek-chat'
+export const HERMES_TRIAGE_MODEL = HERMES_BACKGROUND_MODEL
 
 /** A triage is a one-shot judgement, not a tool-using conversation — 45s is plenty. */
 const HERMES_TRIAGE_TIMEOUT_MS = 45 * 1000

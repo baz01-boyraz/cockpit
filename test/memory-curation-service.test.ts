@@ -77,7 +77,13 @@ describe('MemoryCurationService.sweep', () => {
     })
     expect(deps.audited).toHaveLength(1)
     expect(deps.audited[0].actionType).toBe('memory.curation_sweep')
-    expect(deps.audited[0].payload).toMatchObject({ proposals: 2, notes: 3 })
+    expect(deps.audited[0].payload).toMatchObject({
+      proposals: 2,
+      notes: 3,
+      model: 'deepseek/deepseek-v4-flash',
+      modelRole: 'bounded-mechanical-analysis',
+      modelPolicyVersion: 1,
+    })
   })
 
   it('drops proposals that reference notes not in the inventory', async () => {

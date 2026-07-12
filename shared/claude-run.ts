@@ -7,7 +7,7 @@
  * to ground its answer but cannot run risky commands without a TTY to approve.
  *
  * `--no-session-persistence` is mandatory: none of these one-shot callers
- * (memory distiller, swarm review gates, council, chat) ever resume a prior
+ * (council, Claude chat, and other Claude one-shot analysis) ever resumes a prior
  * run, so there is no reason for the CLI to write a `.jsonl` transcript under
  * `~/.claude/projects/<project>/`. Without it, that transcript lands in the
  * exact directory MemoryAutoCapture scans for "grown" sessions to distill —

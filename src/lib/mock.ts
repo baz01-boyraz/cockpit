@@ -54,6 +54,7 @@ import type { ReviewItem } from '@shared/memory-review'
 import {
   brainForAccess,
   defaultTrustModeForBrain,
+  MEMORY_POLICY_VERSION,
   type MemoryBrainScope,
   type MemoryTrustMode,
 } from '@shared/memory-policy'
@@ -1160,7 +1161,7 @@ export function createMockApi(): CockpitApi {
           brain,
           mode: mockTrustModes.get(brain) ?? defaultTrustModeForBrain(brain),
           isExplicit: mockTrustModes.has(brain),
-          policyVersion: 1,
+          policyVersion: MEMORY_POLICY_VERSION,
         }
       },
       setTrustMode: async (projectId, scope, mode) => {

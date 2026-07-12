@@ -164,7 +164,7 @@ name: <kebab-slug>            # == filename, by construction
 title: <human title>
 class: decision | gotcha | user | reference | architecture
 source: { sessionId, capturedAt }
-gate: save | asked        # how it entered — model auto-saved, or Baz approved an "ask"
+gate: save | asked        # auto-saved, owner-approved, or evidence-backed delegated resolution
 updatedAt: <iso>
 tags: [ ... ]
 ---
@@ -343,7 +343,7 @@ Prove we can safely read and redact a full session.
 
 ### Phase 2 — Distiller: session → observations `[x]`
 
-**Done 2026-07-04** — observation schema + prompt + tolerant parser, MemoryDistiller (local `claude` CLI only, injectable runner, 1 retry). 12 tests.
+**Done 2026-07-04; routing superseded 2026-07-06/12** — observation schema + prompt + tolerant parser, injectable MemoryDistiller, one retry. The original local-Claude runner moved to the explicit Hermes mechanical-model route below.
 
 - **2.1 `[x]` Observation schema** — **S**
   - *Do:* Zod schema for an Observation (`class, targetSlug, isNew, body, links[]`) plus
@@ -353,10 +353,10 @@ Prove we can safely read and redact a full session.
   - *Files:* new `shared/memory-observation.ts` + tests.
 - **2.2 `[x]` Distiller service (model call)** — **L**
   - *Why:* G1 — the actual "understand what matters" step.
-  - *Do:* `MemoryDistiller` that takes redacted transcript text and returns
-    `Observation[]`. **Model = Baz's Claude subscription via the local `claude` CLI only**
-    (the path the shelved `ChatService`/Hermes already uses) — **no Anthropic API, no key,
-    no other model, ever.** Structured output enforced by the schema. Prompt engineered to
+  - *Do:* `MemoryDistiller` takes redacted transcript text and returns
+    `Observation[]`. It invokes Hermes oneshot with `--ignore-rules` and the canonical
+    mechanical model (`deepseek/deepseek-v4-flash`); no orchestrator persona or MCP tools.
+    Structured output is enforced by the schema. The prompt is engineered to
     prefer *few high-signal* facts over many noisy ones, to classify project-fact vs
     user-fact, and to set each observation's `decision` (`save` when it's confident the
     fact matters, `ask` when it isn't sure).
@@ -473,26 +473,26 @@ Only after 0–3 are proven does capture become hands-off.
   fixture exposes a gap.
 - **Renderer never receives raw secrets** — distillation and redaction run in main; the
   renderer only ever gets assembled, safe notes and proposals.
-- **Local-first** — memory is files + local SQLite. The only outbound call is the model
-  call in the distiller, and it carries redacted text only.
+- **Local-first storage** — memory is files + local SQLite. The distiller's only memory-data
+  egress is a redacted Hermes/OpenRouter model call; raw transcript text never leaves.
 - **Auditable** — the ledger records every write with provenance; nothing the brain does
   is invisible.
 
 ## Model & cost notes
 
-- **Distiller model — hard rule:** Baz's Claude subscription via the local `claude` CLI,
-  and nothing else. **No Anthropic API, no API key, no third-party model, no fallback
-  provider — ever.** This is a locked decision (2026-07-04), not a default. The distiller
-  reuses the same local-`claude` invocation path the shelved Hermes/`ChatService` already
-  has. If the CLI is unavailable, capture pauses and waits — it never reaches for an API.
+- **Distiller model — current hard route:** `MemoryDistiller` uses Hermes oneshot with
+  `deepseek/deepseek-v4-flash` from `shared/hermes-model-policy.ts`. This supersedes the
+  2026-07-04 local-Claude-only decision because background capture consumed coding quota.
+  It runs without rules/tools, after redaction; if Hermes/OpenRouter is unavailable the
+  capture job fails visibly/retries rather than silently switching models.
 - **The model owns the judgment:** whether a fact is worth saving, and whether to save-vs-ask,
   is the model's call per observation — no numeric threshold in code. Prompt it to prefer
   *few high-signal* facts and to ask when unsure.
 - **Incremental capture:** `last_offset` means only *new* turns are distilled, not the
   whole transcript every time — bounds work on long sessions.
-- **Consolidation** runs on idle + manual button, not per-keystroke — amortized, not hot-path.
+- **Consolidation/curation** runs on the weekly due-check or manual action, never per-keystroke.
 
-## Decisions (locked 2026-07-04)
+## Decisions (current; original set 2026-07-04, model/cadence later superseded)
 
 1. **Save-vs-ask — the model decides.** No fixed `importance × confidence` threshold in
    code. The model judges each fact's importance/value itself; it saves what it's confident
@@ -500,15 +500,15 @@ Only after 0–3 are proven does capture become hands-off.
    review; a human choice or evidence-backed delegated resolver is required.
 2. **Capture trigger — both.** Idle-timeout (transcript quiet for N minutes) **and** explicit
    end-of-session both enqueue a capture job.
-3. **Distiller model — Baz's Claude subscription via local `claude` CLI, only.** No API,
-   no key, no other provider, ever. If the CLI is unavailable, capture waits.
-4. **Consolidation cadence — idle + manual, to start.** ("Consolidation" = the periodic
+3. **Distiller model — Hermes mechanical route.** `deepseek/deepseek-v4-flash`, explicit in
+   shared code; redaction happens before invocation and no fallback silently changes authority.
+4. **Consolidation cadence — weekly automatic + manual.** ("Consolidation" = the periodic
    "sleep" pass from the maintenance loop above: it re-reads the *whole* brain and cleans it
    — merges duplicate notes, fixes dangling `[[links]]`, splits notes that grew too big,
-   flags contradictions. "Cadence" = how often that clean-up runs.) Default: it runs when
-   the app is idle, plus a manual "Consolidate now" button — never mid-work. Once you trust
-   it, we can add a daily automatic pass. Every pass snapshots the brain first (G7), so a
-   bad clean-up is one click to undo.
+   flags contradictions. "Cadence" = how often that clean-up runs.) The app checks audit
+   history and runs due projects about weekly; the manual button remains. Model curation only
+   proposes review items, while deterministic consolidation snapshots first (G7), so a bad
+   accepted clean-up remains recoverable.
 
 ## Definition of Done (every task)
 

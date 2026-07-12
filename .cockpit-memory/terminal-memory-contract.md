@@ -4,7 +4,7 @@ name: terminal-memory-contract
 title: Terminal prompt dock removed — standing memory-first contract instead
 class: architecture
 gate: save
-updatedAt: 2026-07-10T22:06:00.000Z
+updatedAt: 2026-07-12T05:17:51.000Z
 ---
 
 # Terminal memory contract (prompt dock removed)
@@ -30,8 +30,8 @@ Evidence of compliance = the engine's opening `MEMORY: read <files>` /
 
 Phase 2 (same day): Claude chat now rides the contract on
 `--append-system-prompt` (user message stays the verbatim positional prompt);
-Hermes carries it in the trusted preamble; council/swarm/review prompts are
-app-composed → compliant by construction. All lookup surfaces reuse the one
+Hermes carries a tool-aware equivalent in the trusted preamble; council/swarm/review prompts are
+app-composed → compliant by construction. File-capable lookup wording reuses the
 canonical text. `shared/memory-evidence.ts` parses the reply status line into
 `receipt.evidence` (`read`/`none`/`missing`) — `missing` = engine ignored the
 contract. See [[memory-hub]] and `docs/MEMORY-CHARTER.md` "Memory-first

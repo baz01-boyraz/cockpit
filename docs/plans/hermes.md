@@ -15,8 +15,10 @@
 
 - **Hermes = [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)**
   (MIT, doğrulandı `gh api repos/NousResearch/hermes-agent` ile — gerçek repo).
-- **Model:** `deepseek/deepseek-v4-pro` veya `glm-5.2`, OpenRouter üzerinden — config'den
-  okunacak, koda gömülmeyecek.
+- **Model policy:** Hermes chat/orchestration = `deepseek/deepseek-v4-pro`; bounded tool-less
+  triage, memory distillation and curation = `deepseek/deepseek-v4-flash`. Provider slugs live
+  once in `shared/hermes-model-policy.ts` and cockpiT passes `-m` explicitly, so a changed
+  Hermes config cannot silently promote a cheap background call or downgrade main judgment.
 - **Rol ayrımı (kritik, karışıklığı önlemek için):**
   - **Claude Code** = coding işinin **birincil** yürütücüsü. Her zaman ilk tercih.
   - **Codex** = Claude Code kotası bittiğinde coding'in **ikincil** yürütücüsü.
@@ -85,7 +87,8 @@ key'i audit-log/PTY-log'da hiç göstermeyecek şekilde genişletilir.
 ### Faz 1 — Spike: hermes-agent'ı local kur ve doğrula
 **Bağımlılık:** yok · **Model:** default
 
-1. Tek satır installer ile kur, OpenRouter key + `deepseek-v4-pro`/`glm-5.2` ile yapılandır.
+1. Tek satır installer ile kur, OpenRouter key ile doğrula; cockpiT-owned calls use the explicit
+   Pro/Flash role policy above rather than trusting the CLI default.
 2. Tek seferlik/etkileşimsiz invocation modu var mı doğrula (`claude --print` eşleniği).
 3. **Native "Command approval" özelliğini gerçekten test et** — bir riskli komutu (örn.
    `rm -rf`) tetiklediğinde gerçekten engelliyor mu, yoksa sadece log mu tutuyor? Bu sonucu
@@ -108,11 +111,11 @@ tool erişimini ne kadar kısıtlı tutmalıyız" kararını etkiler).
 
 #### Faz 1 bulguları (2026-07-05, gerçek kurulumda doğrulandı)
 
-- **Kurulum:** `curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash` — script
+- **Kurulum (historical default, now superseded by explicit routing):** `curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash` — script
   incelendi (sudo sadece opsiyonel sistem paketleri için, varsayılan "hayır"; şüpheli network
-  hedefi yok), macOS'ta root olmadan `~/.hermes` altına kuruluyor. Model: `deepseek/deepseek-v4-flash`
-  (Pro değil — maliyet nedeniyle Flash seçildi, $0.09/$0.18 per M token, OpenRouter'da doğrulanmış
-  slug). Key `~/.hermes/.env`'de `OPENROUTER_API_KEY` olarak duruyor. Gerçek bir istekle test
+  hedefi yok), macOS'ta root olmadan `~/.hermes` altına kuruluyor. İlk kurulum default'u
+  `deepseek/deepseek-v4-flash` idi; bugün chat Pro, mekanik işler Flash olarak koddan seçiliyor.
+  Key `~/.hermes/.env`'de `OPENROUTER_API_KEY` olarak duruyor. Gerçek bir istekle test
   edildi (`hermes -z "..."`), çalışıyor.
 - **Not (önemli, ileride tekrar kurulum yapan biri için):** bu makinede DAHA ÖNCE farklı bir
   Hermes kurulumu vardı — hermes-agent'ın kendi "Hermes Desktop" Electron app'ine (`apps/desktop/`)
@@ -300,12 +303,12 @@ Bu, senin tarif ettiğin akışın tam karşılığı:
 
 ### Faz 5 — Memory yakalama yeniden tasarımı — TAMAMLANDI (2026-07-05)
 **Bağımlılık:** Faz 2 (OpenRouter key), Faz 3'ün `write_memory_summary`/`resolve_memory_review`
-tool'ları · **Model:** default
+tool'ları · **Model:** `deepseek/deepseek-v4-flash` (explicit mechanical route)
 
-Mevcut sistem (doğrulandı): `MemoryAutoCapture` 90sn'de bir polling yapıyor, idle ≥10dk olan
-session'ları yakalıyor, damıtmayı **local `claude` CLI** ile yapıyor (asla API key/başka
-provider kullanmıyor — bilinçli bir karar, `MemoryDistiller.ts:19`). Conflict/merge/new kararı
-`shared/memory-reconcile.ts`'de deterministik, review kuyruğu Memory tab UI'da.
+Bu faz başlamadan önceki sistem (historical): `MemoryAutoCapture` 90sn'de bir polling yapıyor,
+idle ≥10dk session'ları yakalıyor ve damıtmayı local `claude` CLI ile yapıyordu. Fazın gerçekleşen
+sonucu aşağıda: distiller Hermes/Flash'a taşındı; conflict/merge/new sınıflandırması hâlâ
+`shared/memory-reconcile.ts`'de deterministik, review kuyruğu aynı güvenlik sınırında.
 
 Değişecekler:
 

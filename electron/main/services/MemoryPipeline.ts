@@ -39,7 +39,6 @@ export interface CaptureRequest {
   /** Preview only — compute proposals, write nothing. */
   dryRun?: boolean
   sessionId?: string
-  model?: string
 }
 
 /**
@@ -90,7 +89,6 @@ export class MemoryPipeline {
       fromOffset: req.fromOffset,
       projectSlugs: projectDocs.map((d) => d.name),
       userSlugs: userDocs.map((d) => d.name),
-      model: req.model,
     })
 
     if (distilled.error) {

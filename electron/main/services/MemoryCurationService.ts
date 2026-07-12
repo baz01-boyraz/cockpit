@@ -3,6 +3,10 @@ import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { promisify } from 'node:util'
 import { buildHermesArgs } from '@shared/hermes-run'
+import {
+  HERMES_BACKGROUND_MODEL,
+  HERMES_MODEL_POLICY,
+} from '@shared/hermes-model-policy'
 import { projectBrain } from '@shared/memory-ledger'
 import { mergeDuplicate } from '@shared/memory-consolidate'
 import { extractHook } from '@shared/memory-hub'
@@ -12,7 +16,6 @@ import {
   type CurationNote,
   type CurationProposal,
 } from '@shared/memory-curation'
-import { HERMES_TRIAGE_MODEL } from './hermes/HermesTriageService'
 import { resolveBin } from './resolveBin'
 import type { AuditLogService } from './AuditLogService'
 import type { MemoryHubService } from './MemoryHubService'
@@ -86,7 +89,10 @@ export class MemoryCurationService {
     try {
       const fenceTag = `====COCKPIT-UNTRUSTED-MEMORY-${randomUUID()}====`
       const prompt = buildCurationPrompt(inventory, fenceTag)
-      const args = buildHermesArgs(prompt, { model: HERMES_TRIAGE_MODEL, ignoreRules: true })
+      const args = buildHermesArgs(prompt, {
+        model: HERMES_BACKGROUND_MODEL,
+        ignoreRules: true,
+      })
       const { stdout } = await this.runner(homedir(), args, {
         timeout: CURATION_TIMEOUT_MS,
         maxBuffer: MAX_OUTPUT_BYTES,
@@ -151,8 +157,14 @@ export class MemoryCurationService {
       actor: 'ai',
       actionType: 'memory.curation_sweep',
       summary: `Memory curation sweep: ${queued} proposal(s) queued from ${inventory.length} note(s)`,
-      // Counts only — never a note name or hook.
-      payload: { proposals: queued, notes: inventory.length },
+      // Counts + routing metadata only — never a note name or hook.
+      payload: {
+        proposals: queued,
+        notes: inventory.length,
+        model: HERMES_BACKGROUND_MODEL,
+        modelRole: HERMES_MODEL_POLICY.background.role,
+        modelPolicyVersion: HERMES_MODEL_POLICY.version,
+      },
     })
     return { proposals: queued }
   }

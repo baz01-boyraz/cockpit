@@ -24,15 +24,17 @@ prompt dump:
   dedup/curation work.
 - Tool-less Council/review engines may receive at most two short, redacted hooks
   with source paths, and only when they positively match the task.
-- Zero-overlap means no injected memory block. Never pad context with recent but
-  unrelated notes.
+- For tool-less inline surfaces, zero-overlap means no injected memory block.
+  Lookup-capable surfaces still receive the compact contract even when the hub
+  is empty, so the engine can honestly report `MEMORY: no relevant notes`.
+  Never pad context with recent but unrelated notes.
 
 - Covered surfaces: Claude chat, Hermes chat, Council spec/diff, Swarm workers,
   and reviews.
-- The receipt's `delivery` is `lookup`, `inline`, or `none`. `ready` means the
-  lookup contract or matched hooks reached the prompt; `empty` means the hub was
-  checked but nothing applied; `unavailable` must be surfaced and must never be
-  described as a successful read.
+- The receipt's `delivery` is `lookup`, `inline`, or `none`. `ready` means a
+  non-empty hub's lookup contract or matched hooks reached the prompt; `empty`
+  means no note applied (an empty hub may still have `delivery: lookup`);
+  `unavailable` must be surfaced and never described as a successful read.
 - A receipt is not proof of model cognition. A source citation in the engine
   answer or work log is the evidence that a note materially affected the work.
 - Compact and legacy injected context is stripped from Claude transcripts before
@@ -66,9 +68,10 @@ The same MUST applies beyond terminals. Claude chat delivers the contract via
 byte-for-byte verbatim. Hermes chat carries it in the trusted runtime preamble,
 never inside the user's transcript turn. Council seats, Swarm worker briefs,
 and review prompts are app-composed documents (no interactive user prose), so
-their memory sections are compliant by construction. Every lookup surface now
-uses the one canonical contract text from `shared/memory-contract.ts`, and
-chat replies are parsed by `shared/memory-evidence.ts`: the receipt's
+their memory sections are compliant by construction. File-capable lookup
+surfaces reuse `shared/memory-contract.ts`; Hermes receives its tool-aware
+equivalent requiring `read_memory_recent(query=task)`. Chat replies are parsed
+by `shared/memory-evidence.ts`: the receipt's
 `evidence` field records `read` (with files), `none`, or `missing` — `missing`
 means the engine ignored the contract and must never be presented as a
 successful lookup.

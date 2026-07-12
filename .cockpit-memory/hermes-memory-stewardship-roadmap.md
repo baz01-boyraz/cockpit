@@ -5,24 +5,21 @@ title: Hermes Memory + Sentinel Stewardship roadmap
 class: decision
 capturedAt: 2026-07-11T23:10:24.000Z
 gate: save
-updatedAt: 2026-07-12T05:03:45.000Z
+updatedAt: 2026-07-12T05:17:51.000Z
 ---
 
-cockpiT will first tighten memory correctness, then expand Hermes/Sentinel into a proactive operational steward: deterministic sensors watch continuously, Hermes judges only meaningful signals, the owner is notified through the right channel, and durable outcomes return to memory.
+cockpiT first tightens memory correctness, then expands Hermes/Sentinel into a proactive steward: sensors watch, Hermes judges meaningful signals, notifications reach the right channel, and durable outcomes return to memory.
 
 ## Operating principle
 
-- Deterministic, LLM-free sensors watch Swarm, memory, logs, errors, approvals, quota, git, and process health.
-- Hermes is the bounded judgment layer, not a token-burning raw-log watcher: quiet/known events stop at the sensor layer; only anomalies and scheduled digests reach the model.
-- Every notification carries evidence, severity, and a concrete next action. Self-discovered coding work is proposed for approval, never started silently.
-- App-wide toast + macOS notification is the first delivery channel. Phone delivery and Hermes-managed cron jobs are later transport/scheduling phases built on the same signal/outbox contract.
-- Markdown notes remain the durable project-memory truth; deterministic validation, redaction, audit, and rollback remain authoritative safety rails around model judgment.
+- LLM-free sensors watch Swarm, memory, logs, errors, approvals, quota, git, and process health; quiet/known states never reach Hermes.
+- Notifications carry evidence, severity, and a next action. Self-discovered coding work is proposed, never silently started.
+- Toast/macOS ships first; phone/cron reuse the same signal/outbox contract. Markdown truth stays protected by validation, redaction, audit, and rollback.
 
 ## Model policy
 
-- **Hermes's main model is DeepSeek V4 Pro** for conversation, orchestration, memory judgment, operational stewardship, and other work where nuanced reasoning matters.
-- **DeepSeek V4 Flash is reserved for bounded mechanical background work** such as Sentinel triage, transcript distillation, curation passes, and routine digests.
-- Model roles stay explicit in code and audit metadata so a cheap background call can never silently become the authority for a high-judgment decision.
+- **DeepSeek V4 Pro** handles conversation/orchestration; **V4 Flash** handles bounded tool-less triage, distillation, curation, and routine digests.
+- Roles stay explicit in code/audit metadata so background calls cannot silently gain high-judgment authority.
 
 ## Ordered delivery
 
@@ -52,10 +49,11 @@ cockpiT will first tighten memory correctness, then expand Hermes/Sentinel into 
    - Do not turn cleanup output into fresh memory observations or re-ingest the memory protocol itself.
    - **Result:** snapshot `2026-07-12T05-01-41-495Z-6b8a3a5c` captured all 126 notes before the committed dry-run report. Nine repetitive notes were canonically compacted with no deletion/archive: 208,006 → 136,505 bytes, repeated facts 66 → 0, oversized notes 4 → 0. No link target disappeared and no unresolved target was introduced.
 
-5. **Code/documentation consistency**
+5. **Code/documentation consistency — complete (2026-07-12)**
    - Reconcile stale comments, charter text, AGENTS instructions, UI copy, and memory notes with the behavior actually enforced by code.
    - Mark superseded facts clearly instead of leaving contradictory statements as equally current.
    - Add focused contract tests for the trust policy and memory-first delivery rules.
+   - **Result:** shared policy now pins Hermes main=V4 Pro and mechanical=V4 Flash; callers cannot promote distillation. Empty hubs still receive lookup contracts, mock/backend policy versions match, and stale Claude-only/native-channel claims were replaced with current behavior across code, charter, plans, and canonical notes.
 
 ### Phase 2 — Hermes/Sentinel operational stewardship
 
@@ -86,11 +84,9 @@ cockpiT will first tighten memory correctness, then expand Hermes/Sentinel into 
 
 ## Completion bar
 
-- Memory retrieval and dedup regressions pass on a real, versioned evaluation corpus.
-- No conflict policy differs between code, UI, charter, and Hermes instructions.
-- A successful or failed Swarm run produces one deduplicated, evidence-backed notification with a useful next action.
-- Memory pipeline failures and stale backlogs become observable without creating notification noise.
-- A quiet healthy day costs no unnecessary Hermes calls; an actionable anomaly reliably reaches the owner.
-- All cleanup and automated writes remain recoverable through snapshots, ledger/audit history, git, and soft-delete.
+- Retrieval/dedup regressions pass on a real versioned corpus; trust policy agrees across code, UI, charter, and Hermes.
+- Swarm outcomes and memory failures produce deduplicated, evidence-backed signals with a useful next action.
+- Healthy days cost no unnecessary Hermes calls; actionable degradation reaches the owner.
+- Cleanup and writes remain recoverable through snapshots, ledger/audit, git, and soft-delete.
 
 Related: [[memory-hub]], [[memory-reconcile-dedup-gotcha]], [[memory-trust-modes]], [[memory-contract-unified-source]], [[sentinel-3-layer-architecture]], [[sentinel-anti-noise-gotcha]], [[sentinel-notification-tiering]], [[swarm-completion-notification-gap]], [[hermes-jarvis-plan]], [[self-initiated-card-protocol]]

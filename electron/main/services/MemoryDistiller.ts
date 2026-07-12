@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
 import { promisify } from 'node:util'
 import { buildHermesArgs } from '@shared/hermes-run'
+import { HERMES_BACKGROUND_MODEL } from '@shared/hermes-model-policy'
 import {
   type Observation,
   buildDistillPrompt,
@@ -42,8 +43,6 @@ export interface DistillRequest {
   fromOffset?: number
   projectSlugs: string[]
   userSlugs: string[]
-  /** Optional model alias for `claude --model`; omit to use Baz's default. */
-  model?: string
 }
 
 export interface DistillOutput {
@@ -89,7 +88,7 @@ export class MemoryDistiller {
 
     let raw: string
     try {
-      raw = await this.runner(cwd, prompt, req.model)
+      raw = await this.runner(cwd, prompt, HERMES_BACKGROUND_MODEL)
     } catch (err) {
       return { observations: [], nextOffset, error: `distiller CLI failed: ${(err as Error).message}` }
     }
@@ -101,7 +100,7 @@ export class MemoryDistiller {
         const retry = await this.runner(
           cwd,
           `${prompt}\n\nYour previous reply was not valid. Reply with STRICT JSON only, no prose, no code fence.`,
-          req.model,
+          HERMES_BACKGROUND_MODEL,
         )
         parsed = parseObservations(retry)
       } catch (err) {

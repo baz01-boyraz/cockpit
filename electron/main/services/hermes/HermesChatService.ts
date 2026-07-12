@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { buildHermesArgs } from '@shared/hermes-run'
+import { HERMES_MAIN_MODEL } from '@shared/hermes-model-policy'
 import { buildTranscriptPrompt, capHistory, type ChatRole, type ChatTurn } from '@shared/hermes-chat'
 import type { HermesChatReply } from '@shared/ipc'
 import { redactText } from '@shared/redaction'
@@ -193,7 +194,11 @@ export class HermesChatService {
     // The tools flag rides after the oneshot/chat argv so the prompt keeps its
     // slot right after --oneshot (or -q for the image path).
     const args = [
-      ...buildHermesArgs(prompt, { ignoreRules: false, imagePath: safeImagePath }),
+      ...buildHermesArgs(prompt, {
+        ignoreRules: false,
+        imagePath: safeImagePath,
+        model: HERMES_MAIN_MODEL,
+      }),
       ...HERMES_CHAT_TOOLS,
     ]
     // D3 — hand the CLI the loopback MCP bearer token so its tool calls back
