@@ -340,8 +340,15 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
       getTrustMode: () => 'autopilot',
     },
     memoryPipeline: {
-      resolveReview: (projectId, scope, reviewId, decision, editedContent) => {
-        calls.resolveReview.push({ projectId, scope, reviewId, decision, editedContent })
+      resolveReview: (projectId, scope, reviewId, decision, editedContent, resolution) => {
+        calls.resolveReview.push({
+          projectId,
+          scope,
+          reviewId,
+          decision,
+          editedContent,
+          resolution,
+        })
       },
     },
     memoryCuration: {

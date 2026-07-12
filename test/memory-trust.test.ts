@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   autoCommitKinds,
   brainForAccess,
+  delegatedConflictResolutionIssues,
   defaultTrustModeForBrain,
   MEMORY_POLICY,
   MEMORY_TRUST_META,
@@ -39,6 +40,20 @@ describe('canonical memory policy', () => {
     expect(delegated.allowedBases).not.toContain('recency')
     expect(delegated.rationaleRequired).toBe(true)
     expect(delegated.evidenceRequired).toBe(true)
+  })
+
+  it('rejects forged runtime delegation details even if a caller bypasses the tool schema', () => {
+    const issues = delegatedConflictResolutionIssues({
+      basis: 'recency' as never,
+      rationale: 'too short',
+      evidence: 'time',
+    })
+
+    expect(issues).toEqual([
+      'delegated conflict basis is invalid; recency is never sufficient',
+      'delegated conflict rationale must explain the judgment',
+      'delegated conflict evidence must identify the authority or verification',
+    ])
   })
 
   it('defaults project brains to Autopilot and the global brain to Assisted', () => {

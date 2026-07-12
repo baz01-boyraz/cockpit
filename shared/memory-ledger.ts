@@ -8,6 +8,7 @@
 export const LEDGER_ACTIONS = [
   'create',
   'merge',
+  'replace',
   'split',
   'rename',
   'trash',
@@ -16,7 +17,7 @@ export const LEDGER_ACTIONS = [
 export type LedgerAction = (typeof LEDGER_ACTIONS)[number]
 
 /** How the change entered the brain. */
-export const LEDGER_GATES = ['save', 'asked', 'manual', 'consolidation'] as const
+export const LEDGER_GATES = ['save', 'asked', 'delegated', 'manual', 'consolidation'] as const
 export type LedgerGate = (typeof LEDGER_GATES)[number]
 
 export interface LedgerEntry {

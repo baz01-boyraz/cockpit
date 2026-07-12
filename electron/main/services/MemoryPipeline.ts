@@ -11,10 +11,17 @@ import { reconcile, type Reconciled } from '@shared/memory-reconcile'
 import type { MemoryDoc } from '@shared/memory-hub'
 import type { Observation } from '@shared/memory-observation'
 import type { CaptureResult, MemoryProposal } from '@shared/memory-pipeline'
-import { reviewOperation, type ReviewDecision, type ReviewKind } from '@shared/memory-review'
+import {
+  reviewOperation,
+  type MemoryReviewResolutionContext,
+  type ReviewDecision,
+  type ReviewItem,
+  type ReviewKind,
+} from '@shared/memory-review'
 import {
   brainForAccess,
   canAutoCommit,
+  delegatedConflictResolutionIssues,
   defaultTrustModeForBrain,
   type MemoryBrainScope,
 } from '@shared/memory-policy'
@@ -272,6 +279,35 @@ export class MemoryPipeline {
     return { memory: this.memory, hubId: projectId }
   }
 
+  /** Content-free resolution provenance; note bytes stay in the ledger hashes. */
+  private recordReviewResolution(
+    projectId: string,
+    scope: MemoryBrainScope,
+    item: ReviewItem,
+    decision: ReviewDecision,
+    resolution: MemoryReviewResolutionContext,
+  ): void {
+    const outcome =
+      decision === 'accept' ? 'accepted' : decision === 'edit' ? 'edited' : 'discarded'
+    const delegated = resolution.delegated
+    this.audit?.record({
+      projectId,
+      actor: resolution.actor,
+      actionType: 'memory.review_resolved',
+      summary: `${resolution.actor === 'ai' ? 'Delegated resolver' : 'Owner'} ${outcome} a ${item.kind} memory review`,
+      payload: {
+        reviewId: item.id,
+        scope,
+        kind: item.kind,
+        slug: item.slug,
+        decision,
+        basis: delegated?.basis ?? null,
+        rationale: delegated?.rationale ?? null,
+        evidence: delegated?.evidence ?? null,
+      },
+    })
+  }
+
   /**
    * Resolve a queued review (G4). accept/edit applies the proposed write or
    * recoverable archive (validated + ledgered); discard leaves the hub untouched.
@@ -281,15 +317,30 @@ export class MemoryPipeline {
     scope: MemoryBrainScope,
     reviewId: string,
     decision: ReviewDecision,
-    editedContent?: string,
+    editedContent: string | undefined,
+    resolution: MemoryReviewResolutionContext,
   ): void {
     const item = this.reviews.getPendingFor(projectId, scope, reviewId)
     if (!item) throw new Error('Review item not found or not authorized for this brain.')
+    if (resolution.actor !== 'user' && resolution.actor !== 'ai') {
+      throw new Error('Memory review resolution requires a trusted user or AI actor.')
+    }
+    if (decision === 'edit' && editedContent == null) {
+      throw new Error('An edit decision requires edited content.')
+    }
+    if (item.kind === 'conflict' && resolution.actor === 'ai') {
+      const issues = delegatedConflictResolutionIssues(resolution.delegated)
+      if (!this.audit) issues.push('delegated conflict audit sink is unavailable')
+      if (issues.length > 0) {
+        throw new Error(`Delegated conflict resolution refused: ${issues.join('; ')}`)
+      }
+    }
 
     if (decision === 'discard') {
       if (!this.reviews.markResolvedFor(projectId, scope, reviewId, 'discarded')) {
         throw new Error('Review item changed before it could be resolved.')
       }
+      this.recordReviewResolution(projectId, scope, item, decision, resolution)
       return
     }
 
@@ -323,6 +374,7 @@ export class MemoryPipeline {
       if (!this.reviews.markResolvedFor(projectId, scope, reviewId, 'accepted')) {
         throw new Error('Review item changed before it could be resolved.')
       }
+      this.recordReviewResolution(projectId, scope, item, decision, resolution)
       return
     }
 
@@ -335,8 +387,18 @@ export class MemoryPipeline {
     this.ledger.record({
       brain: item.brain,
       noteSlug: item.slug,
-      action: item.kind === 'merge' || operation === 'merge' ? 'merge' : 'create',
-      gate: item.kind === 'maintenance' ? 'consolidation' : 'asked',
+      action:
+        item.kind === 'conflict'
+          ? 'replace'
+          : item.kind === 'merge' || operation === 'merge'
+            ? 'merge'
+            : 'create',
+      gate:
+        item.kind === 'maintenance'
+          ? 'consolidation'
+          : resolution.actor === 'ai'
+            ? 'delegated'
+            : 'asked',
       sourceId: item.sourceId,
       contentBefore: before,
       contentAfter: content,
@@ -367,5 +429,6 @@ export class MemoryPipeline {
     ) {
       throw new Error('Review item changed before it could be resolved.')
     }
+    this.recordReviewResolution(projectId, scope, item, decision, resolution)
   }
 }

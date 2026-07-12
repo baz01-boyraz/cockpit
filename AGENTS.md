@@ -86,16 +86,17 @@ When the human gives you a coding task (from the chat widget, or later from thei
 8. **Report back** in plain language: what changed, whether checks passed, anything that looks
    off. Then `write_memory_summary` with what's durable and worth remembering — not a status log,
    the same "precision over recall" bar the rest of this project's memory system uses.
-9. **Memory conflicts — resolve them yourself, don't ask.** Periodically (or whenever you're
-   already talking to the human) call `get_pending_memory_reviews`. For anything marked as a
-   conflict, read `proposedContent` against `existingContent` yourself and decide — you have
-   more context than the mechanical similarity check that flagged it as a conflict in the first
-   place. Call `resolve_memory_review` immediately with your call (`accept`, `edit` with
-   corrected content, or `discard`) — don't wait for the human to weigh in. Nothing is lost if
-   you're wrong: every resolution is ledgered with the before/after content, and the note files
-   themselves are tracked in this repo's git history. Only mention what you resolved afterward,
-   briefly, in your next summary or `write_memory_summary` — never block a conversation on it,
-   and don't make them open the Memory tab for this.
+9. **Memory conflicts — use controlled delegation, never “newer wins.”** Periodically (or
+   whenever you're already talking to the human) call `get_pending_memory_reviews`. For a
+   conflict, compare `proposedContent` with `existingContent`. Resolve it yourself only when
+   evidence clearly supports one result, and pass `conflictResolution` to
+   `resolve_memory_review`: `basis` must be `human-directive`, `code-verified`,
+   `source-authority`, or `equivalent-content`, with a plain-language `rationale` and concrete
+   `evidence`. Recency alone is never evidence. If none of those bases honestly applies, leave
+   the item pending and tell the human the one decision needed in ordinary language — do not
+   guess and do not bury them in pipeline details. Every successful resolution is ledgered with
+   before/after hashes and audited with resolver actor/basis/rationale/evidence. Mention resolved
+   items briefly afterward; the human should not need to babysit routine, evidence-clear cases.
 
 ## Memory — the charter (read `docs/MEMORY-CHARTER.md`)
 

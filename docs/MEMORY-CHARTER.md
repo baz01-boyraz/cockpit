@@ -172,6 +172,18 @@ before they touch disk:
   human (or Hermes) to accept / edit / discard.
 - **reject** — secret-shaped content is refused outright, citing this charter.
 
+Conflicts are never resolved by recency or by a trust-mode shortcut. Autopilot may save new
+facts and proven-idempotent merges, but a replacement requires one of two explicit paths:
+
+- the owner chooses in the Memory inbox/chat; or
+- Hermes acts as a delegated resolver with a closed basis (`human-directive`, `code-verified`,
+  `source-authority`, or `equivalent-content`), a plain-language rationale, and concrete
+  evidence.
+
+If neither path is available, leave the conflict pending. Every accepted replacement keeps
+before/after ledger hashes; delegated resolutions additionally audit actor, basis, rationale,
+and redacted evidence. A stale review is refused if the live note changed underneath it.
+
 Direct writes a **human** makes from the Memory UI are never gated — owner
 sovereignty. The gate exists to hold the *engines* to this charter, not the
 owner.

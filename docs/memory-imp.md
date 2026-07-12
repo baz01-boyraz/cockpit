@@ -23,7 +23,7 @@ guarantee, the guarantee wins.
 | G1 | **Capture what matters, automatically.** The brain reads the Claude sessions we live in and pulls out the important facts without being asked. | "Manuel yazmazsam hiçbir şey birikmiyor." |
 | G2 | **Never miss important information.** Capture is durable and queued — a crash, quit, or reload never drops a pending session. | "Önemli bilgi kaçırmak." |
 | G3 | **Never write a broken or partial note.** Every write is validated (schema, links, size, markdown) and atomic. A half-written note is unrepresentable. | "Eksik/bozuk not etmek." |
-| G4 | **The model decides, and asks when unsure.** The model judges each fact's importance/value itself and either saves it or — if it isn't sure it's worth keeping — asks Baz "not edeyim mi?" No fixed threshold; judgment + ask-fallback. Conflicts always ask. | "Model kendisi karar vermeli; emin değilse sorsun." |
+| G4 | **The model decides, and asks when unsure.** The model judges each fact's importance/value itself and either saves it or — if it isn't sure it's worth keeping — asks Baz "not edeyim mi?" No fixed threshold; judgment + ask-fallback. Conflicts always enter review; only the owner or an evidence-backed delegated Hermes resolver may settle them. | "Model kendisi karar vermeli; emin değilse sorsun." |
 | G5 | **Never write-and-forget.** A maintenance ("sleep") pass revisits the whole brain on a schedule: merges duplicates, resolves dangling links, splits bloated notes, flags contradictions. | "Not ettikten sonra bir daha dönüp incelememek." |
 | G6 | **Stay organized and concrete.** Every note has the same skeleton (frontmatter + body + `[[links]]`). The graph is the index. Health is visible, not hidden. | "Her şey çok düzenli ve somut çalışmalı." |
 | G7 | **Never corrupt.** Append-only provenance ledger, pre-consolidation snapshots, soft-delete only, idempotent pipeline. Every note traceable to its source and revertible. | "Asla bozuk olmamalı." |
@@ -116,7 +116,8 @@ queue, never mid-write.
 3. **Reconcile** — for each observation, compare against the current hub (slug match +
    content similarity). Decide one of: **NEW** (create), **MERGE** (append/update an
    existing note), **DUPLICATE** (skip — already known), **CONFLICT** (existing note
-   asserts the opposite). Conflicts *always* escalate to the human. This stage is pure
+   asserts the opposite). Conflicts always enter review; they never auto-commit. The owner or
+   an evidence-backed delegated Hermes resolver may settle them. This stage is pure
    logic in `shared/` and is where "organized like a brain" is enforced — dedup and
    contradiction detection happen here, before anything touches disk. **This is G5/G6.**
 4. **Gate** — **the model decides, not a formula.** During Distill the model judges each
@@ -124,7 +125,8 @@ queue, never mid-write.
    - **SAVE** — the model is confident this matters and is unambiguous → commit it.
    - **ASK** — the model is *not sure* it's worth keeping, or is unsure how to classify /
      where to file it → it surfaces a one-tap "Not edeyim mi?" card ("Save / Edit /
-     Discard"). Any reconcile **CONFLICT** always forces ASK regardless of the model's call.
+     Discard"). Any reconcile **CONFLICT** always forces review regardless of the model's call.
+     Delegated Hermes resolution requires a non-recency basis, rationale, and evidence.
    There is no fixed numeric threshold; the model's own judgment drives it, and "when in
    doubt, ask Baz" is the hard fallback. Nothing questionable is written silently. **This is G4.**
 5. **Commit** — write through `MemoryHubService.write` (keeps atomic tmp+rename), with
@@ -494,7 +496,8 @@ Only after 0–3 are proven does capture become hands-off.
 
 1. **Save-vs-ask — the model decides.** No fixed `importance × confidence` threshold in
    code. The model judges each fact's importance/value itself; it saves what it's confident
-   matters and asks Baz ("not edeyim mi?") when it isn't sure. Reconcile conflicts always ask.
+   matters and asks Baz ("not edeyim mi?") when it isn't sure. Reconcile conflicts always enter
+   review; a human choice or evidence-backed delegated resolver is required.
 2. **Capture trigger — both.** Idle-timeout (transcript quiet for N minutes) **and** explicit
    end-of-session both enqueue a capture job.
 3. **Distiller model — Baz's Claude subscription via local `claude` CLI, only.** No API,

@@ -360,7 +360,9 @@ export function registerIpc(services: Services): void {
   handle('memoryResolveReview', (p) => {
     const { projectId, scope, reviewId, decision, editedContent } = memoryResolveReviewSchema.parse(p)
     services.projects.get(projectId)
-    services.memoryPipeline.resolveReview(projectId, scope, reviewId, decision, editedContent)
+    services.memoryPipeline.resolveReview(projectId, scope, reviewId, decision, editedContent, {
+      actor: 'user',
+    })
     return services.memoryReviews.listPendingFor(projectId, scope)
   })
   handle('memoryLedger', (p) => {

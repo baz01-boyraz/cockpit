@@ -76,7 +76,7 @@ describe('presentMemoryReview', () => {
     const view = presentMemoryReview(review)
 
     expect(view.category).toBe('attention')
-    expect(view.title).toBe('Choose which version to remember')
+    expect(view.title).toBe('Two versions need a decision')
     expect(view.acceptLabel).toBe('Use new version')
     expect(view.discardLabel).toBe('Keep current version')
     expect(view.rationale).toMatch(/neither version was chosen automatically/i)

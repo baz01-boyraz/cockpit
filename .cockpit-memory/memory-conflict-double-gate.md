@@ -1,13 +1,15 @@
 ---
 schema: 1
 name: memory-conflict-double-gate
-title: Conflict auto-resolution was gated at TWO independent levels
+title: Conflict resolution is enforced by policy, mutation gateway, and Hermes tool
 class: gotcha
 capturedAt: 2026-07-06T02:32:23.678Z
 gate: save
-updatedAt: 2026-07-06T02:32:23.678Z
+updatedAt: 2026-07-12T04:50:43.000Z
 ---
 
-The original 'conflicts are NEVER auto-accepted' protection existed at two separate layers: (1) code — `memoryTrust.ts` `autoAcceptKinds()` explicitly excluded conflict from auto-accept with an inline comment, and (2) prompt — `AGENTS.md` item 8 instructed Hermes to 'describe the actual disagreement in one line' and ask the human. To achieve silent resolution, BOTH levels had to change. The MCP tool `resolve_memory_review` itself had no human-approval gate in its schema — it was always fully callable programmatically. The code-only and prompt-only guards each independently blocked silent resolution; changing one without the other would have left the other blocking.
+Conflict safety now has three aligned enforcement layers: (1) shared policy excludes conflict from Autopilot, Assisted, and Manual auto-commit sets; (2) `MemoryPipeline.resolveReview` refuses an AI conflict decision without an allowed delegated basis, rationale, evidence, and an audit sink; (3) the Hermes tool schema rejects unknown bases such as recency before the mutation call. Human inbox clicks remain an explicit owner decision.
+
+Successful Hermes replacements use ledger action/gate `replace/delegated` with before/after hashes and a redacted audit record containing actor, basis, rationale, and evidence. The existing-content compare still rejects stale reviews. This preserves the no-babysitting goal for evidence-clear cases without returning to silent “newer wins.”
 
 Related: [[memory-trust-modes]], [[hermes-mcp-architecture]]

@@ -6,7 +6,10 @@ import {
   projectIdSchema,
 } from '@shared/schemas'
 import { projectBrain } from '@shared/memory-ledger'
-import { canAutoCommit } from '@shared/memory-policy'
+import {
+  MEMORY_DELEGATED_CONFLICT_BASES,
+  canAutoCommit,
+} from '@shared/memory-policy'
 import { gateMemoryWrite } from '@shared/memory-gate'
 import { extractHook } from '@shared/memory-hub'
 import { rankNotes } from '@shared/memory-recall'
@@ -43,6 +46,26 @@ const justificationShape = z.object({
 /** Agent write input = the renderer write schema + the charter justification. */
 const gatedWriteSchema = memoryWriteSchema.extend({
   justification: justificationShape.optional(),
+})
+
+const delegatedConflictResolutionSchema = z.object({
+  basis: z.enum(MEMORY_DELEGATED_CONFLICT_BASES),
+  rationale: z
+    .string()
+    .trim()
+    .min(20)
+    .max(1_000)
+    .describe('Why this version is correct; recency alone is never a valid reason.'),
+  evidence: z
+    .string()
+    .trim()
+    .min(10)
+    .max(2_000)
+    .describe('The owner directive, authoritative source, or code/test verification used.'),
+})
+
+const hermesResolveReviewSchema = memoryResolveReviewSchema.extend({
+  conflictResolution: delegatedConflictResolutionSchema.optional(),
 })
 
 const memoryReadSchema = projectIdSchema.extend({
@@ -208,11 +231,15 @@ export function createMemoryTools(ctx: HermesToolContext): HermesTool[] {
     {
       name: 'resolve_memory_review',
       description:
-        "Resolve one queued memory review in an explicit scope. `decision` is 'accept' (write as proposed), 'edit' (write `editedContent` instead), or 'discard' (drop it). The review must belong to the requested project/global brain.",
-      inputShape: memoryResolveReviewSchema.shape,
+        "Resolve one queued memory review in an explicit scope. `decision` is 'accept' (write as proposed), 'edit' (write `editedContent` instead), or 'discard' (drop it). The review must belong to the requested project/global brain. For a conflict, you are a delegated resolver only when evidence is clear: include `conflictResolution` with basis (`human-directive`, `code-verified`, `source-authority`, or `equivalent-content`), a plain-language rationale, and concrete evidence. Recency alone is never valid; if evidence is insufficient, leave the conflict pending.",
+      inputShape: hermesResolveReviewSchema.shape,
       run: async (raw) => {
-        const { projectId, scope, reviewId, decision, editedContent } = memoryResolveReviewSchema.parse(raw)
-        ctx.memoryPipeline.resolveReview(projectId, scope, reviewId, decision, editedContent)
+        const { projectId, scope, reviewId, decision, editedContent, conflictResolution } =
+          hermesResolveReviewSchema.parse(raw)
+        ctx.memoryPipeline.resolveReview(projectId, scope, reviewId, decision, editedContent, {
+          actor: 'ai',
+          ...(conflictResolution ? { delegated: conflictResolution } : {}),
+        })
         return ctx.memoryReviews.listPendingFor(projectId, scope)
       },
     },

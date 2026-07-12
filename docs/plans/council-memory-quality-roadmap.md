@@ -132,8 +132,9 @@ the code as authority:
    compact history and scorecard reads; the panel triggers overlapping reads.
 7. Memory trust is a renderer/localStorage policy. Background behavior is therefore not
    reliably governed when the Memory panel is closed.
-8. Autopilot conflict policy contradicts its own comments and older policy notes: current
-   code can accept conflicts by recency while UI comments still promise conflicts wait.
+8. Before the 2026-07-11 policy-v2 fix, Autopilot conflict behavior contradicted older policy
+   notes and could accept by recency. Trust modes now never auto-resolve conflicts; Hermes needs
+   an allowed delegated basis, rationale and evidence, with resolver provenance audited.
 9. A queued review can overwrite a note that changed after the proposal was created; there
    is no base-hash compare-and-swap at acceptance time.
 10. Human UI writes and accepted Hermes writes can bypass the same validation/ledger path
@@ -727,7 +728,7 @@ migration and no result deletion.
 
 ### M1 — Canonical Memory policy and concurrency-safe mutation gateway (L)
 
-> **M1a completed 2026-07-11; M1b–M1d remain pending.** One shared machine-readable
+> **M1a plus the controlled-resolver slice completed 2026-07-11; M1b–M1d remain pending.** One shared machine-readable
 > policy now drives prompts, backend gates, Hermes and UI copy. Project/global trust lives in
 > additive SQLite migration V19 with independent defaults (project Autopilot, global Assisted),
 > with stricter legacy renderer choices adopted once before the old key is removed. Queued
@@ -735,6 +736,8 @@ migration and no result deletion.
 > resolutions require explicit scope and reject foreign-brain ids. No Markdown Memory content
 > was migrated or rewritten. Unit/integration, Electron-native migration smoke, browser journey
 > and 1024/1280/1600 visual checks passed.
+> Policy v2 additionally rejects recency-only/unevidenced Hermes conflict decisions, records
+> successful replacements as `replace/delegated`, and audits actor+basis+rationale+evidence.
 
 **Goal:** make every write path obey one explicit integrity model before changing retrieval or
 UI.

@@ -8,7 +8,7 @@ import { BAZ_GLOBAL_BRAIN, projectBrain } from './memory-ledger'
  * services, IPC validation, mocks, and UI copy all consume the same values so
  * a trust-sensitive rule cannot silently drift between layers.
  */
-export const MEMORY_POLICY_VERSION = 1 as const
+export const MEMORY_POLICY_VERSION = 2 as const
 
 export const MEMORY_TRUST_MODES = ['autopilot', 'assisted', 'manual'] as const
 export type MemoryTrustMode = (typeof MEMORY_TRUST_MODES)[number]
@@ -56,6 +56,42 @@ export const MEMORY_SOURCE_CLASSES = [
   'system-event',
 ] as const
 
+export const MEMORY_DELEGATED_CONFLICT_BASES = [
+  'human-directive',
+  'code-verified',
+  'source-authority',
+  'equivalent-content',
+] as const
+export type MemoryDelegatedConflictBasis =
+  (typeof MEMORY_DELEGATED_CONFLICT_BASES)[number]
+
+export interface DelegatedConflictResolution {
+  basis: MemoryDelegatedConflictBasis
+  rationale: string
+  evidence: string
+}
+
+/** Pure validation used by the mutation gateway; transport schemas stay stricter. */
+export function delegatedConflictResolutionIssues(
+  resolution: Partial<DelegatedConflictResolution> | null | undefined,
+): string[] {
+  if (!resolution) return ['delegated conflict basis, rationale, and evidence are required']
+  const issues: string[] = []
+  if (
+    !resolution.basis ||
+    !(MEMORY_DELEGATED_CONFLICT_BASES as readonly string[]).includes(resolution.basis)
+  ) {
+    issues.push('delegated conflict basis is invalid; recency is never sufficient')
+  }
+  if (!resolution.rationale || resolution.rationale.trim().length < 20) {
+    issues.push('delegated conflict rationale must explain the judgment')
+  }
+  if (!resolution.evidence || resolution.evidence.trim().length < 10) {
+    issues.push('delegated conflict evidence must identify the authority or verification')
+  }
+  return issues
+}
+
 export const MEMORY_POLICY = {
   version: MEMORY_POLICY_VERSION,
   sourceClasses: MEMORY_SOURCE_CLASSES,
@@ -75,6 +111,11 @@ export const MEMORY_POLICY = {
     autoResolve: false,
     strategy: 'explicit-review-or-delegated-resolver',
     newerNeverWinsByRecencyAlone: true,
+    delegatedResolver: {
+      allowedBases: MEMORY_DELEGATED_CONFLICT_BASES,
+      rationaleRequired: true,
+      evidenceRequired: true,
+    },
   },
   lifecycle: {
     archiveRepresentation: 'status:archived',
@@ -91,7 +132,7 @@ export const MEMORY_POLICY = {
 /** Stable policy lines embedded in the distiller prompt. */
 export const MEMORY_POLICY_PROMPT = [
   `Memory policy v${MEMORY_POLICY_VERSION}: precision over recall.`,
-  'A conflict is never resolved by recency alone; mark it ask.',
+  'A conflict is never resolved by recency alone; mark it ask unless an evidence-backed delegated resolver is explicitly used.',
   'Prefer an existing durable fact over a near-duplicate.',
   'Never emit secrets or transient task status as memory.',
 ].join(' ')

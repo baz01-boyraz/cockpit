@@ -5,7 +5,7 @@ title: Hermes Memory + Sentinel Stewardship roadmap
 class: decision
 capturedAt: 2026-07-11T23:10:24.000Z
 gate: save
-updatedAt: 2026-07-12T04:38:25.000Z
+updatedAt: 2026-07-12T04:50:43.000Z
 ---
 
 cockpiT will first tighten memory correctness, then expand Hermes/Sentinel into a proactive operational steward: deterministic sensors watch continuously, Hermes judges only meaningful signals, the owner is notified through the right channel, and durable outcomes return to memory.
@@ -40,10 +40,11 @@ cockpiT will first tighten memory correctness, then expand Hermes/Sentinel into 
    - Add long-note, threshold-boundary, and repeated-capture regression tests.
    - **Result:** reconcile now measures the strongest match across individual paragraphs/list items plus a backwards-compatible combined candidate. Dated bullets and `Related:` navigation do not dilute the score; exact and near-duplicate facts at the inclusive `0.82` boundary are skipped. Merge has its own byte-idempotent guard, repeated captures create no write/ledger entry, and Turkish fact tokens remain intact.
 
-3. **Controlled conflict trust policy**
+3. **Controlled conflict trust policy — complete (2026-07-11)**
    - Remove silent conflict overwrite as the default behavior.
    - Make the effective policy consistent across backend gate, renderer trust mode, Hermes instructions, and user-facing copy.
    - Preserve before/after provenance and require an explicit human decision or a narrowly defined, auditable policy for destructive replacement.
+   - **Result:** Memory policy v2 keeps conflicts outside every trust mode's auto-commit set. The owner can choose explicitly; Hermes may resolve routine evidence-clear conflicts only with an allowed basis, plain-language rationale, and concrete evidence. Recency is rejected. Successful AI replacements are stale-write checked, ledgered as `replace/delegated` with before/after hashes, and audited with actor+basis+rationale+redacted evidence. Ambiguous cases remain pending with calm, non-technical UI copy.
 
 4. **One-time cleanup of bloated notes**
    - Snapshot first, then dry-run a bullet-level dedup/merge pass over oversized and repetitive notes.

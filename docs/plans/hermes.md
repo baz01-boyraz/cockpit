@@ -72,7 +72,7 @@ yazılmıyor, var olanı Hermes'e açıyoruz.
 | `run_tests` / `run_typecheck` / `run_lint` | `npm test` / `npm run typecheck` / `npm run lint` | Var olan script'ler, yeni bir şey değil |
 | `take_app_screenshot` | `serve.mjs` + `screenshot.mjs` akışı (CLAUDE.md'deki screenshot workflow) | — |
 | `read_memory_recent` / `write_memory_summary` | `memoryWriteSchema` (`schemas.ts:203-207`, body ≤500.000 char) | — |
-| `get_pending_memory_reviews` / `resolve_memory_review` | `memoryResolveReviewSchema` (`schemas.ts:222-227`) | accept/edit/discard |
+| `get_pending_memory_reviews` / `resolve_memory_review` | scoped review schema + Hermes-only delegated-conflict extension | accept/edit/discard; conflicts require basis+rationale+evidence |
 | `subscribe_card_output(cardId)` | **Yeni, küçük plumbing** | `TerminalManager`'ın PTY stream'ini, sadece o kart running olduğu sürece, Hermes'e tee eder. 7/24 global izleme değil — sadece o an dispatch edilen tek görev. |
 | cron/scheduled task | hermes-agent'ın **kendi** scheduled-task desteği | cockpiT tarafında yeni bir scheduler yazılmıyor (v1'deki karar aynen geçerli) |
 
@@ -228,8 +228,9 @@ tool erişimini ne kadar kısıtlı tutmalıyız" kararını etkiler).
   servis: `HermesChecksService.ts`, `AppScreenshotService.ts`.
 - **Şema yeniden kullanımı:** `get_git_status`/`read_memory_recent`/`get_pending_memory_reviews` →
   `projectIdSchema`; `get_git_diff_stat` → `reviewDiffStatSchema`; `write_memory_summary` →
-  `memoryWriteSchema`; `resolve_memory_review` → `memoryResolveReviewSchema` (hepsi IPC path'iyle
-  aynı, paralel validasyon yok). Yeni şemalar sadece gerçekten yeni şekiller için:
+  `memoryWriteSchema`; `resolve_memory_review` tabanı → `memoryResolveReviewSchema`. Hermes
+  conflict çözümünde ayrıca kapalı basis + rationale + evidence alanlarını doğrular; recency
+  kabul edilmez. Yeni şemalar sadece gerçekten yeni şekiller için:
   `runChecksSchema` (kapalı enum), `takeAppScreenshotSchema`.
 - **`run_checks` — allowlist-only (güvenlik-kritik):** `check` KAPALI bir enum
   (`'test'|'typecheck'|'lint'`), serbest string değil. Enum → tek, sabit, hardcoded npm komutu
@@ -322,9 +323,10 @@ Değişecekler:
    yapılacak (gerçek, ucuz bir koruma) ama bu **best-effort bir yazılım sınırı**, container
    ile zorlanan bir ağ sınırı değil — local çalışan her şeyle aynı güven seviyesinde.
 3. **Conflict çözümü UI'dan sohbete taşınır** — Hermes `get_pending_memory_reviews`'i okuyup
-   konuşarak sunuyor ("bugün 3 çelişkili not var, şu ikisi çakışıyor, hangisini istersin?"),
-   `resolve_memory_review` ile senin kararını uyguluyor. Memory tab UI'daki manuel
-   Save/Edit/Discard kuyruğu **kaldırılmıyor**, Hermes ek bir arayüz sunuyor.
+   kanıt açıksa kontrollü delegated resolver olarak çözer; basis+rationale+evidence zorunludur
+   ve recency tek başına geçersizdir. Kanıt yetmiyorsa farkı sade dille sorar ve senin kararını
+   `resolve_memory_review` ile uygular. Memory tab UI'daki manuel Save/Edit/Discard kuyruğu
+   **kaldırılmıyor**, Hermes ek bir arayüz sunuyor.
 4. **Başarı/başarısızlık öğrenimi** — mevcut distill prompt'unun (`memory-observation.ts:79-98`)
    sadece "durable fact" çıkarıp çıkarmadığı, yoksa "bu session'da ne başarısız oldu, neden"
    diye özellikle sorup sormadığı **doğrulanacak**. Sormuyorsa, prompt'a küçük bir ek yapılacak.
@@ -355,9 +357,11 @@ Değişecekler:
    public `captureNow(projectId)` eklendi (idle beklemeden hemen enqueue+drain), yeni
    `electron/main/services/memoryExitTrigger.ts` (`registerMemoryExitCapture`) sadece
    `role === 'claude'` çıkışlarında tetikliyor. 90sn idle-poll fallback olarak aynen duruyor.
-4. **Conflict çözümü sohbete taşındı** — kod değil, `AGENTS.md`'ye eklenen bir talimat: Hermes
-   `get_pending_memory_reviews`'i okuyup çelişkiyi tek cümlede özetleyip soruyor, kararı
-   `resolve_memory_review`'a uyguluyor. Memory tab UI'daki manuel kuyruk kaldırılmadı.
+4. **Conflict çözümü sohbete taşındı ve sonra sertleştirildi** — Hermes
+   `get_pending_memory_reviews`'i okur. Evidence açıksa kapalı bir delegated basis, rationale ve
+   evidence ile kendisi çözer; aksi halde çelişkiyi tek cümlede sorup kararı uygular. Mutation
+   gateway kanıtsız/recency-temelli AI çözümünü reddeder; ledger `replace/delegated`, audit ise
+   actor+basis+rationale+evidence kaydeder. Memory tab UI'daki manuel kuyruk kaldırılmadı.
 5. **Test:** 660→666 test yeşil (6 yeni: exit-trigger'ın idle-poll'dan bağımsız + role-filtreli
    çalıştığını, prompt-tweak'in gotcha'yı yüzeye çıkardığını kanıtlıyor).
    `npm run typecheck`/`lint`/`test`/`build` bağımsız olarak tekrar doğrulandı, mevcut

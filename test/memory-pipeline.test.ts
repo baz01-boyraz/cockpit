@@ -113,6 +113,8 @@ const fakeAudit = () => {
   return { svc: svc as unknown as ConstructorParameters<typeof MemoryPipeline>[6], records }
 }
 
+const USER_RESOLUTION = { actor: 'user' as const }
+
 function seedConflictReview(reviews: ReturnType<typeof fakeReviews>, id: string) {
   const existing = '# Release process\n\nUse the current signed workflow.'
   const proposed = '# Release process\n\nUse the replacement workflow.'
@@ -387,7 +389,9 @@ describe('MemoryPipeline.resolveReview', () => {
     )
 
     expect(memory.read('p1', 'release-process')?.content).toBe(proposed)
-    expect(ledger.records).toContainEqual(expect.objectContaining({ gate: 'delegated' }))
+    expect(ledger.records).toContainEqual(
+      expect.objectContaining({ action: 'replace', gate: 'delegated' }),
+    )
     expect(audit.records).toContainEqual(
       expect.objectContaining({
         actor: 'ai',
@@ -395,6 +399,32 @@ describe('MemoryPipeline.resolveReview', () => {
         payload: expect.objectContaining({ basis: 'code-verified' }),
       }),
     )
+  })
+
+  it('refuses delegated conflict mutation when the audit sink is unavailable', () => {
+    const reviews = fakeReviews()
+    const { existing } = seedConflictReview(reviews, 'conflict-no-audit')
+    memory.write('p1', 'release-process', existing)
+    const pipe = new MemoryPipeline(memory, fakeLedger().svc, reviews.svc, stubDistiller([]))
+
+    expect(() =>
+      pipe.resolveReview(
+        'p1',
+        'project',
+        'conflict-no-audit',
+        'discard',
+        undefined,
+        {
+          actor: 'ai',
+          delegated: {
+            basis: 'source-authority',
+            rationale: 'The owner-authored charter supersedes the captured session summary.',
+            evidence: 'docs/MEMORY-CHARTER.md controlled conflict policy',
+          },
+        },
+      ),
+    ).toThrow(/audit sink/i)
+    expect(reviews.items.get('conflict-no-audit')?.status).toBe('pending')
   })
 
   it('refuses an edit decision that has no edited content', () => {
@@ -422,7 +452,7 @@ describe('MemoryPipeline.resolveReview', () => {
     await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
     const [item] = reviews.items.values()
 
-    pipe.resolveReview('p1', 'project', item.id, 'accept')
+    pipe.resolveReview('p1', 'project', item.id, 'accept', undefined, USER_RESOLUTION)
     expect(memory.read('p1', 'router-placement')?.content).toContain('lives in shared')
     expect(reviews.items.get(item.id)?.status).toBe('accepted')
     expect(ledger.records).toHaveLength(1)
@@ -434,7 +464,7 @@ describe('MemoryPipeline.resolveReview', () => {
     await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
     const [item] = reviews.items.values()
 
-    pipe.resolveReview('p1', 'project', item.id, 'discard')
+    pipe.resolveReview('p1', 'project', item.id, 'discard', undefined, USER_RESOLUTION)
     expect(memory.read('p1', 'router-placement')).toBeNull()
     expect(reviews.items.get(item.id)?.status).toBe('discarded')
   })
@@ -461,7 +491,7 @@ describe('MemoryPipeline.resolveReview', () => {
     })
     const pipe = new MemoryPipeline(memory, ledger.svc, reviews.svc, stubDistiller([]))
 
-    pipe.resolveReview('p1', 'project', 'archive-1', 'accept')
+    pipe.resolveReview('p1', 'project', 'archive-1', 'accept', undefined, USER_RESOLUTION)
 
     expect(memory.read('p1', 'stale-fact')).toBeNull()
     expect(reviews.items.get('archive-1')?.status).toBe('accepted')
@@ -497,7 +527,16 @@ describe('MemoryPipeline.resolveReview', () => {
     memory.write('p1', 'release-process', changed)
     const pipe = new MemoryPipeline(memory, fakeLedger().svc, reviews.svc, stubDistiller([]))
 
-    expect(() => pipe.resolveReview('p1', 'project', 'stale-review', 'accept')).toThrow(/changed since/i)
+    expect(() =>
+      pipe.resolveReview(
+        'p1',
+        'project',
+        'stale-review',
+        'accept',
+        undefined,
+        USER_RESOLUTION,
+      ),
+    ).toThrow(/changed since/i)
     expect(memory.read('p1', 'release-process')?.content).toBe(changed)
     expect(reviews.items.get('stale-review')?.status).toBe('pending')
   })
@@ -529,7 +568,16 @@ describe('MemoryPipeline.resolveReview', () => {
     memory.write('p1', 'duplicate', changedDuplicate)
     const pipe = new MemoryPipeline(memory, fakeLedger().svc, reviews.svc, stubDistiller([]))
 
-    expect(() => pipe.resolveReview('p1', 'project', 'merge-cleanup', 'accept')).toThrow(/duplicate memory changed/i)
+    expect(() =>
+      pipe.resolveReview(
+        'p1',
+        'project',
+        'merge-cleanup',
+        'accept',
+        undefined,
+        USER_RESOLUTION,
+      ),
+    ).toThrow(/duplicate memory changed/i)
     expect(memory.read('p1', 'canonical')?.content).toBe(survivor)
     expect(memory.read('p1', 'duplicate')?.content).toBe(changedDuplicate)
     expect(reviews.items.get('merge-cleanup')?.status).toBe('pending')
@@ -541,7 +589,9 @@ describe('MemoryPipeline.resolveReview', () => {
     await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
     const [item] = reviews.items.values()
 
-    expect(() => pipe.resolveReview('p2', 'project', item.id, 'accept')).toThrow(/not found|authorized/i)
+    expect(() =>
+      pipe.resolveReview('p2', 'project', item.id, 'accept', undefined, USER_RESOLUTION),
+    ).toThrow(/not found|authorized/i)
     expect(reviews.items.get(item.id)?.status).toBe('pending')
     expect(memory.read('p1', 'router-placement')).toBeNull()
   })
@@ -561,8 +611,10 @@ describe('MemoryPipeline.resolveReview', () => {
     await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
     const [item] = reviews.items.values()
 
-    expect(() => pipe.resolveReview('p1', 'project', item.id, 'accept')).toThrow(/not found|authorized/i)
-    pipe.resolveReview('p1', 'global', item.id, 'accept')
+    expect(() =>
+      pipe.resolveReview('p1', 'project', item.id, 'accept', undefined, USER_RESOLUTION),
+    ).toThrow(/not found|authorized/i)
+    pipe.resolveReview('p1', 'global', item.id, 'accept', undefined, USER_RESOLUTION)
     expect(globalMemory.read(BAZ_GLOBAL_BRAIN, 'baz-prefers-calm-ui')).not.toBeNull()
     rmSync(globalDir, { recursive: true, force: true })
   })

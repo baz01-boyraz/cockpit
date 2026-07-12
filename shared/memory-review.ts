@@ -5,6 +5,8 @@
  * Pure types shared by the service, the IPC contract, and the mock.
  */
 
+import type { DelegatedConflictResolution } from './memory-policy'
+
 export const REVIEW_KINDS = ['new', 'merge', 'conflict', 'maintenance'] as const
 export type ReviewKind = (typeof REVIEW_KINDS)[number]
 
@@ -42,6 +44,12 @@ export interface ReviewItem {
 
 export const REVIEW_DECISIONS = ['accept', 'edit', 'discard'] as const
 export type ReviewDecision = (typeof REVIEW_DECISIONS)[number]
+
+/** Trusted caller identity and optional evidence for a delegated AI decision. */
+export interface MemoryReviewResolutionContext {
+  actor: 'user' | 'ai'
+  delegated?: DelegatedConflictResolution
+}
 
 /**
  * Resolve a review's cleanup operation, including rows queued before the
