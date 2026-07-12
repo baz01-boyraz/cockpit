@@ -33,4 +33,34 @@ test('opens Terminals and mounts a session with the stream/blocks surface', asyn
   await expect(terminals.streamTab()).toBeVisible()
   await expect(terminals.blocksTab()).toBeVisible()
   await expect(terminals.streamTab()).toHaveAttribute('aria-selected', 'true')
+  await expect(terminals.composer).toBeVisible()
+  await expect(terminals.historyButton).toBeVisible()
+  await expect(terminals.sendButton).toBeVisible()
+})
+
+test('edits, sends, and recalls text through the terminal composer', async ({ page }) => {
+  await gotoApp(page)
+  await openView(page, 'terminals')
+
+  const terminals = new TerminalsPage(page)
+  await terminals.createBlankShell()
+  await expect(terminals.composer).toBeVisible()
+
+  await terminals.composer.fill('echo old text')
+  await terminals.composer.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(5, 8))
+  await terminals.composer.pressSequentially('new')
+  await expect(terminals.composer).toHaveValue('echo new text')
+
+  await terminals.composer.press('Enter')
+  await expect(terminals.composer).toHaveValue('')
+
+  await terminals.composer.press('Control+r')
+  await expect(page.getByRole('listbox', { name: 'Terminal history' })).toBeVisible()
+  await expect(page.getByRole('option', { name: 'echo new text' })).toBeVisible()
+
+  await terminals.composer.press('Escape')
+  await terminals.composer.fill('echo first')
+  await terminals.composer.press('Shift+Enter')
+  await terminals.composer.pressSequentially('echo second')
+  await expect(terminals.composer).toHaveValue('echo first\necho second')
 })

@@ -6,6 +6,9 @@ export class TerminalsPage {
   readonly blankShellButton: Locator
   readonly sessionTabs: Locator
   readonly viewToggle: Locator
+  readonly composer: Locator
+  readonly historyButton: Locator
+  readonly sendButton: Locator
 
   constructor(page: Page) {
     this.page = page
@@ -13,6 +16,9 @@ export class TerminalsPage {
     this.sessionTabs = page.getByRole('tablist', { name: 'Terminal sessions' })
     // The stream/blocks toggle lives inside the active terminal pane.
     this.viewToggle = page.getByRole('tablist', { name: 'Terminal view' })
+    this.composer = page.getByRole('textbox', { name: 'Terminal composer' })
+    this.historyButton = page.getByRole('button', { name: 'Search terminal history' })
+    this.sendButton = page.getByRole('button', { name: 'Send terminal input' })
   }
 
   async createBlankShell(): Promise<void> {

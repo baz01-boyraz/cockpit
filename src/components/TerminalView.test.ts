@@ -40,6 +40,18 @@ describe('TerminalView affordances', () => {
     }
   })
 
+  it('adds an exact-send editor composer to every terminal type', () => {
+    for (const role of ['general', 'claude', 'codex'] as const) {
+      const html = renderToStaticMarkup(createElement(TerminalView, { session: session(role), active: true }))
+
+      expect(html).toContain('aria-label="Terminal composer"')
+      expect(html).toContain('aria-label="Search terminal history"')
+      expect(html).toContain('aria-label="Send terminal input"')
+      expect(html).toContain('Shift+Enter')
+      expect(html).toContain('Ctrl+R')
+    }
+  })
+
   it('keeps the shared terminal affordances on every pane', () => {
     const html = renderToStaticMarkup(createElement(TerminalView, { session: session('general'), active: true }))
 
