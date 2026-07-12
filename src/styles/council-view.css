@@ -372,6 +372,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
+  scroll-margin-top: var(--sp-4);
 }
 .councilView__resultHead {
   display: flex;
@@ -825,6 +826,18 @@
   color: var(--text-faint);
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
+}
+.councilView__historyOpen {
+  flex-shrink: 0;
+  min-width: 42px;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  font-weight: 650;
+  text-align: right;
+}
+.councilView__historyRow:hover .councilView__historyOpen,
+.councilView__historyRow--on .councilView__historyOpen {
+  color: var(--accent-soft);
 }
 .councilView__historyStatus {
   flex-shrink: 0;

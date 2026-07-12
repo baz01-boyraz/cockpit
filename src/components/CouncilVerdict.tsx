@@ -105,6 +105,8 @@ interface CouncilVerdictProps {
   showEvidence?: boolean
 }
 
+const DECISION_PREVIEW_LIMIT = 5
+
 export function CouncilVerdict({
   result,
   onContinue,
@@ -112,6 +114,7 @@ export function CouncilVerdict({
   showEvidence = true,
 }: CouncilVerdictProps) {
   const display = buildCouncilDisplay(result)
+  const keyFindings = result.decision?.keyFindings ?? []
   const DecisionIcon =
     display.kind === 'failed' ? IconX : display.kind === 'clarify' ? IconWarning : IconCheck
 
@@ -135,6 +138,7 @@ export function CouncilVerdict({
           <CouncilClarificationForm
             questions={display.clarifications}
             continuing={continuing}
+            responseLanguage={result.responseLanguage}
             onContinue={onContinue}
           />
         ) : (
@@ -160,13 +164,41 @@ export function CouncilVerdict({
           )}
           {display.acceptanceCriteria.length > 0 && (
             <div className="councilAction__criteria">
-              <span>Acceptance criteria</span>
+              <span>Key acceptance checks</span>
               <ol>
-                {display.acceptanceCriteria.map((criterion, index) => (
-                  <li key={index}>{criterion}</li>
+                {display.acceptanceCriteria.slice(0, DECISION_PREVIEW_LIMIT).map((criterion, index) => (
+                  <li key={index} className="councilAction__criterionPreview">{criterion}</li>
                 ))}
               </ol>
+              {display.acceptanceCriteria.length > DECISION_PREVIEW_LIMIT && (
+                <details className="councilAction__more">
+                  <summary>
+                    {display.acceptanceCriteria.length - DECISION_PREVIEW_LIMIT} more checks
+                  </summary>
+                  <ol start={DECISION_PREVIEW_LIMIT + 1}>
+                    {display.acceptanceCriteria.slice(DECISION_PREVIEW_LIMIT).map((criterion, index) => (
+                      <li key={index}>{criterion}</li>
+                    ))}
+                  </ol>
+                </details>
+              )}
             </div>
+          )}
+        </section>
+      )}
+
+      {display.kind === 'reviewed' && keyFindings.length > 0 && (
+        <section className="councilAction councilAction--reviewed">
+          <div className="eyebrow">Decision brief</div>
+          <ol className="councilAction__findings">
+            {keyFindings.slice(0, DECISION_PREVIEW_LIMIT).map((finding, index) => (
+              <li key={index} className="councilAction__finding">{finding}</li>
+            ))}
+          </ol>
+          {keyFindings.length > DECISION_PREVIEW_LIMIT && (
+            <p className="councilAction__remainder">
+              {keyFindings.length - DECISION_PREVIEW_LIMIT} more findings in the full report
+            </p>
           )}
         </section>
       )}

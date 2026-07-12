@@ -122,6 +122,7 @@ describe('CouncilVerdict consumption hierarchy', () => {
     const criteria = Array.from({ length: 9 }, (_, index) => `${index + 1}. Check ${index + 1}`)
     const raw: CouncilResultV3 = {
       ...analysisResult(),
+      schemaVersion: 3,
       mode: 'spec',
       responseLanguage: 'en',
       decision: {
@@ -167,7 +168,7 @@ describe('CouncilVerdict consumption hierarchy', () => {
     )
 
     expect(html).toContain('Decision brief')
-    expect(html.match(/councilAction__finding/g)).toHaveLength(5)
+    expect(html.match(/class="councilAction__finding"/g)).toHaveLength(5)
     expect(html).toContain('3 more findings in the full report')
   })
 })

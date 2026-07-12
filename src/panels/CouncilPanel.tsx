@@ -65,7 +65,7 @@ export function CouncilPanel() {
   const [spec, setSpec] = useState('')
   const [sessions, setSessions] = useState<CouncilSessionSummary[] | null>(null)
   const [scorecard, setScorecard] = useState<ScorecardEntry[] | null>(null)
-  const [loadingDetail, setLoadingDetail] = useState(false)
+  const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null)
   const [showAllHistory, setShowAllHistory] = useState(false)
   const [composerOpen, setComposerOpen] = useState(true)
   const [responseLanguage, setResponseLanguage] = useState<'auto' | 'tr' | 'en'>('auto')
@@ -73,6 +73,16 @@ export function CouncilPanel() {
   const [analysisEgress, setAnalysisEgress] =
     useState<CouncilAnalysisEgressPolicy>('local-only')
   const [analysisConsent, setAnalysisConsent] = useState(false)
+  const resultRef = useRef<HTMLElement | null>(null)
+
+  const revealResult = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'auto'
+        : 'smooth'
+      resultRef.current?.scrollIntoView({ behavior, block: 'start' })
+    })
+  }, [])
 
   // Persisted history + cross-session standings, both project-scoped. A stale
   // list from another project must never flash under a new one.
@@ -156,7 +166,7 @@ export function CouncilPanel() {
       if (!projectId || convening) return
       clearCouncilNotice()
       setComposerOpen(false)
-      setLoadingDetail(true)
+      setLoadingSessionId(summary.id)
       setCouncilActive({
         id: summary.id,
         title: sessionTitle(summary),
@@ -165,6 +175,7 @@ export function CouncilPanel() {
         result: null,
         at: Date.parse(summary.createdAt) || Date.now(),
       })
+      revealResult()
       try {
         const result = await cockpit().council.session(projectId, summary.id)
         if (useStore.getState().activeProjectId !== projectId) return
@@ -177,15 +188,16 @@ export function CouncilPanel() {
           result,
           at: Date.parse(summary.createdAt) || Date.now(),
         })
+        revealResult()
       } catch {
         if (useStore.getState().activeProjectId !== projectId) return
         // Leave the header; a failed detail read simply shows no verdict body.
         setCouncilActive(null)
       } finally {
-        setLoadingDetail(false)
+        setLoadingSessionId(null)
       }
     },
-    [projectId, convening, clearCouncilNotice, setCouncilActive],
+    [projectId, convening, clearCouncilNotice, setCouncilActive, revealResult],
   )
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -424,7 +436,7 @@ export function CouncilPanel() {
       )}
 
       {active && (
-        <section className="card councilView__result u-rise">
+        <section ref={resultRef} className="card councilView__result u-rise">
           <div className="councilView__resultHead">
             <span className="councilView__resultIcon" aria-hidden>
               <IconCouncil width={14} height={14} />
@@ -558,6 +570,7 @@ export function CouncilPanel() {
           <ul className="councilView__historyList">
             {visibleCouncilSessions(sessions, showAllHistory).map((summary) => {
               const isActive = active?.id === summary.id
+              const isLoading = loadingSessionId === summary.id
               const presentation = councilHistoryPresentation(summary)
               return (
                 <li key={summary.id}>
@@ -565,8 +578,9 @@ export function CouncilPanel() {
                     type="button"
                     className={`councilView__historyRow ${isActive ? 'councilView__historyRow--on' : ''}`}
                     onClick={() => void browse(summary)}
-                    disabled={convening || loadingDetail || summary.status === 'pending'}
-                    aria-current={isActive}
+                    disabled={convening || loadingSessionId !== null || summary.status === 'pending'}
+                    aria-current={isActive ? 'true' : undefined}
+                    aria-busy={isLoading}
                   >
                     <span
                       className={`councilView__historyDot councilView__historyDot--${presentation.tone}`}
@@ -586,7 +600,7 @@ export function CouncilPanel() {
                     <span
                       className={`councilView__historyStatus councilView__historyStatus--${presentation.tone}`}
                     >
-                      {presentation.label}
+                      {isLoading ? 'Opening…' : presentation.label}
                     </span>
                     <time
                       className="councilView__historyTime mono"
@@ -594,6 +608,9 @@ export function CouncilPanel() {
                     >
                       {relativeTime(summary.createdAt)}
                     </time>
+                    <span className="councilView__historyOpen" aria-hidden>
+                      {isActive ? 'Viewing' : 'Open'}
+                    </span>
                   </button>
                 </li>
               )
