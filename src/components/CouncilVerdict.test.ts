@@ -2,7 +2,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { normalizeCouncilResult, type CouncilResultV3 } from '@shared/council'
-import { CouncilVerdictEvidence } from './CouncilVerdict'
+import { CouncilVerdict, CouncilVerdictEvidence } from './CouncilVerdict'
 
 const HASH = 'a'.repeat(64)
 
@@ -114,5 +114,60 @@ describe('CouncilVerdictEvidence analysis provenance', () => {
     expect(html).not.toContain('src/unused.ts')
     expect(html).not.toContain('SECRET CONTENT MUST NEVER RENDER')
     expect(html).not.toContain('UNUSED CONTENT MUST NEVER RENDER')
+  })
+})
+
+describe('CouncilVerdict consumption hierarchy', () => {
+  it('keeps only five acceptance checks in the default decision brief', () => {
+    const criteria = Array.from({ length: 9 }, (_, index) => `${index + 1}. Check ${index + 1}`)
+    const raw: CouncilResultV3 = {
+      ...analysisResult(),
+      mode: 'spec',
+      responseLanguage: 'en',
+      decision: {
+        kind: 'approved',
+        summary: 'The brief is buildable.',
+        why: null,
+        questions: [],
+        keyFindings: [],
+        dissent: [],
+      },
+      primaryArtifact: {
+        kind: 'refinedSpec',
+        content: `**Goal** Make Council easy to consume.\n**Acceptance criteria** ${criteria.join(' ')}`,
+      },
+      evidence: {
+        seats: [],
+        rankings: [],
+        aggregate: [],
+        labelToSeat: {},
+        rawChairman: null,
+      },
+    }
+    const result = normalizeCouncilResult(raw)!
+    const html = renderToStaticMarkup(
+      createElement(CouncilVerdict, { result, showEvidence: false }),
+    )
+
+    expect(html.match(/councilAction__criterionPreview/g)).toHaveLength(5)
+    expect(html).toContain('4 more checks')
+  })
+
+  it('shows a bounded decision brief for repository analysis before the full report', () => {
+    const raw = analysisResult()
+    const result = normalizeCouncilResult({
+      ...raw,
+      decision: {
+        ...raw.decision,
+        keyFindings: Array.from({ length: 8 }, (_, index) => `Finding ${index + 1}`),
+      },
+    })!
+    const html = renderToStaticMarkup(
+      createElement(CouncilVerdict, { result, showEvidence: false }),
+    )
+
+    expect(html).toContain('Decision brief')
+    expect(html.match(/councilAction__finding/g)).toHaveLength(5)
+    expect(html).toContain('3 more findings in the full report')
   })
 })

@@ -53,6 +53,10 @@ test('Council report is selectable, copyable, exportable, and rendered once', as
   await page.getByRole('button', {
     name: /Cache the gateway read responses to cut repeat latency/,
   }).click()
+  await expect(page.locator('.councilView__result')).toBeInViewport()
+  await expect(page.getByRole('button', {
+    name: /Cache the gateway read responses to cut repeat latency/,
+  })).toHaveAttribute('aria-current', 'true')
   await expect(page.getByText('Your brief is ready. Nothing has started yet.')).toBeVisible()
 
   const reportSurface = page.locator('.councilSelectable')
