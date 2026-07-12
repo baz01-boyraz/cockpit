@@ -151,6 +151,35 @@ describe('council slice — standalone run', () => {
     ).toBe('tr')
   })
 
+  it('forwards explicit analysis intent and its data-egress consent without inference', async () => {
+    run.mockResolvedValue(makeV3Result() as unknown as CouncilResult)
+    const convene = useStore.getState().conveneCouncil as unknown as (
+      projectId: string,
+      request: string,
+      options: {
+        mode: 'analysis'
+        analysisEgress: 'account-models'
+        analysisConsent: boolean
+      },
+    ) => Promise<void>
+
+    await convene('prj_1', 'Analyze memory architecture.', {
+      mode: 'analysis',
+      analysisEgress: 'account-models',
+      analysisConsent: true,
+    })
+
+    expect(run).toHaveBeenCalledWith(
+      'prj_1',
+      expect.objectContaining({
+        mode: 'analysis',
+        analysisEgress: 'account-models',
+        analysisConsent: true,
+      }),
+    )
+    expect(useStore.getState().councilActive?.mode).toBe('analysis')
+  })
+
   it('a convened verdict survives a same-project reset (the vanishing-verdict guard)', async () => {
     run.mockResolvedValue(makeResult({ sessionId: 'sess-1' }))
     await useStore.getState().conveneCouncil('prj_1', 'x')

@@ -76,8 +76,15 @@ describe('Council v3 run transport', () => {
         mode: 'analysis',
         spec: 'Analyze the memory architecture.',
         responseLanguage: 'tr-TR',
+        analysisEgress: 'account-models',
+        analysisConsent: true,
       }),
-    ).toMatchObject({ mode: 'analysis', responseLanguage: 'tr-TR' })
+    ).toMatchObject({
+      mode: 'analysis',
+      responseLanguage: 'tr-TR',
+      analysisEgress: 'account-models',
+      analysisConsent: true,
+    })
 
     expect(() =>
       councilRunSchema.parse({
@@ -90,10 +97,14 @@ describe('Council v3 run transport', () => {
 
   it('forwards responseLanguage across preload and the main-process handler', () => {
     expect(preloadSrc).toContain('responseLanguage: opts?.responseLanguage')
+    expect(preloadSrc).toContain('analysisEgress: opts?.analysisEgress')
+    expect(preloadSrc).toContain('analysisConsent: opts?.analysisConsent')
     expect(mainSrc).toMatch(
-      /const \{ projectId, model, mode, dir, question, spec, cardId, responseLanguage \}/,
+      /const \{ projectId, model, mode, dir, question, spec, cardId, responseLanguage, analysisEgress, analysisConsent \}/,
     )
-    expect(mainSrc).toContain('specText: spec, cardId, responseLanguage')
+    expect(mainSrc).toContain(
+      'specText: spec, cardId, responseLanguage, analysisEgress, analysisConsent',
+    )
   })
 })
 

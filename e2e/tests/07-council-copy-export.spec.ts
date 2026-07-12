@@ -6,15 +6,21 @@ test('Council composer labels intent honestly and exposes output language', asyn
   await openView(page, 'council')
 
   await expect(page.getByRole('button', { name: /Refine request/ })).toBeEnabled()
-  await expect(page.getByRole('button', { name: /Analyze repository/ })).toBeDisabled()
+  await expect(page.getByRole('button', { name: /Analyze repository/ })).toBeEnabled()
   await expect(page.getByRole('button', { name: /Review change/ })).toBeDisabled()
-  await expect(page.getByText(/Grounded analysis ships next/)).toBeVisible()
   await expect(page.getByText(/Use Council from a Swarm card/)).toBeVisible()
 
   const language = page.getByLabel('Output language')
   await expect(language).toHaveValue('auto')
   await language.selectOption('tr')
   await expect(language).toHaveValue('tr')
+
+  await page.getByRole('button', { name: /Analyze repository/ }).click()
+  const egress = page.getByLabel('Repository data sharing')
+  await expect(egress).toHaveValue('local-only')
+  await expect(page.getByText(/No repository content leaves this device/)).toBeVisible()
+  await egress.selectOption('account-models')
+  await expect(page.getByRole('checkbox', { name: /I consent to sending bounded/ })).toBeVisible()
 })
 
 test('Council report is selectable, copyable, exportable, and rendered once', async ({ page, context }) => {
