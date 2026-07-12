@@ -164,6 +164,7 @@ const EXPECTED_SERVICE_FIELDS = [
   'memoryConsolidator',
   'memoryCuration',
   'memoryLifecycle',
+  'operationalHealth',
   'swarm',
   'sentinel',
   'namedAgents',
