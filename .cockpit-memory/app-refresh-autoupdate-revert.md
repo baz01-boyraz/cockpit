@@ -5,13 +5,15 @@ title: Local app:refresh build gets reverted by GitHub auto-update
 class: gotcha
 capturedAt: 2026-07-04T20:38:28.345Z
 gate: asked
-updatedAt: 2026-07-06T01:05:49.164Z
+updatedAt: 2026-07-12T05:03:45.000Z
 ---
 
-When a newer GitHub release exists than the local app:refresh build, electron-updater auto-updates the installed cockpiT back to the released version, silently discarding the local build. This caused a 'the new Named-Agents UI disappeared from Swarm' confusion: a local build carrying unreleased commits was overwritten by the v0.1.28 release. Implication: to durably see unreleased code in the installed app, either keep app:refresh builds ahead of any release OR just ship the release. Verify which version the installed app is actually running before debugging 'my feature isn't showing up'.
+# Local build can be replaced by auto-update
+
+When GitHub publishes a version newer than a local `app:refresh` build, `electron-updater` can replace the installed local build with that release. The observed symptom was: **“the new Named-Agents UI disappeared from Swarm.”** The feature had not vanished from source; an unreleased local build had been overwritten by v0.1.28.
+
+Before debugging “my feature isn't showing up,” verify the version and commit represented by the installed app. To keep unreleased behavior visible, the local build must compare newer than the available release or the change must be shipped as a release.
+
+Separate unresolved symptom from 2026-07-04: Baz reported that the installed app was closing itself at regular intervals. It was not investigated because the session returned to Command Blocks; `AppUpdateService` quit behavior or a crash were only hypotheses, not a diagnosis.
 
 Related: [[app-refresh-consent-rule]], [[release-tagging-gotcha]]
-- (2026-07-04) Baz reported the installed cockpiT app started closing itself by itself at regular intervals (observed ~2026-07-04). Unresolved — not investigated this session (he said 'neyse'/never mind to focus on Command Blocks). Suspected: AppUpdateService auto-check/quit behavior or a crash; plan to inspect logs together. Flag for follow-up.
-- (2026-07-05) Baz reported the installed cockpiT app started closing itself at regular intervals (observed ~2026-07-04). Not investigated this session (he said 'neyse' to keep focus on Command Blocks). Suspected: AppUpdateService auto-check/quit behavior or a crash — plan to inspect logs together. Flag for follow-up.
-- (2026-07-05) Baz reported the installed cockpiT app started closing itself at regular intervals (observed ~2026-07-04). Not investigated this session (he said 'neyse' to keep focus on Command Blocks). Suspected: AppUpdateService auto-check/quit behavior or a crash — plan to inspect logs together. Flag for follow-up.
-- (2026-07-06) Baz reported the installed cockpiT app started closing itself at regular intervals (observed ~2026-07-04). Not investigated this session (he said 'neyse' to keep focus on Command Blocks). Suspected: AppUpdateService auto-check/quit behavior or a crash — plan to inspect logs together. Flag for follow-up.

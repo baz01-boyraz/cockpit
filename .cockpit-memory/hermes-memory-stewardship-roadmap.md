@@ -5,7 +5,7 @@ title: Hermes Memory + Sentinel Stewardship roadmap
 class: decision
 capturedAt: 2026-07-11T23:10:24.000Z
 gate: save
-updatedAt: 2026-07-12T04:50:43.000Z
+updatedAt: 2026-07-12T05:03:45.000Z
 ---
 
 cockpiT will first tighten memory correctness, then expand Hermes/Sentinel into a proactive operational steward: deterministic sensors watch continuously, Hermes judges only meaningful signals, the owner is notified through the right channel, and durable outcomes return to memory.
@@ -32,24 +32,25 @@ cockpiT will first tighten memory correctness, then expand Hermes/Sentinel into 
    - Combine the existing lexical name/hook score with semantic retrieval or reranking.
    - Preserve positive-match-only behavior, strict note/character caps, source paths, and the rule that unrelated recent notes never pad a prompt.
    - Add bilingual and synonym-heavy retrieval evaluations using real project queries.
-   - **Result:** deterministic exact-token + bilingual concept reranking is implemented without remote embeddings or model calls. The 72-case synthetic gate includes 12 explicit semantic tune regressions; all return one correct note, Top-3 is 62/62, and no-match false injection is 0/10. The original 30 holdout labels remain untouched. A separate redacted real-Turkish-query dogfood set passes 7/7 task queries at Top-1 plus one correct no-match.
+   - **Result:** local exact-token + bilingual concept reranking needs no embedding/model call. The untouched holdout stays clean; synthetic Top-3 is 62/62 with 0/10 false no-match injection, and redacted Turkish dogfood is 7/7 Top-1 plus one correct no-match.
 
 2. **Bullet-level duplicate detection — complete (2026-07-11)**
    - Compare a new observation against atomic bullets/facts inside an existing note, not only the whole accumulated body.
    - Prevent a merge from appending a near-identical bullet.
    - Add long-note, threshold-boundary, and repeated-capture regression tests.
-   - **Result:** reconcile now measures the strongest match across individual paragraphs/list items plus a backwards-compatible combined candidate. Dated bullets and `Related:` navigation do not dilute the score; exact and near-duplicate facts at the inclusive `0.82` boundary are skipped. Merge has its own byte-idempotent guard, repeated captures create no write/ledger entry, and Turkish fact tokens remain intact.
+   - **Result:** reconcile scores paragraphs/list items independently, ignores dates/navigation, and skips facts at the inclusive `0.82` boundary. Merge is byte-idempotent, repeated captures write no note/ledger entry, and Turkish tokens remain intact.
 
 3. **Controlled conflict trust policy — complete (2026-07-11)**
    - Remove silent conflict overwrite as the default behavior.
    - Make the effective policy consistent across backend gate, renderer trust mode, Hermes instructions, and user-facing copy.
    - Preserve before/after provenance and require an explicit human decision or a narrowly defined, auditable policy for destructive replacement.
-   - **Result:** Memory policy v2 keeps conflicts outside every trust mode's auto-commit set. The owner can choose explicitly; Hermes may resolve routine evidence-clear conflicts only with an allowed basis, plain-language rationale, and concrete evidence. Recency is rejected. Successful AI replacements are stale-write checked, ledgered as `replace/delegated` with before/after hashes, and audited with actor+basis+rationale+redacted evidence. Ambiguous cases remain pending with calm, non-technical UI copy.
+   - **Result:** policy v2 excludes conflicts from every auto-commit mode. Owner choices are explicit; Hermes needs a closed evidence basis, plain rationale, and concrete evidence. Recency is rejected. Delegated replacements are stale-checked, ledgered, and audited; ambiguity stays pending with plain UI copy.
 
-4. **One-time cleanup of bloated notes**
+4. **One-time cleanup of bloated notes — complete (2026-07-12)**
    - Snapshot first, then dry-run a bullet-level dedup/merge pass over oversized and repetitive notes.
    - Produce a reviewable report before applying changes; use soft-delete only and verify wikilinks afterward.
    - Do not turn cleanup output into fresh memory observations or re-ingest the memory protocol itself.
+   - **Result:** snapshot `2026-07-12T05-01-41-495Z-6b8a3a5c` captured all 126 notes before the committed dry-run report. Nine repetitive notes were canonically compacted with no deletion/archive: 208,006 → 136,505 bytes, repeated facts 66 → 0, oversized notes 4 → 0. No link target disappeared and no unresolved target was introduced.
 
 5. **Code/documentation consistency**
    - Reconcile stale comments, charter text, AGENTS instructions, UI copy, and memory notes with the behavior actually enforced by code.

@@ -4,32 +4,29 @@ name: memory-hub
 title: Living memory brain built on the markdown hub
 class: architecture
 gate: save
-updatedAt: 2026-07-06T02:31:02.544Z
+updatedAt: 2026-07-12T05:03:45.000Z
 ---
 
-# Memory Hub
+# Memory hub
 
-This knowledge layer (Phase 5). Files in `.cockpit-memory/` are the ONLY
-truth — committed with the repo; the link index is derived in memory.
+Markdown is durable knowledge truth: project notes live in `.cockpit-memory/*.md` and travel with the repository. SQLite holds operational queues/audit state, while the wikilink index and graph are derived views that can be rebuilt.
 
-Design decisions:
-- Note names are slugs by construction (`normalizeNoteName`), so path
-  traversal is unrepresentable; resolve()-guard is defense in depth only.
-- Deletion is a soft move to `.trash/` — honest with the delete_file approval
-  rule without an approvals round-trip.
-- `shared/wikilink.ts` is the kernel (parse, index, rename-refresh);
-  `shared/memory-hub.ts` is the assembly rule shared by service and mock
-  (the [[ipc-contract]] single-rule principle).
-- Storage map: localStorage = UI prefs + Notepad; SQLite = operational;
-  markdown = knowledge. Documented in `docs/plans/memory-graph-plan.md`.
+## Storage and safety
 
-Polish backlog: `write`/`rename` could return `{note, snapshot}` to save the
-UI a round-trip (asymmetry noted by the 5.4 build); graph view is time-boxed
-extra credit — backlinks carry 80% of the value. Agent read access is deferred
-to [[swarm-design]], where its first real consumer lives.
-- (2026-07-04) cockpiT memory is markdown files (`.cockpit-memory/*.md`), not SQLite. In v0.1.33 it grew a full auto-brain pipeline: Capture → Distill → Reconcile → Gate → Commit/Review. It reads the Claude Code session `.jsonl` transcripts (via ClaudeSessionsService), redacts every fact through `redactText`, an LLM distills observations, reconcile detects duplicate/conflict against existing notes, a gate decides save-vs-ask, then atomic write with a provenance ledger + snapshot/restore. Two brains: project brain (`.cockpit-memory/`) and a global Baz brain (`<userData>/baz-memory/`) for cross-project user facts. Auto-capture runs on both idle-timeout and session-end via a durable SQLite queue. Roadmap: docs/memory-imp.md.
-- (2026-07-04) cockpiT has two separate memory stores: the project 'Living brain' (flat .md files in .cockpit-memory/) and the global 'Baz brain' (MEMORY.md + files). The graph only resolves links between notes that exist in the SAME store. When a project note links to a Baz-brain note (e.g. [[model-routing-preference]], [[app-refresh-consent-rule]], [[swarm-auto-assign]], [[swarm-agent-boundaries]]), the target isn't in the project folder, so the graph reports it as 'unresolved', and a note whose only links point out of the store shows as 'orphan' (e.g. named-agents-team). This is by design (two brains are intentionally separate), not a bug — it's a cosmetic graph warning. Consolidate reports these same links as 'dangling'.
-- (2026-07-05) cockpiT memory is markdown files (`.cockpit-memory/*.md`), not SQLite. In v0.1.33 it grew a full auto-brain pipeline: Capture → Distill → Reconcile → Gate → Commit/Review. It reads the Claude Code session `.jsonl` transcripts (via ClaudeSessionsService), redacts every fact through `redactText`, an LLM distills observations, reconcile detects duplicate/conflict against existing notes, a gate decides save-vs-ask, then atomic write with a provenance ledger + snapshot/restore. Two brains: project brain (`.cockpit-memory/`) and a global Baz brain (`<userData>/baz-memory/`) for cross-project user facts. Auto-capture runs on both idle-timeout and session-end via a durable SQLite queue. Roadmap: docs/memory-imp.md.
-- (2026-07-05) cockpiT memory is markdown files (`.cockpit-memory/*.md`), not SQLite. In v0.1.33 it grew a full auto-brain pipeline: Capture → Distill → Reconcile → Gate → Commit/Review. It reads the Claude Code session `.jsonl` transcripts (via ClaudeSessionsService), redacts every fact through `redactText`, an LLM distills observations, reconcile detects duplicate/conflict against existing notes, a gate decides save-vs-ask, then atomic write with a provenance ledger + snapshot/restore. Two brains: project brain (`.cockpit-memory/`) and a global Baz brain (`<userData>/baz-memory/`) for cross-project user facts. Auto-capture runs on both idle-timeout and session-end via a durable SQLite queue. Roadmap: docs/memory-imp.md.
-- (2026-07-06) cockpiT has two separate memory stores: the project 'Living brain' (flat .md files in .cockpit-memory/) and the global 'Baz brain' (MEMORY.md + files). The graph only resolves links between notes that exist in the SAME store. When a project note links to a Baz-brain note (e.g. [[model-routing-preference]], [[app-refresh-consent-rule]], [[swarm-auto-assign]], [[swarm-agent-boundaries]]), the target isn't in the project folder, so the graph reports it as 'unresolved', and a note whose only links point out of the store shows as 'orphan' (e.g. named-agents-team). This is by design (two brains are intentionally separate), not a bug — it's a cosmetic graph warning. Consolidate reports these same links as 'dangling'.
-- (2026-07-06) MemoryHubService auto-generates timestamped snapshot copies of all memory notes under `.cockpit-memory/.snapshots/<timestamp>/` on every edit (for internal undo/versioning). These and the `.trash/` directory are internal backup artifacts that must never enter git tracking — without a gitignore entry they accumulate hundreds of untracked files that pollute git status. Fixed in commit 5525b36 (July 2026) by adding both dirs to .gitignore.
+- Note names are normalized slugs, making traversal unrepresentable; resolved-path checks add defense in depth.
+- Delete is always a soft move to `.trash/`.
+- `shared/wikilink.ts` owns parsing, indexes, and rename refresh. `shared/memory-hub.ts` is the assembly rule shared by the real service and mock, following [[ipc-contract]].
+- Snapshots copy top-level notes into `.cockpit-memory/.snapshots/<timestamp>/`. Both `.snapshots/` and `.trash/` are internal recovery data and must remain ignored by git (fixed by `5525b36`).
+
+## Capture pipeline
+
+The v0.1.33 pipeline is Capture → Distill → Reconcile → Gate → Commit/Review. Session transcripts are redacted before an LLM distills bounded observations; deterministic reconciliation classifies new, merge, duplicate, or conflict; policy gates decide save versus review; accepted writes are atomic and carry ledger/snapshot provenance. Idle and session-end capture use a durable SQLite work queue. Current contracts live in `docs/memory-imp.md` and `docs/MEMORY-CHARTER.md`.
+
+There are two isolated brains:
+
+- Project brain: `.cockpit-memory/`
+- Baz/global brain: `<userData>/baz-memory/`
+
+Links resolve only inside their own brain. A project note linking to a global fact such as [[model-routing-preference]], [[app-refresh-consent-rule]], [[swarm-auto-assign]], or [[swarm-agent-boundaries]] therefore appears unresolved/orphaned in the project graph. This is a known cross-brain navigation limitation, not proof that the target fact is missing. Consolidation reports the same targets as dangling but must not invent project copies to silence the warning.
+
+Related: [[swarm-design]], [[memory-reconcile-dedup-gotcha]], [[memory-trust-modes]]

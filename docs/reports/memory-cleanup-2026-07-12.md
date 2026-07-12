@@ -1,6 +1,6 @@
 # One-time memory cleanup — dry-run report
 
-Status: reviewed dry run; no live note had been rewritten when this report was created.
+Status: completed. The dry-run version was committed before any live note rewrite; results below were added only after verification.
 
 ## Safety checkpoint
 
@@ -40,3 +40,14 @@ Status: reviewed dry run; no live note had been rewritten when this report was c
 ## Approval basis
 
 This is a one-time cleanup explicitly requested by the owner. The dry run and snapshot make the operation bounded and recoverable; the actual rewrite remains a separate, reviewable git commit.
+
+## Verified result
+
+- Notes: 126 → 126; no note was deleted or archived.
+- Hub size: 208,006 → 136,505 UTF-8 bytes (71,501 bytes / 34% smaller).
+- Repeated fact candidates: 66 → 0.
+- Notes above the 8 KB soft ceiling: 4 → 0.
+- Whole-note duplicate pairs: 0 → 0.
+- Existing unresolved targets: unchanged at 11; no new unresolved target was introduced.
+- Removed wikilink targets: 0. One additional link to the existing `brand-mark-gauge-needle` note was added.
+- Restore snapshot remains available under the safety-checkpoint path above.

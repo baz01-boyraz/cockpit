@@ -1,26 +1,32 @@
 ---
 schema: 1
 name: molten-obsidian-design
-title: Molten Obsidian brand triad + dual-engine color identity
+title: Molten Obsidian visual system and product wordmark
 class: architecture
 capturedAt: 2026-07-04T20:42:41.082Z
 gate: save
-updatedAt: 2026-07-07T01:10:13.214Z
+updatedAt: 2026-07-12T05:03:45.000Z
 ---
 
-cockpiT's brand color system is a role-based triad on an obsidian ground with a strict accent budget (~90/7/2/1, max ~3 ember attention points per view): Ember (orange ramp, `--molten` gradient) = the pilot's attention/CTAs; Glacier (cool blue) = machine data; Lime = safe/go signal. Dual-engine identity is fixed: Claude = ember, Codex = glacier (glacier replaced Codex's old teal #13bd92 and unified inconsistent Codex blues). Core problem this solved was 'ember fatigue' — everything being orange made the accent meaningless. Light discipline: one resting/breathing glow per view region; three glow primitives (core/pool/trace). Signature motions (glint sweep, CountUp tick-up, 1px conic ember-trace hover ring via @property + masked conic border, toast one-shot bloom) animate only transform/opacity and are all gated behind prefers-reduced-motion. Documented in docs/DESIGN-VISION.md and docs/DESIGN.md; shipped commit 20a77dd.
+# Molten Obsidian
 
-Related: [[diff-review]]
-- (2026-07-04) The premium wordmark typeface is Space Grotesk (Baz's pick). It is self-hosted (OFL, latin variable subset ~22KB) at public/fonts/space-grotesk-latin.woff2 and exposed via a display-font token in tokens.css — NOT loaded from Google Fonts CDN, because the app CSP is font-src 'self' data:. Both the dashboard hero title and the left-rail brand mark render 'cockpit' in this face with the molten copper→amber gradient, so rail and hero read as one system. The big hero title is the product wordmark 'cockpit', not the project name; the project name moved to the eyebrow (COMMAND CENTER · <project>). Shipped in commit a35dac1.
-- (2026-07-04) v0.1.35 (commit a35dac1): (1) Removed the HeroEngines usage box from the dashboard command-center hero — it was triple-shown (left-rail footer + Usage nav item), so hero grid collapsed from 3 cols to 2 (identity | CTAs). (2) Big hero title now renders the product wordmark 'cockpit' (not the project name) in Space Grotesk with the molten copper→amber gradient; project name moved to the eyebrow (COMMAND CENTER · <project>) and still lives in the top bar + project switcher. (3) Left-rail brand header rebuilt: copper monogram tile + 'cockpit' wordmark in the same Space Grotesk face + 'developer' as a quiet capsule tag, so rail and hero read as siblings.
-- (2026-07-04) Dashboard command-center hero renders the product wordmark 'cockpit' in the molten gradient — NOT the project name. Project awareness moves to the eyebrow (COMMAND CENTER · <project>), and stays in the top bar + project switcher. The hero's usage/ENGINES box was removed as redundant (usage already appears in the left-rail footer strip and behind the Usage nav item); the hero grid collapsed from 3 cols to identity | CTAs so the CTAs breathe. Shipped in commit a35dac1 on main (unpushed, batch-release). Baz's driver: 'premium, eye-catching' wordmark that won't look out of place.
-- (2026-07-04) The command-center dashboard hero's big title renders the product wordmark 'cockpit' (Space Grotesk, molten gradient), NOT the active project name. Project awareness is preserved by moving the project name to the eyebrow line (COMMAND CENTER · <project>), plus it stays in the top bar and project switcher. The hero was also decluttered: the ENGINES/usage box was removed as a triplicate (usage already shows in the left-rail footer and the Usage nav), collapsing the hero grid to identity | CTAs.
-- (2026-07-05) Dashboard command-center hero's big title now renders the product wordmark 'cockpit' (Space Grotesk, molten gradient) instead of the active project name; project name moved to the eyebrow line (COMMAND CENTER · <project>) and still appears in the top bar + project switcher. The redundant HeroEngines usage box (Claude/Codex %) was removed from the hero since usage was already shown in the left-rail footer and the Usage nav item — hero grid collapsed from 3 columns to identity | CTAs. Shipped in commit a35dac1 on main (unpushed, batch-release convention).
-- (2026-07-05) Dashboard command-center hero title now renders the product wordmark 'cockpit' instead of the active project name — project name moved to the hero eyebrow line (COMMAND CENTER · <project>) and remains in the top bar + project switcher. The hero's ENGINES usage box (Claude/Codex %) was removed as redundant since the same usage is already shown in the left-rail footer strip and the Usage nav tab; hero grid collapsed from 3 columns to 2 (identity | CTAs).
-- (2026-07-05) v0.1.35 (commit a35dac1): (1) Removed the HeroEngines usage box from the dashboard command-center hero — it was triple-shown (left-rail footer + Usage nav item), so hero grid collapsed from 3 cols to 2 (identity | CTAs). (2) Big hero title now renders the product wordmark 'cockpit' (not the project name) in Space Grotesk with the molten copper→amber gradient; project name moved to the eyebrow (COMMAND CENTER · <project>) and still lives in the top bar + project switcher. (3) Left-rail brand header rebuilt: copper monogram tile + 'cockpit' wordmark in the same Space Grotesk face + 'developer' as a quiet capsule tag, so rail and hero read as siblings.
-- (2026-07-05) When styling the graph's new zoom control buttons, `--bg-raised` was assumed to exist as a design token but doesn't. `--surface-3` is the correct token for raised/elevated surface buttons in this design system.
-- (2026-07-05) Dashboard command-center hero renders the product wordmark 'cockpit' in the molten gradient — NOT the project name. Project awareness moves to the eyebrow (COMMAND CENTER · <project>), and stays in the top bar + project switcher. The hero's usage/ENGINES box was removed as redundant (usage already appears in the left-rail footer strip and behind the Usage nav item); the hero grid collapsed from 3 cols to identity | CTAs so the CTAs breathe. Shipped in commit a35dac1 on main (unpushed, batch-release). Baz's driver: 'premium, eye-catching' wordmark that won't look out of place.
-- (2026-07-05) The command-center dashboard hero's big title renders the product wordmark 'cockpit' (Space Grotesk, molten gradient), NOT the active project name. Project awareness is preserved by moving the project name to the eyebrow line (COMMAND CENTER · <project>), plus it stays in the top bar and project switcher. The hero was also decluttered: the ENGINES/usage box was removed as a triplicate (usage already shows in the left-rail footer and the Usage nav), collapsing the hero grid to identity | CTAs.
-- (2026-07-05) When styling the graph's new zoom control buttons, `--bg-raised` was assumed to exist as a design token but doesn't. `--surface-3` is the correct token for raised/elevated surface buttons in this design system.
-- (2026-07-06) When styling the graph's new zoom control buttons, `--bg-raised` was assumed to exist as a design token but doesn't. `--surface-3` is the correct token for raised/elevated surface buttons in this design system.
-- (2026-07-07) Baz requested Hermes-specific orange UI accents (avatar border, input border, send button) be changed to platinum/white to align with the Hermes ring identity in the Rail. Applied during the v0.1.43 copy-button work.
+cockpiT uses a role-based color triad on an obsidian ground with a strict accent budget (roughly 90/7/2/1 and at most three ember attention points per view):
+
+- Ember / `--molten` marks the pilot's attention and primary actions.
+- Glacier marks machine data and Codex identity; Claude remains ember.
+- Lime means safe/go.
+
+This solved “ember fatigue,” where making everything orange destroyed the accent's meaning. Each view region gets at most one resting glow. The core/pool/trace primitives and signature motions—glint, count-up, masked conic hover ring, and one-shot toast bloom—animate transform/opacity only and honor `prefers-reduced-motion`. The complete contract lives in `docs/DESIGN-VISION.md` and `docs/DESIGN.md` (base system commit `20a77dd`).
+
+## Wordmark and dashboard
+
+Space Grotesk is the premium wordmark face. It is self-hosted at `public/fonts/space-grotesk-latin.woff2`; the CSP intentionally does not depend on Google Fonts. Dashboard hero and left rail use the same molten “cockpit” wordmark. The hero title is the product name, while active-project context lives in `COMMAND CENTER · <project>`, the top bar, and the project switcher.
+
+The redundant HeroEngines block was removed because usage already exists in the rail and Usage view. The hero therefore uses a quieter two-column identity/CTA layout. The rail pairs its wordmark with a copper monogram and restrained developer capsule (v0.1.35, `a35dac1`).
+
+## Durable exceptions
+
+- Raised graph controls use `--surface-3`; `--bg-raised` is not a defined token.
+- Hermes-specific avatar, input, and send accents use platinum/white to match the Hermes ring identity rather than borrowing the general ember CTA color.
+
+Related: [[diff-review]], [[bundled-display-font]], [[brand-mark-gauge-needle]]
