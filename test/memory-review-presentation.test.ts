@@ -79,6 +79,8 @@ describe('presentMemoryReview', () => {
     expect(view.title).toBe('Choose which version to remember')
     expect(view.acceptLabel).toBe('Use new version')
     expect(view.discardLabel).toBe('Keep current version')
+    expect(view.rationale).toMatch(/neither version was chosen automatically/i)
+    expect(view.rationale).not.toMatch(/newer/i)
     expect(view.canEdit).toBe(true)
     expect(isBatchCleanup(review)).toBe(false)
   })

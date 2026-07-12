@@ -93,9 +93,45 @@ const fakeLedger = () => {
 }
 
 const fakeAudit = () => {
-  const records: Array<{ actionType: string; payload?: Record<string, unknown> }> = []
-  const svc = { record: (r: { actionType: string; payload?: Record<string, unknown> }) => { records.push(r); return r } }
+  const records: Array<{
+    actor: string
+    actionType: string
+    summary: string
+    payload?: Record<string, unknown>
+  }> = []
+  const svc = {
+    record: (r: {
+      actor: string
+      actionType: string
+      summary: string
+      payload?: Record<string, unknown>
+    }) => {
+      records.push(r)
+      return r
+    },
+  }
   return { svc: svc as unknown as ConstructorParameters<typeof MemoryPipeline>[6], records }
+}
+
+function seedConflictReview(reviews: ReturnType<typeof fakeReviews>, id: string) {
+  const existing = '# Release process\n\nUse the current signed workflow.'
+  const proposed = '# Release process\n\nUse the replacement workflow.'
+  reviews.items.set(id, {
+    id,
+    brain: projectBrain('p1'),
+    kind: 'conflict',
+    slug: 'release-process',
+    title: 'Release process conflict',
+    proposedContent: proposed,
+    reason: 'The saved fact and a new observation disagree.',
+    existingContent: existing,
+    sourceId: 'session-2',
+    alsoTrash: null,
+    status: 'pending',
+    createdAt: 't',
+    resolvedAt: null,
+  })
+  return { existing, proposed }
 }
 
 describe('MemoryPipeline.capture', () => {
@@ -295,6 +331,89 @@ describe('MemoryPipeline.resolveReview', () => {
     memory = new MemoryHubService(stubProjects(dir))
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
+
+  it('blocks a delegated AI conflict decision without structured evidence', () => {
+    const reviews = fakeReviews()
+    const { existing } = seedConflictReview(reviews, 'conflict-unproven')
+    memory.write('p1', 'release-process', existing)
+    const ledger = fakeLedger()
+    const pipe = new MemoryPipeline(memory, ledger.svc, reviews.svc, stubDistiller([]))
+
+    expect(() =>
+      pipe.resolveReview(
+        'p1',
+        'project',
+        'conflict-unproven',
+        'accept',
+        undefined,
+        { actor: 'ai' },
+      ),
+    ).toThrow(/delegated|evidence|basis/i)
+    expect(memory.read('p1', 'release-process')?.content).toBe(existing)
+    expect(reviews.items.get('conflict-unproven')?.status).toBe('pending')
+    expect(ledger.records).toHaveLength(0)
+  })
+
+  it('audits an evidence-backed Hermes conflict decision and marks its ledger gate delegated', () => {
+    const reviews = fakeReviews()
+    const { existing, proposed } = seedConflictReview(reviews, 'conflict-proven')
+    memory.write('p1', 'release-process', existing)
+    const ledger = fakeLedger()
+    const audit = fakeAudit()
+    const pipe = new MemoryPipeline(
+      memory,
+      ledger.svc,
+      reviews.svc,
+      stubDistiller([]),
+      undefined,
+      undefined,
+      audit.svc,
+    )
+
+    pipe.resolveReview(
+      'p1',
+      'project',
+      'conflict-proven',
+      'accept',
+      undefined,
+      {
+        actor: 'ai',
+        delegated: {
+          basis: 'code-verified',
+          rationale: 'The implementation and release checks both use the replacement workflow.',
+          evidence: 'electron/main release service and the signed-release integration test',
+        },
+      },
+    )
+
+    expect(memory.read('p1', 'release-process')?.content).toBe(proposed)
+    expect(ledger.records).toContainEqual(expect.objectContaining({ gate: 'delegated' }))
+    expect(audit.records).toContainEqual(
+      expect.objectContaining({
+        actor: 'ai',
+        actionType: 'memory.review_resolved',
+        payload: expect.objectContaining({ basis: 'code-verified' }),
+      }),
+    )
+  })
+
+  it('refuses an edit decision that has no edited content', () => {
+    const reviews = fakeReviews()
+    const { existing } = seedConflictReview(reviews, 'conflict-empty-edit')
+    memory.write('p1', 'release-process', existing)
+    const pipe = new MemoryPipeline(memory, fakeLedger().svc, reviews.svc, stubDistiller([]))
+
+    expect(() =>
+      pipe.resolveReview(
+        'p1',
+        'project',
+        'conflict-empty-edit',
+        'edit',
+        undefined,
+        { actor: 'user' },
+      ),
+    ).toThrow(/edited content/i)
+  })
 
   it('accept writes the proposed note and ledgers it', async () => {
     const ledger = fakeLedger()

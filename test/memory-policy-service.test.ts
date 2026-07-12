@@ -60,7 +60,7 @@ describe('MemoryPolicyService', () => {
       brain: 'project:proj-a',
       mode: 'autopilot',
       isExplicit: false,
-      policyVersion: 1,
+      policyVersion: 2,
     })
     const row = db.prepare('SELECT COUNT(*) AS count FROM memory_brain_settings').get() as { count: number }
     expect(row.count).toBe(0)

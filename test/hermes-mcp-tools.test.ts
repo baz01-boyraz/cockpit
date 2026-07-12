@@ -1308,7 +1308,14 @@ describe('Hermes MCP tools — the scoped tool set', () => {
         decision: 'accept',
       })) as ReviewItem[]
       expect(calls.resolveReview).toEqual([
-        { projectId: 'p1', scope: 'project', reviewId: 'r1', decision: 'accept', editedContent: undefined },
+        {
+          projectId: 'p1',
+          scope: 'project',
+          reviewId: 'r1',
+          decision: 'accept',
+          editedContent: undefined,
+          resolution: { actor: 'ai' },
+        },
       ])
       // Only the project brain's remaining queue is re-read (matches the IPC handler).
       expect(calls.listPending).toEqual([projectBrain('p1')])
@@ -1325,8 +1332,62 @@ describe('Hermes MCP tools — the scoped tool set', () => {
         editedContent: 'fixed up',
       })
       expect(calls.resolveReview).toEqual([
-        { projectId: 'p1', scope: 'project', reviewId: 'r1', decision: 'edit', editedContent: 'fixed up' },
+        {
+          projectId: 'p1',
+          scope: 'project',
+          reviewId: 'r1',
+          decision: 'edit',
+          editedContent: 'fixed up',
+          resolution: { actor: 'ai' },
+        },
       ])
+    })
+
+    it('forwards an evidence-backed delegated conflict resolution', async () => {
+      const { ctx, calls } = makeContext()
+      const conflictResolution = {
+        basis: 'source-authority',
+        rationale: 'The owner-authored charter is authoritative over the captured summary.',
+        evidence: 'docs/MEMORY-CHARTER.md conflict policy',
+      }
+
+      await toolNamed(ctx, 'resolve_memory_review').run({
+        projectId: 'p1',
+        scope: 'project',
+        reviewId: 'r1',
+        decision: 'discard',
+        conflictResolution,
+      })
+
+      expect(calls.resolveReview).toEqual([
+        {
+          projectId: 'p1',
+          scope: 'project',
+          reviewId: 'r1',
+          decision: 'discard',
+          editedContent: undefined,
+          resolution: { actor: 'ai', delegated: conflictResolution },
+        },
+      ])
+    })
+
+    it('rejects recency as a delegated conflict basis before resolving', async () => {
+      const { ctx, calls } = makeContext()
+
+      await expect(
+        toolNamed(ctx, 'resolve_memory_review').run({
+          projectId: 'p1',
+          scope: 'project',
+          reviewId: 'r1',
+          decision: 'accept',
+          conflictResolution: {
+            basis: 'recency',
+            rationale: 'The new version arrived later, so it should replace the saved one.',
+            evidence: 'capture timestamp only',
+          },
+        }),
+      ).rejects.toThrow()
+      expect(calls.resolveReview).toEqual([])
     })
 
     it('rejects an unknown decision before resolving', async () => {

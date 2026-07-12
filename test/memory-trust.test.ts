@@ -10,13 +10,35 @@ import {
 
 describe('canonical memory policy', () => {
   it('is machine-readable and locks the trust-sensitive invariants', () => {
-    expect(MEMORY_POLICY.version).toBe(1)
+    expect(MEMORY_POLICY.version).toBe(2)
     expect(MEMORY_POLICY.semanticGate.humanEditsBypassSemanticGate).toBe(true)
     expect(MEMORY_POLICY.conflicts.autoResolve).toBe(false)
     expect(MEMORY_POLICY.lifecycle.archiveRepresentation).toBe('status:archived')
     expect(MEMORY_POLICY.lifecycle.forgetRepresentation).toBe('recoverable-trash')
     expect(MEMORY_POLICY.actors).toEqual(['user', 'ai', 'system'])
     expect(MEMORY_POLICY.ledger.requiredForEveryMutation).toBe(true)
+  })
+
+  it('allows only evidence-backed delegated conflict bases, never recency', () => {
+    const delegated = (
+      MEMORY_POLICY.conflicts as typeof MEMORY_POLICY.conflicts & {
+        delegatedResolver: {
+          allowedBases: readonly string[]
+          rationaleRequired: boolean
+          evidenceRequired: boolean
+        }
+      }
+    ).delegatedResolver
+
+    expect(delegated.allowedBases).toEqual([
+      'human-directive',
+      'code-verified',
+      'source-authority',
+      'equivalent-content',
+    ])
+    expect(delegated.allowedBases).not.toContain('recency')
+    expect(delegated.rationaleRequired).toBe(true)
+    expect(delegated.evidenceRequired).toBe(true)
   })
 
   it('defaults project brains to Autopilot and the global brain to Assisted', () => {
