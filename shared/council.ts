@@ -191,6 +191,25 @@ export interface ScorecardEntry {
   sessions: number
 }
 
+export type CouncilProgressStage = 'preparing' | 'seats' | 'ranking' | 'chairman' | 'complete'
+export type CouncilProgressStatus = 'started' | 'completed' | 'failed'
+
+/** Safe, run-scoped public activity for the waiting surface. This is stage
+ * telemetry and bounded seat output, never hidden chain-of-thought, prompts,
+ * provider errors, or raw tool logs. */
+export interface CouncilProgressEvent {
+  projectId: string
+  runId: string
+  mode: CouncilIntentMode
+  kind: 'stage' | 'seat'
+  stage: CouncilProgressStage
+  status: CouncilProgressStatus
+  seatId?: CouncilTone
+  seatLabel?: string
+  message: string
+  at: string
+}
+
 /** Run lifecycle status carried on each persisted session row (store V-column
  *  `status`). `final` is the honest read for any legacy/NULL row. */
 export type CouncilSessionStatus = 'pending' | 'final' | 'failed'

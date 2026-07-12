@@ -234,6 +234,8 @@ export const councilRunSchema = z.object({
     .enum(['local-only', 'account-models', 'all-configured'])
     .optional(),
   analysisConsent: z.boolean().optional(),
+  // Renderer-generated correlation id for progress events; never a DB/session id.
+  clientRunId: z.string().min(1).max(120).regex(/^[a-zA-Z0-9._:-]+$/).optional(),
 }).superRefine((value, ctx) => {
   const hasAnalysisPolicy = value.analysisEgress !== undefined || value.analysisConsent !== undefined
   if (value.mode !== 'analysis' && hasAnalysisPolicy) {

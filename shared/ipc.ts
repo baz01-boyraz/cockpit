@@ -14,6 +14,7 @@ import type { DiffStat, ReviewResult } from './review'
 import type {
   CouncilIntentMode,
   CouncilSessionSummary,
+  CouncilProgressEvent,
   NormalizedCouncilResult,
   ScorecardEntry,
 } from './council'
@@ -186,6 +187,7 @@ export const IPC = {
   evtAppUpdateChanged: 'evt:appUpdate:changed',
   evtSwarmCardCompleted: 'evt:swarm:cardCompleted',
   evtSentinelAlert: 'evt:sentinel:alert',
+  evtCouncilProgress: 'evt:council:progress',
 } as const
 
 export type Unsubscribe = () => void
@@ -404,6 +406,7 @@ export interface CockpitApi {
         responseLanguage?: string
         analysisEgress?: CouncilAnalysisEgressPolicy
         analysisConsent?: boolean
+        clientRunId?: string
       },
     ): Promise<NormalizedCouncilResult>
     /**
@@ -428,6 +431,8 @@ export interface CockpitApi {
      * instead of holding the heavy result in volatile component state.
      */
     session(projectId: string, sessionId: string): Promise<NormalizedCouncilResult | null>
+    /** Safe stage/seat summaries for the active waiting surface. */
+    onProgress(cb: (event: CouncilProgressEvent) => void): Unsubscribe
   }
   outcomes: {
     /**

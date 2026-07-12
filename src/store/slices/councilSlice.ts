@@ -91,6 +91,7 @@ export const createCouncilSlice: SliceCreator<CouncilSlice> = (set, get) => ({
         responseLanguage: options.responseLanguage,
         analysisEgress: options.analysisEgress,
         analysisConsent: options.analysisConsent,
+        clientRunId: run.id,
       })
       const normalized = normalizeCouncilResult(rawResult)
       const result = normalized?.mode === mode
@@ -175,6 +176,7 @@ export const createCouncilSlice: SliceCreator<CouncilSlice> = (set, get) => ({
         spec: continuationSpec,
         question: active.title,
         responseLanguage: active.responseLanguage,
+        clientRunId: run.id,
       })
       const result = normalizeCouncilResult(rawResult) ?? councilFailure(
         new Error('Council returned an invalid result envelope.'),

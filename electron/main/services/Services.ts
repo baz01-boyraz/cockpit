@@ -225,6 +225,7 @@ export class Services {
       this.memoryRecalls,
       this.memoryContexts,
       this.councilEvidence,
+      opts.events,
     )
     // Track G4: the judgment scorecard read model. It DERIVES outcomes — card
     // fates from the append-only audit trail, verdicts from the shared session

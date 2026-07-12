@@ -25,7 +25,9 @@ import type {
 import type { CockpitApi, SystemInfo, Unsubscribe } from '@shared/ipc'
 import {
   councilSpecVerdictKind,
+  COUNCIL_SEATS,
   normalizeCouncilResult,
+  type CouncilProgressEvent,
   type CouncilResult,
   type CouncilResultV3,
   type CouncilSessionSummary,
@@ -185,7 +187,25 @@ const dataListeners = new Set<(c: TerminalOutputChunk) => void>()
 const approvalListeners = new Set<() => void>()
 const appUpdateListeners = new Set<(s: AppUpdateState) => void>()
 const logsListeners = new Set<() => void>()
+const councilProgressListeners = new Set<(event: CouncilProgressEvent) => void>()
 const notifyLogsChanged = () => logsListeners.forEach((cb) => cb())
+
+function emitCouncilProgress(
+  projectId: string,
+  runId: string | undefined,
+  mode: CouncilProgressEvent['mode'],
+  event: Omit<CouncilProgressEvent, 'projectId' | 'runId' | 'mode' | 'at'>,
+): void {
+  if (!runId) return
+  const payload: CouncilProgressEvent = {
+    projectId,
+    runId,
+    mode,
+    ...event,
+    at: now(),
+  }
+  councilProgressListeners.forEach((listener) => listener(payload))
+}
 
 const memoryDocsFor = (projectId: string): MemoryDoc[] => memoryHub.get(projectId) ?? []
 const kanbanFor = (projectId: string): KanbanCard[] => kanbanSeed.get(projectId) ?? []
@@ -351,7 +371,7 @@ function mockDiffCouncil(): CouncilResult {
 
 // A finished spec-mode gate for the browser preview: a NEEDS_CLARIFICATION
 // verdict with the questions the author must answer before a build starts.
-function mockSpecCouncil(): CouncilResult {
+function mockSpecCouncil(responseLanguage = 'en'): CouncilResult {
   const seats: CouncilResult['seats'] = [
     {
       id: 'contrarian',
@@ -397,6 +417,7 @@ function mockSpecCouncil(): CouncilResult {
   return {
     ok: true,
     mode: 'spec',
+    responseLanguage,
     seats,
     rankings: [
       {
@@ -455,8 +476,8 @@ function mockSpecCouncil(): CouncilResult {
 // buildable and returns a refined spec the editor can paste into the body.
 // Reached in the browser preview when the draft mentions "acceptance", so both
 // gate branches (approve / clarify) are visually reviewable without a backend.
-function mockSpecCouncilApproved(): CouncilResult {
-  const base = mockSpecCouncil()
+function mockSpecCouncilApproved(responseLanguage = 'en'): CouncilResult {
+  const base = mockSpecCouncil(responseLanguage)
   return {
     ...base,
     seats: base.seats.map((s) =>
@@ -1518,10 +1539,61 @@ export function createMockApi(): CockpitApi {
       },
     },
     council: {
-      run: async (_projectId, opts) => {
-        await new Promise((r) => setTimeout(r, 1600))
+      run: async (projectId, opts) => {
         const mode = opts?.mode ?? 'diff'
+        const progress = (
+          event: Omit<CouncilProgressEvent, 'projectId' | 'runId' | 'mode' | 'at'>,
+        ) => emitCouncilProgress(projectId, opts?.clientRunId, mode, event)
+        progress({
+          kind: 'stage',
+          stage: 'preparing',
+          status: 'completed',
+          message: mode === 'analysis'
+            ? 'Bounded repository evidence prepared.'
+            : 'Request secured and Council context prepared.',
+        })
+        await new Promise((r) => setTimeout(r, 120))
         if (mode === 'analysis') {
+          if ((opts?.analysisEgress ?? 'local-only') === 'local-only') {
+            await new Promise((r) => setTimeout(r, 320))
+            progress({
+              kind: 'stage',
+              stage: 'complete',
+              status: 'completed',
+              message: 'Local evidence inventory is ready; no model was called.',
+            })
+          } else {
+            progress({
+              kind: 'stage',
+              stage: 'seats',
+              status: 'started',
+              message: 'Five seats are reviewing the same bounded evidence independently.',
+            })
+            for (const seat of COUNCIL_SEATS) {
+              await new Promise((r) => setTimeout(r, 90))
+              progress({
+                kind: 'seat',
+                stage: 'seats',
+                status: 'completed',
+                seatId: seat.id,
+                seatLabel: seat.label,
+                message: `${seat.label} completed a source-checked perspective.`,
+              })
+            }
+            progress({
+              kind: 'stage',
+              stage: 'ranking',
+              status: 'completed',
+              message: 'Peer review completed.',
+            })
+            await new Promise((r) => setTimeout(r, 180))
+            progress({
+              kind: 'stage',
+              stage: 'chairman',
+              status: 'started',
+              message: 'Chairman is compressing the final report.',
+            })
+          }
           return mockAnalysisCouncil(
             detectCouncilResponseLanguage(
               `${opts?.question ?? ''}\n${opts?.spec ?? ''}`,
@@ -1531,11 +1603,52 @@ export function createMockApi(): CockpitApi {
             opts?.analysisConsent ?? false,
           )
         }
+        progress({
+          kind: 'stage',
+          stage: 'seats',
+          status: 'started',
+          message: 'Five seats are reviewing independently.',
+        })
+        for (const seat of COUNCIL_SEATS) {
+          await new Promise((r) => setTimeout(r, 110))
+          progress({
+            kind: 'seat',
+            stage: 'seats',
+            status: 'completed',
+            seatId: seat.id,
+            seatLabel: seat.label,
+            message: `${seat.label} completed a concise perspective.`,
+          })
+        }
+        progress({
+          kind: 'stage',
+          stage: 'ranking',
+          status: 'started',
+          message: 'Seats are comparing the room anonymously.',
+        })
+        await new Promise((r) => setTimeout(r, 180))
+        progress({
+          kind: 'stage',
+          stage: 'chairman',
+          status: 'started',
+          message: 'Chairman is compressing the strongest findings.',
+        })
+        await new Promise((r) => setTimeout(r, 180))
+        progress({
+          kind: 'stage',
+          stage: 'complete',
+          status: 'completed',
+          message: 'Council decision is ready.',
+        })
         if (mode !== 'spec') return normalizedMockCouncil(mockDiffCouncil())
         // A draft that already spells out acceptance criteria gates through.
+        const responseLanguage = detectCouncilResponseLanguage(
+          `${opts?.question ?? ''}\n${opts?.spec ?? ''}`,
+          opts?.responseLanguage,
+        )
         return normalizedMockCouncil(/acceptance|author clarification answers/i.test(opts?.spec ?? '')
-          ? mockSpecCouncilApproved()
-          : mockSpecCouncil())
+          ? mockSpecCouncilApproved(responseLanguage)
+          : mockSpecCouncil(responseLanguage))
       },
       // A plausible cross-session standing, best (lowest average rank) first —
       // enough for the browser preview to render the scorecard chips.
@@ -1611,6 +1724,10 @@ export function createMockApi(): CockpitApi {
         await new Promise((r) => setTimeout(r, 120))
         const result = mockCouncilSessionDetail(sessionId)
         return result ? normalizedMockCouncil(result) : null
+      },
+      onProgress: (cb) => {
+        councilProgressListeners.add(cb)
+        return (() => councilProgressListeners.delete(cb)) as Unsubscribe
       },
     },
     outcomes: {

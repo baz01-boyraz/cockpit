@@ -5,6 +5,7 @@ import { relativeTime } from '@shared/time'
 import type {
   CouncilClarificationAnswer,
   CouncilIntentMode,
+  CouncilProgressEvent,
   CouncilSessionSummary,
   ScorecardEntry,
 } from '@shared/council'
@@ -20,6 +21,7 @@ import {
 import { CouncilVerdict, CouncilVerdictEvidence } from '../components/CouncilVerdict'
 import { CouncilScorecard } from '../components/CouncilScorecard'
 import { CouncilJourney, type CouncilJourneyPhase } from '../components/CouncilJourney'
+import { CouncilRoom } from '../components/CouncilRoom'
 import { CopyTextButton } from '../components/CopyTextButton'
 import { CouncilTextSurface } from '../components/CouncilTextSurface'
 import { downloadTextFile } from '../lib/text-export'
@@ -73,6 +75,7 @@ export function CouncilPanel() {
   const [analysisEgress, setAnalysisEgress] =
     useState<CouncilAnalysisEgressPolicy>('local-only')
   const [analysisConsent, setAnalysisConsent] = useState(false)
+  const [progressEvents, setProgressEvents] = useState<CouncilProgressEvent[]>([])
   const resultRef = useRef<HTMLElement | null>(null)
 
   const revealResult = useCallback(() => {
@@ -116,9 +119,21 @@ export function CouncilPanel() {
     setIntent('spec')
     setAnalysisEgress('local-only')
     setAnalysisConsent(false)
+    setProgressEvents([])
     setComposerOpen(useStore.getState().councilActive === null)
     void loadHistory()
   }, [projectId, resetCouncil, loadHistory])
+
+  useEffect(() => {
+    return cockpit().council.onProgress((event) => {
+      if (event.projectId !== projectId) return
+      setProgressEvents((current) =>
+        current[0]?.runId === event.runId
+          ? [...current, event].slice(-20)
+          : [event],
+      )
+    })
+  }, [projectId])
 
   // A run finishing (in-store) means a new persisted session exists — reload the
   // history the moment convening flips false, so the browser stays current.
@@ -457,19 +472,20 @@ export function CouncilPanel() {
           </div>
           <CouncilJourney phase={journeyPhase} />
           {busy ? (
-            <div className="councilView__busy">
-              <span className="councilView__pulse" aria-hidden />
-              <div>
-                <strong>{convening ? 'Council is reviewing your request.' : 'Opening the saved decision.'}</strong>
-                <span>
-                  {convening
-                    ? active.mode === 'analysis'
-                      ? 'Council is collecting bounded evidence and checking every claim against its source. You can leave this page; the result will stay here.'
-                      : 'You do not need to do anything yet. You can leave this page; the result will stay here.'
-                    : 'This should take only a moment.'}
-                </span>
+            convening ? (
+              <CouncilRoom
+                events={progressEvents.filter((event) => event.runId === active.id)}
+                responseLanguage={active.responseLanguage}
+              />
+            ) : (
+              <div className="councilView__busy">
+                <span className="councilView__pulse" aria-hidden />
+                <div>
+                  <strong>Opening the saved decision.</strong>
+                  <span>This should take only a moment.</span>
+                </div>
               </div>
-            </div>
+            )
           ) : (
             active.result && (
               <CouncilTextSurface

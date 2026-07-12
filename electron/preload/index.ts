@@ -109,10 +109,12 @@ const api: CockpitApi = {
         responseLanguage: opts?.responseLanguage,
         analysisEgress: opts?.analysisEgress,
         analysisConsent: opts?.analysisConsent,
+        clientRunId: opts?.clientRunId,
       }),
     scorecard: (projectId) => invoke(IPC.councilScorecard, { projectId }),
     sessions: (projectId) => invoke(IPC.councilSessions, { projectId }),
     session: (projectId, sessionId) => invoke(IPC.councilSession, { projectId, sessionId }),
+    onProgress: (cb) => subscribe(IPC.evtCouncilProgress, cb),
   },
   outcomes: {
     scorecard: (projectId) => invoke(IPC.outcomesScorecard, { projectId }),

@@ -114,15 +114,16 @@ describe('Council v3 run transport', () => {
     ).toThrow()
   })
 
-  it('forwards responseLanguage across preload and the main-process handler', () => {
+  it('forwards language, egress, and progress correlation across the transport', () => {
     expect(preloadSrc).toContain('responseLanguage: opts?.responseLanguage')
     expect(preloadSrc).toContain('analysisEgress: opts?.analysisEgress')
     expect(preloadSrc).toContain('analysisConsent: opts?.analysisConsent')
+    expect(preloadSrc).toContain('clientRunId: opts?.clientRunId')
     expect(mainSrc).toMatch(
-      /const \{ projectId, model, mode, dir, question, spec, cardId, responseLanguage, analysisEgress, analysisConsent \}/,
+      /const \{ projectId, model, mode, dir, question, spec, cardId, responseLanguage, analysisEgress, analysisConsent, clientRunId \}/,
     )
     expect(mainSrc).toContain(
-      'specText: spec, cardId, responseLanguage, analysisEgress, analysisConsent',
+      'specText: spec, cardId, responseLanguage, analysisEgress, analysisConsent, clientRunId',
     )
   })
 })

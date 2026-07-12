@@ -33,8 +33,26 @@ test('Council waiting state shows a live, safe room instead of an empty card', a
   const room = page.getByLabel('Council live activity')
   await expect(room).toBeVisible()
   await expect(room.getByText('Council room')).toBeVisible()
-  await expect(room.getByText('Contrarian')).toBeVisible()
+  await expect(room.getByText('Contrarian', { exact: true })).toBeVisible()
   await expect(room).toContainText('Concise outputs, not private reasoning')
+})
+
+test('clarification keeps three decisions in one compact, localized flow', async ({ page }) => {
+  await gotoApp(page)
+  await openView(page, 'council')
+
+  await page.getByLabel('Output language').selectOption('tr')
+  await page.locator('#council-spec').fill('Council akışını değerlendir')
+  await page.getByRole('button', { name: 'Review my request' }).click()
+
+  const form = page.locator('.councilClarify')
+  await expect(form.getByText('Soru 1 / 3')).toBeVisible()
+  await expect(form.getByLabel('Soru 1')).toHaveAttribute('aria-current', 'step')
+  await expect(form.getByLabel('Soru 2')).toBeVisible()
+  await form.getByRole('button', { name: 'Önerilen cevabı kullan' }).click()
+  await form.getByRole('button', { name: 'Sonraki soru' }).click()
+  await expect(form.getByText('Soru 2 / 3')).toBeVisible()
+  await expect(form.getByLabel('Soru 2')).toHaveAttribute('aria-current', 'step')
 })
 
 test('local repository analysis discloses zero egress and cited-source metadata', async ({ page }) => {

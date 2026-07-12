@@ -23,6 +23,7 @@ import {
   type CouncilDecisionKind,
   type CouncilIntentMode,
   type CouncilMode,
+  type CouncilProgressEvent,
   type CouncilRanking,
   type CouncilResult,
   type CouncilResultArtifact,
@@ -71,6 +72,7 @@ import type { MemoryHubService } from './MemoryHubService'
 import type { MemoryRecallService } from './MemoryRecallService'
 import type { ProjectService } from './ProjectService'
 import type { SentinelService } from './SentinelService'
+import type { CockpitEvents } from '../events'
 
 /** The narrow sentinel slice this service feeds — structural so tests pass
  *  `undefined` (no-op). Sentinel never depends on CouncilService. */
@@ -196,6 +198,8 @@ export interface CouncilRunOpts {
   analysisEgress?: CouncilAnalysisEgressPolicy
   /** Required whenever analysis evidence may reach an external model provider. */
   analysisConsent?: boolean
+  /** Renderer correlation id for safe live progress; never persisted. */
+  clientRunId?: string
 }
 
 /**
@@ -233,8 +237,31 @@ export class CouncilService {
     private readonly memoryContexts?: MemoryContextProvider,
     /** C3's deterministic, read-only repository evidence boundary. */
     private readonly evidence?: CouncilEvidenceCollector,
+    /** Safe public stage activity for the waiting surface. */
+    private readonly events?: Pick<CockpitEvents, 'emitTyped'>,
   ) {
     this.sweepStalePending()
+  }
+
+  private emitProgress(
+    projectId: string,
+    opts: CouncilRunOpts,
+    event: Omit<CouncilProgressEvent, 'projectId' | 'runId' | 'mode' | 'at'>,
+  ): void {
+    if (!opts.clientRunId || !this.events) return
+    this.events.emitTyped('council:progress', {
+      projectId,
+      runId: opts.clientRunId,
+      mode: opts.mode ?? 'diff',
+      ...event,
+      message: boundedCouncilText(redactText(event.message).replace(/\s+/g, ' '), 220),
+      at: new Date().toISOString(),
+    })
+  }
+
+  private seatProgressMessage(seat: CouncilSeatOutput): string {
+    if (!seat.ok) return 'No response after the allowed fallback chain.'
+    return seat.findings?.[0]?.finding ?? seat.text
   }
 
   /**
@@ -297,6 +324,14 @@ export class CouncilService {
       `${question ?? ''}\n${specText ?? ''}`,
       opts.responseLanguage,
     )
+    this.emitProgress(projectId, opts, {
+      kind: 'stage',
+      stage: 'preparing',
+      status: 'completed',
+      message: mode === 'spec'
+        ? 'Request secured and Council context prepared.'
+        : 'Change set sanitized and Council context prepared.',
+    })
 
     // A6: the early-exit guards have passed, so the run is committed — reserve a
     // durable `pending` row up front. A crash between here and the final
@@ -349,14 +384,40 @@ export class CouncilService {
       })
 
     // Phase 1 — every seat, in parallel, blind to the others (with fallback).
+    this.emitProgress(projectId, opts, {
+      kind: 'stage',
+      stage: 'seats',
+      status: 'started',
+      message: 'Five seats are reviewing independently.',
+    })
     const seats: CouncilSeatOutput[] = await Promise.all(
-      COUNCIL_SEATS.map((seat) =>
-        this.runSeat(seat, seatPrompt(seat), claudeOverride, seatCallOpts),
-      ),
+      COUNCIL_SEATS.map(async (seat) => {
+        const output = await this.runSeat(
+          seat,
+          seatPrompt(seat),
+          claudeOverride,
+          seatCallOpts,
+        )
+        this.emitProgress(projectId, opts, {
+          kind: 'seat',
+          stage: 'seats',
+          status: output.ok ? 'completed' : 'failed',
+          seatId: output.id,
+          seatLabel: output.label,
+          message: this.seatProgressMessage(output),
+        })
+        return output
+      }),
     )
 
     const okSeats = seats.filter((s) => s.ok)
     if (okSeats.length === 0) {
+      this.emitProgress(projectId, opts, {
+        kind: 'stage',
+        stage: 'complete',
+        status: 'failed',
+        message: 'No Council seat returned a usable response.',
+      })
       const result = this.buildResult({
         ok: false,
         mode,
@@ -376,6 +437,12 @@ export class CouncilService {
     }
 
     // Phase 2 — anonymized peer rankings (needs ≥2 responses to compare).
+    this.emitProgress(projectId, opts, {
+      kind: 'stage',
+      stage: 'ranking',
+      status: 'started',
+      message: 'Successful seats are comparing the room anonymously.',
+    })
     const { rankings, aggregate, labelToSeat } = await this.runRankings(
       seats,
       okSeats,
@@ -384,6 +451,12 @@ export class CouncilService {
       memoryBlock,
       responseLanguage,
     )
+    this.emitProgress(projectId, opts, {
+      kind: 'stage',
+      stage: 'ranking',
+      status: 'completed',
+      message: `${rankings.length} peer reviews completed.`,
+    })
 
     // Phase 3 — chairman synthesis (with fallback retry).
     const chairmanPrompt =
@@ -406,7 +479,21 @@ export class CouncilService {
             memoryBlock,
             responseLanguage,
           })
+    this.emitProgress(projectId, opts, {
+      kind: 'stage',
+      stage: 'chairman',
+      status: 'started',
+      message: 'Chairman is compressing the strongest findings into one decision.',
+    })
     const verdict = await this.runChairman(chairmanPrompt, mode, chairmanCallOpts)
+    this.emitProgress(projectId, opts, {
+      kind: 'stage',
+      stage: 'chairman',
+      status: verdict ? 'completed' : 'failed',
+      message: verdict
+        ? 'Chairman synthesis is ready.'
+        : 'Chairman synthesis was unavailable; seat evidence remains preserved.',
+    })
 
     const specVerdict = mode === 'spec' && verdict ? normalizeSpecVerdict(verdict) : null
 
@@ -424,6 +511,12 @@ export class CouncilService {
       started,
       responseLanguage,
       memoryContext: automaticMemory,
+    })
+    this.emitProgress(projectId, opts, {
+      kind: 'stage',
+      stage: 'complete',
+      status: 'completed',
+      message: 'Council decision is ready.',
     })
     return this.persistAndRecord(projectId, pendingId, cardId, mode, question, result)
   }
@@ -735,6 +828,13 @@ export class CouncilService {
       )
     }
 
+    this.emitProgress(projectId, opts, {
+      kind: 'stage',
+      stage: 'preparing',
+      status: 'started',
+      message: 'Collecting a bounded, redacted repository evidence pack.',
+    })
+
     const automaticMemory = this.memoryContexts?.forTask({
       projectId,
       surface: 'council_analysis',
@@ -748,6 +848,12 @@ export class CouncilService {
         ...(automaticMemory?.receipt ? { memoryReceipt: automaticMemory.receipt } : {}),
       })
     } catch {
+      this.emitProgress(projectId, opts, {
+        kind: 'stage',
+        stage: 'complete',
+        status: 'failed',
+        message: 'Repository evidence could not be collected safely.',
+      })
       return this.earlyError(
         'analysis',
         'Repository evidence could not be collected safely; no model was called and nothing was persisted.',
@@ -772,6 +878,12 @@ export class CouncilService {
         pack: evidencePack,
         responseLanguage,
         egress,
+      })
+      this.emitProgress(projectId, opts, {
+        kind: 'stage',
+        stage: 'complete',
+        status: 'completed',
+        message: 'Local evidence inventory is ready; no model was called.',
       })
       return this.persistAndRecord(
         projectId,
@@ -807,6 +919,12 @@ export class CouncilService {
         pack: evidencePack,
         responseLanguage,
         egress,
+      })
+      this.emitProgress(projectId, opts, {
+        kind: 'stage',
+        stage: 'complete',
+        status: 'failed',
+        message: 'Could not create the isolated analysis workspace.',
       })
       return this.persistAndRecord(
         projectId,
@@ -863,10 +981,31 @@ export class CouncilService {
           memoryBlock: automaticMemory?.block,
           responseLanguage,
         })
+      this.emitProgress(projectId, opts, {
+        kind: 'stage',
+        stage: 'seats',
+        status: 'started',
+        message: 'Five seats are reviewing the same bounded evidence independently.',
+      })
       const seats = await Promise.all(
-        COUNCIL_SEATS.map((seat) =>
-          this.runSeat(seat, seatPrompt(seat), claudeOverride, seatCallOpts, allowedSet),
-        ),
+        COUNCIL_SEATS.map(async (seat) => {
+          const output = await this.runSeat(
+            seat,
+            seatPrompt(seat),
+            claudeOverride,
+            seatCallOpts,
+            allowedSet,
+          )
+          this.emitProgress(projectId, opts, {
+            kind: 'seat',
+            stage: 'seats',
+            status: output.ok ? 'completed' : 'failed',
+            seatId: output.id,
+            seatLabel: output.label,
+            message: this.seatProgressMessage(output),
+          })
+          return output
+        }),
       )
       const okSeats = seats.filter((seat) => seat.ok)
       if (okSeats.length === 0) {
@@ -875,6 +1014,12 @@ export class CouncilService {
           pack: evidencePack,
           responseLanguage,
           egress,
+        })
+        this.emitProgress(projectId, opts, {
+          kind: 'stage',
+          stage: 'complete',
+          status: 'failed',
+          message: 'No allowed Council seat returned a usable response.',
         })
         return this.persistAndRecord(
           projectId,
@@ -906,6 +1051,12 @@ export class CouncilService {
       ]
         .filter((value): value is string => Boolean(value?.trim()))
         .join('\n\n')
+      this.emitProgress(projectId, opts, {
+        kind: 'stage',
+        stage: 'ranking',
+        status: 'started',
+        message: 'Successful seats are comparing the evidence-backed responses anonymously.',
+      })
       const { rankings, aggregate, labelToSeat } = await this.runRankings(
         seats,
         okSeats,
@@ -915,6 +1066,12 @@ export class CouncilService {
         responseLanguage,
         fenceTag,
       )
+      this.emitProgress(projectId, opts, {
+        kind: 'stage',
+        stage: 'ranking',
+        status: 'completed',
+        message: `${rankings.length} peer reviews completed.`,
+      })
       const chairmanPrompt = buildAnalysisChairmanPrompt({
         question: request,
         seats,
@@ -924,6 +1081,12 @@ export class CouncilService {
         fenceTag,
         memoryBlock: automaticMemory?.block,
         responseLanguage,
+      })
+      this.emitProgress(projectId, opts, {
+        kind: 'stage',
+        stage: 'chairman',
+        status: 'started',
+        message: 'Chairman is validating claims and compressing the final report.',
       })
       const rawChairman = await this.runAnalysisChairman(
         chairmanPrompt,
@@ -940,6 +1103,14 @@ export class CouncilService {
         pack: evidencePack,
         responseLanguage,
         egress,
+      })
+      this.emitProgress(projectId, opts, {
+        kind: 'stage',
+        stage: 'complete',
+        status: ok ? 'completed' : 'failed',
+        message: ok
+          ? 'Source-backed repository analysis is ready.'
+          : 'No provenance-checked analysis claim could be produced.',
       })
       return this.persistAndRecord(
         projectId,
