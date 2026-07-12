@@ -8,6 +8,9 @@
 export const REVIEW_KINDS = ['new', 'merge', 'conflict', 'maintenance'] as const
 export type ReviewKind = (typeof REVIEW_KINDS)[number]
 
+export const REVIEW_OPERATIONS = ['archive', 'merge'] as const
+export type ReviewOperation = (typeof REVIEW_OPERATIONS)[number]
+
 export const REVIEW_STATUSES = ['pending', 'accepted', 'edited', 'discarded'] as const
 export type ReviewStatus = (typeof REVIEW_STATUSES)[number]
 
@@ -28,6 +31,10 @@ export interface ReviewItem {
   sourceId: string | null
   /** On accept, also soft-delete this slug (a merge's dropped duplicate). */
   alsoTrash: string | null
+  /** Explicit cleanup operation. Optional so queued rows from older builds remain readable. */
+  operation?: ReviewOperation | null
+  /** Original content of the duplicate, used to reject a stale cleanup safely. */
+  alsoTrashContent?: string | null
   status: ReviewStatus
   createdAt: string
   resolvedAt: string | null
@@ -35,3 +42,19 @@ export interface ReviewItem {
 
 export const REVIEW_DECISIONS = ['accept', 'edit', 'discard'] as const
 export type ReviewDecision = (typeof REVIEW_DECISIONS)[number]
+
+/**
+ * Resolve a review's cleanup operation, including rows queued before the
+ * explicit `operation` field existed. The legacy fallback is deliberately
+ * narrow: ordinary merge/conflict reviews must never become maintenance work.
+ */
+export function reviewOperation(
+  item: Pick<ReviewItem, 'kind' | 'title' | 'reason' | 'alsoTrash' | 'operation'>,
+): ReviewOperation | null {
+  if (item.operation === 'archive' || item.operation === 'merge') return item.operation
+  if (item.kind !== 'maintenance') return null
+  if (item.alsoTrash) return 'merge'
+  if (/^archive stale note:/i.test(item.title)) return 'archive'
+  if (/^curation\s*[—-]\s*archive:/i.test(item.reason)) return 'archive'
+  return null
+}

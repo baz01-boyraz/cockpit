@@ -11,16 +11,14 @@ interface MemoryNoteListProps {
   onCreate: (slug: string) => Promise<boolean>
 }
 
-/** Note cards vary in height → incremental render rather than fixed windowing. */
-const INITIAL = 80
-const STEP = 60
-const INCREMENTAL_THRESHOLD = 200
+/** Keep the everyday library intentionally small; search still covers every note. */
+const RECENT_LIMIT = 24
 
 /** Left zone: recency-ordered note list with filter-as-you-type + new note. */
 export function MemoryNoteList({ notes, selected, onSelect, onCreate }: MemoryNoteListProps) {
   const [query, setQuery] = useState('')
   const [creating, setCreating] = useState(false)
-  const [limit, setLimit] = useState(INITIAL)
+  const [showAll, setShowAll] = useState(false)
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -28,33 +26,30 @@ export function MemoryNoteList({ notes, selected, onSelect, onCreate }: MemoryNo
     return notes.filter((n) => n.title.toLowerCase().includes(q) || n.name.includes(q))
   }, [notes, query])
 
-  // Reset the render budget whenever the visible set changes (filter / new notes).
-  useEffect(() => setLimit(INITIAL), [query, notes])
+  useEffect(() => setShowAll(false), [notes])
 
-  const incremental = visible.length > INCREMENTAL_THRESHOLD
-  const shown = incremental ? visible.slice(0, limit) : visible
-  const hasMore = incremental && limit < visible.length
-
-  // Grow the budget as the list nears its bottom — DOM stays bounded until scrolled.
-  const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    if (!hasMore) return
-    const el = e.currentTarget
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) {
-      setLimit((l) => Math.min(visible.length, l + STEP))
-    }
-  }
+  const searching = query.trim().length > 0
+  const shown = searching || showAll ? visible : visible.slice(0, RECENT_LIMIT)
+  const hiddenCount = Math.max(0, visible.length - shown.length)
 
   return (
     <section className="card memory__list">
+      <div className="memlist__intro">
+        <div>
+          <span className="eyebrow">library</span>
+          <strong>Memories</strong>
+        </div>
+        <span className="memlist__total mono">{notes.length}</span>
+      </div>
       <div className="memlist__head">
         <div className="memlist__search">
           <IconSearch width={13} height={13} className="memlist__searchIcon" />
           <input
             className="memlist__searchInput"
-            placeholder="Filter notes…"
+            placeholder="Find a memory…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            aria-label="Filter notes"
+            aria-label="Find a memory"
           />
         </div>
         <button
@@ -82,7 +77,7 @@ export function MemoryNoteList({ notes, selected, onSelect, onCreate }: MemoryNo
         </div>
       )}
 
-      <div className="memlist__body scroll-y" onScroll={onScroll}>
+      <div className="memlist__body scroll-y">
         {visible.length === 0 ? (
           <div className="emptyline">
             {query ? `Nothing matches “${query}”.` : 'No notes yet.'}
@@ -97,22 +92,7 @@ export function MemoryNoteList({ notes, selected, onSelect, onCreate }: MemoryNo
                 >
                   <div className="memnote__top">
                     <span className="memnote__title">{n.title}</span>
-                    <span className="memnote__time mono">{relativeTime(n.updatedAt)}</span>
-                  </div>
-                  <div className="memnote__meta">
-                    <span className="memnote__name mono">{n.name}</span>
-                    <span
-                      className={`memnote__count mono ${n.linksOut === 0 ? 'memnote__count--zero' : ''}`}
-                      title={`${n.linksOut} outgoing link${n.linksOut === 1 ? '' : 's'}`}
-                    >
-                      {n.linksOut}→
-                    </span>
-                    <span
-                      className={`memnote__count mono ${n.backlinks === 0 ? 'memnote__count--zero' : ''}`}
-                      title={`${n.backlinks} backlink${n.backlinks === 1 ? '' : 's'}`}
-                    >
-                      ←{n.backlinks}
-                    </span>
+                    <span className="memnote__time">{relativeTime(n.updatedAt)}</span>
                   </div>
                 </button>
               </li>
@@ -120,6 +100,15 @@ export function MemoryNoteList({ notes, selected, onSelect, onCreate }: MemoryNo
           </ul>
         )}
       </div>
+
+      {!searching && notes.length > RECENT_LIMIT && (
+        <div className="memlist__foot">
+          <span>{showAll ? `All ${notes.length} memories` : `${hiddenCount} older memories tucked away`}</span>
+          <button className="memlist__browse" onClick={() => setShowAll((value) => !value)}>
+            {showAll ? 'Show recent' : 'Browse all'}
+          </button>
+        </div>
+      )}
     </section>
   )
 }

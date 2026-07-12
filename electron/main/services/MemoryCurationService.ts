@@ -116,13 +116,13 @@ export class MemoryCurationService {
           brain,
           kind: 'maintenance',
           slug: p.note,
-          // Non-destructive by construction: proposedContent is the note's CURRENT
-          // body, so accepting is a harmless re-save. The owner does the actual
-          // soft-delete from the Memory panel — the sweep never removes a note.
+          // The sweep only proposes. If accepted later, the pipeline verifies
+          // this exact content is still current before soft-deleting the note.
           title: `Archive stale note: ${p.note}`,
           proposedContent: note.content,
           reason: `Curation — archive: ${p.reason}`,
           existingContent: note.content,
+          operation: 'archive',
         })
         queued += 1
       } else {
@@ -138,7 +138,9 @@ export class MemoryCurationService {
           proposedContent: mergeDuplicate(into.name, into.content, p.note, note.content, nowIso),
           reason: `Curation — merge: ${p.reason}`,
           existingContent: into.content,
+          operation: 'merge',
           alsoTrash: p.note,
+          alsoTrashContent: note.content,
         })
         queued += 1
       }

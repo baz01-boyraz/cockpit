@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { ReviewItem, ReviewKind } from '@shared/memory-review'
+import type { ReviewItem, ReviewKind, ReviewOperation } from '@shared/memory-review'
 import { brainForAccess, type MemoryBrainScope } from '@shared/memory-policy'
 import type { Db } from '../db/Database'
 
@@ -21,6 +21,8 @@ interface Payload {
   existingContent: string | null
   sourceId: string | null
   alsoTrash?: string | null
+  operation?: ReviewOperation | null
+  alsoTrashContent?: string | null
 }
 
 function toItem(r: ReviewRow): ReviewItem {
@@ -36,6 +38,8 @@ function toItem(r: ReviewRow): ReviewItem {
     existingContent: p.existingContent,
     sourceId: p.sourceId,
     alsoTrash: p.alsoTrash ?? null,
+    operation: p.operation ?? null,
+    alsoTrashContent: p.alsoTrashContent ?? null,
     status: r.status as ReviewItem['status'],
     createdAt: r.created_at,
     resolvedAt: r.resolved_at,
@@ -52,6 +56,8 @@ export interface CreateReviewInput {
   existingContent?: string | null
   sourceId?: string | null
   alsoTrash?: string | null
+  operation?: ReviewOperation | null
+  alsoTrashContent?: string | null
 }
 
 /**
@@ -72,6 +78,8 @@ export class MemoryReviewService {
       existingContent: input.existingContent ?? null,
       sourceId: input.sourceId ?? null,
       alsoTrash: input.alsoTrash ?? null,
+      operation: input.operation ?? null,
+      alsoTrashContent: input.alsoTrashContent ?? null,
     }
     this.db
       .prepare(

@@ -105,4 +105,20 @@ describe('MemoryReviewService brain authorization', () => {
     expect(reviews.getPendingFor('proj-a', 'global', global.id)?.id).toBe(global.id)
     expect(reviews.markResolvedFor('proj-a', 'global', global.id, 'accepted')).toBe(true)
   })
+
+  it('round-trips cleanup operation and stale-check content through storage', () => {
+    const review = reviews.create({
+      ...proposal(projectBrain('proj-a'), 'canonical-note'),
+      kind: 'maintenance',
+      operation: 'merge',
+      alsoTrash: 'duplicate-note',
+      alsoTrashContent: '# Duplicate note\n\nOriginal duplicate content.',
+    })
+
+    expect(reviews.get(review.id)).toMatchObject({
+      operation: 'merge',
+      alsoTrash: 'duplicate-note',
+      alsoTrashContent: '# Duplicate note\n\nOriginal duplicate content.',
+    })
+  })
 })

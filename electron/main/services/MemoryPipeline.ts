@@ -11,7 +11,7 @@ import { reconcile, type Reconciled } from '@shared/memory-reconcile'
 import type { MemoryDoc } from '@shared/memory-hub'
 import type { Observation } from '@shared/memory-observation'
 import type { CaptureResult, MemoryProposal } from '@shared/memory-pipeline'
-import type { ReviewDecision, ReviewKind } from '@shared/memory-review'
+import { reviewOperation, type ReviewDecision, type ReviewKind } from '@shared/memory-review'
 import {
   brainForAccess,
   canAutoCommit,
@@ -293,19 +293,50 @@ export class MemoryPipeline {
       return
     }
 
+    const operation = reviewOperation(item)
+    const { memory, hubId } = this.hubForBrain(item.brain, projectId, scope)
+    const before = memory.read(hubId, item.slug)?.content ?? null
+    if (before !== item.existingContent) {
+      throw new Error('This memory changed since the review was created. Dismiss it and review the latest version.')
+    }
+
+    if (item.alsoTrash && item.alsoTrashContent != null) {
+      const duplicate = memory.read(hubId, item.alsoTrash)?.content ?? null
+      if (duplicate !== item.alsoTrashContent) {
+        throw new Error('A duplicate memory changed since cleanup was proposed. Run cleanup again before combining it.')
+      }
+    }
+
+    if (operation === 'archive') {
+      if (decision === 'edit') throw new Error('Archive cleanup cannot be edited.')
+      if (before === null) throw new Error('This memory is no longer active.')
+      memory.trash(hubId, item.slug)
+      this.ledger.record({
+        brain: item.brain,
+        noteSlug: item.slug,
+        action: 'trash',
+        gate: 'consolidation',
+        sourceId: item.sourceId,
+        contentBefore: before,
+        contentAfter: null,
+      })
+      if (!this.reviews.markResolvedFor(projectId, scope, reviewId, 'accepted')) {
+        throw new Error('Review item changed before it could be resolved.')
+      }
+      return
+    }
+
     const content = decision === 'edit' && editedContent != null ? editedContent : item.proposedContent
     const check = validateNoteContent(item.slug, content)
     if (!check.ok) {
       throw new Error(`Refusing to write invalid note "${item.slug}": ${check.errors.join('; ')}`)
     }
-    const { memory, hubId } = this.hubForBrain(item.brain, projectId, scope)
-    const before = memory.read(hubId, item.slug)?.content ?? null
     memory.write(hubId, item.slug, content)
     this.ledger.record({
       brain: item.brain,
       noteSlug: item.slug,
-      action: item.kind === 'merge' ? 'merge' : 'create',
-      gate: 'asked',
+      action: item.kind === 'merge' || operation === 'merge' ? 'merge' : 'create',
+      gate: item.kind === 'maintenance' ? 'consolidation' : 'asked',
       sourceId: item.sourceId,
       contentBefore: before,
       contentAfter: content,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cockpit } from '../../lib/cockpit'
 import type { MemoryHealth } from '@shared/memory-health'
 import type { MemoryHubSnapshot, MemoryNote } from '@shared/memory-hub'
@@ -13,7 +13,12 @@ import {
   type MemoryTrustMode,
 } from '@shared/memory-policy'
 import { BAZ_GLOBAL_BRAIN } from '@shared/memory-ledger'
-import { IconBolt, IconCheck, IconMemory, IconX } from '../icons'
+import { IconBolt, IconCheck, IconChevron, IconMemory, IconX } from '../icons'
+import {
+  isBatchCleanup,
+  presentMemoryReview,
+  summarizeMemoryReviews,
+} from '@shared/memory-review-presentation'
 
 interface MemoryBrainBarProps {
   projectId: string
@@ -73,6 +78,8 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
+  const [inboxOpen, setInboxOpen] = useState(false)
+  const [activeReviewId, setActiveReviewId] = useState<string | null>(null)
   const [baz, setBaz] = useState<MemoryHubSnapshot | null>(null)
   const [bazNote, setBazNote] = useState<MemoryNote | null>(null)
   const [showBaz, setShowBaz] = useState(false)
@@ -128,6 +135,8 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
     setReport(null)
     setError(null)
     setEditing(null)
+    setInboxOpen(false)
+    setActiveReviewId(null)
     setMode(PROJECT_DEFAULT_TRUST_MODE)
     setGlobalMode(GLOBAL_DEFAULT_TRUST_MODE)
     void refresh()
@@ -177,9 +186,10 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
     setReport(null)
     try {
       const res = await cockpit().memory.consolidate(projectId)
-      const { duplicates, oversized, dangling } = res.report
       setFlash(
-        `Consolidated: ${res.queued} merges queued · ${duplicates.length} duplicate, ${oversized.length} oversized, ${dangling.length} dangling.`,
+        res.queued > 0
+          ? `Memory found ${res.queued} cleanup suggestion${res.queued === 1 ? '' : 's'}. They are grouped in the inbox.`
+          : 'Memory is tidy — no duplicate notes need your attention.',
       )
       await refresh()
     } catch (err) {
@@ -241,6 +251,7 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
         const scope: MemoryBrainScope = item.brain === BAZ_GLOBAL_BRAIN ? 'global' : 'project'
         await cockpit().memory.resolveReview(projectId, scope, item.id, decision, content)
         setEditing(null)
+        setActiveReviewId(null)
         await refresh()
         if (decision !== 'discard') onChanged()
       } catch (err) {
@@ -250,31 +261,51 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
     [projectId, editDraft, refresh, onChanged],
   )
 
-  /** Batch clear the queue. Accept skips conflicts (those need a real decision). */
-  const resolveAll = useCallback(
-    async (decision: 'accept' | 'discard') => {
+  /** Batch actions are deliberately limited to explicit housekeeping proposals. */
+  const resolveMany = useCallback(
+    async (targets: ReviewItem[], decision: 'accept' | 'discard') => {
       setError(null)
       setBusy(true)
+      let resolved = 0
       try {
-        const targets =
-          decision === 'accept' ? reviews.filter((r) => r.kind !== 'conflict') : reviews
         for (const item of targets) {
           const scope: MemoryBrainScope = item.brain === BAZ_GLOBAL_BRAIN ? 'global' : 'project'
           await cockpit().memory.resolveReview(projectId, scope, item.id, decision)
+          resolved += 1
         }
         setEditing(null)
-        await refresh()
-        if (decision === 'accept' && targets.length > 0) onChanged()
+        setActiveReviewId(null)
       } catch (err) {
         setError(msg(err))
       } finally {
+        await refresh()
+        if (decision === 'accept' && resolved > 0) onChanged()
         setBusy(false)
       }
     },
-    [projectId, reviews, refresh, onChanged],
+    [projectId, refresh, onChanged],
   )
 
-  const acceptable = reviews.filter((r) => r.kind !== 'conflict').length
+  const reviewSummary = useMemo(() => summarizeMemoryReviews(reviews), [reviews])
+  const cleanupReviews = useMemo(() => reviews.filter(isBatchCleanup), [reviews])
+  const requestedReviewIndex = activeReviewId
+    ? reviews.findIndex((item) => item.id === activeReviewId)
+    : 0
+  const activeReviewIndex = requestedReviewIndex >= 0 ? requestedReviewIndex : 0
+  const activeReview = reviews[activeReviewIndex] ?? null
+  const activePresentation = activeReview ? presentMemoryReview(activeReview) : null
+  const inboxHeadline = reviewSummary.attention > 0
+    ? `${reviewSummary.attention} memory decision${reviewSummary.attention === 1 ? '' : 's'} need a closer look`
+    : reviewSummary.cleanup > 0
+      ? `${reviewSummary.cleanup} cleanup suggestion${reviewSummary.cleanup === 1 ? '' : 's'}, neatly grouped`
+      : `${reviewSummary.suggestions} memory suggestion${reviewSummary.suggestions === 1 ? '' : 's'}`
+
+  const moveReview = (delta: number) => {
+    if (reviews.length === 0) return
+    const next = (activeReviewIndex + delta + reviews.length) % reviews.length
+    setEditing(null)
+    setActiveReviewId(reviews[next].id)
+  }
 
   return (
     <section className="brainbar">
@@ -288,18 +319,15 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
 
         {health && (
           <div className="brainbar__stats" aria-label="Brain health">
-            <span className="brainstat" title="Notes in the brain">
-              <b>{health.noteCount}</b> notes
+            <span className="brainstat" title="Active memories in this project">
+              <b>{health.noteCount}</b> memories
             </span>
-            <span className={`brainstat ${health.orphanCount ? 'brainstat--warn' : ''}`} title="Notes with no links in or out">
-              <b>{health.orphanCount}</b> orphan
-            </span>
-            <span className={`brainstat ${health.unresolvedCount ? 'brainstat--warn' : ''}`} title="Wanted links with no note yet">
-              <b>{health.unresolvedCount}</b> unresolved
-            </span>
+            {health.orphanCount + health.unresolvedCount === 0 ? (
+              <span className="brainstat brainstat--healthy"><IconCheck width={11} height={11} /> tidy</span>
+            ) : null}
             {reviews.length > 0 && (
-              <span className="brainstat brainstat--ask" title="Facts the brain wants you to confirm">
-                <b>{reviews.length}</b> to review
+              <span className="brainstat brainstat--ask" title="Suggestions waiting in the Memory inbox">
+                <b>{reviews.length}</b> in inbox
               </span>
             )}
           </div>
@@ -322,11 +350,11 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
           <button
             className={`brainbtn ${showBaz ? 'brainbtn--on' : ''}`}
             onClick={() => void toggleBaz()}
-            title="Facts about you, portable across every project (memory-imp Phase 6)"
+            title="Facts about you that can travel across projects"
           >
             Baz brain
           </button>
-          <button className="brainbtn" onClick={() => void consolidate()} disabled={busy} title="Merge duplicates, surface dangling links (memory-imp G5)">
+          <button className="brainbtn" onClick={() => void consolidate()} disabled={busy} title="Find duplicate memories and tidy their connections">
             Consolidate
           </button>
           <button className="brainbtn brainbtn--accent" onClick={() => void capture()} disabled={busy}>
@@ -442,63 +470,130 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
       )}
 
       {reviews.length > 0 && (
-        <>
-          <div className="reviewbatch">
-            <span className="reviewbatch__count">
-              {reviews.length} to review
-              {acceptable < reviews.length ? ` · ${reviews.length - acceptable} conflict` : ''}
+        <section className={`memoryInbox ${inboxOpen ? 'memoryInbox--open' : ''}`}>
+          <button
+            className="memoryInbox__toggle"
+            onClick={() => setInboxOpen((open) => !open)}
+            aria-expanded={inboxOpen}
+          >
+            <span className="memoryInbox__mark" aria-hidden>
+              <IconMemory width={17} height={17} />
             </span>
-            <div className="reviewbatch__actions">
-              <button
-                className="brainbtn brainbtn--accent brainbtn--sm"
-                onClick={() => void resolveAll('accept')}
-                disabled={busy || acceptable === 0}
-                title="Save every non-conflict item at once"
-              >
-                <IconCheck width={13} height={13} /> Save all{acceptable ? ` (${acceptable})` : ''}
-              </button>
-              <button
-                className="brainbtn brainbtn--ghost brainbtn--sm reviewcard__discard"
-                onClick={() => void resolveAll('discard')}
-                disabled={busy}
-                title="Discard everything in the queue"
-              >
-                <IconX width={13} height={13} /> Discard all
-              </button>
-            </div>
-          </div>
-          <ul className="reviewlist">
-            {reviews.map((item) => (
-              <li key={item.id} className={`reviewcard reviewcard--${item.kind}`}>
-                <div className="reviewcard__head">
-                  <span className="reviewcard__title">{item.title}</span>
-                  <span>
-                    <span className="chip mono reviewcard__kind">
-                      {item.brain === BAZ_GLOBAL_BRAIN ? 'baz-global' : 'project'}
-                    </span>{' '}
-                    <span className="chip mono reviewcard__kind">{item.kind}</span>
-                  </span>
+            <span className="memoryInbox__copy">
+              <span className="eyebrow">memory inbox</span>
+              <strong>{inboxHeadline}</strong>
+              <small>Plain-language choices first. Note text stays hidden until you ask for it.</small>
+            </span>
+            <span className="memoryInbox__counts" aria-label={`${reviews.length} total suggestions`}>
+              {reviewSummary.cleanup > 0 && <span>{reviewSummary.cleanup} cleanup</span>}
+              {reviewSummary.attention > 0 && <span className="memoryInbox__count--attention">{reviewSummary.attention} attention</span>}
+              {reviewSummary.suggestions > 0 && <span>{reviewSummary.suggestions} suggestion</span>}
+            </span>
+            <span className="memoryInbox__openLabel">
+              {inboxOpen ? 'Close' : 'Review'}
+              <IconChevron
+                width={14}
+                height={14}
+                className={`memoryInbox__chevron ${inboxOpen ? 'memoryInbox__chevron--open' : ''}`}
+                aria-hidden
+              />
+            </span>
+          </button>
+
+          {inboxOpen && activeReview && activePresentation && (
+            <div className="memoryInbox__body">
+              <div className="memoryInbox__toolbar">
+                <span className="memoryInbox__progress">
+                  Decision {activeReviewIndex + 1} of {reviews.length}
+                </span>
+                <div className="memoryInbox__nav" aria-label="Move through memory suggestions">
+                  <button onClick={() => moveReview(-1)} aria-label="Previous suggestion" disabled={reviews.length < 2}>
+                    <IconChevron width={13} height={13} className="memoryInbox__prev" />
+                  </button>
+                  <button onClick={() => moveReview(1)} aria-label="Next suggestion" disabled={reviews.length < 2}>
+                    <IconChevron width={13} height={13} />
+                  </button>
                 </div>
-                <p className="reviewcard__reason">{item.reason}</p>
-                {editing === item.id ? (
+              </div>
+
+              {cleanupReviews.length > 1 && (
+                <div className="memoryInbox__batch">
+                  <div>
+                    <strong>Handle the housekeeping together</strong>
+                    <span>{cleanupReviews.length} archive or duplicate suggestions — conflicts are never included.</span>
+                  </div>
+                  <div className="memoryInbox__batchActions">
+                    <button
+                      className="brainbtn brainbtn--accent brainbtn--sm"
+                      onClick={() => void resolveMany(cleanupReviews, 'accept')}
+                      disabled={busy}
+                    >
+                      <IconCheck width={13} height={13} /> Apply cleanup
+                    </button>
+                    <button
+                      className="brainbtn brainbtn--ghost brainbtn--sm"
+                      onClick={() => void resolveMany(cleanupReviews, 'discard')}
+                      disabled={busy}
+                    >
+                      Keep everything
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <article className={`memoryDecision memoryDecision--${activePresentation.category}`}>
+                <div className="memoryDecision__topline">
+                  <span className="eyebrow">{activePresentation.eyebrow}</span>
+                  <span>{activeReview.brain === BAZ_GLOBAL_BRAIN ? 'Personal memory' : 'This project'}</span>
+                </div>
+                <h3>{activePresentation.title}</h3>
+                <p className="memoryDecision__summary">{activePresentation.summary}</p>
+
+                {activePresentation.rationale && (
+                  <div className="memoryDecision__why">
+                    <span>Why it surfaced</span>
+                    <p>{activePresentation.rationale}</p>
+                  </div>
+                )}
+
+                {editing === activeReview.id ? (
                   <textarea
                     className="reviewcard__editor mono"
                     value={editDraft}
                     onChange={(e) => setEditDraft(e.target.value)}
-                    rows={8}
+                    rows={9}
                     spellCheck={false}
+                    aria-label="Edit proposed memory"
                   />
                 ) : (
-                  <details className="reviewcard__preview">
-                    <summary>Preview note</summary>
-                    <pre className="reviewcard__pre mono">{item.proposedContent}</pre>
+                  <details className="memoryDecision__details">
+                    <summary>See note details</summary>
+                    {activeReview.kind === 'conflict' && activeReview.existingContent ? (
+                      <div className="memoryDecision__compare">
+                        <div>
+                          <span>Current memory</span>
+                          <pre className="reviewcard__pre mono">{activeReview.existingContent}</pre>
+                        </div>
+                        <div>
+                          <span>New version</span>
+                          <pre className="reviewcard__pre mono">{activeReview.proposedContent}</pre>
+                        </div>
+                      </div>
+                    ) : (
+                      <pre className="reviewcard__pre mono">{activeReview.proposedContent}</pre>
+                    )}
                   </details>
                 )}
-                <div className="reviewcard__actions">
-                  {editing === item.id ? (
+
+                <div className="memoryDecision__actions">
+                  {editing === activeReview.id ? (
                     <>
-                      <button className="brainbtn brainbtn--accent brainbtn--sm" onClick={() => void resolve(item, 'edit')}>
-                        <IconCheck width={13} height={13} /> Save edited
+                      <button
+                        className="brainbtn brainbtn--accent brainbtn--sm"
+                        onClick={() => void resolve(activeReview, 'edit')}
+                        disabled={busy}
+                      >
+                        <IconCheck width={13} height={13} /> Save adjusted text
                       </button>
                       <button className="brainbtn brainbtn--ghost brainbtn--sm" onClick={() => setEditing(null)}>
                         Cancel
@@ -506,28 +601,38 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
                     </>
                   ) : (
                     <>
-                      <button className="brainbtn brainbtn--accent brainbtn--sm" onClick={() => void resolve(item, 'accept')}>
-                        <IconCheck width={13} height={13} /> Save
-                      </button>
                       <button
-                        className="brainbtn brainbtn--ghost brainbtn--sm"
-                        onClick={() => {
-                          setEditing(item.id)
-                          setEditDraft(item.proposedContent)
-                        }}
+                        className="brainbtn brainbtn--accent brainbtn--sm"
+                        onClick={() => void resolve(activeReview, 'accept')}
+                        disabled={busy}
                       >
-                        Edit
+                        <IconCheck width={13} height={13} /> {activePresentation.acceptLabel}
                       </button>
-                      <button className="brainbtn brainbtn--ghost brainbtn--sm reviewcard__discard" onClick={() => void resolve(item, 'discard')}>
-                        <IconX width={13} height={13} /> Discard
+                      {activePresentation.canEdit && (
+                        <button
+                          className="brainbtn brainbtn--ghost brainbtn--sm"
+                          onClick={() => {
+                            setEditing(activeReview.id)
+                            setEditDraft(activeReview.proposedContent)
+                          }}
+                        >
+                          Adjust text
+                        </button>
+                      )}
+                      <button
+                        className="brainbtn brainbtn--ghost brainbtn--sm reviewcard__discard"
+                        onClick={() => void resolve(activeReview, 'discard')}
+                        disabled={busy}
+                      >
+                        <IconX width={13} height={13} /> {activePresentation.discardLabel}
                       </button>
                     </>
                   )}
                 </div>
-              </li>
-            ))}
-          </ul>
-        </>
+              </article>
+            </div>
+          )}
+        </section>
       )}
     </section>
   )

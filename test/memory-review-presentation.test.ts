@@ -4,7 +4,7 @@ import {
   isBatchCleanup,
   presentMemoryReview,
   summarizeMemoryReviews,
-} from '../src/lib/memory-review-presentation'
+} from '../shared/memory-review-presentation'
 
 const item = (over: Partial<ReviewItem> = {}): ReviewItem => ({
   id: 'review-1',

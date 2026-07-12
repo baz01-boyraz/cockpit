@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import type { MemoryHubSnapshot, MemoryNote } from '@shared/memory-hub'
-import { IconMemory, IconWarning, IconX } from '../components/icons'
+import { IconWarning, IconX } from '../components/icons'
 import { MemoryNoteList } from '../components/memory/MemoryNoteList'
 import { MemoryReader } from '../components/memory/MemoryReader'
 import { MemoryConnections } from '../components/memory/MemoryConnections'
 import { MemoryEmptyState } from '../components/memory/MemoryEmptyState'
 import { MemoryGraph } from '../components/memory/MemoryGraph'
 import { MemoryBrainBar } from '../components/memory/MemoryBrainBar'
+import { MemoryOverview } from '../components/memory/MemoryOverview'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong writing to the hub.'
@@ -206,8 +207,8 @@ export function MemoryPanel() {
         {!hubEmpty && !loading && (
           <div className="panel__actions">
             <span className="chip mono">{notes.length} notes</span>
-            <span className="chip mono" title="Plain markdown, next to the repo">
-              .cockpit-memory/
+            <span className="chip" title="Plain markdown stored in .cockpit-memory/ beside this project">
+              Saved with project
             </span>
             <div className="memtoggle" role="group" aria-label="Memory layout">
               <button
@@ -266,7 +267,7 @@ export function MemoryPanel() {
           />
         </div>
       ) : (
-        <div className="memory__cols">
+        <div className={`memory__cols ${note && !noteLoading ? '' : 'memory__cols--overview'}`}>
           <MemoryNoteList
             notes={notes}
             selected={selected}
@@ -274,63 +275,52 @@ export function MemoryPanel() {
             onCreate={createNote}
           />
 
-          {note && !noteLoading ? (
-            <MemoryReader
-              key={note.name}
-              note={note}
-              mode={mode}
-              draft={draft}
-              saving={saving}
-              savedFlash={savedFlash}
-              pendingCreate={pendingCreate}
-              known={known}
-              onDraftChange={setDraft}
-              onEdit={() => {
-                setDraft(note.content)
-                setMode('edit')
-              }}
-              onSave={() => void saveDraft()}
-              onCancelEdit={() => {
-                if (confirmLeave()) setMode('read')
-              }}
-              onRename={(to) => void renameNote(to)}
-              onTrash={() => void trashNote()}
-              onOpenLink={(name) => void openNote(name)}
-              onOfferCreate={setPendingCreate}
-              onCreatePending={() => {
-                if (pendingCreate) void createNote(pendingCreate)
-              }}
-              onDismissPending={() => setPendingCreate(null)}
-            />
-          ) : (
-            <section className="card memory__reader memory__reader--idle">
-              {noteLoading ? (
+          {noteLoading ? (
+            <section className="card memory__reader memory__reader--idle memory__reader--wide">
                 <div className="memory__busy memory__busy--bare">
                   <span className="memory__pulse" aria-hidden />
                   Opening note…
                 </div>
-              ) : (
-                <div className="memidle">
-                  <div className="memidle__icon">
-                    <IconMemory width={20} height={20} />
-                  </div>
-                  <div className="memidle__title">Select a note</div>
-                  <p className="memidle__sub">
-                    Pick a note from the list, or create one — every{' '}
-                    <span className="mono">[[wikilink]]</span> you write becomes a connection here.
-                  </p>
-                </div>
-              )}
             </section>
+          ) : note ? (
+            <>
+              <MemoryReader
+                key={note.name}
+                note={note}
+                mode={mode}
+                draft={draft}
+                saving={saving}
+                savedFlash={savedFlash}
+                pendingCreate={pendingCreate}
+                known={known}
+                onDraftChange={setDraft}
+                onEdit={() => {
+                  setDraft(note.content)
+                  setMode('edit')
+                }}
+                onSave={() => void saveDraft()}
+                onCancelEdit={() => {
+                  if (confirmLeave()) setMode('read')
+                }}
+                onRename={(to) => void renameNote(to)}
+                onTrash={() => void trashNote()}
+                onOpenLink={(name) => void openNote(name)}
+                onOfferCreate={setPendingCreate}
+                onCreatePending={() => {
+                  if (pendingCreate) void createNote(pendingCreate)
+                }}
+                onDismissPending={() => setPendingCreate(null)}
+              />
+              <MemoryConnections
+                note={note}
+                titles={titles}
+                onOpen={(name) => void openNote(name)}
+                onCreate={(target) => void createNote(target)}
+              />
+            </>
+          ) : (
+            <MemoryOverview notes={notes} onOpen={(name) => void openNote(name)} />
           )}
-
-          <MemoryConnections
-            note={noteLoading ? null : note}
-            unresolved={snapshot?.unresolved ?? []}
-            titles={titles}
-            onOpen={(name) => void openNote(name)}
-            onCreate={(target) => void createNote(target)}
-          />
         </div>
       )}
     </div>
