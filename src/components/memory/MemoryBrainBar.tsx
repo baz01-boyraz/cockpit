@@ -73,6 +73,7 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
   const [health, setHealth] = useState<MemoryHealth | null>(null)
   const [reviews, setReviews] = useState<ReviewItem[]>([])
   const [busy, setBusy] = useState(false)
+  const [reviewBusy, setReviewBusy] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
   const [report, setReport] = useState<CaptureReport | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -135,6 +136,7 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
     setReport(null)
     setError(null)
     setEditing(null)
+    setReviewBusy(false)
     setInboxOpen(false)
     setActiveReviewId(null)
     setMode(PROJECT_DEFAULT_TRUST_MODE)
@@ -246,6 +248,7 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
   const resolve = useCallback(
     async (item: ReviewItem, decision: 'accept' | 'edit' | 'discard') => {
       setError(null)
+      setReviewBusy(true)
       try {
         const content = decision === 'edit' ? editDraft : undefined
         const scope: MemoryBrainScope = item.brain === BAZ_GLOBAL_BRAIN ? 'global' : 'project'
@@ -256,6 +259,8 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
         if (decision !== 'discard') onChanged()
       } catch (err) {
         setError(msg(err))
+      } finally {
+        setReviewBusy(false)
       }
     },
     [projectId, editDraft, refresh, onChanged],
@@ -265,7 +270,7 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
   const resolveMany = useCallback(
     async (targets: ReviewItem[], decision: 'accept' | 'discard') => {
       setError(null)
-      setBusy(true)
+      setReviewBusy(true)
       let resolved = 0
       try {
         for (const item of targets) {
@@ -280,7 +285,7 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
       } finally {
         await refresh()
         if (decision === 'accept' && resolved > 0) onChanged()
-        setBusy(false)
+        setReviewBusy(false)
       }
     },
     [projectId, refresh, onChanged],
@@ -356,10 +361,10 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
           >
             Baz brain
           </button>
-          <button className="brainbtn" onClick={() => void consolidate()} disabled={busy} title="Find duplicate memories and tidy their connections">
+          <button className="brainbtn" onClick={() => void consolidate()} disabled={busy || reviewBusy} title="Find duplicate memories and tidy their connections">
             Consolidate
           </button>
-          <button className="brainbtn brainbtn--accent" onClick={() => void capture()} disabled={busy}>
+          <button className="brainbtn brainbtn--accent" onClick={() => void capture()} disabled={busy || reviewBusy}>
             <IconBolt width={14} height={14} />
             {busy ? 'Capturing…' : 'Capture latest session'}
           </button>
@@ -509,10 +514,10 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
                   Decision {activeReviewIndex + 1} of {reviews.length}
                 </span>
                 <div className="memoryInbox__nav" aria-label="Move through memory suggestions">
-                  <button onClick={() => moveReview(-1)} aria-label="Previous suggestion" disabled={reviews.length < 2}>
+                  <button onClick={() => moveReview(-1)} aria-label="Previous suggestion" disabled={reviews.length < 2 || editing !== null || reviewBusy}>
                     <IconChevron width={13} height={13} className="memoryInbox__prev" />
                   </button>
-                  <button onClick={() => moveReview(1)} aria-label="Next suggestion" disabled={reviews.length < 2}>
+                  <button onClick={() => moveReview(1)} aria-label="Next suggestion" disabled={reviews.length < 2 || editing !== null || reviewBusy}>
                     <IconChevron width={13} height={13} />
                   </button>
                 </div>
@@ -528,14 +533,14 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
                     <button
                       className="brainbtn brainbtn--accent brainbtn--sm"
                       onClick={() => void resolveMany(cleanupReviews, 'accept')}
-                      disabled={busy}
+                      disabled={reviewBusy || editing !== null}
                     >
                       <IconCheck width={13} height={13} /> Apply cleanup
                     </button>
                     <button
                       className="brainbtn brainbtn--ghost brainbtn--sm"
                       onClick={() => void resolveMany(cleanupReviews, 'discard')}
-                      disabled={busy}
+                      disabled={reviewBusy || editing !== null}
                     >
                       Keep everything
                     </button>
@@ -593,7 +598,7 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
                       <button
                         className="brainbtn brainbtn--accent brainbtn--sm"
                         onClick={() => void resolve(activeReview, 'edit')}
-                        disabled={busy}
+                        disabled={reviewBusy}
                       >
                         <IconCheck width={13} height={13} /> Save adjusted text
                       </button>
@@ -606,7 +611,7 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
                       <button
                         className="brainbtn brainbtn--accent brainbtn--sm"
                         onClick={() => void resolve(activeReview, 'accept')}
-                        disabled={busy}
+                        disabled={reviewBusy}
                       >
                         <IconCheck width={13} height={13} /> {activePresentation.acceptLabel}
                       </button>
@@ -624,7 +629,7 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
                       <button
                         className="brainbtn brainbtn--ghost brainbtn--sm reviewcard__discard"
                         onClick={() => void resolve(activeReview, 'discard')}
-                        disabled={busy}
+                        disabled={reviewBusy}
                       >
                         <IconX width={13} height={13} /> {activePresentation.discardLabel}
                       </button>
