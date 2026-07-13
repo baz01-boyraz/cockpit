@@ -7,7 +7,6 @@ import {
   IconGit,
   IconLogs,
   IconMemory,
-  IconRailway,
   IconSwarm,
   IconTerminal,
 } from './icons'
@@ -23,13 +22,12 @@ interface NavItem {
   Icon: ComponentType<SVGProps<SVGSVGElement>>
 }
 
-const NAV: NavItem[] = [
+export const LEFT_RAIL_NAV: readonly NavItem[] = [
   { view: 'dashboard', label: 'Dashboard', Icon: IconDashboard },
   { view: 'terminals', label: 'Terminals', Icon: IconTerminal },
   { view: 'git', label: 'Git', Icon: IconGit },
   { view: 'swarm', label: 'Swarm', Icon: IconSwarm },
   { view: 'council', label: 'Council', Icon: IconCouncil },
-  { view: 'railway', label: 'Railway', Icon: IconRailway },
   { view: 'logs', label: 'Logs & Errors', Icon: IconLogs },
   { view: 'memory', label: 'Memory', Icon: IconMemory },
 ]
@@ -69,7 +67,7 @@ export function LeftRail() {
       </button>
 
       <nav className="rail__nav">
-        {NAV.map(({ view: v, label, Icon }) => {
+        {LEFT_RAIL_NAV.map(({ view: v, label, Icon }) => {
           const badge = badgeFor(v)
           return (
             <button
