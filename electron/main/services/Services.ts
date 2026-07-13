@@ -10,6 +10,7 @@ import { classifyRoute } from '@shared/router'
 import { inferLogLevel } from '@shared/log-patterns'
 import type { TerminalScanState } from '@shared/log-sanitize'
 import { initialTerminalScanState, sanitizeChunkToLines, scanTerminalChunk } from '@shared/log-sanitize'
+import { HERMES_RUNTIME_ENABLED } from '@shared/hermes-runtime'
 import type { Db } from '../db/Database'
 import { openDatabase } from '../db/Database'
 import type { CockpitEvents } from '../events'
@@ -84,7 +85,7 @@ export class Services {
   readonly approvals: ApprovalService
   readonly usage: UsageService
   readonly agentUsage: AgentUsageService
-  /** Live OpenRouter credit remaining — powers the Hermes engine core's ring. */
+  /** Live OpenRouter credit remaining — powers Council's remote seats. */
   readonly openRouterUsage: OpenRouterUsageService
   readonly logs: LogIntelligenceService
   readonly projects: ProjectService
@@ -199,7 +200,7 @@ export class Services {
       this.db,
       opts.events,
       notifier,
-      this.hermesTriage,
+      HERMES_RUNTIME_ENABLED ? this.hermesTriage : undefined,
       this.memoryReviews,
       this.memory,
       this.memoryPolicy,
@@ -208,7 +209,9 @@ export class Services {
     this.swarmCompletion = new SwarmCompletionSteward(
       opts.events,
       this.sentinel,
-      this.hermesCompletion,
+      HERMES_RUNTIME_ENABLED
+        ? this.hermesCompletion
+        : { summarize: async () => null },
     )
     this.memoryLifecycle = new MemoryLifecycleSentinel(
       this.sentinel,
@@ -257,6 +260,7 @@ export class Services {
       this.memoryContexts,
       this.councilEvidence,
       opts.events,
+      this.agentUsage,
     )
     // Track G4: the judgment scorecard read model. It DERIVES outcomes — card
     // fates from the append-only audit trail, verdicts from the shared session
@@ -292,6 +296,7 @@ export class Services {
       this.memoryPipeline,
       this.projects,
       this.claudeSessions,
+      { enabled: HERMES_RUNTIME_ENABLED },
     )
     // Rehydrate lifecycle pressure from durable state. Models are not involved;
     // only queue status/counts/ages reach Sentinel.
@@ -423,10 +428,12 @@ export class Services {
       // Faz C: gate outcomes (accept/review/reject counts, no content) land here.
       audit: this.audit,
     })
-    void this.hermesMcp.start().catch((err) => {
-      // Last-resort surface; matches the main process's crash-log fallback.
-      console.error('[Services] HermesMcpServer failed to start:', err)
-    })
+    if (HERMES_RUNTIME_ENABLED) {
+      void this.hermesMcp.start().catch((err) => {
+        // Last-resort surface; matches the main process's crash-log fallback.
+        console.error('[Services] HermesMcpServer failed to start:', err)
+      })
+    }
 
     // Faz 6: when the human approves a Hermes `propose_open_swarm_card` request
     // on the Dashboard, open+start the proposed card. Registered here alongside
@@ -436,7 +443,7 @@ export class Services {
       approvals: this.approvals,
       swarm: this.swarm,
     })
-    this.hermesApprovalExecutor.start()
+    if (HERMES_RUNTIME_ENABLED) this.hermesApprovalExecutor.start()
 
     // A crash between staging and Pro publication leaves a durable row. Resume
     // those oldest-first, sequentially; failure keeps the feed evidence intact.
@@ -445,22 +452,22 @@ export class Services {
     // The living brain: sweep idle Claude sessions into memory in the background
     // (docs/memory-imp.md Phase 4). Conservative defaults; all state is durable
     // in the capture queue, so a crash mid-drain resumes on the next boot.
-    this.memoryAutoCapture.start()
+    if (HERMES_RUNTIME_ENABLED) this.memoryAutoCapture.start()
     // Faz 5: capture the instant a Claude pane closes, instead of waiting for the
     // idle-poll. Non-claude terminals never trigger a capture. The idle-poll
     // above remains the fallback for panes that never emit a clean exit.
-    registerMemoryExitCapture(opts.events, this.memoryAutoCapture)
+    if (HERMES_RUNTIME_ENABLED) registerMemoryExitCapture(opts.events, this.memoryAutoCapture)
 
     // Faz D: weekly memory curation cadence — no new table. Each project's last
     // sweep is read from the append-only audit trail; anything not swept in >7
     // days (or never) gets a fire-and-forget sweep. Fully isolated so it can
     // never block or crash startup.
-    this.scheduleCurationSweeps()
+    if (HERMES_RUNTIME_ENABLED) this.scheduleCurationSweeps()
     // Cross-system health starts only after every sensor dependency exists. Its
     // healthy/unchanged ticks remain silent; only a changed anomaly wakes its
     // signal path. The visible AutomationService below owns daily delivery.
     this.operationalHealth.start()
-    this.automation.start()
+    if (HERMES_RUNTIME_ENABLED) this.automation.start()
   }
 
   /** Age threshold before a project's memory hub is re-swept (7 days). */

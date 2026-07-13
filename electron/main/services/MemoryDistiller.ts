@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { promisify } from 'node:util'
 import { buildHermesArgs } from '@shared/hermes-run'
 import { HERMES_BACKGROUND_MODEL } from '@shared/hermes-model-policy'
+import { assertHermesRuntimeEnabled } from '@shared/hermes-runtime'
 import {
   type Observation,
   buildDistillPrompt,
@@ -27,6 +28,7 @@ const execFileAsync = promisify(execFile)
 export type DistillRunner = (cwd: string, prompt: string, model?: string) => Promise<string>
 
 const defaultRunner: DistillRunner = async (cwd, prompt, model) => {
+  assertHermesRuntimeEnabled()
   const bin = resolveBin('hermes')
   const { stdout } = await execFileAsync(bin, buildHermesArgs(prompt, { model }), {
     cwd,

@@ -10,13 +10,13 @@ interface StatusMessage {
 }
 
 /**
- * Stores the OpenRouter API key for the upcoming Hermes integration. The value
+ * Stores the OpenRouter API key for Council's remote seats. The value
  * is written straight to the OS keychain via the main process and is never read
  * back to the renderer — this section only ever knows whether a key EXISTS, and
  * shows a masked input for setting a new one. Same secure pattern the app uses
  * for Railway/GitHub tokens.
  */
-function HermesKeySection() {
+function OpenRouterKeySection() {
   const [stored, setStored] = useState<boolean | null>(null)
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
@@ -78,12 +78,12 @@ function HermesKeySection() {
   return (
     <section className="card settings__card settings__card--wide">
       <div className="card__title">
-        <IconShield width={15} height={15} /> Hermes · OpenRouter
+        <IconShield width={15} height={15} /> Council · OpenRouter
       </div>
       <p className="settings__note">
         Stored encrypted in the OS keychain and only ever read inside the app — the key is never
-        shown here again and never sent to the renderer. Powers the upcoming Hermes agent&apos;s
-        OpenRouter access.
+        shown here again and never sent to the renderer. Powers the DeepSeek Pro seat and the
+        quota-gated GLM 5.2 fallback.
       </p>
       <div className="secretfield">
         {stored === null ? (
@@ -198,7 +198,7 @@ export function SettingsPanel() {
           </div>
         </section>
 
-        <HermesKeySection />
+        <OpenRouterKeySection />
 
         <section className="card settings__card settings__card--wide">
           <div className="card__title">Project</div>

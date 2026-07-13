@@ -22,7 +22,7 @@ function persistChatOpen(open: boolean): void {
 /** Deep-linked view (used by the screenshot review workflow), if valid. */
 export function initialView(): View {
   const requested = new URLSearchParams(window.location.search).get('view') as View | null
-  const valid: View[] = ['dashboard', 'automations', 'terminals', 'git', 'swarm', 'railway', 'logs', 'memory', 'usage', 'settings']
+  const valid: View[] = ['dashboard', 'terminals', 'git', 'swarm', 'railway', 'logs', 'memory', 'usage', 'settings']
   return requested && valid.includes(requested) ? requested : 'dashboard'
 }
 

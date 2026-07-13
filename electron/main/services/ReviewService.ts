@@ -20,6 +20,7 @@ import {
 } from '@shared/review'
 import { SPECS, isSpec } from '@shared/agent-taxonomy'
 import { buildHermesArgs } from '@shared/hermes-run'
+import { assertHermesRuntimeEnabled, HERMES_RUNTIME_ENABLED } from '@shared/hermes-runtime'
 import type { MemoryContextProvider, MemoryContextSurface } from '@shared/memory-context'
 import type { AuditLogService } from './AuditLogService'
 import type { ProjectService } from './ProjectService'
@@ -34,8 +35,10 @@ export type CliRunner = (
   opts: { cwd: string; timeout: number; maxBuffer: number },
 ) => Promise<{ stdout: string }>
 
-const defaultRunner: CliRunner = (bin, args, opts) =>
-  execFileAsync(bin, args, { ...opts, env: { ...process.env } })
+const defaultRunner: CliRunner = (bin, args, opts) => {
+  assertHermesRuntimeEnabled()
+  return execFileAsync(bin, args, { ...opts, env: { ...process.env } })
+}
 
 /**
  * Read one untracked file as a synthetic all-additions diff. Binary content
@@ -241,7 +244,7 @@ export class ReviewService {
     memoryQuery: string,
   ): Promise<ReviewResult> {
     const sanitized = sanitizeDiff(inputs)
-    const modelLabel = opts.model?.trim() || 'Hermes'
+    const modelLabel = opts.model?.trim() || (HERMES_RUNTIME_ENABLED ? 'Hermes' : 'Paused')
     const memoryContext = this.memoryContexts?.forTask({
       projectId,
       surface: memorySurface,

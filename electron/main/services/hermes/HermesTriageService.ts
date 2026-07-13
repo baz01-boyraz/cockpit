@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { promisify } from 'node:util'
 import { buildHermesArgs } from '@shared/hermes-run'
 import { HERMES_BACKGROUND_MODEL } from '@shared/hermes-model-policy'
+import { assertHermesRuntimeEnabled } from '@shared/hermes-runtime'
 import {
   buildTriagePrompt,
   parseTriageResponse,
@@ -40,8 +41,10 @@ export type HermesTriageRunner = (
   opts: { timeout: number; maxBuffer: number },
 ) => Promise<{ stdout: string }>
 
-const defaultRunner: HermesTriageRunner = (cwd, args, opts) =>
-  execFileAsync(resolveBin('hermes'), args, { cwd, ...opts })
+const defaultRunner: HermesTriageRunner = (cwd, args, opts) => {
+  assertHermesRuntimeEnabled()
+  return execFileAsync(resolveBin('hermes'), args, { cwd, ...opts })
+}
 
 /**
  * Faz B triage seat: a cheap Hermes oneshot (DeepSeek) that judges a persisted

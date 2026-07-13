@@ -6,7 +6,6 @@ import { useAgentUsage } from '../lib/useAgentUsage'
 import { useOpenRouterUsage } from '../lib/useOpenRouterUsage'
 import claudeLogo from '../assets/usage/claude.png'
 import codexLogo from '../assets/usage/codex.png'
-import hermesAvatar from '../assets/hermes/avatar.png'
 
 /** Each provider's 3D logo stays pristine and full-color; a thin quota ring
  *  hugging it reads the remaining level, so the mark itself never dims. */
@@ -52,12 +51,11 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 function LogoMeter({
   src,
   percent,
-  avatar,
+  glyph,
 }: {
-  src: string
+  src?: string
   percent: number | null
-  /** Hermes's mark is a face portrait, not a centered logo — crop it round. */
-  avatar?: boolean
+  glyph?: string
 }) {
   const hasFill = percent !== null
   const fill = clampPercent(percent)
@@ -107,19 +105,18 @@ function LogoMeter({
           </>
         ) : null}
       </svg>
-      <img
-        className={`logoMeter__logo ${avatar ? 'logoMeter__logo--avatar' : ''}`}
-        src={src}
-        alt=""
-        draggable={false}
-      />
+      {src ? (
+        <img className="logoMeter__logo" src={src} alt="" draggable={false} />
+      ) : (
+        <span className="logoMeter__glyph mono">{glyph}</span>
+      )}
     </span>
   )
 }
 
 /** '62%' when OpenRouter reports a purchased-credit share, else the raw '$12.40'
  *  balance (a pure pay-as-you-go account has no total to take a percent of). */
-function hermesDisplay(snapshot: OpenRouterUsageSnapshot | null): string {
+function openRouterDisplay(snapshot: OpenRouterUsageSnapshot | null): string {
   if (!snapshot?.available) return '—'
   if (snapshot.remainingPercent !== null) return `${snapshot.remainingPercent}%`
   if (snapshot.remainingUsd !== null) return `$${snapshot.remainingUsd.toFixed(2)}`
@@ -175,13 +172,10 @@ export function EngineCore({
 }
 
 /**
- * Hermes's own engine core: the OpenRouter key it runs DeepSeek calls through,
- * ringed the same way Claude/Codex are — but in a premium white/platinum tone
- * (set purely via --provider/--provider-hi; the halo, ring, and glow math is
- * identical to the other engines) instead of ember/glacier. Opens the Hermes
- * chat panel instead of the Usage tab.
+ * OpenRouter credit for Council's DeepSeek/GLM seats, ringed like the account
+ * engines and opening the shared Usage view.
  */
-function HermesEngineCore({
+function OpenRouterEngineCore({
   snapshot,
   onOpen,
 }: {
@@ -192,11 +186,11 @@ function HermesEngineCore({
   // No total-credit percent on a pure pay-as-you-go account: ring reads "full"
   // rather than falsely empty when we simply can't express a fraction.
   const ringPercent = available ? snapshot?.remainingPercent ?? 100 : null
-  const display = hermesDisplay(snapshot)
+  const display = openRouterDisplay(snapshot)
   const tone = available ? toneFor(snapshot?.remainingPercent ?? null) : 'off'
   const ariaLabel = available
-    ? `Hermes engine. ${display} OpenRouter credit left. Open Hermes.`
-    : `Hermes credit telemetry unavailable. ${snapshot?.reason ?? 'Open Hermes.'}`
+    ? `OpenRouter Council credit. ${display} remaining. Open usage details.`
+    : `OpenRouter credit telemetry unavailable. ${snapshot?.reason ?? 'Open usage details.'}`
 
   return (
     <button
@@ -206,12 +200,12 @@ function HermesEngineCore({
       onClick={onOpen}
     >
       <span className="engineCore__stage">
-        <LogoMeter src={hermesAvatar} percent={ringPercent} avatar />
+        <LogoMeter glyph="OR" percent={ringPercent} />
       </span>
       <span className="engineCore__meta">
         <span className="engineCore__name">
           <span className="engineCore__dot" aria-hidden />
-          Hermes
+          OpenRouter
         </span>
         {available ? (
           <span className="engineCore__pct mono">{display}</span>
@@ -231,7 +225,6 @@ function HermesEngineCore({
  */
 export function UsageStrip() {
   const setView = useStore((s) => s.setView)
-  const toggleHermes = useStore((s) => s.toggleHermes)
   const snapshots = useAgentUsage()
   const openRouter = useOpenRouterUsage()
 
@@ -241,16 +234,16 @@ export function UsageStrip() {
   // Hide the bay entirely only when nothing is connected and nothing to say.
   if (pills.every(({ pill }) => !pill.available && !pill.reason)) return null
 
-  const hermesReporting = openRouter?.available ?? false
+  const openRouterReporting = openRouter?.available ?? false
   const reportingCount =
-    pills.filter(({ pill }) => pill.available).length + (hermesReporting ? 1 : 0)
+    pills.filter(({ pill }) => pill.available).length + (openRouterReporting ? 1 : 0)
   const totalCount = pills.length + 1
   let worstRemaining = pills.reduce<number | null>((acc, { pill }) => {
     if (!pill.available || pill.minRemainingPercent === null) return acc
     return acc === null ? pill.minRemainingPercent : Math.min(acc, pill.minRemainingPercent)
   }, null)
   if (
-    hermesReporting &&
+    openRouterReporting &&
     openRouter?.remainingPercent !== null &&
     openRouter?.remainingPercent !== undefined
   ) {
@@ -283,7 +276,7 @@ export function UsageStrip() {
             onOpen={() => setView('usage')}
           />
         ))}
-        <HermesEngineCore snapshot={openRouter} onOpen={() => toggleHermes()} />
+        <OpenRouterEngineCore snapshot={openRouter} onOpen={() => setView('usage')} />
       </div>
     </section>
   )

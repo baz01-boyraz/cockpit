@@ -3,6 +3,7 @@ import type { KanbanCard } from '@shared/kanban'
 import type { NamedAgentSummary } from '@shared/named-agents'
 import type { DiffStat } from '@shared/review'
 import { assignmentLabel } from '@shared/agent-taxonomy'
+import { HERMES_RUNTIME_ENABLED } from '@shared/hermes-runtime'
 import { cockpit } from '../../lib/cockpit'
 import { useCardCompletion, useSessionActivity } from '../../store/swarmActivityStore'
 import {
@@ -504,15 +505,17 @@ export function SwarmCard({
             <IconCheck width={11} height={11} />
             {reporting ? 'Report…' : 'Report'}
           </button>
-          <button
-            className="swarmCardLink"
-            onClick={act(() => onReview(card))}
-            disabled={reviewing || counciling || reporting}
-            title="AI review of the card's worktree diff"
-          >
-            <IconShieldSearch width={11} height={11} />
-            {reviewing ? 'Reviewing…' : 'Review diff'}
-          </button>
+          {HERMES_RUNTIME_ENABLED && (
+            <button
+              className="swarmCardLink"
+              onClick={act(() => onReview(card))}
+              disabled={reviewing || counciling || reporting}
+              title="AI review of the card's worktree diff"
+            >
+              <IconShieldSearch width={11} height={11} />
+              {reviewing ? 'Reviewing…' : 'Review diff'}
+            </button>
+          )}
           <button
             className="swarmCardLink"
             onClick={act(() => onCouncil(card))}

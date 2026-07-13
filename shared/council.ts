@@ -14,6 +14,7 @@
  * bridge. This file is dependency-free (only a type import) so it unit-tests as
  * pure logic and runs identically in the browser mock.
  */
+import type { AgentUsageProvider } from './domain'
 import type { EngineSpec } from './engines'
 import type { MemoryContextReceipt } from './memory-context'
 import {
@@ -48,6 +49,15 @@ export interface CouncilSeat {
   engine: EngineSpec
   /** Ordered retry path. GPT-first seats end in Claude only as a last resort. */
   fallbacks?: readonly EngineSpec[]
+  /**
+   * A provider-capacity fallback is selected before the primary call. It is not
+   * a generic retry: a CLI crash, timeout, bad response, or model error must not
+   * activate it. This distinction keeps paid OpenRouter fallbacks intentional.
+   */
+  availabilityFallback?: {
+    provider: AgentUsageProvider
+    engine: EngineSpec
+  }
   /** The seat's lens — its identity, independent of diff/spec mode. */
   prompt: string
 }
@@ -82,30 +92,31 @@ export const GPT56_MODELS = {
   luna: 'gpt-5.6-luna',
 } as const
 
+/** Explicit model ids: moving aliases must not silently change Council seats. */
+export const COUNCIL_MODELS = {
+  sonnet5: 'claude-sonnet-5',
+  deepseekPro: 'deepseek/deepseek-v4-pro',
+  glm52: 'z-ai/glm-5.2',
+} as const
+
 /**
- * The default roster is GPT-first: Sol handles the high-judgment seats, Terra
- * the pragmatic/newcomer read, and Luna the fast expansion pass. DeepSeek keeps
- * one genuinely independent provider in the room. Claude is an emergency
- * fallback instead of the default spend path while a missing OpenRouter key
- * falls back to Terra through the same Codex login.
+ * The five seats intentionally use five distinct models. Sonnet 5 is the only
+ * seat with a fallback, and GLM 5.2 is eligible only when Claude usage telemetry
+ * proves that the account has no usable capacity. Ordinary Sonnet failures do
+ * not spend OpenRouter credit or silently change the reviewer.
  */
 export const COUNCIL_SEATS: readonly CouncilSeat[] = [
   {
     id: 'contrarian',
     label: 'Contrarian',
     engine: { engine: 'codex', model: GPT56_MODELS.sol },
-    fallbacks: [{ engine: 'claude', model: 'opus' }],
     prompt:
       'You are The Contrarian on an LLM Council. Your job is to find what will FAIL. Assume the work under review has a fatal flaw and go find it — challenge every assumption, hunt hidden risks, second-order consequences, regressions, and what breaks at scale, under load, or in the edge cases nobody tested. Generic warnings are worthless here: every concern must point at concrete evidence in the material, or it does not count.',
   },
   {
     id: 'first-principles',
     label: 'First Principles',
-    engine: { engine: 'openrouter', model: 'deepseek/deepseek-chat' },
-    fallbacks: [
-      { engine: 'codex', model: GPT56_MODELS.terra },
-      { engine: 'claude', model: 'sonnet' },
-    ],
+    engine: { engine: 'openrouter', model: COUNCIL_MODELS.deepseekPro },
     prompt:
       'You are The First Principles Thinker on an LLM Council. Strip away assumptions and rebuild from the ground up: what is the REAL problem being solved here? Separate what is KNOWN from what is merely ASSUMED. Challenge the framing itself, not just the details — is this optimizing the wrong variable entirely, or solving a symptom instead of the cause?',
   },
@@ -113,7 +124,6 @@ export const COUNCIL_SEATS: readonly CouncilSeat[] = [
     id: 'expansionist',
     label: 'Expansionist',
     engine: { engine: 'codex', model: GPT56_MODELS.luna },
-    fallbacks: [{ engine: 'claude', model: 'haiku' }],
     prompt:
       'You are The Expansionist on an LLM Council. Find the UPSIDE being missed. What could this be if approached more ambitiously — a reusable abstraction, a compounding win, hidden optionality sitting right next to the work? Point at the specific bigger play, grounded in the material, never a vague "think bigger".',
   },
@@ -121,15 +131,17 @@ export const COUNCIL_SEATS: readonly CouncilSeat[] = [
     id: 'outsider',
     label: 'Outsider',
     engine: { engine: 'codex', model: GPT56_MODELS.terra },
-    fallbacks: [{ engine: 'claude', model: 'sonnet' }],
     prompt:
       'You are The Outsider on an LLM Council. React with ZERO prior context about this codebase or its conventions. What is confusing? What would surprise a newcomer meeting this cold? Flag the curse of knowledge — things "obvious" to the author but invisible to everyone else. Ask the naive questions the experts skip; your ignorance is your superpower.',
   },
   {
     id: 'builder',
     label: 'Builder',
-    engine: { engine: 'codex', model: GPT56_MODELS.sol },
-    fallbacks: [{ engine: 'claude', model: 'opus' }],
+    engine: { engine: 'claude', model: COUNCIL_MODELS.sonnet5 },
+    availabilityFallback: {
+      provider: 'claude',
+      engine: { engine: 'openrouter', model: COUNCIL_MODELS.glm52 },
+    },
     prompt:
       'You are The Builder on an LLM Council — the seat that will actually implement this. You do not critique for sport; you judge whether the work can be built well and what it will honestly cost. Be concrete about effort, and surface every place where you would be forced to guess during the build rather than papering over it.',
   },
@@ -144,10 +156,7 @@ export const COUNCIL_SEAT_IDS: readonly CouncilTone[] = COUNCIL_SEATS.map((s) =>
  */
 export const CHAIRMAN: { engine: EngineSpec; fallbacks: readonly EngineSpec[] } = {
   engine: { engine: 'codex', model: GPT56_MODELS.sol },
-  fallbacks: [
-    { engine: 'codex', model: GPT56_MODELS.terra },
-    { engine: 'claude', model: 'opus' },
-  ],
+  fallbacks: [],
 }
 
 /** One seat's outcome: its reply, plus which engine produced it and whether the

@@ -301,6 +301,15 @@
   -webkit-user-select: none;
   user-select: none;
 }
+.logoMeter__glyph {
+  position: relative;
+  z-index: 1;
+  color: var(--tone-hi);
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 12px color-mix(in srgb, var(--tone) 55%, transparent);
+}
 /* Hermes's mark is a face portrait, not a centered logo on transparent — crop
  * it round and zoom past its white margin instead of the contain/scale pair
  * the logo marks use. */

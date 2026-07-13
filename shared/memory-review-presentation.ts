@@ -102,7 +102,7 @@ export function presentMemoryReview(item: ReviewItem): MemoryReviewPresentation 
       category: 'attention',
       eyebrow: 'Needs attention',
       title: 'Two versions need a decision',
-      summary: `Memory already contains a different version of “${noteName(item)}”. Nothing was overwritten. Hermes can settle it when the evidence is clear; otherwise you choose.`,
+      summary: `Memory already contains a different version of “${noteName(item)}”. Nothing was overwritten. Evidence-backed review can settle it when the facts are clear; otherwise you choose.`,
       rationale: 'The saved fact and a new observation disagree, so neither version was chosen automatically.',
       hook,
       acceptLabel: 'Use new version',

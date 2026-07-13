@@ -1,7 +1,7 @@
 /**
  * SentinelPanel — the full sentinel signal feed (Track E3). Where the top-bar
  * bell popover is a capped glance (20 newest), this is the filterable history:
- * severity chips, seen/unseen + outcome badges, Hermes triage enrichment where
+ * severity chips, seen/unseen + outcome badges, legacy triage enrichment where
  * present, and the two owner affordances (Track H) — "Create card" (signal→Swarm)
  * and "Dismiss as noise" (records the G3 outcome). Read + act; the feed itself is
  * fetched on demand, the badge count stays in the store.
@@ -15,9 +15,8 @@ import {
   OUTCOME_META,
   SEVERITY_LABELS,
   sourceLabel,
-  toHermesOpener,
 } from '../lib/sentinelView'
-import { IconBell, IconCheck, IconPlus, IconSend, IconX } from '../components/icons'
+import { IconBell, IconCheck, IconPlus, IconX } from '../components/icons'
 
 const FETCH_LIMIT = 200
 
@@ -26,7 +25,6 @@ const SEVERITY_ORDER: SentinelSeverity[] = ['alert', 'notice', 'info']
 
 export function SentinelPanel() {
   const activeProjectId = useStore((s) => s.activeProjectId)
-  const openHermesWith = useStore((s) => s.openHermesWith)
   const markSignalsSeen = useStore((s) => s.markSignalsSeen)
 
   const [signals, setSignals] = useState<SentinelSignal[]>([])
@@ -91,14 +89,6 @@ export function SentinelPanel() {
     if (ids.length === 0) return
     void markSignalsSeen(ids)
     setSignals((prev) => prev.map((s) => (s.status === 'new' ? { ...s, status: 'seen' } : s)))
-  }
-
-  const ask = (signal: SentinelSignal) => {
-    openHermesWith(toHermesOpener(signal))
-    if (signal.status === 'new') {
-      void markSignalsSeen([signal.id])
-      patch(signal.id, { status: 'seen' })
-    }
   }
 
   const dismiss = async (signal: SentinelSignal) => {
@@ -203,7 +193,6 @@ export function SentinelPanel() {
                 key={signal.id}
                 signal={signal}
                 index={i}
-                onAsk={() => ask(signal)}
                 onCreateCard={() => void createCard(signal)}
                 onDismiss={() => void dismiss(signal)}
               />
@@ -218,12 +207,11 @@ export function SentinelPanel() {
 interface SignalRowProps {
   signal: SentinelSignal
   index: number
-  onAsk: () => void
   onCreateCard: () => void
   onDismiss: () => void
 }
 
-function SignalRow({ signal, index, onAsk, onCreateCard, onDismiss }: SignalRowProps) {
+function SignalRow({ signal, index, onCreateCard, onDismiss }: SignalRowProps) {
   const { triage, outcome } = signal
   const outcomeMeta = outcome ? OUTCOME_META[outcome] : null
   const cardCreated = outcome === 'card_created'
@@ -259,7 +247,7 @@ function SignalRow({ signal, index, onAsk, onCreateCard, onDismiss }: SignalRowP
         {triage && (
           <div className="sigtriage">
             <div className="sigtriage__head">
-              <span className="sigtriage__eyebrow">Hermes triage</span>
+              <span className="sigtriage__eyebrow">Legacy triage</span>
               <span
                 className={`sigbadge ${triage.reportWorthy ? 'sigbadge--accent' : 'sigbadge--muted'}`}
               >
@@ -282,10 +270,6 @@ function SignalRow({ signal, index, onAsk, onCreateCard, onDismiss }: SignalRowP
         {signal.context && <div className="sigrow__context mono">{signal.context}</div>}
 
         <div className="sigrow__actions">
-          <button type="button" className="btn btn--ghost btn--sm" onClick={onAsk}>
-            <IconSend width={13} height={13} />
-            Ask Hermes
-          </button>
           <button
             type="button"
             className="btn btn--ghost btn--sm"

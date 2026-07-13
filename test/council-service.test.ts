@@ -22,13 +22,10 @@ import type { Db } from '../electron/main/db/Database'
 import { COUNCIL_STAGE_BUDGETS } from '../shared/council-stages'
 import type { AgentUsageService } from '../electron/main/services/AgentUsageService'
 
-/** A spec-mode-aware fake engine: OpenRouter and Codex always throw (no key /
- *  second CLI absent) so their seats must fall back; every claude call answers.
- *  The chairman and ranking calls are recognized by their prompt shape. */
+/** A spec-mode-aware fake engine. The chairman and ranking calls are recognized
+ *  by their prompt shape; every configured Council provider answers. */
 function makeEngine(): EngineRunner {
   const call = vi.fn(async (spec: { engine: string }, prompt: string) => {
-    if (spec.engine === 'openrouter') throw new Error('no OpenRouter key')
-    if (spec.engine === 'codex') throw new Error('codex CLI missing')
     if (prompt.includes('Refined Spec')) {
       return [
         '### 🎯 Verdict',

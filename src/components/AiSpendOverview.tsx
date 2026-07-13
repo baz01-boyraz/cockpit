@@ -14,7 +14,7 @@ import {
  * and what's left?" across every engine the cockpit drives. It fuses two things
  * that used to be two lookalike card rows: the Claude/Codex remaining *capacity*
  * (flat CLI subscriptions, surfaced as quota rings, never a fake per-token price)
- * and the Hermes/OpenRouter metered *spend* (the one real dollar line). A slim
+ * and the Council/OpenRouter metered *spend* (the one real dollar line). A slim
  * ledger folds the project's local activity beneath, so the old stat grid's
  * numbers stay reachable without a second competing card.
  */
@@ -34,21 +34,21 @@ function fmtTokens(n: number | null): string {
 }
 
 /**
- * The Hermes credit module — the only engine that meters real dollars. A single
+ * The OpenRouter credit module — the only engine that meters real dollars. A single
  * credit ring beside the headline metered-spend figure (total − remaining), with
  * an honest "not connected" state when no OpenRouter key is present rather than a
  * zero that reads like data.
  */
-function HermesCapacity({ snapshot }: { snapshot: OpenRouterUsageSnapshot | null }) {
+function OpenRouterCapacity({ snapshot }: { snapshot: OpenRouterUsageSnapshot | null }) {
   const available = snapshot?.available ?? false
 
   if (!available || !snapshot) {
     return (
       <article className="capEngine capEngine--hermes capEngine--off">
         <CapacityHead
-          glyph="H"
-          name="Hermes"
-          kind="Pay-as-you-go"
+          glyph="OR"
+          name="OpenRouter"
+          kind="Council"
           tone="off"
           statusLabel="Credit unavailable"
         />
@@ -81,7 +81,7 @@ function HermesCapacity({ snapshot }: { snapshot: OpenRouterUsageSnapshot | null
 
   return (
     <article className={`capEngine capEngine--hermes capEngine--${tone}`}>
-      <CapacityHead glyph="H" name="Hermes" kind="Pay-as-you-go" tone={tone} />
+      <CapacityHead glyph="OR" name="OpenRouter" kind="Council" tone={tone} />
       <div className="capEngine__credit">
         <CapacityRing percent={remainingPct} tone={tone} label="Credit" sub={ringSub} />
         <div className="capEngine__spend">
@@ -135,7 +135,7 @@ export function AiSpendOverview({ ledger }: { ledger: ActivityLedger }) {
         {subscriptions.map((snapshot) => (
           <SubscriptionCapacity key={snapshot.provider} snapshot={snapshot} />
         ))}
-        <HermesCapacity snapshot={openRouter} />
+        <OpenRouterCapacity snapshot={openRouter} />
       </div>
 
       <footer className="capacity__ledger">

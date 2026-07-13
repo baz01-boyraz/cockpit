@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { promisify } from 'node:util'
 import { buildHermesArgs } from '@shared/hermes-run'
 import { HERMES_MAIN_MODEL } from '@shared/hermes-model-policy'
+import { assertHermesRuntimeEnabled } from '@shared/hermes-runtime'
 import {
   buildCompletionManagerPrompt,
   parseCompletionManagerResponse,
@@ -26,8 +27,10 @@ export type HermesCompletionRunner = (
   opts: { timeout: number; maxBuffer: number },
 ) => Promise<{ stdout: string }>
 
-const defaultRunner: HermesCompletionRunner = (cwd, args, opts) =>
-  execFileAsync(resolveBin('hermes'), args, { cwd, ...opts })
+const defaultRunner: HermesCompletionRunner = (cwd, args, opts) => {
+  assertHermesRuntimeEnabled()
+  return execFileAsync(resolveBin('hermes'), args, { cwd, ...opts })
+}
 
 /**
  * Tool-less Pro seat for one already-persisted completion. It never searches,

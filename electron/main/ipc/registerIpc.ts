@@ -7,6 +7,7 @@ import { formatIpcError } from '@shared/ipc-errors'
 import { requiresApproval } from '@shared/approval-rules'
 import { toSummary } from '@shared/named-agents'
 import { BAZ_GLOBAL_BRAIN, projectBrain } from '@shared/memory-ledger'
+import { HERMES_RUNTIME_ENABLED } from '@shared/hermes-runtime'
 import type { ApprovalActionType } from '@shared/domain'
 import {
   addProjectInputSchema,
@@ -458,14 +459,16 @@ export function registerIpc(services: Services): void {
 
   // --- Hermes chat widget (orchestrator persona + cockpit MCP tools; the
   // service keeps conversation history itself since oneshot is stateless) ---
-  handle('hermesChatAsk', (p) => {
-    const { projectId, message, imagePath } = hermesChatAskSchema.parse(p)
-    return services.hermesChat.ask(projectId, message, imagePath)
-  })
-  handle('hermesChatClear', (p) => {
-    const { projectId } = hermesChatClearSchema.parse(p)
-    services.hermesChat.clear(projectId)
-  })
+  if (HERMES_RUNTIME_ENABLED) {
+    handle('hermesChatAsk', (p) => {
+      const { projectId, message, imagePath } = hermesChatAskSchema.parse(p)
+      return services.hermesChat.ask(projectId, message, imagePath)
+    })
+    handle('hermesChatClear', (p) => {
+      const { projectId } = hermesChatClearSchema.parse(p)
+      services.hermesChat.clear(projectId)
+    })
+  }
 
   // --- secrets (encrypted key/value; the value never crosses back to the
   // renderer — set/has/delete only, deliberately no get). Each kind maps to a

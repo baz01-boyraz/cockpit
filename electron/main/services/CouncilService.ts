@@ -5,6 +5,7 @@ import { join, resolve, sep } from 'node:path'
 import { sanitizeDiff, type SanitizedDiff } from '@shared/diff-sanitize'
 import { resolveChatModel } from '@shared/chat-models'
 import { redactText } from '@shared/redaction'
+import type { AgentUsageProvider, AgentUsageReport } from '@shared/domain'
 import type { EngineId, EngineSpec } from '@shared/engines'
 import {
   CHAIRMAN,
@@ -77,6 +78,10 @@ import type { CockpitEvents } from '../events'
 /** The narrow sentinel slice this service feeds — structural so tests pass
  *  `undefined` (no-op). Sentinel never depends on CouncilService. */
 type SentinelReporter = Pick<SentinelService, 'report'>
+
+interface CouncilUsageReporter {
+  getReport(): Promise<AgentUsageReport>
+}
 
 /** One seat/ranking/chairman call: grounded in the repo, hang-guarded. */
 const CALL_TIMEOUT_MS = 360_000
@@ -239,6 +244,8 @@ export class CouncilService {
     private readonly evidence?: CouncilEvidenceCollector,
     /** Safe public stage activity for the waiting surface. */
     private readonly events?: Pick<CockpitEvents, 'emitTyped'>,
+    /** Live account capacity. Only availability-gated seat policies consume it. */
+    private readonly usage?: CouncilUsageReporter,
   ) {
     this.sweepStalePending()
   }
@@ -383,7 +390,10 @@ export class CouncilService {
         responseLanguage,
       })
 
-    // Phase 1 — every seat, in parallel, blind to the others (with fallback).
+    const unavailableUsageProviders = await this.resolveUnavailableUsageProviders()
+
+    // Phase 1 — every seat, in parallel, blind to the others. The sole
+    // availability fallback is resolved before any model call.
     this.emitProgress(projectId, opts, {
       kind: 'stage',
       stage: 'seats',
@@ -397,6 +407,8 @@ export class CouncilService {
           seatPrompt(seat),
           claudeOverride,
           seatCallOpts,
+          undefined,
+          unavailableUsageProviders,
         )
         this.emitProgress(projectId, opts, {
           kind: 'seat',
@@ -657,12 +669,26 @@ export class CouncilService {
     claudeOverride: string | null,
     callOpts: EngineCallOpts,
     allowedEngines?: ReadonlySet<EngineId>,
+    unavailableUsageProviders: ReadonlySet<AgentUsageProvider> = new Set(),
   ): Promise<CouncilSeatOutput> {
     const primary = this.withOverride(seat.engine, claudeOverride)
-    const configured = [primary, ...(seat.fallbacks ?? [])]
+    const availabilityFallback = seat.availabilityFallback &&
+      unavailableUsageProviders.has(seat.availabilityFallback.provider)
+      ? seat.availabilityFallback.engine
+      : null
+    const configured = [
+      primary,
+      ...(seat.fallbacks ?? []),
+      ...(availabilityFallback ? [availabilityFallback] : []),
+    ]
+    // Capacity fallback is a preflight route, never an error retry. If Sonnet
+    // had capacity and then crashed/timed out, GLM must remain untouched.
+    const selected = availabilityFallback
+      ? [availabilityFallback]
+      : [primary, ...(seat.fallbacks ?? [])]
     const chain = allowedEngines
-      ? configured.filter((candidate) => allowedEngines.has(candidate.engine))
-      : configured
+      ? selected.filter((candidate) => allowedEngines.has(candidate.engine))
+      : selected
     let primaryErr: unknown = new Error('No engine is allowed by the analysis data-egress policy.')
     for (let index = 0; index < chain.length; index += 1) {
       const engine = chain[index]
@@ -700,6 +726,41 @@ export class CouncilService {
       text: failure.text,
       ok: false,
     }
+  }
+
+  /**
+   * Resolve provider capacity once per Council run. Missing/errored telemetry is
+   * treated as unavailable: the app may use GLM only when it cannot establish
+   * usable Claude capacity, and it must never optimistically burn a blocked
+   * Sonnet call first.
+   */
+  private async resolveUnavailableUsageProviders(): Promise<ReadonlySet<AgentUsageProvider>> {
+    const providers = new Set(
+      COUNCIL_SEATS.flatMap((seat) =>
+        seat.availabilityFallback ? [seat.availabilityFallback.provider] : [],
+      ),
+    )
+    const unavailable = new Set<AgentUsageProvider>()
+    if (providers.size === 0) return unavailable
+    if (!this.usage) return unavailable
+
+    let report: AgentUsageReport
+    try {
+      report = await this.usage.getReport()
+    } catch {
+      return providers
+    }
+
+    for (const provider of providers) {
+      const snapshot = report.providers.find((item) => item.provider === provider)
+      const hasInvalidWindow = snapshot?.windows.some(
+        (window) => !Number.isFinite(window.usedPercent) || window.usedPercent >= 100,
+      ) ?? true
+      if (!snapshot?.available || snapshot.windows.length === 0 || hasInvalidWindow) {
+        unavailable.add(provider)
+      }
+    }
+    return unavailable
   }
 
   /** The claude alias override only re-points claude seats; other engines keep
@@ -981,6 +1042,7 @@ export class CouncilService {
           memoryBlock: automaticMemory?.block,
           responseLanguage,
         })
+      const unavailableUsageProviders = await this.resolveUnavailableUsageProviders()
       this.emitProgress(projectId, opts, {
         kind: 'stage',
         stage: 'seats',
@@ -995,6 +1057,7 @@ export class CouncilService {
             claudeOverride,
             seatCallOpts,
             allowedSet,
+            unavailableUsageProviders,
           )
           this.emitProgress(projectId, opts, {
             kind: 'seat',

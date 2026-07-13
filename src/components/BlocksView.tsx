@@ -3,6 +3,7 @@ import type { CapturedBlock, TerminalCommandStatus } from '@shared/command-block
 import type { ReviewResult } from '@shared/review'
 import { ansiToHtml } from '@shared/ansi-to-html'
 import { formatDuration, relativeTime } from '@shared/time'
+import { HERMES_RUNTIME_ENABLED } from '@shared/hermes-runtime'
 import { cockpit } from '../lib/cockpit'
 import { ReviewFindings, reviewFailure } from './ReviewFindings'
 import { IconChevron, IconCopy, IconCheck, IconRestart, IconShieldSearch, IconTerminal } from './icons'
@@ -111,14 +112,16 @@ function BlockCard({ block, projectId, onRerun }: BlockCardProps) {
           >
             <IconRestart width={13} height={13} />
           </button>
-          <button
-            className={`iconbtn ${reviewing ? 'iconbtn--busy' : ''}`}
-            title="Review this block with AI"
-            disabled={!block.command && !hasOutput}
-            onClick={() => void runReview()}
-          >
-            <IconShieldSearch width={13} height={13} />
-          </button>
+          {HERMES_RUNTIME_ENABLED && (
+            <button
+              className={`iconbtn ${reviewing ? 'iconbtn--busy' : ''}`}
+              title="Review this block with AI"
+              disabled={!block.command && !hasOutput}
+              onClick={() => void runReview()}
+            >
+              <IconShieldSearch width={13} height={13} />
+            </button>
+          )}
         </span>
       </div>
       {!collapsed && (

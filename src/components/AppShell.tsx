@@ -1,5 +1,6 @@
 import { useStore } from '../store/useStore'
 import { CHAT_ENABLED } from '../lib/features'
+import { HERMES_RUNTIME_ENABLED } from '@shared/hermes-runtime'
 import { LeftRail } from './LeftRail'
 import { TopBar } from './TopBar'
 import { RightPanel } from './RightPanel'
@@ -33,7 +34,7 @@ export function AppShell() {
   // widens a 3rd grid column); if CHAT_ENABLED ever comes back, the two
   // docked panels sharing the grid needs a real decision, not a guess here.
   const shellClass = !CHAT_ENABLED
-    ? `shell shell--no-chat ${hermesOpen ? 'shell--hermes-open' : ''}`.trim()
+    ? `shell shell--no-chat ${HERMES_RUNTIME_ENABLED && hermesOpen ? 'shell--hermes-open' : ''}`.trim()
     : chatOpen
       ? 'shell'
       : 'shell shell--chat-collapsed'
@@ -45,7 +46,7 @@ export function AppShell() {
         <TopBar />
         <main className="shell__main scroll-y">
           {view === 'dashboard' && <DashboardPanel />}
-          {view === 'automations' && <AutomationsPanel />}
+          {HERMES_RUNTIME_ENABLED && view === 'automations' && <AutomationsPanel />}
           <section
             className={`viewSlot viewSlot--terminals ${
               view === 'terminals' ? 'viewSlot--active' : 'viewSlot--hidden'
@@ -66,7 +67,7 @@ export function AppShell() {
           {view === 'settings' && <SettingsPanel />}
         </main>
       </div>
-      {!CHAT_ENABLED && <HermesWidget />}
+      {HERMES_RUNTIME_ENABLED && !CHAT_ENABLED && <HermesWidget />}
       <div className="floatingCorner">
         <UpdateToast />
         <SentinelToasts />

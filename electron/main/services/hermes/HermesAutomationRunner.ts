@@ -7,6 +7,7 @@ import {
   type AutomationJob,
 } from '@shared/automation'
 import { HERMES_BACKGROUND_MODEL } from '@shared/hermes-model-policy'
+import { assertHermesRuntimeEnabled } from '@shared/hermes-runtime'
 import type { OperationalHealthSnapshot } from '@shared/operational-health'
 import { redactText } from '@shared/redaction'
 import { resolveBin } from '../resolveBin'
@@ -146,6 +147,7 @@ export class HermesAutomationRunner {
     args: string[],
     opts: { timeout: number; maxBuffer: number },
   ): Promise<{ stdout: string }> {
+    assertHermesRuntimeEnabled()
     return execFileAsync(resolveBin('hermes'), args, { cwd, ...opts })
   }
 

@@ -17,8 +17,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { cockpit, isMockBackend } from '../lib/cockpit'
-import { sourceLabel, toHermesOpener } from '../lib/sentinelView'
-import { IconBolt, IconX } from './icons'
+import { sourceLabel } from '../lib/sentinelView'
+import { IconX } from './icons'
 import type { SentinelSignal } from '@shared/sentinel'
 import { completionCardId } from '@shared/swarm-completion'
 
@@ -29,7 +29,6 @@ const MAX_VISIBLE = 3
 
 export function SentinelToasts() {
   const activeProjectId = useStore((s) => s.activeProjectId)
-  const openHermesWith = useStore((s) => s.openHermesWith)
   const markSignalsSeen = useStore((s) => s.markSignalsSeen)
   const bumpSentinelUnseen = useStore((s) => s.bumpSentinelUnseen)
   const setView = useStore((s) => s.setView)
@@ -109,12 +108,6 @@ export function SentinelToasts() {
     }
   }, [])
 
-  const askHermes = (signal: SentinelSignal) => {
-    openHermesWith(toHermesOpener(signal))
-    void markSignalsSeen([signal.id])
-    dismiss(signal.id)
-  }
-
   const reviewCard = (signal: SentinelSignal) => {
     setView('swarm')
     void markSignalsSeen([signal.id])
@@ -162,14 +155,6 @@ export function SentinelToasts() {
                 Review card
               </button>
             )}
-            <button
-              type="button"
-              className="sentinelToast__ask"
-              onClick={() => askHermes(signal)}
-            >
-              <IconBolt width={13} height={13} />
-              Ask Hermes
-            </button>
             <button
               type="button"
               className="sentinelToast__dismiss"

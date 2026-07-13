@@ -4,6 +4,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { buildHermesArgs } from '@shared/hermes-run'
 import { HERMES_MAIN_MODEL } from '@shared/hermes-model-policy'
+import { assertHermesRuntimeEnabled } from '@shared/hermes-runtime'
 import { buildTranscriptPrompt, capHistory, type ChatRole, type ChatTurn } from '@shared/hermes-chat'
 import type { HermesChatReply } from '@shared/ipc'
 import { redactText } from '@shared/redaction'
@@ -109,6 +110,7 @@ export class HermesChatService {
     args: string[],
     opts: { timeout: number; maxBuffer: number; env?: Record<string, string> },
   ): Promise<{ stdout: string }> {
+    assertHermesRuntimeEnabled()
     const { env, ...rest } = opts
     return execFileAsync(resolveBin('hermes'), args, {
       cwd,

@@ -7,6 +7,7 @@ import {
   HERMES_BACKGROUND_MODEL,
   HERMES_MODEL_POLICY,
 } from '@shared/hermes-model-policy'
+import { assertHermesRuntimeEnabled } from '@shared/hermes-runtime'
 import { projectBrain } from '@shared/memory-ledger'
 import { mergeDuplicate } from '@shared/memory-consolidate'
 import { extractHook } from '@shared/memory-hub'
@@ -40,8 +41,10 @@ export type HermesCurationRunner = (
   opts: { timeout: number; maxBuffer: number },
 ) => Promise<{ stdout: string }>
 
-const defaultRunner: HermesCurationRunner = (cwd, args, opts) =>
-  execFileAsync(resolveBin('hermes'), args, { cwd, ...opts })
+const defaultRunner: HermesCurationRunner = (cwd, args, opts) => {
+  assertHermesRuntimeEnabled()
+  return execFileAsync(resolveBin('hermes'), args, { cwd, ...opts })
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000
 

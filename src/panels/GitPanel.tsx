@@ -7,6 +7,7 @@ import type {
   TerminalSession,
 } from '@shared/domain'
 import type { ReviewResult } from '@shared/review'
+import { HERMES_RUNTIME_ENABLED } from '@shared/hermes-runtime'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import type { ReactNode } from 'react'
@@ -702,7 +703,7 @@ export function GitPanel() {
         {notice ? <span className="chip">{notice}</span> : null}
       </div>
 
-      <section className="card review">
+      {HERMES_RUNTIME_ENABLED && <section className="card review">
         <div className="review__head">
           <span className="review__icon" aria-hidden>
             <IconShieldSearch width={18} height={18} />
@@ -711,7 +712,7 @@ export function GitPanel() {
             <div className="eyebrow">pre-ship review</div>
             <h3 className="review__title">Review before ship</h3>
             <p className="review__sub">
-              Hermes reads this change set — staged, unstaged and untracked — through the
+              The AI reviewer reads this change set — staged, unstaged and untracked — through the
               sanitizer boundary and reports bugs, regressions and security holes. Read-only,
               advisory; secrets never leave the machine.
             </p>
@@ -733,7 +734,7 @@ export function GitPanel() {
         ) : review ? (
           <ReviewFindings result={review} />
         ) : null}
-      </section>
+      </section>}
 
       {hasFiles ? (
         <div className="git__cols">

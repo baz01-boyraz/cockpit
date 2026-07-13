@@ -2,15 +2,14 @@
  * SentinelBell — the top-bar affordance into the always-on sentinel signal feed
  * (Faz A UI). A quiet bell chip carrying an unseen-count badge; clicking it opens
  * a compact popover of recent signals (newest first, a severity edge + relative
- * time per row). Clicking a row is the same "continue from the notification"
- * handoff as a toast — it opens Hermes with the signal's context and marks it
- * seen. "Mark all seen" clears the badge in one move.
+ * time per row). Clicking a row opens the full signal center and marks it seen.
+ * "Mark all seen" clears the badge in one move.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import { relativeTime } from '@shared/time'
-import { OUTCOME_META, sourceLabel, toHermesOpener } from '../lib/sentinelView'
+import { OUTCOME_META, sourceLabel } from '../lib/sentinelView'
 import { IconBell, IconCheck, IconChevron, IconPlus, IconX } from './icons'
 import type { SentinelSignal } from '@shared/sentinel'
 
@@ -19,7 +18,6 @@ export function SentinelBell() {
   const view = useStore((s) => s.view)
   const activeProjectId = useStore((s) => s.activeProjectId)
   const setView = useStore((s) => s.setView)
-  const openHermesWith = useStore((s) => s.openHermesWith)
   const markSignalsSeen = useStore((s) => s.markSignalsSeen)
 
   const [open, setOpen] = useState(false)
@@ -66,8 +64,8 @@ export function SentinelBell() {
   }, [open])
 
   const pick = (signal: SentinelSignal) => {
-    openHermesWith(toHermesOpener(signal))
     void markSignalsSeen([signal.id])
+    setView('sentinel')
     setOpen(false)
   }
 
@@ -172,7 +170,7 @@ export function SentinelBell() {
                       type="button"
                       className="sentinelRow__main"
                       onClick={() => pick(signal)}
-                      title="Continue in Hermes"
+                      title="Open signal center"
                     >
                       <span className="sentinelRow__top">
                         <span className="sentinelRow__source">{sourceLabel(signal.source)}</span>
