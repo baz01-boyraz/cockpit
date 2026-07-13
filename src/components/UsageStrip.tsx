@@ -114,10 +114,10 @@ function LogoMeter({
   )
 }
 
-/** '62%' when OpenRouter reports a purchased-credit share, else the raw '$12.40'
- *  balance (a pure pay-as-you-go account has no total to take a percent of). */
+/** Capped keys show remaining share; uncapped routing keys show infinity. */
 function openRouterDisplay(snapshot: OpenRouterUsageSnapshot | null): string {
   if (!snapshot?.available) return '—'
+  if (snapshot.unlimited) return '∞'
   if (snapshot.remainingPercent !== null) return `${snapshot.remainingPercent}%`
   if (snapshot.remainingUsd !== null) return `$${snapshot.remainingUsd.toFixed(2)}`
   return '—'
@@ -183,13 +183,15 @@ function OpenRouterEngineCore({
   onOpen: () => void
 }) {
   const available = snapshot?.available ?? false
-  // No total-credit percent on a pure pay-as-you-go account: ring reads "full"
-  // rather than falsely empty when we simply can't express a fraction.
+  // An uncapped key has no percentage denominator, so its ring reads full and
+  // the visible infinity mark communicates that this is deliberate.
   const ringPercent = available ? snapshot?.remainingPercent ?? 100 : null
   const display = openRouterDisplay(snapshot)
   const tone = available ? toneFor(snapshot?.remainingPercent ?? null) : 'off'
   const ariaLabel = available
-    ? `OpenRouter Council credit. ${display} remaining. Open usage details.`
+    ? snapshot?.unlimited
+      ? `OpenRouter Council key. No spending cap. $${snapshot.usageUsd?.toFixed(2) ?? '0.00'} used. Open usage details.`
+      : `OpenRouter Council key. ${display} remaining. Open usage details.`
     : `OpenRouter credit telemetry unavailable. ${snapshot?.reason ?? 'Open usage details.'}`
 
   return (

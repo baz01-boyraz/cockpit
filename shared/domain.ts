@@ -556,23 +556,26 @@ export interface AgentUsageReport {
 }
 
 // ---------------------------------------------------------------------------
-// OpenRouter credit (powers the Hermes engine core's live quota ring)
+// OpenRouter routing-key limit (powers Council's live quota ring)
 // ---------------------------------------------------------------------------
 
 /**
- * Remaining balance on the OpenRouter key stored in Settings, which Hermes
- * runs its DeepSeek/OpenRouter model calls through. Built in the main process
+ * Limit and usage on the OpenRouter key stored in Settings, which Council uses
+ * for its remote model seats. Built in the main process
  * from the decrypted key (SecretStore.get, main-process only) — the renderer
  * only ever receives these derived figures, never the key itself.
  */
 export interface OpenRouterUsageSnapshot {
-  /** True when a key is saved and OpenRouter reported a balance. */
+  /** True when a key is saved and OpenRouter reported its key metadata. */
   available: boolean
-  /** Remaining share of purchased credit, 0–100. Null on a pure pay-as-you-go
-   *  account (total_credits is 0, so a percent isn't meaningful). */
+  /** Remaining share of the key's spending cap, 0–100. Null when uncapped. */
   remainingPercent: number | null
   remainingUsd: number | null
   totalUsd: number | null
+  /** All-time usage attributed to this routing key. */
+  usageUsd: number | null
+  /** True when OpenRouter reports no per-key spending cap. */
+  unlimited: boolean
   /** Why usage is unavailable — drives a polished empty/error state. */
   reason: string | null
   fetchedAt: ISODate

@@ -7,7 +7,8 @@ import type { SecretStore } from './SecretStore'
  *  copy of the string (the two silently drifted once already). */
 export const OPENROUTER_SECRET_REF = 'hermes.openrouter'
 
-const CREDITS_URL = 'https://openrouter.ai/api/v1/credits'
+/** `/credits` requires a management key; Settings stores a normal routing key. */
+const KEY_URL = 'https://openrouter.ai/api/v1/key'
 const FETCH_TIMEOUT_MS = 8_000
 /** Don't re-probe OpenRouter more often than this. */
 const MIN_REFRESH_MS = 60_000
@@ -19,16 +20,17 @@ interface CacheEntry {
   at: number
 }
 
-interface CreditsResponse {
+interface KeyResponse {
   data?: {
-    total_credits?: number
-    total_usage?: number
+    limit?: number | null
+    limit_remaining?: number | null
+    usage?: number
   }
 }
 
 /**
- * Live remaining-credit awareness for the OpenRouter key saved in Settings —
- * the key Hermes's DeepSeek/OpenRouter model calls run on. Mirrors
+ * Live limit awareness for the OpenRouter routing key saved in Settings —
+ * the key Council's remote seats run on. Mirrors
  * AgentUsageService's cache + stale-fallback shape so the rail's Engines row
  * can treat Hermes like a third provider next to Claude/Codex.
  *
@@ -62,41 +64,62 @@ export class OpenRouterUsageService {
 
   private async fetchSnapshot(): Promise<OpenRouterUsageSnapshot> {
     const key = this.secrets.get(OPENROUTER_SECRET_REF)
-    if (!key) return this.unavailable('Add an OpenRouter key in Settings to see live credit.')
-
-    const body = await this.getJson(key)
-    const totalCredits = body.data?.total_credits
-    const totalUsage = body.data?.total_usage
-    if (typeof totalCredits !== 'number' || typeof totalUsage !== 'number') {
-      return this.unavailable('OpenRouter did not report a credit balance.')
+    if (!key) {
+      return this.unavailable(
+        this.secrets.has(OPENROUTER_SECRET_REF)
+          ? 'The stored OpenRouter key cannot be decrypted by this app build. Re-save it in Settings.'
+          : 'Add an OpenRouter key in Settings to see its live limit.',
+      )
     }
 
-    const remainingUsd = Math.max(0, totalCredits - totalUsage)
-    const remainingPercent =
-      totalCredits > 0
-        ? Math.max(0, Math.min(100, Math.round((remainingUsd / totalCredits) * 100)))
-        : null
+    const body = await this.getJson(key)
+    const limit = body.data?.limit
+    const limitRemaining = body.data?.limit_remaining
+    const usage = body.data?.usage
+    if (
+      (limit !== null && (typeof limit !== 'number' || !Number.isFinite(limit))) ||
+      typeof usage !== 'number' ||
+      !Number.isFinite(usage)
+    ) {
+      return this.unavailable('OpenRouter did not report this key’s limit.')
+    }
+
+    const totalUsd = typeof limit === 'number' ? Math.max(0, limit) : null
+    const unlimited = totalUsd === null
+    const remainingUsd = totalUsd === null
+      ? null
+      : Math.max(
+          0,
+          typeof limitRemaining === 'number' && Number.isFinite(limitRemaining)
+            ? limitRemaining
+            : totalUsd - usage,
+        )
+    const remainingPercent = totalUsd !== null && totalUsd > 0
+      ? Math.max(0, Math.min(100, Math.round(((remainingUsd ?? 0) / totalUsd) * 100)))
+      : null
 
     return {
       available: true,
       remainingPercent,
       remainingUsd,
-      totalUsd: totalCredits,
+      totalUsd,
+      usageUsd: Math.max(0, usage),
+      unlimited,
       reason: null,
       fetchedAt: new Date().toISOString(),
     }
   }
 
-  private async getJson(key: string): Promise<CreditsResponse> {
+  private async getJson(key: string): Promise<KeyResponse> {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
     try {
-      const res = await fetch(CREDITS_URL, {
+      const res = await fetch(KEY_URL, {
         headers: { Authorization: `Bearer ${key}` },
         signal: controller.signal,
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      return (await res.json()) as CreditsResponse
+      return (await res.json()) as KeyResponse
     } finally {
       clearTimeout(timer)
     }
@@ -108,6 +131,8 @@ export class OpenRouterUsageService {
       remainingPercent: null,
       remainingUsd: null,
       totalUsd: null,
+      usageUsd: null,
+      unlimited: false,
       reason,
       fetchedAt: new Date().toISOString(),
     }

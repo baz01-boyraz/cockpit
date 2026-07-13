@@ -59,31 +59,35 @@ function OpenRouterCapacity({ snapshot }: { snapshot: OpenRouterUsageSnapshot | 
     )
   }
 
-  // Pure pay-as-you-go accounts report no purchased-credit total, so a percent
-  // isn't meaningful — the ring reads full rather than falsely empty.
+  // Uncapped keys have no percentage denominator, so a full ring plus an
+  // explicit "no cap" label is more honest than an empty or unavailable ring.
   const remainingPct = snapshot.remainingPercent ?? 100
   const tone: CapacityTone = toneFor(snapshot.remainingPercent)
   const hasCap = snapshot.totalUsd !== null && snapshot.remainingUsd !== null
-  const spent = hasCap ? Math.max(0, snapshot.totalUsd! - snapshot.remainingUsd!) : null
+  const spent = snapshot.usageUsd
 
   const spendValue =
     spent !== null
       ? `$${spent.toFixed(2)}`
-      : snapshot.remainingUsd !== null
-        ? `$${snapshot.remainingUsd.toFixed(2)}`
+      : snapshot.usageUsd !== null
+        ? `$${snapshot.usageUsd.toFixed(2)}`
         : '—'
-  const spendLabel = spent !== null ? 'Metered spend' : 'Credit balance'
+  const spendLabel = 'Key usage'
   const spendSub =
-    spent !== null
-      ? `of $${snapshot.totalUsd!.toFixed(2)} credit`
-      : 'pay-as-you-go · no cap'
-  const ringSub = snapshot.remainingUsd !== null ? `$${snapshot.remainingUsd.toFixed(2)} left` : null
+    hasCap
+      ? `of $${snapshot.totalUsd!.toFixed(2)} key limit`
+      : 'unlimited key · no cap'
+  const ringSub = snapshot.unlimited
+    ? 'no key cap'
+    : snapshot.remainingUsd !== null
+      ? `$${snapshot.remainingUsd.toFixed(2)} left`
+      : null
 
   return (
     <article className={`capEngine capEngine--hermes capEngine--${tone}`}>
       <CapacityHead glyph="OR" name="OpenRouter" kind="Council" tone={tone} />
       <div className="capEngine__credit">
-        <CapacityRing percent={remainingPct} tone={tone} label="Credit" sub={ringSub} />
+        <CapacityRing percent={remainingPct} tone={tone} label="Limit" sub={ringSub} />
         <div className="capEngine__spend">
           <span className="capEngine__spendLabel">{spendLabel}</span>
           <span className="capEngine__spendValue mono">{spendValue}</span>

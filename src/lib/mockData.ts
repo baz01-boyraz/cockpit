@@ -256,6 +256,8 @@ export const openRouterUsageSnapshot = (): OpenRouterUsageSnapshot => ({
   remainingPercent: 62,
   remainingUsd: 12.4,
   totalUsd: 20,
+  usageUsd: 7.6,
+  unlimited: false,
   reason: null,
   fetchedAt: now(),
 })
