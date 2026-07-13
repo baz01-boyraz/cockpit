@@ -42,6 +42,7 @@ interface TerminalComposerProps {
   onPickImages: () => void
   onRemoveAttachment: (id: string) => void
   onDismissAttachmentError: () => void
+  onFocusChange: (focused: boolean) => void
   onSubmit: (draft: string) => Promise<boolean>
 }
 
@@ -93,6 +94,7 @@ export const TerminalComposer = forwardRef<TerminalComposerHandle, TerminalCompo
       onPickImages,
       onRemoveAttachment,
       onDismissAttachmentError,
+      onFocusChange,
       onSubmit,
     },
     handleRef,
@@ -259,7 +261,13 @@ export const TerminalComposer = forwardRef<TerminalComposerHandle, TerminalCompo
     sending || savingAttachment || (draft.trim().length === 0 && readyAttachments === 0)
 
   return (
-    <div className={`termcomposer ${historyOpen ? 'termcomposer--history' : ''}`}>
+    <div
+      className={`termcomposer ${historyOpen ? 'termcomposer--history' : ''}`}
+      onFocusCapture={() => onFocusChange(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onFocusChange(false)
+      }}
+    >
       {historyOpen && (
         <div id={historyId} className="termcomposer__history" role="listbox" aria-label="Terminal history">
           <div className="termcomposer__historyHead">

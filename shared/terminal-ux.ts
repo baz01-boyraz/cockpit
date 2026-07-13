@@ -154,6 +154,42 @@ export interface TerminalCopyKey {
   ctrlKey: boolean
 }
 
+export interface NativeInputBarSpan {
+  start: number
+  end: number
+}
+
+/**
+ * Locate a terminal-native input bar without confusing compact highlights
+ * (selected menu rows, badges, progress cells) for a second composer.
+ *
+ * The bar must be one continuous painted run, contain the live cursor, and
+ * occupy most of the terminal width. This keeps the visual mask role-neutral:
+ * Codex and Claude can change colours without teaching cockpiT prompt strings,
+ * while ordinary shell prompts and terminal menus remain untouched.
+ */
+export function findNativeInputBarSpan(
+  paintedCells: readonly boolean[],
+  cursorColumn: number,
+): NativeInputBarSpan | null {
+  if (
+    paintedCells.length === 0 ||
+    cursorColumn < 0 ||
+    cursorColumn >= paintedCells.length ||
+    !paintedCells[cursorColumn]
+  ) {
+    return null
+  }
+
+  let start = cursorColumn
+  let end = cursorColumn + 1
+  while (start > 0 && paintedCells[start - 1]) start -= 1
+  while (end < paintedCells.length && paintedCells[end]) end += 1
+
+  const minimumWidth = Math.max(18, Math.ceil(paintedCells.length * 0.55))
+  return end - start >= minimumWidth ? { start, end } : null
+}
+
 /**
  * Cmd+C copies on macOS only when xterm has a selection. Bare Ctrl+C remains
  * an interrupt there; other platforms use the conventional Ctrl+C selection

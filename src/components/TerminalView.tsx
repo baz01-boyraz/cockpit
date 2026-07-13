@@ -11,6 +11,7 @@ import {
 } from '@shared/terminal-ux'
 import { cockpit } from '../lib/cockpit'
 import { CommandBlockDecorations } from '../lib/commandBlocks'
+import { NativeInputMask } from '../lib/nativeInputMask'
 import { useSessionBlocks } from '../store/blockStore'
 import { BlocksView } from './BlocksView'
 import { TerminalComposer, type TerminalComposerHandle } from './TerminalComposer'
@@ -70,6 +71,7 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
   const decorationsRef = useRef<CommandBlockDecorations | null>(null)
+  const inputMaskRef = useRef<NativeInputMask | null>(null)
   const composerRef = useRef<TerminalComposerHandle | null>(null)
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -129,6 +131,8 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
     // the (invisible) control sequence.
     const decorations = new CommandBlockDecorations(term)
     decorationsRef.current = decorations
+    const inputMask = new NativeInputMask(term, THEME.background)
+    inputMaskRef.current = inputMask
     const offOsc = term.parser.registerOscHandler(OSC_COMMAND, (payload) => {
       decorations.handlePayload(payload)
       return true
@@ -139,6 +143,7 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
     const api = cockpit()
     const syncLiveOutput = () => {
       setAtLiveOutput(term.buffer.active.viewportY >= term.buffer.active.baseY)
+      inputMask.sync()
     }
     const offData = api.terminals.onData((chunk) => {
       if (chunk.sessionId !== session.id) return
@@ -195,6 +200,8 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
       offOsc.dispose()
       decorations.dispose()
       decorationsRef.current = null
+      inputMask.dispose()
+      inputMaskRef.current = null
       ro.disconnect()
       term.dispose()
       termRef.current = null
@@ -565,6 +572,7 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
         onPickImages={() => fileInputRef.current?.click()}
         onRemoveAttachment={removeAttachment}
         onDismissAttachmentError={() => setError(null)}
+        onFocusChange={(focused) => inputMaskRef.current?.setComposerFocused(focused)}
         onSubmit={submitComposerDraft}
       />
 
