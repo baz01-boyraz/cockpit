@@ -159,6 +159,23 @@ describe('Codex terminal UX', () => {
     expect(findNativeInputBarSpan(paintedCells, 2)).toBeNull()
   })
 
+  it('finds an unpainted ghost prompt when its suggestion continues after the cursor', () => {
+    const paintedCells = Array.from({ length: 80 }, () => false)
+    const contentCells = Array.from(
+      { length: 80 },
+      (_, index) => index === 0 || (index >= 2 && index < 38),
+    )
+
+    expect(findNativeInputBarSpan(paintedCells, 2, contentCells)).toEqual({ start: 0, end: 38 })
+  })
+
+  it('keeps an ordinary shell prompt whose text ends at the cursor', () => {
+    const paintedCells = Array.from({ length: 80 }, () => false)
+    const contentCells = Array.from({ length: 80 }, (_, index) => index < 34)
+
+    expect(findNativeInputBarSpan(paintedCells, 34, contentCells)).toBeNull()
+  })
+
   it('folds staged image references into one composer message', () => {
     expect(buildComposerMessage('fix this screen', ['.dev-cockpit/attachments/a.png'])).toBe(
       'fix this screen\n\nAttached image: .dev-cockpit/attachments/a.png',
