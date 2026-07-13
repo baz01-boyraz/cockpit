@@ -369,6 +369,9 @@ export function registerIpc(services: Services): void {
       summary: `${scope} Memory trust mode changed to ${saved}`,
       payload: { scope, mode: saved },
     })
+    // Autopilot owns reversible housekeeping: switching into it settles the
+    // cleanup backlog immediately instead of leaving stale asks in the inbox.
+    services.memoryPipeline.applyCleanupBacklog(projectId, scope)
     return saved
   })
   handle('memoryReviewQueue', (p) => {
@@ -392,9 +395,14 @@ export function registerIpc(services: Services): void {
     const { projectId, noteSlug } = memoryLedgerSchema.parse(p)
     return services.memoryLedger.list(projectBrain(projectId), noteSlug)
   })
-  handle('memoryConsolidate', (p) =>
-    services.memoryConsolidator.consolidate(projectIdSchema.parse(p).projectId),
-  )
+  handle('memoryConsolidate', (p) => {
+    const { projectId } = projectIdSchema.parse(p)
+    const result = services.memoryConsolidator.consolidate(projectId)
+    // Under Autopilot the queued archive/duplicate proposals are the brain's
+    // own reversible housekeeping — applied now, ledgered, never a conflict.
+    const autoApplied = services.memoryPipeline.applyCleanupBacklog(projectId, 'project')
+    return { ...result, autoApplied }
+  })
   handle('memoryTrash', (p) => {
     const { projectId, name } = memoryNameSchema.parse(p)
     return services.memory.trash(projectId, name)

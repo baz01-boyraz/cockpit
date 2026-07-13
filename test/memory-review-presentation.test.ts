@@ -45,6 +45,50 @@ describe('presentMemoryReview', () => {
     expect(isBatchCleanup(review)).toBe(true)
   })
 
+  it('surfaces the concrete curation reason and what the note says', () => {
+    const view = presentMemoryReview(
+      item({
+        kind: 'maintenance',
+        slug: 'stale-fact',
+        title: 'Archive stale note: stale-fact',
+        reason: 'Curation — archive: superseded by the v2 release flow',
+        proposedContent: '# Stale fact\n\nSomething that used to be true.',
+        existingContent: '# Stale fact\n\nSomething that used to be true.',
+      }),
+    )
+
+    expect(view.rationale).toBe('Superseded by the v2 release flow.')
+    expect(view.hook).toBe('Something that used to be true.')
+  })
+
+  it('reads the hook through frontmatter and falls back to the tidy-up line', () => {
+    const view = presentMemoryReview(
+      item({
+        kind: 'maintenance',
+        title: 'Archive stale note: stale-fact',
+        reason: 'Curation — archive:',
+        existingContent: '---\nschema: 1\n---\n# Old\n\nThe first real sentence.',
+      }),
+    )
+
+    expect(view.hook).toBe('The first real sentence.')
+    expect(view.rationale).toMatch(/tidy-up/i)
+  })
+
+  it('strips the trust-policy preamble from a suggestion reason', () => {
+    const view = presentMemoryReview(
+      item({
+        kind: 'merge',
+        title: 'Router placement update',
+        reason:
+          'autopilot policy requires review for a merge proposal. Needed when tuning the router next sprint.',
+        existingContent: '# Router placement\n\nThe router was renderer-only.',
+      }),
+    )
+
+    expect(view.rationale).toBe('Needed when tuning the router next sprint.')
+  })
+
   it('describes duplicate cleanup without exposing slugs or pipeline jargon', () => {
     const review = item({
       kind: 'maintenance',
@@ -99,6 +143,7 @@ describe('presentMemoryReview', () => {
     expect(view.title).toBe('Update “Router placement”?')
     expect(view.rationale).toBe('A recent session found a detail that belongs with this memory.')
     expect(view.rationale).not.toMatch(/model|reconcile/i)
+    expect(view.hook).toBe('The router was renderer-only.')
     expect(view.acceptLabel).toBe('Add detail')
   })
 

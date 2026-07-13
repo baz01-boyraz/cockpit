@@ -22,11 +22,62 @@
 
 /* graph mode gets the whole floor — no cramped middle column */
 .memory__graphstage {
+  position: relative;
   display: flex;
   min-height: 620px;
   height: calc(100vh - 320px);
 }
 .memory__graphstage > .memgraph { flex: 1; min-width: 0; }
+
+/* ----- graph quick view: a node click reads the note IN the field ----- */
+.memquick {
+  position: absolute;
+  top: var(--sp-3);
+  right: var(--sp-3);
+  bottom: calc(var(--sp-3) + 34px); /* keep the hint line readable below */
+  width: min(430px, 46%);
+  display: flex;
+  flex-direction: column;
+  z-index: 3;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: var(--r-lg);
+  background: color-mix(in oklab, var(--surface-2) 93%, transparent);
+  backdrop-filter: blur(14px);
+  box-shadow:
+    inset 0 1px 0 var(--edge-highlight),
+    0 20px 52px rgba(0, 0, 0, 0.52);
+  animation: fade-rise var(--dur) var(--ease-out) both;
+}
+.memquick__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-3) var(--sp-2);
+  border-bottom: 1px solid var(--border);
+}
+.memquick__headText { flex: 1; min-width: 0; }
+.memquick__headText h3 {
+  margin: 0 0 2px;
+  font-size: var(--fs-body);
+  font-weight: 640;
+  letter-spacing: var(--tracking-snug);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.memquick__sub { font-size: var(--fs-micro); color: var(--text-faint); }
+.memquick__actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.memquick__body {
+  flex: 1;
+  min-height: 0;
+  padding: var(--sp-3) var(--sp-4);
+}
+.memquick .notebody { font-size: var(--fs-sm); }
+
+@media (prefers-reduced-motion: reduce) {
+  .memquick { animation: none; }
+}
 
 /* calm busy state — one breathing dot, same language as review */
 .memory__busy {
@@ -392,6 +443,119 @@
   line-height: 1.7;
   color: var(--text-muted);
 }
+
+/* ----- composed note body: frontmatter → chips, markdown-lite → structure ----- */
+.notebody {
+  max-width: 640px;
+  font-size: var(--fs-body);
+  line-height: 1.7;
+  color: var(--text-muted);
+  word-break: break-word;
+}
+.notebody__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--sp-4);
+}
+.notebody__class {
+  padding: 2px 9px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  font-size: var(--fs-micro);
+  font-weight: 620;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--surface-inset);
+}
+.notebody__class--decision {
+  color: var(--ember-200);
+  border-color: color-mix(in oklab, var(--ember-400) 40%, var(--border));
+  background: color-mix(in oklab, var(--ember-400) 12%, transparent);
+}
+.notebody__class--gotcha {
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 38%, var(--border));
+  background: var(--danger-wash);
+}
+.notebody__class--architecture {
+  color: var(--glacier-300);
+  border-color: color-mix(in oklab, var(--glacier-400) 38%, var(--border));
+  background: var(--glacier-wash);
+}
+.notebody__class--user {
+  color: var(--signal);
+  border-color: color-mix(in oklab, var(--signal) 32%, var(--border));
+  background: var(--signal-dim);
+}
+.notebody__metaItem {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface-inset);
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+}
+.notebody__h {
+  margin: var(--sp-4) 0 var(--sp-2);
+  color: var(--text);
+  font-weight: 640;
+  letter-spacing: var(--tracking-snug);
+  line-height: 1.3;
+}
+.notebody__h:first-child { margin-top: 0; }
+.notebody__h--1 { font-size: var(--fs-h2); }
+.notebody__h--2 { font-size: calc(var(--fs-body) + 2px); }
+.notebody__h--3,
+.notebody__h--4 { font-size: var(--fs-body); }
+.notebody__p { margin: 0 0 var(--sp-3); }
+.notebody__p:last-child { margin-bottom: 0; }
+.notebody strong { color: var(--text); font-weight: 620; }
+.notebody code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+}
+.notebody__list {
+  margin: 0 0 var(--sp-3);
+  padding-left: 1.3em;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.notebody__list li::marker { color: var(--text-faint); }
+.notebody__code {
+  margin: 0 0 var(--sp-3);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+.notebody__code code { border: 0; background: transparent; padding: 0; }
+.notebody__quote {
+  margin: 0 0 var(--sp-3);
+  padding: 6px 12px;
+  border-left: 2px solid color-mix(in oklab, var(--ember-400) 45%, var(--border));
+  background: color-mix(in oklab, var(--surface-inset) 72%, transparent);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+.notebody__rule {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: var(--sp-4) 0;
+}
 /* wikilinks: ember owns interaction — resolved links are the reader's accent */
 .wikilink {
   display: inline;
@@ -509,137 +673,137 @@
   line-height: 1.6;
 }
 
-/* ----- calm landing view: orientation, not a wall of implementation details ----- */
+/* ----- working landing view: orientation the user can act on ----- */
 .memory__overview {
   position: relative;
   min-width: 0;
-  overflow: hidden;
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.9fr);
-  grid-template-rows: 1fr auto;
-  gap: var(--sp-5);
-  padding: clamp(28px, 5vw, 64px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
   background:
-    radial-gradient(80% 80% at 20% 15%, color-mix(in oklab, var(--ember-400) 10%, transparent), transparent 72%),
-    linear-gradient(145deg, color-mix(in oklab, var(--surface-2) 84%, transparent), var(--surface-inset));
+    radial-gradient(70% 60% at 12% 0%, color-mix(in oklab, var(--ember-400) 7%, transparent), transparent 70%),
+    linear-gradient(160deg, color-mix(in oklab, var(--surface-2) 82%, transparent), var(--surface-inset));
 }
-.memoverview__glow {
-  position: absolute;
-  width: 360px;
-  height: 360px;
-  left: -170px;
-  bottom: -230px;
-  border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in oklab, var(--ember-400) 24%, transparent), transparent 70%);
-  pointer-events: none;
-}
-.memoverview__hero {
-  position: relative;
-  z-index: 1;
-  align-self: center;
-  max-width: 560px;
+.memoverview__head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--sp-4);
+  padding-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--border);
 }
 .memoverview__icon {
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
-  margin-bottom: var(--sp-4);
-  border-radius: var(--r-lg);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-md);
   color: var(--ember-200);
   background: color-mix(in oklab, var(--ember-400) 13%, var(--surface-inset));
   border: 1px solid color-mix(in oklab, var(--ember-400) 34%, var(--border));
-  box-shadow: var(--bevel), 0 14px 36px color-mix(in oklab, var(--ember-500) 12%, transparent);
+  box-shadow: var(--bevel);
 }
-.memoverview__hero h3 {
-  max-width: 520px;
-  margin: 10px 0 var(--sp-3);
+.memoverview__intro { min-width: 0; max-width: 560px; }
+.memoverview__intro h3 {
+  margin: 6px 0 6px;
   color: var(--text);
-  font-size: clamp(25px, 3vw, 38px);
-  line-height: 1.08;
-  letter-spacing: -0.035em;
+  font-size: clamp(17px, 1.8vw, 21px);
+  line-height: 1.25;
+  letter-spacing: var(--tracking-snug);
   font-weight: 650;
 }
-.memoverview__hero p {
-  max-width: 520px;
+.memoverview__intro p {
   margin: 0;
   color: var(--text-muted);
-  font-size: var(--fs-body);
-  line-height: 1.7;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
 }
+.memoverview__intro p strong { color: var(--text); font-weight: 600; }
 .memoverview__stats {
-  position: relative;
-  z-index: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-self: end;
+  grid-auto-flow: column;
   gap: 1px;
+  margin: 0;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   background: var(--border);
   box-shadow: var(--bevel);
 }
 .memoverview__stats > div {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: var(--sp-4);
+  flex-direction: column-reverse;
+  gap: 2px;
+  min-width: 92px;
+  padding: 10px 14px;
   background: color-mix(in oklab, var(--surface-inset) 88%, transparent);
 }
-.memoverview__stats strong {
+.memoverview__stats dd {
+  margin: 0;
   color: var(--ember-200);
   font-family: var(--font-mono);
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 620;
+  font-variant-numeric: tabular-nums;
 }
-.memoverview__stats span { color: var(--text-faint); font-size: var(--fs-xs); }
-.memoverview__recent {
-  position: relative;
-  z-index: 1;
-  grid-column: 1 / -1;
-  padding-top: var(--sp-4);
-  border-top: 1px solid var(--border);
+.memoverview__stats dt { color: var(--text-faint); font-size: var(--fs-micro); white-space: nowrap; }
+
+.memoverview__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-5);
+  align-items: start;
 }
-.memoverview__recentHead {
+.memoverview__colHead {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--sp-3);
   margin-bottom: var(--sp-2);
 }
-.memoverview__recentHead strong { color: var(--text); font-size: var(--fs-sm); }
-.memoverview__recentHead span { color: var(--text-faint); font-size: var(--fs-xs); }
-.memoverview__recent ul {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--sp-2);
+.memoverview__colHead strong { color: var(--text); font-size: var(--fs-sm); font-weight: 620; }
+.memoverview__colHead span { color: var(--text-faint); font-size: var(--fs-xs); }
+.memoverview__col ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
-.memoverview__recent button {
+.memoverview__col button {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
+  gap: var(--sp-3);
   width: 100%;
-  min-height: 62px;
-  padding: 10px 12px;
+  padding: 9px 12px;
   text-align: left;
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   background: color-mix(in oklab, var(--surface-inset) 78%, transparent);
   color: var(--text-muted);
-  transition: transform var(--dur) var(--ease-spring), border-color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+  transition:
+    transform var(--dur) var(--ease-spring),
+    border-color var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out);
 }
-.memoverview__recent button:hover {
-  transform: translateY(-2px);
+.memoverview__col button:hover {
+  transform: translateX(2px);
   border-color: var(--border-accent);
   background: var(--surface-2);
 }
-.memoverview__recent button > span { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.memoverview__recent button strong {
+.memoverview__col button:active { transform: translateX(2px) scale(0.995); }
+.memoverview__col button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.memoverview__rowText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.memoverview__rowText strong {
   overflow: hidden;
   color: var(--text);
   font-size: var(--fs-xs);
@@ -647,8 +811,29 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.memoverview__recent button small { color: var(--text-faint); font-size: var(--fs-micro); }
-.memoverview__recent button svg { flex-shrink: 0; color: var(--text-faint); }
+.memoverview__rowText small {
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.memoverview__rowMeta {
+  flex-shrink: 0;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+}
+.memoverview__col button svg { flex-shrink: 0; color: var(--text-faint); }
+.memoverview__empty {
+  margin: 0;
+  padding: var(--sp-3);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-md);
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
 
 /* ----- right zone: connections ----- */
 .memory__conns {
@@ -1287,17 +1472,29 @@
   font-size: var(--fs-sm);
   line-height: 1.65;
 }
-.memoryDecision__why {
-  display: grid;
-  grid-template-columns: 100px minmax(0, 1fr);
-  gap: var(--sp-2);
+.memoryDecision__facts {
+  display: flex;
+  flex-direction: column;
   margin-top: var(--sp-3);
-  padding: 9px 11px;
   border-radius: var(--r-sm);
   background: color-mix(in oklab, var(--surface-inset) 78%, transparent);
 }
-.memoryDecision__why > span { color: var(--text-faint); font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: 0.06em; }
-.memoryDecision__why p { margin: 0; color: var(--text-muted); font-size: var(--fs-xs); line-height: 1.5; }
+.memoryDecision__fact {
+  display: grid;
+  grid-template-columns: 108px minmax(0, 1fr);
+  gap: var(--sp-2);
+  padding: 9px 11px;
+}
+.memoryDecision__fact + .memoryDecision__fact { border-top: 1px solid var(--border); }
+.memoryDecision__fact > span {
+  padding-top: 1px;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.memoryDecision__fact p { margin: 0; color: var(--text-muted); font-size: var(--fs-xs); line-height: 1.5; }
+.memoryDecision__fact:first-child p { color: var(--text); }
 .memoryDecision__details { margin-top: var(--sp-3); }
 .memoryDecision__details > summary {
   width: fit-content;
@@ -1431,9 +1628,9 @@
 @media (max-width: 1180px) {
   .memory__cols { grid-template-columns: 244px minmax(0, 1fr); }
   .memory__conns { display: none; }
-  .memory__overview { grid-template-columns: 1fr; padding: var(--sp-6); }
-  .memoverview__stats { align-self: auto; }
-  .memoverview__recent ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .memoverview__head { grid-template-columns: auto minmax(0, 1fr); }
+  .memoverview__stats { grid-column: 1 / -1; justify-self: start; }
+  .memoverview__grid { grid-template-columns: 1fr; gap: var(--sp-4); }
   .memoryInbox__toggle { grid-template-columns: auto minmax(220px, 1fr) auto; }
   .memoryInbox__counts { display: none; }
 }
@@ -1448,6 +1645,7 @@
   .memory__list { max-height: 300px; }
   .memory__reader--wide { grid-column: auto; }
   .memory__overview { min-height: 520px; }
+  .memquick { width: auto; left: var(--sp-3); }
   .memoryInbox__toggle { grid-template-columns: auto minmax(0, 1fr) auto; }
   .memoryInbox__copy small { display: none; }
   .memoryInbox__batch { align-items: flex-start; flex-direction: column; }
@@ -1457,5 +1655,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .memoryInbox__body,
-  .memoverview__recent button { animation: none; transition: none; }
+  .memoverview__col button { animation: none; transition: none; }
 }

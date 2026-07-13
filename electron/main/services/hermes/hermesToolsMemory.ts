@@ -219,12 +219,19 @@ export function createMemoryTools(ctx: HermesToolContext): HermesTool[] {
               'No sweep result — the hub is empty or the curation model was unavailable. Nothing was changed.',
           }
         }
+        // Autopilot brains settle reversible cleanup immediately (stale-checked,
+        // ledgered, recoverable); other modes keep every proposal in the queue.
+        const autoApplied = ctx.memoryPipeline.applyCleanupBacklog(projectId, 'project')
+        const remaining = result.proposals - autoApplied
         return {
           proposals: result.proposals,
+          autoApplied,
           message:
-            result.proposals > 0
-              ? `${result.proposals} archive/merge proposal(s) queued to the owner's review queue. Review them with get_pending_memory_reviews; nothing was changed on disk.`
-              : 'The sweep ran and proposed no changes — the hub looks healthy.',
+            result.proposals === 0
+              ? 'The sweep ran and proposed no changes — the hub looks healthy.'
+              : autoApplied > 0
+                ? `${autoApplied} reversible cleanup(s) applied under Autopilot (recoverable from the ledger and .trash)${remaining > 0 ? `; ${remaining} left in the owner's review queue` : ''}.`
+                : `${result.proposals} archive/merge proposal(s) queued to the owner's review queue. Review them with get_pending_memory_reviews; nothing was changed on disk.`,
         }
       },
     },

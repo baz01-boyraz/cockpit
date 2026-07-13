@@ -55,9 +55,10 @@ import { assembleHubSnapshot, assembleNote, type MemoryDoc } from '@shared/memor
 import { assembleHealth } from '@shared/memory-health'
 import { analyzeConsolidation } from '@shared/memory-consolidate'
 import type { CaptureResult } from '@shared/memory-pipeline'
-import type { ReviewItem } from '@shared/memory-review'
+import { reviewOperation, type ReviewDecision, type ReviewItem } from '@shared/memory-review'
 import {
   brainForAccess,
+  canAutoCleanup,
   defaultTrustModeForBrain,
   MEMORY_POLICY_VERSION,
   type MemoryBrainScope,
@@ -272,6 +273,95 @@ function emitCouncilProgress(
 
 const memoryDocsFor = (projectId: string): MemoryDoc[] => memoryHub.get(projectId) ?? []
 const kanbanFor = (projectId: string): KanbanCard[] => kanbanSeed.get(projectId) ?? []
+
+/**
+ * Apply one review decision to the mock hub — the single rule shared by the
+ * user path (resolveReview) and the Autopilot cleanup path, mirroring the
+ * pipeline: archive removes the note, merge writes the survivor and drops the
+ * duplicate, everything else writes the proposed content.
+ */
+function applyMockResolve(
+  projectId: string,
+  scope: MemoryBrainScope,
+  item: ReviewItem,
+  decision: ReviewDecision,
+  editedContent?: string,
+): void {
+  const brain = brainForAccess(projectId, scope)
+  if (decision !== 'discard') {
+    const hubId = scope === 'global' ? 'baz-global' : projectId
+    const operation = reviewOperation(item)
+    if (operation === 'archive') {
+      memoryHub.set(hubId, memoryDocsFor(hubId).filter((d) => d.name !== item.slug))
+    } else {
+      const content =
+        decision === 'edit' && editedContent != null ? editedContent : item.proposedContent
+      const docs = memoryDocsFor(hubId).filter(
+        (d) => d.name !== item.slug && d.name !== item.alsoTrash,
+      )
+      docs.push({ name: item.slug, content, updatedAt: now() })
+      memoryHub.set(hubId, docs)
+    }
+  }
+  mockReviews.set(brain, (mockReviews.get(brain) ?? []).filter((r) => r.id !== item.id))
+}
+
+/** Autopilot parity with MemoryPipeline.applyCleanupBacklog (reversible only). */
+function applyMockCleanupBacklog(projectId: string): number {
+  const brain = brainForAccess(projectId, 'project')
+  const mode = mockTrustModes.get(brain) ?? defaultTrustModeForBrain(brain)
+  if (!canAutoCleanup(mode)) return 0
+  let applied = 0
+  for (const item of [...(mockReviews.get(brain) ?? [])]) {
+    if (item.kind !== 'maintenance' || reviewOperation(item) === null) continue
+    applyMockResolve(projectId, 'project', item, 'accept')
+    applied += 1
+  }
+  return applied
+}
+
+// Demo inbox: one reversible cleanup + one suggestion so the browser preview
+// exercises the decision cards; the cleanup demonstrates Autopilot tidy-up.
+{
+  const staleNote = memoryDocsFor('prj_cockpit').find((d) => d.name === 'swarm-ideas')
+  if (staleNote) {
+    mockReviews.set('project:prj_cockpit', [
+      {
+        id: 'rev-cleanup-swarm-ideas',
+        brain: 'project:prj_cockpit',
+        kind: 'maintenance',
+        slug: 'swarm-ideas',
+        title: 'Archive stale note: swarm-ideas',
+        proposedContent: staleNote.content,
+        reason:
+          'Curation — archive: superseded by the shipped Swarm board — roles and personas now live in the agent taxonomy',
+        existingContent: staleNote.content,
+        sourceId: null,
+        alsoTrash: null,
+        operation: 'archive',
+        status: 'pending',
+        createdAt: now(),
+        resolvedAt: null,
+      },
+      {
+        id: 'rev-suggestion-release-ritual',
+        brain: 'project:prj_cockpit',
+        kind: 'new',
+        slug: 'release-ritual',
+        title: 'Release ritual',
+        proposedContent:
+          '# Release ritual\n\nTag only after CI is green; the release workflow publishes metadata and assets from the same run.',
+        reason: 'Needed every time a version is tagged — mixing local and CI artifacts broke auto-update once.',
+        existingContent: null,
+        sourceId: null,
+        alsoTrash: null,
+        status: 'pending',
+        createdAt: now(),
+        resolvedAt: null,
+      },
+    ])
+  }
+}
 
 function emit(sessionId: string, data: string) {
   for (const cb of dataListeners) cb({ sessionId, data, at: now() })
@@ -1294,27 +1384,22 @@ export function createMockApi(): CockpitApi {
       },
       setTrustMode: async (projectId, scope, mode) => {
         mockTrustModes.set(brainForAccess(projectId, scope), mode)
+        // Parity with main: entering Autopilot settles the reversible backlog.
+        if (scope === 'project' && mode === 'autopilot') applyMockCleanupBacklog(projectId)
         return mode
       },
       reviewQueue: async (projectId, scope) => reviewsFor(projectId, scope),
       resolveReview: async (projectId, scope, reviewId, decision, editedContent) => {
-        const brain = brainForAccess(projectId, scope)
         const item = reviewsFor(projectId, scope).find((r) => r.id === reviewId)
         if (!item) throw new Error('Review item not found or not authorized for this brain.')
-        if (item && decision !== 'discard') {
-          const content = decision === 'edit' && editedContent != null ? editedContent : item.proposedContent
-          const hubId = scope === 'global' ? 'baz-global' : projectId
-          const docs = memoryDocsFor(hubId).filter((d) => d.name !== item.slug)
-          docs.push({ name: item.slug, content, updatedAt: now() })
-          memoryHub.set(hubId, docs)
-        }
-        mockReviews.set(brain, reviewsFor(projectId, scope).filter((r) => r.id !== reviewId))
+        applyMockResolve(projectId, scope, item, decision, editedContent)
         return reviewsFor(projectId, scope)
       },
       ledger: async () => [],
       consolidate: async (projectId) => {
         const report = analyzeConsolidation(memoryDocsFor(projectId))
-        return { report, queued: 0, snapshotId: `snap-${now().slice(0, 10)}` }
+        const autoApplied = applyMockCleanupBacklog(projectId)
+        return { report, queued: 0, snapshotId: `snap-${now().slice(0, 10)}`, autoApplied }
       },
       bazList: async () => assembleHubSnapshot(memoryDocsFor('baz-global')),
       bazRead: async (name) => assembleNote(memoryDocsFor('baz-global'), name),

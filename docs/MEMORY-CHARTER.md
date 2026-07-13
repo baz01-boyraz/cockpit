@@ -160,9 +160,12 @@ Notes **decay**. A fact that was load-bearing in June can be dead by August.
 - A **weekly curation sweep** proposes archive / merge / delete for stale,
   superseded, or duplicate notes. (The sweep itself ships in a later phase; this
   charter declares the policy now.)
-- Curation proposals are **batched for owner approval** — the owner approves the
-  sweep; the engines never silently delete a human's note.
-- Soft-delete only: notes move to `.trash/`, never hard-removed.
+- Cleanup follows the owner's **trust mode**. Under **Autopilot** the brain
+  applies REVERSIBLE cleanup (archive, duplicate-merge) on its own through the
+  stale-checked, ledgered resolution path; under Assisted/Manual every proposal
+  is batched for owner approval. Conflicts are never cleanup and always ask.
+- Soft-delete only: notes move to `.trash/`, never hard-removed — an Autopilot
+  tidy-up is one restore away.
 
 ## Enforcement
 

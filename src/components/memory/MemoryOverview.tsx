@@ -7,55 +7,103 @@ interface MemoryOverviewProps {
   onOpen: (name: string) => void
 }
 
-/** Calm landing view: useful orientation instead of an empty reader + raw link queue. */
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * Working landing view: what the brain holds, what moved recently, and which
+ * memories everything else hangs off — every element opens something. No
+ * marketing hero; orientation the user can act on.
+ */
 export function MemoryOverview({ notes, onOpen }: MemoryOverviewProps) {
-  const connected = notes.filter((note) => note.linksOut + note.backlinks > 0).length
-  const recent = notes.slice(0, 4)
+  const degree = (note: MemoryNoteSummary): number => note.linksOut + note.backlinks
+  const connected = notes.filter((note) => degree(note) > 0).length
+  const freshCount = notes.filter(
+    (note) => Date.now() - Date.parse(note.updatedAt) < WEEK_MS,
+  ).length
+  const recent = notes.slice(0, 5)
+  const hubs = [...notes]
+    .filter((note) => degree(note) > 0)
+    .sort((a, b) => degree(b) - degree(a))
+    .slice(0, 5)
 
   return (
     <section className="card memory__overview">
-      <div className="memoverview__glow" aria-hidden />
-      <div className="memoverview__hero">
+      <header className="memoverview__head">
         <span className="memoverview__icon" aria-hidden>
-          <IconMemory width={23} height={23} />
+          <IconMemory width={20} height={20} />
         </span>
-        <span className="eyebrow">project brain</span>
-        <h3>Your work, remembered without the noise.</h3>
-        <p>
-          Search the library or open a recent memory. Technical housekeeping stays tucked away
-          until it genuinely needs attention.
-        </p>
-      </div>
+        <div className="memoverview__intro">
+          <span className="eyebrow">project brain</span>
+          <h3>Everything this project has learned, in one place.</h3>
+          <p>
+            Plain markdown saved with the repo. Open a memory below, search the library, or
+            switch to <strong>Graph</strong> to see how the ideas connect.
+          </p>
+        </div>
+        <dl className="memoverview__stats" aria-label="Memory summary">
+          <div>
+            <dt>memories</dt>
+            <dd>{notes.length}</dd>
+          </div>
+          <div>
+            <dt>connected</dt>
+            <dd>{connected}</dd>
+          </div>
+          <div>
+            <dt>updated this week</dt>
+            <dd>{freshCount}</dd>
+          </div>
+        </dl>
+      </header>
 
-      <div className="memoverview__stats" aria-label="Memory summary">
-        <div>
-          <strong>{notes.length}</strong>
-          <span>active memories</span>
+      <div className="memoverview__grid">
+        <div className="memoverview__col">
+          <div className="memoverview__colHead">
+            <strong>Recently updated</strong>
+            <span>Pick up where you left off</span>
+          </div>
+          <ul>
+            {recent.map((note) => (
+              <li key={note.name}>
+                <button onClick={() => onOpen(note.name)}>
+                  <span className="memoverview__rowText">
+                    <strong>{note.title}</strong>
+                    <small>{note.name}.md</small>
+                  </span>
+                  <span className="memoverview__rowMeta mono">{relativeTime(note.updatedAt)}</span>
+                  <IconChevron width={13} height={13} aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
-        <div>
-          <strong>{connected}</strong>
-          <span>connected ideas</span>
-        </div>
-      </div>
 
-      <div className="memoverview__recent">
-        <div className="memoverview__recentHead">
-          <strong>Recently updated</strong>
-          <span>Pick up where you left off</span>
+        <div className="memoverview__col">
+          <div className="memoverview__colHead">
+            <strong>Most connected</strong>
+            <span>The load-bearing ideas</span>
+          </div>
+          {hubs.length === 0 ? (
+            <p className="memoverview__empty">
+              No links yet — connect notes with [[wikilinks]] and the hubs appear here.
+            </p>
+          ) : (
+            <ul>
+              {hubs.map((note) => (
+                <li key={note.name}>
+                  <button onClick={() => onOpen(note.name)}>
+                    <span className="memoverview__rowText">
+                      <strong>{note.title}</strong>
+                      <small>{note.name}.md</small>
+                    </span>
+                    <span className="memoverview__rowMeta mono">{degree(note)} links</span>
+                    <IconChevron width={13} height={13} aria-hidden />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-        <ul>
-          {recent.map((note) => (
-            <li key={note.name}>
-              <button onClick={() => onOpen(note.name)}>
-                <span>
-                  <strong>{note.title}</strong>
-                  <small>{relativeTime(note.updatedAt)}</small>
-                </span>
-                <IconChevron width={14} height={14} aria-hidden />
-              </button>
-            </li>
-          ))}
-        </ul>
       </div>
     </section>
   )

@@ -673,6 +673,10 @@ export class Services {
         for (const projectId of due) {
           try {
             await this.memoryCuration.sweep(projectId)
+            // Autopilot settles its own reversible cleanup right away — the
+            // inbox only keeps what genuinely needs the owner (conflicts,
+            // uncertain suggestions, non-autopilot brains).
+            this.memoryPipeline.applyCleanupBacklog(projectId, 'project')
           } catch {
             /* a missed sweep is invisible by design */
           }

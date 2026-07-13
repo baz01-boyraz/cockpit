@@ -3,7 +3,7 @@ import type { MemoryNote } from '@shared/memory-hub'
 import { normalizeNoteName } from '@shared/wikilink'
 import { relativeTime } from '@shared/time'
 import { IconCheck, IconPlus, IconX } from '../icons'
-import { WikiText } from './WikiText'
+import { NoteBody } from './NoteBody'
 
 interface MemoryReaderProps {
   note: MemoryNote
@@ -188,7 +188,13 @@ export function MemoryReader({
 
       {mode === 'read' ? (
         <div className="memreader__body scroll-y">
-          <WikiText content={note.content} known={known} onOpen={onOpenLink} onOffer={onOfferCreate} />
+          <NoteBody
+            content={note.content}
+            known={known}
+            onOpen={onOpenLink}
+            onOffer={onOfferCreate}
+            dedupeTitle={note.title}
+          />
         </div>
       ) : (
         <div className="memreader__editWrap">

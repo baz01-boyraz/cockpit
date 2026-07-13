@@ -33,7 +33,7 @@ export const MEMORY_TRUST_META: Record<
 > = {
   autopilot: {
     label: 'Autopilot',
-    effect: 'High-confidence new facts and safe merges save automatically. Conflicts ask.',
+    effect: 'New facts, safe merges, and reversible cleanup handle themselves. Conflicts always ask.',
   },
   assisted: {
     label: 'Assisted',
@@ -183,4 +183,15 @@ export function autoCommitKinds(mode: MemoryTrustMode): ReadonlySet<ReviewKind> 
 
 export function canAutoCommit(mode: MemoryTrustMode, kind: ReviewKind): boolean {
   return autoCommitKinds(mode).has(kind)
+}
+
+/**
+ * Whether a mode lets the brain apply REVERSIBLE housekeeping (archive /
+ * duplicate-merge maintenance proposals) without asking. Archive is a soft
+ * move to `.trash/` and merges keep the survivor + ledger provenance, so
+ * autopilot treats them as its own tidy-up; conflicts are never cleanup and
+ * stay governed by the explicit-review/delegated-resolver rule.
+ */
+export function canAutoCleanup(mode: MemoryTrustMode): boolean {
+  return mode === 'autopilot'
 }

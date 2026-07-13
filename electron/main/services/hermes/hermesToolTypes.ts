@@ -40,7 +40,7 @@ export interface HermesToolContext {
   // into the SAME review queue the distiller uses, instead of persisting it.
   memoryReviews: Pick<MemoryReviewService, 'listPendingFor' | 'create'>
   memoryPolicy: Pick<MemoryPolicyService, 'getTrustMode'>
-  memoryPipeline: Pick<MemoryPipeline, 'resolveReview'>
+  memoryPipeline: Pick<MemoryPipeline, 'resolveReview' | 'applyCleanupBacklog'>
   // Faz D — the weekly memory curation sweep. `run_memory_sweep` triggers it;
   // proposals land in the review queue above, never a direct file operation.
   memoryCuration: Pick<MemoryCurationService, 'sweep'>

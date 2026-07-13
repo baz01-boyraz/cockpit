@@ -56,6 +56,11 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
   const controls = useRef<GraphControls | null>(null)
   const [data, setData] = useState<GraphData | null>(null)
   const [failed, setFailed] = useState(false)
+  // The engine effect must survive parent re-renders: a new onOpen identity
+  // would otherwise tear the whole field down (re-seed, re-simulate) on every
+  // panel state change — the graph looked permanently "settling" and burned CPU.
+  const onOpenRef = useRef(onOpen)
+  onOpenRef.current = onOpen
 
   // Hubs are small — read every note exactly once per graph open.
   useEffect(() => {
@@ -249,15 +254,20 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
         const c = controlOf(i, a.x, a.y, b.x, b.y)
         const toGhost = metaById.get(edge.target)?.ghost ?? false
         const alpha = lit ? 0.55 : dim ? 0.05 : 0.17
-        const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y)
-        grad.addColorStop(0, withAlpha(va.color, alpha))
-        grad.addColorStop(1, withAlpha(vb.color, alpha * (toGhost ? 0.5 : 1)))
 
         ctx.save()
-        if (lit) ctx.globalCompositeOperation = 'lighter'
+        if (lit) {
+          // Gradients are worth their allocation only on the few focused edges.
+          const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y)
+          grad.addColorStop(0, withAlpha(va.color, alpha))
+          grad.addColorStop(1, withAlpha(vb.color, alpha * (toGhost ? 0.5 : 1)))
+          ctx.globalCompositeOperation = 'lighter'
+          ctx.strokeStyle = grad
+        } else {
+          ctx.strokeStyle = withAlpha(va.color, alpha * (toGhost ? 0.7 : 1))
+        }
         ctx.beginPath()
         ctx.setLineDash(toGhost ? [3, 5] : [])
-        ctx.strokeStyle = grad
         ctx.lineWidth = lit ? 1.7 : 0.9
         ctx.moveTo(a.x, a.y)
         ctx.quadraticCurveTo(c.x, c.y, b.x, b.y)
@@ -349,6 +359,9 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
       }
 
       // --- labels (precise mono caps) ---
+      // Below ~0.75× the caps are unreadable noise — draw only the focused
+      // neighbourhood there instead of 100+ smeared strings per frame.
+      const labelsLegible = camScale >= 0.75
       ctx.textAlign = 'center'
       ctx.textBaseline = 'top'
       ctx.letterSpacing = '0.09em'
@@ -358,6 +371,7 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
         if (!meta || !p) continue
         const isHover = node.id === hovered
         const near = hoodOf?.has(node.id) ?? false
+        if (!labelsLegible && !isHover && !near) continue
         const dim = hovered !== null && !isHover && !near
         const raw = meta.label.toUpperCase()
         const text = raw.length > LABEL_MAX ? raw.slice(0, LABEL_MAX - 1) + '…' : raw
@@ -556,7 +570,7 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
       const moved = downAt ? Math.hypot(p.x - downAt.x, p.y - downAt.y) : 0
       downAt = null
       if (moved <= CLICK_SLOP_PX && !metaById.get(id)?.ghost) {
-        onOpen(id)
+        onOpenRef.current(id)
         return
       }
       settled = false
@@ -629,7 +643,7 @@ export function MemoryGraph({ projectId, snapshot, onOpen }: MemoryGraphProps) {
       canvas.removeEventListener('wheel', onWheel)
       controls.current = null
     }
-  }, [data, onOpen])
+  }, [data])
 
   return (
     <section className="card memgraph" aria-label="Memory graph">

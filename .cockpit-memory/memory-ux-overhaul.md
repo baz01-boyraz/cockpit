@@ -16,4 +16,6 @@ Commit `527b146` added queue-wide reconciliation in `MemoryBrainBar`: whenever t
 
 The same UX pass fixed the graph's poor resting posture with cursor-centered wheel zoom, empty-space pan, node pinning, fit-on-open/settle, and compact +/−/fit controls. Motion remains limited to transform/opacity. Reducing queue noise also lets the graph sit higher instead of being pushed below the fold.
 
+**Gotcha (fixed 2026-07-12):** symptom "memory graph lag yapıyor, bilgiler sürekli dönüyor" — MemoryGraph's engine effect depended on the `onOpen` prop, an inline arrow recreated on every MemoryPanel render, so any panel state change tore the whole canvas down and re-seeded/re-simulated the layout: permanent swirling + CPU burn. Fix: hold callbacks in a ref, effect deps `[data]` only. Same pass: node click opens a quick-view overlay on the graph (never yanks to list), unlit edges draw solid strokes (no per-frame gradient allocation), and labels below 0.75× zoom draw only for the focused neighbourhood.
+
 Related: [[memory-trust-modes]], [[memory-conflict-double-gate]]

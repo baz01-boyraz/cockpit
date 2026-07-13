@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import type { MemoryHubSnapshot, MemoryNote } from '@shared/memory-hub'
+import { relativeTime } from '@shared/time'
 import { IconWarning, IconX } from '../components/icons'
+import { NoteBody } from '../components/memory/NoteBody'
 import { MemoryNoteList } from '../components/memory/MemoryNoteList'
 import { MemoryReader } from '../components/memory/MemoryReader'
 import { MemoryConnections } from '../components/memory/MemoryConnections'
@@ -260,11 +262,55 @@ export function MemoryPanel() {
           <MemoryGraph
             projectId={projectId}
             snapshot={snapshot}
-            onOpen={(name) => {
-              setLayout('list')
-              void openNote(name)
-            }}
+            onOpen={(name) => void openNote(name)}
           />
+          {/* Quick view floats over the field — a node click must never yank
+              the user out of the graph they were exploring. */}
+          {(noteLoading || note) && (
+            <aside className="memquick" role="dialog" aria-label="Memory quick view">
+              {noteLoading ? (
+                <div className="memory__busy memory__busy--bare">
+                  <span className="memory__pulse" aria-hidden />
+                  Opening note…
+                </div>
+              ) : note ? (
+                <>
+                  <header className="memquick__head">
+                    <div className="memquick__headText">
+                      <h3>{note.title}</h3>
+                      <span className="memquick__sub mono">
+                        {note.name}.md · {relativeTime(note.updatedAt)}
+                      </span>
+                    </div>
+                    <div className="memquick__actions">
+                      <button className="btn btn--sm" onClick={() => setLayout('list')}>
+                        Open in library
+                      </button>
+                      <button
+                        className="btn btn--ghost btn--sm"
+                        aria-label="Close quick view"
+                        onClick={() => {
+                          setNote(null)
+                          setSelected(null)
+                        }}
+                      >
+                        <IconX width={13} height={13} />
+                      </button>
+                    </div>
+                  </header>
+                  <div className="memquick__body scroll-y">
+                    <NoteBody
+                      content={note.content}
+                      known={known}
+                      onOpen={(name) => void openNote(name)}
+                      onOffer={() => undefined}
+                      dedupeTitle={note.title}
+                    />
+                  </div>
+                </>
+              ) : null}
+            </aside>
+          )}
         </div>
       ) : (
         <div className={`memory__cols ${note && !noteLoading ? '' : 'memory__cols--overview'}`}>

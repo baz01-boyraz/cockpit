@@ -1,3 +1,4 @@
+import { extractHook, HOOK_CAP } from './memory-hub'
 import { reviewOperation, type ReviewItem } from './memory-review'
 
 export type MemoryReviewCategory = 'cleanup' | 'attention' | 'suggestion'
@@ -8,6 +9,8 @@ export interface MemoryReviewPresentation {
   title: string
   summary: string
   rationale: string
+  /** One line of what the note actually says — so a decision never needs the raw text. */
+  hook: string | null
   acceptLabel: string
   discardLabel: string
   canEdit: boolean
@@ -27,16 +30,49 @@ export function humanizeMemoryName(name: string): string {
 const noteName = (item: ReviewItem): string =>
   heading(item.existingContent) ?? heading(item.proposedContent) ?? humanizeMemoryName(item.slug)
 
+const noteHook = (item: ReviewItem): string | null => {
+  const source = item.existingContent ?? item.proposedContent
+  const hook = source ? extractHook(source) : null
+  if (!hook) return null
+  // extractHook slices at the cap — a full-length hook is almost surely cut.
+  return hook.length >= HOOK_CAP ? `${hook}…` : hook
+}
+
+/** Pipeline phrasing that must never reach the owner's card verbatim. */
+const PIPELINE_NOISE = /model confidence|reconcile=|semantic gate|charter gate/i
+
+/**
+ * Turn the queue's stored reason into an owner-facing sentence: strip the
+ * curation/trust-policy prefixes, then fall back to `fallback` when nothing
+ * human-readable remains.
+ */
+function humanReviewReason(raw: string | null | undefined, fallback: string): string {
+  if (!raw) return fallback
+  const stripped = raw
+    .trim()
+    .replace(/^curation\s*[—-]\s*(archive|merge):\s*/i, '')
+    .replace(/^(autopilot|assisted|manual) policy requires review for a \w+ proposal\.\s*/i, '')
+    .trim()
+  if (!stripped || PIPELINE_NOISE.test(stripped)) return fallback
+  const sentence = stripped[0].toUpperCase() + stripped.slice(1)
+  return /[.!?…]$/.test(sentence) ? sentence : `${sentence}.`
+}
+
 export function presentMemoryReview(item: ReviewItem): MemoryReviewPresentation {
   const operation = reviewOperation(item)
+  const hook = noteHook(item)
 
   if (operation === 'archive') {
     return {
       category: 'cleanup',
       eyebrow: 'Cleanup suggestion',
       title: `Archive “${noteName(item)}”?`,
-      summary: 'It looks outdated. Archiving removes it from everyday memory while keeping it recoverable.',
-      rationale: 'The weekly tidy-up marked this memory as old or no longer active.',
+      summary: 'It has stopped earning its place in everyday memory. Archiving tucks it away — recoverable anytime.',
+      rationale: humanReviewReason(
+        item.reason,
+        'The weekly tidy-up marked this memory as old or no longer active.',
+      ),
+      hook,
       acceptLabel: 'Archive note',
       discardLabel: 'Keep it active',
       canEdit: false,
@@ -50,7 +86,11 @@ export function presentMemoryReview(item: ReviewItem): MemoryReviewPresentation 
       eyebrow: 'Duplicate cleanup',
       title: `Combine “${duplicate}” with “${noteName(item)}”?`,
       summary: 'They appear to repeat the same idea. Combining them leaves one cleaner memory and keeps the history.',
-      rationale: 'The weekly tidy-up found the same idea saved in two places.',
+      rationale: humanReviewReason(
+        item.reason,
+        'The weekly tidy-up found the same idea saved in two places.',
+      ),
+      hook,
       acceptLabel: 'Combine notes',
       discardLabel: 'Keep both',
       canEdit: false,
@@ -64,6 +104,7 @@ export function presentMemoryReview(item: ReviewItem): MemoryReviewPresentation 
       title: 'Two versions need a decision',
       summary: `Memory already contains a different version of “${noteName(item)}”. Nothing was overwritten. Hermes can settle it when the evidence is clear; otherwise you choose.`,
       rationale: 'The saved fact and a new observation disagree, so neither version was chosen automatically.',
+      hook,
       acceptLabel: 'Use new version',
       discardLabel: 'Keep current version',
       canEdit: true,
@@ -76,7 +117,11 @@ export function presentMemoryReview(item: ReviewItem): MemoryReviewPresentation 
       eyebrow: 'New detail',
       title: `Update “${noteName(item)}”?`,
       summary: 'A recent session found a useful detail that can be added to this memory.',
-      rationale: 'A recent session found a detail that belongs with this memory.',
+      rationale: humanReviewReason(
+        item.reason,
+        'A recent session found a detail that belongs with this memory.',
+      ),
+      hook,
       acceptLabel: 'Add detail',
       discardLabel: 'Skip it',
       canEdit: true,
@@ -88,7 +133,11 @@ export function presentMemoryReview(item: ReviewItem): MemoryReviewPresentation 
     eyebrow: 'Possible memory',
     title: `Remember “${noteName(item)}”?`,
     summary: 'A recent session found something that may be useful again later.',
-    rationale: 'A recent session marked this as useful beyond the current conversation.',
+    rationale: humanReviewReason(
+      item.reason,
+      'A recent session marked this as useful beyond the current conversation.',
+    ),
+    hook,
     acceptLabel: 'Remember this',
     discardLabel: 'Not useful',
     canEdit: true,

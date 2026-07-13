@@ -351,6 +351,7 @@ function makeContext(over: Partial<HermesToolContext> = {}): { ctx: HermesToolCo
           resolution,
         })
       },
+      applyCleanupBacklog: () => 0,
     },
     memoryCuration: {
       sweep: async (projectId) => {

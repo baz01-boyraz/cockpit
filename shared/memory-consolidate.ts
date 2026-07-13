@@ -62,6 +62,8 @@ export interface ConsolidationResult {
   queued: number
   /** The pre-pass snapshot id — a bad clean-up is one restore away (G7). */
   snapshotId: string
+  /** Cleanup proposals Autopilot applied on its own (reversible; ledgered). */
+  autoApplied?: number
 }
 
 const utf8Bytes = (s: string): number => new TextEncoder().encode(s).length

@@ -152,12 +152,19 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
         if (activeProjectRef.current !== projectId) return
         if (scope === 'global') setGlobalMode(next)
         else setMode(next)
+        // Switching into Autopilot settles the reversible-cleanup backlog in
+        // the main process — reload the queue and the hub so the inbox and
+        // note list reflect what the brain just tidied.
+        if (next === 'autopilot') {
+          await refresh()
+          onChanged()
+        }
       } catch (err) {
         if (activeProjectRef.current !== projectId) return
         setError(msg(err))
       }
     },
-    [projectId],
+    [projectId, refresh, onChanged],
   )
 
   const toggleBaz = useCallback(async () => {
@@ -189,22 +196,27 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
     try {
       const res = await cockpit().memory.consolidate(projectId)
       const repetitiveNotes = new Set(res.report.repetitions.map((finding) => finding.slug)).size
+      const autoApplied = res.autoApplied ?? 0
+      const remaining = Math.max(0, res.queued - autoApplied)
       setFlash(
-        res.queued > 0
-          ? `Memory found ${res.queued} cleanup suggestion${res.queued === 1 ? '' : 's'}. They are grouped in the inbox.`
-          : res.report.repetitions.length > 0
-            ? `I found ${res.report.repetitions.length} repeated ${res.report.repetitions.length === 1 ? 'fact' : 'facts'} across ${repetitiveNotes} ${repetitiveNotes === 1 ? 'memory' : 'memories'}. Nothing changed; a safety snapshot is ready.`
-            : res.report.oversized.length > 0
-              ? `${res.report.oversized.length} long ${res.report.oversized.length === 1 ? 'memory needs' : 'memories need'} a careful split. Nothing changed; a safety snapshot is ready.`
-          : 'Memory is tidy — no duplicate notes need your attention.',
+        autoApplied > 0
+          ? `Tidied ${autoApplied} ${autoApplied === 1 ? 'memory' : 'memories'} automatically (Autopilot) — recoverable anytime.${remaining > 0 ? ` ${remaining} need${remaining === 1 ? 's' : ''} your eye in the inbox.` : ''}`
+          : res.queued > 0
+            ? `Memory found ${res.queued} cleanup suggestion${res.queued === 1 ? '' : 's'}. They are grouped in the inbox.`
+            : res.report.repetitions.length > 0
+              ? `I found ${res.report.repetitions.length} repeated ${res.report.repetitions.length === 1 ? 'fact' : 'facts'} across ${repetitiveNotes} ${repetitiveNotes === 1 ? 'memory' : 'memories'}. Nothing changed; a safety snapshot is ready.`
+              : res.report.oversized.length > 0
+                ? `${res.report.oversized.length} long ${res.report.oversized.length === 1 ? 'memory needs' : 'memories need'} a careful split. Nothing changed; a safety snapshot is ready.`
+            : 'Memory is tidy — no duplicate notes need your attention.',
       )
       await refresh()
+      if (autoApplied > 0) onChanged()
     } catch (err) {
       setError(msg(err))
     } finally {
       setBusy(false)
     }
-  }, [projectId, refresh])
+  }, [projectId, refresh, onChanged])
 
   const capture = useCallback(async () => {
     setBusy(true)
@@ -308,9 +320,11 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
     ? reviewSummary.attention === 1
       ? '1 memory decision needs a closer look'
       : `${reviewSummary.attention} memory decisions need a closer look`
-    : reviewSummary.cleanup > 0
-      ? `${reviewSummary.cleanup} cleanup suggestion${reviewSummary.cleanup === 1 ? '' : 's'}, neatly grouped`
-      : `${reviewSummary.suggestions} memory suggestion${reviewSummary.suggestions === 1 ? '' : 's'}`
+    : reviewSummary.cleanup > 0 && reviewSummary.suggestions > 0
+      ? `${reviewSummary.cleanup + reviewSummary.suggestions} waiting — ${reviewSummary.cleanup} cleanup, ${reviewSummary.suggestions} new`
+      : reviewSummary.cleanup > 0
+        ? `${reviewSummary.cleanup} cleanup suggestion${reviewSummary.cleanup === 1 ? '' : 's'}, neatly grouped`
+        : `${reviewSummary.suggestions} memory suggestion${reviewSummary.suggestions === 1 ? '' : 's'}`
 
   const moveReview = (delta: number) => {
     if (reviews.length === 0) return
@@ -561,10 +575,20 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
                 <h3>{activePresentation.title}</h3>
                 <p className="memoryDecision__summary">{activePresentation.summary}</p>
 
-                {activePresentation.rationale && (
-                  <div className="memoryDecision__why">
-                    <span>Why it surfaced</span>
-                    <p>{activePresentation.rationale}</p>
+                {(activePresentation.hook || activePresentation.rationale) && (
+                  <div className="memoryDecision__facts">
+                    {activePresentation.hook && (
+                      <div className="memoryDecision__fact">
+                        <span>What it says</span>
+                        <p>“{activePresentation.hook}”</p>
+                      </div>
+                    )}
+                    {activePresentation.rationale && (
+                      <div className="memoryDecision__fact">
+                        <span>Why it surfaced</span>
+                        <p>{activePresentation.rationale}</p>
+                      </div>
+                    )}
                   </div>
                 )}
 

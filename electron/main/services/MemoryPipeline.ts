@@ -21,6 +21,7 @@ import {
 } from '@shared/memory-review'
 import {
   brainForAccess,
+  canAutoCleanup,
   canAutoCommit,
   delegatedConflictResolutionIssues,
   defaultTrustModeForBrain,
@@ -318,6 +319,31 @@ export class MemoryPipeline {
         evidence: delegated?.evidence ?? null,
       },
     })
+  }
+
+  /**
+   * Autopilot's own housekeeping: apply every pending REVERSIBLE cleanup item
+   * (archive / duplicate-merge maintenance) for the brain, through the same
+   * stale-checked, ledgered resolution path a human decision uses. Conflicts
+   * and ordinary suggestions are never touched. An item that fails (stale,
+   * changed, missing) simply stays in the inbox for the owner. Returns how
+   * many items were applied.
+   */
+  applyCleanupBacklog(projectId: string, scope: MemoryBrainScope): number {
+    const brain = brainForAccess(projectId, scope)
+    const mode = this.policy?.trustModeForBrain(brain) ?? defaultTrustModeForBrain(brain)
+    if (!canAutoCleanup(mode)) return 0
+    let applied = 0
+    for (const item of this.reviews.listPendingFor(projectId, scope)) {
+      if (item.kind !== 'maintenance' || reviewOperation(item) === null) continue
+      try {
+        this.resolveReview(projectId, scope, item.id, 'accept', undefined, { actor: 'ai' })
+        applied += 1
+      } catch {
+        // Stale or changed cleanup stays pending — the owner decides later.
+      }
+    }
+    return applied
   }
 
   /**
