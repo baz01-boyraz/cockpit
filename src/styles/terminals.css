@@ -424,7 +424,7 @@
 }
 .termcomposer__editor {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 6px;
   min-height: 40px;
@@ -487,6 +487,7 @@
   background: rgba(224, 123, 69, 0.32);
   color: var(--text);
 }
+.termcomposer__attach,
 .termcomposer__historyButton,
 .termcomposer__send {
   display: grid;
@@ -504,11 +505,30 @@
     background var(--dur) var(--ease-out),
     transform var(--dur) var(--ease-out);
 }
+.termcomposer__attach:hover,
 .termcomposer__historyButton:hover,
 .termcomposer__historyButton--on {
   color: var(--accent-hi);
   border-color: var(--border-accent);
   background: var(--accent-wash);
+}
+.termcomposer__attach { position: relative; }
+.termcomposer__attachCount {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 3px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-pill);
+  background: linear-gradient(145deg, var(--accent-hi), var(--accent));
+  color: var(--text-on-accent);
+  font-size: 8.5px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 0 0 2px rgba(14, 15, 19, 0.94);
 }
 .termcomposer__send {
   color: var(--text-on-accent);
@@ -529,6 +549,114 @@
   cursor: default;
   opacity: 0.52;
 }
+/* Staged image chips — images ride the next message instead of auto-sending. */
+.termcomposer__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 9px 0;
+}
+.termcomposer__chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 240px;
+  padding: 4px 6px 4px 4px;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background:
+    linear-gradient(160deg, rgba(224, 123, 69, 0.09), transparent 58%),
+    rgba(20, 22, 28, 0.92);
+  box-shadow: var(--shadow-1);
+  animation: termComposerChipIn 200ms var(--ease-spring);
+  transition: border-color var(--dur) var(--ease-out);
+}
+.termcomposer__chip:hover { border-color: rgba(224, 123, 69, 0.34); }
+.termcomposer__chipThumb {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 26px;
+  border-radius: 5px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+}
+.termcomposer__chipBody {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+.termcomposer__chipName {
+  max-width: 150px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.termcomposer__chipMeta {
+  color: var(--text-faint);
+  font-size: 9px;
+}
+.termcomposer__chipRemove {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-faint);
+  transition:
+    color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out);
+}
+.termcomposer__chipRemove:hover {
+  color: #f0786a;
+  border-color: rgba(226, 86, 61, 0.3);
+  background: rgba(226, 86, 61, 0.1);
+}
+.termcomposer__chip--saving { border-color: rgba(224, 123, 69, 0.3); }
+.termcomposer__chip--saving::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 32%, rgba(255, 255, 255, 0.08) 50%, transparent 68%);
+  transform: translateX(-100%);
+  animation: termComposerChipScan 1.1s var(--ease-out) infinite;
+  pointer-events: none;
+}
+.termcomposer__chip--saving .termcomposer__chipMeta { color: var(--accent-hi); }
+.termcomposer__chipError {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid rgba(226, 86, 61, 0.32);
+  border-radius: 7px;
+  background: rgba(226, 86, 61, 0.1);
+  color: #f0786a;
+  font-size: var(--fs-micro);
+  text-align: left;
+  animation: termComposerChipIn 200ms var(--ease-spring);
+}
+.termcomposer__chipError svg { flex: 0 0 auto; opacity: 0.8; }
+
+@keyframes termComposerChipIn {
+  from { opacity: 0; transform: translateY(4px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes termComposerChipScan {
+  to { transform: translateX(100%); }
+}
+
 .termcomposer__footer {
   display: flex;
   align-items: center;
@@ -843,8 +971,7 @@
 }
 .termview__navbtn--latest .termview__navdown { transform: rotate(90deg) translateX(-1px); }
 .termview__copy,
-.termview__clearInput,
-.termview__attach {
+.termview__clearInput {
   display: inline-flex;
   place-items: center;
   align-items: center;
@@ -884,25 +1011,14 @@
 .termview__clearInput {
   opacity: 0.72;
 }
-.termview:hover .termview__attach,
-.termview:hover .termview__clearInput,
-.termview--dragging .termview__attach,
-.termview--saving .termview__attach {
+.termview:hover .termview__clearInput {
   opacity: 1;
 }
 .termview__copy:hover:not(:disabled),
-.termview__clearInput:hover:not(:disabled),
-.termview__attach:hover:not(:disabled) {
+.termview__clearInput:hover:not(:disabled) {
   color: var(--accent-hi);
   border-color: var(--border-accent);
   background: rgba(34, 38, 49, 0.94);
-}
-.termview__attach:disabled {
-  cursor: progress;
-  color: var(--text-faint);
-}
-.termview--saving .termview__attach svg {
-  animation: termAttachFloat 0.9s var(--ease-spring) infinite alternate;
 }
 
 /* --- Foldable Blocks view (Warp-style command cards) ------------------------ */
@@ -1120,87 +1236,6 @@
   color: var(--text-muted);
   font-size: var(--fs-xs);
 }
-.termattach {
-  position: absolute;
-  left: 9px;
-  bottom: 9px;
-  z-index: 6;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  width: min(360px, calc(100% - 18px));
-  min-height: 48px;
-  padding: 6px;
-  border-radius: 8px;
-  border: 1px solid var(--border-strong);
-  background: rgba(20, 22, 28, 0.92);
-  box-shadow: var(--shadow-float);
-  backdrop-filter: blur(14px);
-  animation: termAttachIn 220ms var(--ease-spring);
-}
-.termattach--ready {
-  border-color: rgba(224, 123, 69, 0.28);
-}
-.termattach__thumb {
-  flex: 0 0 auto;
-  width: 42px;
-  height: 34px;
-  border-radius: var(--r-sm);
-  object-fit: cover;
-  background: var(--surface-inset);
-  border: 1px solid var(--border);
-}
-.termattach__body {
-  min-width: 0;
-  flex: 1;
-}
-.termattach__name {
-  color: var(--text);
-  font-size: var(--fs-xs);
-  font-weight: 650;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.termattach__path {
-  margin-top: 1px;
-  color: var(--text-faint);
-  font-size: var(--fs-micro);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.termattach__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  margin-top: 2px;
-  color: var(--text-faint);
-  font-size: var(--fs-micro);
-}
-.termattach__ok {
-  color: var(--signal);
-}
-.termattach__actions {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.termattach__send {
-  color: var(--accent-hi);
-  background: var(--accent-wash);
-  border-color: rgba(224, 123, 69, 0.22);
-}
-.termattach__loader {
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 2px solid rgba(236, 230, 218, 0.12);
-  border-top-color: var(--accent-hi);
-  animation: termAttachSpin 760ms linear infinite;
-}
 .termpane__dead {
   flex: 1;
   display: flex;
@@ -1237,11 +1272,6 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes termAttachFloat {
-  from { transform: translateY(1px); }
-  to { transform: translateY(-2px); }
-}
-
 @keyframes termAttachSpin {
   to { transform: rotate(360deg); }
 }
@@ -1250,9 +1280,8 @@
   .termview--dragging::before,
   .termview__drop,
   .termview__drop::before,
-  .termview--saving .termview__attach svg,
-  .termattach,
-  .termattach__loader,
+  .termcomposer__chip,
+  .termcomposer__chip--saving::after,
   .termview__copy {
     animation: none;
   }

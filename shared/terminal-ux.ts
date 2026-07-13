@@ -104,6 +104,50 @@ export function buildTerminalHistorySuggestions(
     .map((match) => match.item)
 }
 
+/**
+ * One writing place: printable typing aimed at the terminal is rerouted into
+ * the composer instead of the pty. Navigation and control keys (Enter, arrows,
+ * Escape, Ctrl/Cmd chords, Shift+Tab) still reach the foreground TUI so menus,
+ * interrupts, and mode cycling keep working. Alternate-screen apps (vim, htop)
+ * own the whole keyboard, and both keydown and keypress must be swallowed or
+ * xterm still feeds the pty on the second event.
+ */
+export interface TerminalKeyStroke {
+  type: string
+  key: string
+  metaKey: boolean
+  ctrlKey: boolean
+  altKey: boolean
+  isComposing?: boolean
+}
+
+export function shouldRouteKeyToComposer(
+  event: TerminalKeyStroke,
+  opts: { alternateScreen: boolean },
+): boolean {
+  if (opts.alternateScreen) return false
+  if (event.type !== 'keydown' && event.type !== 'keypress') return false
+  if (event.isComposing) return false
+  if (event.metaKey || event.ctrlKey || event.altKey) return false
+  return event.key.length === 1
+}
+
+/**
+ * Fold the draft and staged image references into one submission. Image paths
+ * ride as short `Attached image:` lines after the text, so agents get a
+ * readable file reference instead of a wall-of-path echo.
+ */
+export function buildComposerMessage(
+  draft: string,
+  attachmentPaths: readonly string[],
+): string | null {
+  const text = normalizePromptDraft(draft)
+  const refs = attachmentPaths.map((path) => path.trim()).filter((path) => path.length > 0)
+  if (refs.length === 0) return text
+  const refBlock = refs.map((path) => `Attached image: ${path}`).join('\n')
+  return text === null ? refBlock : `${text}\n\n${refBlock}`
+}
+
 export interface TerminalCopyKey {
   key: string
   metaKey: boolean

@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   CODEX_INTERACTIVE_COMMAND,
   buildCodexResumeCommand,
+  buildComposerMessage,
   buildTerminalComposerSubmission,
   buildTerminalHistorySuggestions,
   isTerminalCopyShortcut,
   normalizePromptDraft,
   rememberTerminalHistory,
+  shouldRouteKeyToComposer,
 } from '../shared/terminal-ux'
 
 describe('Codex terminal UX', () => {
@@ -61,6 +63,95 @@ describe('Codex terminal UX', () => {
       'three',
     ])
     expect(rememberTerminalHistory(['keep'], ' \n ')).toEqual(['keep'])
+  })
+
+  it('routes printable typing into the composer so the terminal has one writing place', () => {
+    const keydown = { type: 'keydown', key: 'g', metaKey: false, ctrlKey: false, altKey: false }
+
+    expect(shouldRouteKeyToComposer(keydown, { alternateScreen: false })).toBe(true)
+    expect(
+      shouldRouteKeyToComposer(
+        { ...keydown, key: ' ' },
+        { alternateScreen: false },
+      ),
+    ).toBe(true)
+    // Shifted characters are still plain typing.
+    expect(
+      shouldRouteKeyToComposer(
+        { ...keydown, key: 'G' },
+        { alternateScreen: false },
+      ),
+    ).toBe(true)
+    // keypress must be swallowed too or xterm still feeds the pty.
+    expect(
+      shouldRouteKeyToComposer(
+        { ...keydown, type: 'keypress' },
+        { alternateScreen: false },
+      ),
+    ).toBe(true)
+  })
+
+  it('keeps TUI navigation, chords, IME, and alt-screen apps on the terminal', () => {
+    const keydown = { type: 'keydown', key: 'g', metaKey: false, ctrlKey: false, altKey: false }
+
+    expect(
+      shouldRouteKeyToComposer(
+        { ...keydown, key: 'Enter' },
+        { alternateScreen: false },
+      ),
+    ).toBe(false)
+    expect(
+      shouldRouteKeyToComposer(
+        { ...keydown, key: 'ArrowDown' },
+        { alternateScreen: false },
+      ),
+    ).toBe(false)
+    expect(
+      shouldRouteKeyToComposer(
+        { ...keydown, key: 'c', ctrlKey: true },
+        { alternateScreen: false },
+      ),
+    ).toBe(false)
+    expect(
+      shouldRouteKeyToComposer(
+        { ...keydown, key: 'v', metaKey: true },
+        { alternateScreen: false },
+      ),
+    ).toBe(false)
+    expect(
+      shouldRouteKeyToComposer(
+        { ...keydown, altKey: true },
+        { alternateScreen: false },
+      ),
+    ).toBe(false)
+    expect(
+      shouldRouteKeyToComposer(
+        { ...keydown, isComposing: true },
+        { alternateScreen: false },
+      ),
+    ).toBe(false)
+    expect(
+      shouldRouteKeyToComposer(
+        { ...keydown, type: 'keyup' },
+        { alternateScreen: false },
+      ),
+    ).toBe(false)
+    // vim, htop & friends own the keyboard on the alternate screen.
+    expect(shouldRouteKeyToComposer(keydown, { alternateScreen: true })).toBe(false)
+  })
+
+  it('folds staged image references into one composer message', () => {
+    expect(buildComposerMessage('fix this screen', ['.dev-cockpit/attachments/a.png'])).toBe(
+      'fix this screen\n\nAttached image: .dev-cockpit/attachments/a.png',
+    )
+    expect(
+      buildComposerMessage('', ['.dev-cockpit/attachments/a.png', '.dev-cockpit/attachments/b.png']),
+    ).toBe(
+      'Attached image: .dev-cockpit/attachments/a.png\nAttached image: .dev-cockpit/attachments/b.png',
+    )
+    expect(buildComposerMessage('plain text', [])).toBe('plain text')
+    expect(buildComposerMessage('  \n ', ['  '])).toBeNull()
+    expect(buildComposerMessage('', [])).toBeNull()
   })
 
   it('copies a selection with the platform shortcut without stealing Ctrl+C on macOS', () => {

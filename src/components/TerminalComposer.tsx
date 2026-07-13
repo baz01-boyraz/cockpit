@@ -1,6 +1,8 @@
 import {
+  forwardRef,
   useEffect,
   useId,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -11,16 +13,42 @@ import {
   buildTerminalHistorySuggestions,
   rememberTerminalHistory,
 } from '@shared/terminal-ux'
-import { IconSearch, IconSend, IconTerminal } from './icons'
+import { IconImage, IconSearch, IconSend, IconTerminal, IconX } from './icons'
 
 const HISTORY_LIMIT = 80
 const TEXTAREA_MAX_HEIGHT = 118
+
+/** Imperative surface for the terminal pane: rerouted typing lands here. */
+export interface TerminalComposerHandle {
+  focus(): void
+  insertText(text: string): void
+}
+
+/** Staged image chip rendered inside the composer until the draft is sent. */
+export interface ComposerAttachmentView {
+  id: string
+  name: string
+  size: number
+  previewUrl: string
+  status: 'saving' | 'ready'
+}
 
 interface TerminalComposerProps {
   projectId: string
   role: TerminalRole | null
   capturedHistory: readonly string[]
+  attachments: readonly ComposerAttachmentView[]
+  attachmentError: string | null
+  onPickImages: () => void
+  onRemoveAttachment: (id: string) => void
+  onDismissAttachmentError: () => void
   onSubmit: (draft: string) => Promise<boolean>
+}
+
+function formatChipBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function historyRole(role: TerminalRole | null): string {
@@ -54,12 +82,21 @@ function oneLinePreview(value: string): string {
   return value.replace(/\n/g, ' ↵ ')
 }
 
-export function TerminalComposer({
-  projectId,
-  role,
-  capturedHistory,
-  onSubmit,
-}: TerminalComposerProps) {
+export const TerminalComposer = forwardRef<TerminalComposerHandle, TerminalComposerProps>(
+  function TerminalComposer(
+    {
+      projectId,
+      role,
+      capturedHistory,
+      attachments,
+      attachmentError,
+      onPickImages,
+      onRemoveAttachment,
+      onDismissAttachmentError,
+      onSubmit,
+    },
+    handleRef,
+  ) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const sendingRef = useRef(false)
   const historyId = useId()
@@ -112,8 +149,34 @@ export function TerminalComposer({
     })
   }
 
+  useImperativeHandle(
+    handleRef,
+    () => ({
+      focus: () => textareaRef.current?.focus(),
+      insertText: (text: string) => {
+        if (!text) return
+        setDraft((prev) => prev + text)
+        requestAnimationFrame(() => {
+          const textarea = textareaRef.current
+          if (!textarea) return
+          textarea.focus()
+          const end = textarea.value.length
+          textarea.setSelectionRange(end, end)
+        })
+      },
+    }),
+    [],
+  )
+
+  const savingAttachment = attachments.some((item) => item.status === 'saving')
+  const readyAttachments = attachments.filter((item) => item.status === 'ready').length
+
   const submit = async () => {
     if (sendingRef.current) return
+    if (savingAttachment) {
+      setNotice('Image still saving…')
+      return
+    }
     sendingRef.current = true
     setSending(true)
     setNotice(null)
@@ -126,7 +189,11 @@ export function TerminalComposer({
       setDraft('')
       setHistoryOpen(false)
       setActiveSuggestion(0)
-      setNotice('Sent exactly as written')
+      setNotice(
+        readyAttachments > 0
+          ? `Sent with ${readyAttachments} image${readyAttachments > 1 ? 's' : ''}`
+          : 'Sent exactly as written',
+      )
       requestAnimationFrame(() => textareaRef.current?.focus())
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not send input')
@@ -183,11 +250,13 @@ export function TerminalComposer({
 
   const roleLabel = role === 'claude' ? 'Claude' : role === 'codex' ? 'Codex' : 'Shell'
   const placeholder = role === 'claude' || role === 'codex'
-    ? 'Write a message — click anywhere to edit'
-    : 'Type a command — click anywhere to edit'
+    ? `Write to ${roleLabel} — typing anywhere lands here`
+    : 'Type a command — typing anywhere lands here'
   const activeSuggestionId = historyOpen && suggestions[activeSuggestion]
     ? `${historyId}-option-${activeSuggestion}`
     : undefined
+  const sendDisabled =
+    sending || savingAttachment || (draft.trim().length === 0 && readyAttachments === 0)
 
   return (
     <div className={`termcomposer ${historyOpen ? 'termcomposer--history' : ''}`}>
@@ -221,6 +290,47 @@ export function TerminalComposer({
         </div>
       )}
 
+      {(attachments.length > 0 || attachmentError) && (
+        <div className="termcomposer__chips" aria-label="Staged image attachments">
+          {attachments.map((item) => (
+            <div
+              key={item.id}
+              className={`termcomposer__chip ${
+                item.status === 'saving' ? 'termcomposer__chip--saving' : ''
+              }`}
+            >
+              <img className="termcomposer__chipThumb" src={item.previewUrl} alt="" />
+              <div className="termcomposer__chipBody">
+                <span className="termcomposer__chipName">{item.name}</span>
+                <span className="termcomposer__chipMeta">
+                  {item.status === 'saving' ? 'Saving…' : formatChipBytes(item.size)}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="termcomposer__chipRemove"
+                aria-label={`Remove ${item.name}`}
+                title="Remove image"
+                onClick={() => onRemoveAttachment(item.id)}
+              >
+                <IconX width={11} height={11} />
+              </button>
+            </div>
+          ))}
+          {attachmentError && (
+            <button
+              type="button"
+              className="termcomposer__chipError"
+              title="Dismiss"
+              onClick={onDismissAttachmentError}
+            >
+              {attachmentError}
+              <IconX width={10} height={10} />
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="termcomposer__editor">
         <div className="termcomposer__identity" aria-hidden="true">
           <span className="termcomposer__spark" />
@@ -245,6 +355,18 @@ export function TerminalComposer({
         />
         <button
           type="button"
+          className="termcomposer__attach"
+          aria-label="Attach image"
+          title="Attach image — or paste / drop one"
+          onClick={onPickImages}
+        >
+          <IconImage width={14} height={14} />
+          {attachments.length > 0 && (
+            <span className="termcomposer__attachCount">{attachments.length}</span>
+          )}
+        </button>
+        <button
+          type="button"
           className={`termcomposer__historyButton ${historyOpen ? 'termcomposer__historyButton--on' : ''}`}
           aria-label="Search terminal history"
           aria-expanded={historyOpen}
@@ -263,7 +385,7 @@ export function TerminalComposer({
           className="termcomposer__send"
           aria-label="Send terminal input"
           title="Send (Enter)"
-          disabled={sending || draft.trim().length === 0}
+          disabled={sendDisabled}
           onClick={() => void submit()}
         >
           <IconSend width={14} height={14} />
@@ -272,11 +394,12 @@ export function TerminalComposer({
 
       <div className="termcomposer__footer">
         <span className="termcomposer__hint">
-          Click to place cursor · <kbd>⌘Z</kbd> undo · <kbd>Shift+Enter</kbd> new line · <kbd>Ctrl+R</kbd> history
+          Paste or drop images · <kbd>⌘Z</kbd> undo · <kbd>Shift+Enter</kbd> new line · <kbd>Ctrl+R</kbd> history
         </span>
         <span className="termcomposer__notice" aria-live="polite">{notice}</span>
         <span className="termcomposer__sendHint"><kbd>Enter</kbd> send</span>
       </div>
     </div>
   )
-}
+  },
+)

@@ -52,6 +52,16 @@ describe('TerminalView affordances', () => {
     }
   })
 
+  it('keeps the composer as the one writing place with image staging inside it', () => {
+    const html = renderToStaticMarkup(createElement(TerminalView, { session: session('claude'), active: true }))
+
+    // Images stage as composer chips; the toolbar no longer auto-sends paths.
+    expect(html).toContain('aria-label="Attach image"')
+    expect(html).not.toContain('Send screenshot')
+    // Typing at the terminal reroutes here — the placeholder says so.
+    expect(html).toContain('typing anywhere lands here')
+  })
+
   it('keeps the shared terminal affordances on every pane', () => {
     const html = renderToStaticMarkup(createElement(TerminalView, { session: session('general'), active: true }))
 

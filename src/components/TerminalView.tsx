@@ -3,18 +3,22 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import type { TerminalAttachment, TerminalSession } from '@shared/domain'
 import { OSC_COMMAND } from '@shared/command-blocks'
-import { buildTerminalComposerSubmission, isTerminalCopyShortcut } from '@shared/terminal-ux'
+import {
+  buildComposerMessage,
+  buildTerminalComposerSubmission,
+  isTerminalCopyShortcut,
+  shouldRouteKeyToComposer,
+} from '@shared/terminal-ux'
 import { cockpit } from '../lib/cockpit'
 import { CommandBlockDecorations } from '../lib/commandBlocks'
 import { useSessionBlocks } from '../store/blockStore'
 import { BlocksView } from './BlocksView'
-import { TerminalComposer } from './TerminalComposer'
+import { TerminalComposer, type TerminalComposerHandle } from './TerminalComposer'
 import {
   IMAGE_ACCEPT,
   MAX_IMAGE_BYTES,
   firstImage,
   firstImageFromItems,
-  formatBytes,
   hasFileDrag,
   inferImageMime,
   readBase64,
@@ -23,10 +27,17 @@ import { IconChevron, IconCopy, IconImage, IconTerminal, IconX } from './icons'
 
 type TerminalViewMode = 'stream' | 'blocks'
 
-type AttachmentPreview = TerminalAttachment & {
+/** Image staged in the composer; `saved` lands once the main process wrote it. */
+type StagedAttachment = {
+  id: string
+  name: string
+  size: number
   previewUrl: string
-  sent: boolean
+  status: 'saving' | 'ready'
+  saved: TerminalAttachment | null
 }
+
+const MAX_STAGED_IMAGES = 4
 
 const THEME = {
   background: '#0e0f13',
@@ -59,10 +70,11 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
   const decorationsRef = useRef<CommandBlockDecorations | null>(null)
+  const composerRef = useRef<TerminalComposerHandle | null>(null)
   const [dragging, setDragging] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [attachment, setAttachment] = useState<AttachmentPreview | null>(null)
+  const [attachments, setAttachments] = useState<StagedAttachment[]>([])
+  const attachmentsRef = useRef<StagedAttachment[]>([])
   const [mode, setMode] = useState<TerminalViewMode>('stream')
   const [hasSelection, setHasSelection] = useState(false)
   const [atLiveOutput, setAtLiveOutput] = useState(true)
@@ -137,15 +149,28 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
     const scrollSub = term.onScroll(syncLiveOutput)
     const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
     term.attachCustomKeyEventHandler((event) => {
-      if (!isTerminalCopyShortcut(event, { hasSelection: term.hasSelection(), isMac })) return true
-      const selection = term.getSelection()
-      if (selection) {
-        void navigator.clipboard.writeText(selection).then(
-          () => setCopyNotice('Copied'),
-          () => setCopyNotice('Copy unavailable'),
-        )
+      if (isTerminalCopyShortcut(event, { hasSelection: term.hasSelection(), isMac })) {
+        const selection = term.getSelection()
+        if (selection) {
+          void navigator.clipboard.writeText(selection).then(
+            () => setCopyNotice('Copied'),
+            () => setCopyNotice('Copy unavailable'),
+          )
+        }
+        return false
       }
-      return false
+
+      // One writing place: plain typing aimed at the terminal flows into the
+      // composer. Navigation, chords, and alt-screen apps stay terminal-native.
+      if (
+        shouldRouteKeyToComposer(event, {
+          alternateScreen: term.buffer.active.type === 'alternate',
+        })
+      ) {
+        if (event.type === 'keydown') composerRef.current?.insertText(event.key)
+        return false
+      }
+      return true
     })
 
     const fitAndResize = () => {
@@ -188,7 +213,7 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
         try {
           fit.fit()
           cockpit().terminals.resize(session.id, term.cols, term.rows)
-          term.focus()
+          composerRef.current?.focus()
         } catch {
           /* ignore */
         }
@@ -198,10 +223,14 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
   }, [active, session.id])
 
   useEffect(() => {
+    attachmentsRef.current = attachments
+  }, [attachments])
+
+  useEffect(() => {
     return () => {
-      if (attachment?.previewUrl) URL.revokeObjectURL(attachment.previewUrl)
+      attachmentsRef.current.forEach((item) => URL.revokeObjectURL(item.previewUrl))
     }
-  }, [attachment?.previewUrl])
+  }, [])
 
   useEffect(() => {
     const clear = () => resetDrag()
@@ -214,12 +243,10 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
   }, [])
 
   useEffect(() => {
-    if (!attachment?.sent) return
-    const timeout = window.setTimeout(() => {
-      setAttachment((current) => (current?.id === attachment.id ? null : current))
-    }, 3200)
+    if (!error) return
+    const timeout = window.setTimeout(() => setError(null), 5200)
     return () => window.clearTimeout(timeout)
-  }, [attachment?.id, attachment?.sent])
+  }, [error])
 
   useEffect(() => {
     if (!copyNotice) return
@@ -251,35 +278,58 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
 
   const clearCurrentInput = () => {
     void cockpit().terminals.write(session.id, '\x15')
-    termRef.current?.focus()
+    composerRef.current?.focus()
+  }
+
+  const removeAttachment = (id: string) => {
+    setAttachments((prev) => {
+      const target = prev.find((item) => item.id === id)
+      if (target) URL.revokeObjectURL(target.previewUrl)
+      return prev.filter((item) => item.id !== id)
+    })
   }
 
   const submitComposerDraft = async (draft: string): Promise<boolean> => {
     const term = termRef.current
-    const submission = buildTerminalComposerSubmission(
+    const isAgent = session.role === 'claude' || session.role === 'codex'
+    const ready = attachmentsRef.current.filter(
+      (item): item is StagedAttachment & { saved: TerminalAttachment } =>
+        item.status === 'ready' && item.saved !== null,
+    )
+    // Agent sessions hold the project cwd, so the short relative path is
+    // enough; a shell may have cd'd away and needs the absolute one.
+    const message = buildComposerMessage(
       draft,
+      ready.map((item) => (isAgent ? item.saved.relativePath : item.saved.path)),
+    )
+    if (!message) return false
+    const submission = buildTerminalComposerSubmission(
+      message,
       term?.modes.bracketedPasteMode ?? false,
     )
     if (!submission) return false
 
     setMode('stream')
     await cockpit().terminals.write(session.id, submission.data)
+    if (ready.length > 0) {
+      const sentIds = new Set(ready.map((item) => item.id))
+      setAttachments((prev) => {
+        prev.forEach((item) => {
+          if (sentIds.has(item.id)) URL.revokeObjectURL(item.previewUrl)
+        })
+        return prev.filter((item) => !sentIds.has(item.id))
+      })
+    }
     term?.scrollToBottom()
     setAtLiveOutput(true)
     return true
-  }
-
-  const sendAttachmentPath = async (target: TerminalAttachment) => {
-    const line = `Screenshot attached: ${JSON.stringify(target.path)}`
-    await cockpit().terminals.write(session.id, `${line}\r`)
-    termRef.current?.focus()
   }
 
   const rerunCommand = (command: string) => {
     if (!command) return
     void cockpit().terminals.write(session.id, `${command}\r`)
     setMode('stream')
-    termRef.current?.focus()
+    composerRef.current?.focus()
   }
 
   const saveImage = async (file: File) => {
@@ -292,10 +342,25 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
       setError('Image must be 10 MB or smaller.')
       return
     }
+    if (attachmentsRef.current.length >= MAX_STAGED_IMAGES) {
+      setError(`Up to ${MAX_STAGED_IMAGES} images per message.`)
+      return
+    }
 
+    const stageId = `stage-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const previewUrl = URL.createObjectURL(file)
-    setSaving(true)
+    const staged: StagedAttachment = {
+      id: stageId,
+      name: file.name,
+      size: file.size,
+      previewUrl,
+      status: 'saving',
+      saved: null,
+    }
     setError(null)
+    // Mirror synchronously so back-to-back drops respect the cap before render.
+    attachmentsRef.current = [...attachmentsRef.current, staged]
+    setAttachments((prev) => [...prev, staged])
     try {
       const dataBase64 = await readBase64(file)
       const saved = await cockpit().terminals.attachImage({
@@ -305,24 +370,16 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
         mimeType,
         dataBase64,
       })
-      await sendAttachmentPath(saved)
-      setAttachment({ ...saved, previewUrl, sent: true })
+      setAttachments((prev) =>
+        prev.map((item) =>
+          item.id === stageId ? { ...item, size: saved.size, status: 'ready', saved } : item,
+        ),
+      )
+      composerRef.current?.focus()
     } catch (err) {
       URL.revokeObjectURL(previewUrl)
-      setError(err instanceof Error ? err.message : 'Could not send image.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const sendCurrentAttachment = async () => {
-    if (!attachment) return
-    setError(null)
-    try {
-      await sendAttachmentPath(attachment)
-      setAttachment((current) => (current ? { ...current, sent: true } : current))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send image.')
+      setAttachments((prev) => prev.filter((item) => item.id !== stageId))
+      setError(err instanceof Error ? err.message : 'Could not attach image.')
     }
   }
 
@@ -354,22 +411,38 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
     event.preventDefault()
     event.stopPropagation()
     resetDrag()
-    const file = firstImage(event.dataTransfer.files)
-    if (file) void saveImage(file)
-    else setError('Drop a PNG, JPG, WebP, or GIF image.')
+    const images = Array.from(event.dataTransfer.files).filter((file) => inferImageMime(file))
+    if (images.length === 0) {
+      setError('Drop a PNG, JPG, WebP, or GIF image.')
+      return
+    }
+    images.forEach((file) => void saveImage(file))
   }
 
   const handlePaste = (event: ClipboardEvent<HTMLDivElement>) => {
     const file = firstImage(event.clipboardData.files) ?? firstImageFromItems(event.clipboardData.items)
-    if (!file) return
+    if (file) {
+      event.preventDefault()
+      event.stopPropagation()
+      void saveImage(file)
+      return
+    }
+
+    // Text pasted at the terminal belongs to the one writing place too —
+    // unless an alt-screen app (vim & co) is in charge of the keyboard.
+    const target = event.target instanceof HTMLElement ? event.target : null
+    if (!target || !hostRef.current?.contains(target)) return
+    if (termRef.current?.buffer.active.type === 'alternate') return
+    const text = event.clipboardData.getData('text/plain')
+    if (!text) return
     event.preventDefault()
     event.stopPropagation()
-    void saveImage(file)
+    composerRef.current?.insertText(text)
   }
 
   return (
     <div
-      className={`termview ${dragging ? 'termview--dragging' : ''} ${saving ? 'termview--saving' : ''} ${
+      className={`termview ${dragging ? 'termview--dragging' : ''} ${
         mode === 'blocks' ? 'termview--blocks' : ''
       } ${isCodex ? 'termview--codex' : ''}`}
       onDragEnterCapture={handleDragEnter}
@@ -467,17 +540,6 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
             </button>
           )}
 
-          {mode === 'stream' && (
-            <button
-              type="button"
-              className="termview__attach"
-              title="Send screenshot"
-              disabled={saving}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <IconImage width={14} height={14} />
-            </button>
-          )}
         </div>
 
         {dragging && (
@@ -486,55 +548,23 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
               <IconImage width={22} height={22} />
             </div>
             <div>
-              <div className="termview__dropTitle">Drop to send image</div>
-              <div className="termview__dropSub">Saved into this project, then sent to this terminal.</div>
+              <div className="termview__dropTitle">Drop to attach image</div>
+              <div className="termview__dropSub">Staged in the composer — sent with your next message.</div>
             </div>
-          </div>
-        )}
-
-        {(attachment || error || saving) && (
-          <div className={`termattach ${attachment ? 'termattach--ready' : ''}`}>
-            {attachment ? (
-              <>
-                <img className="termattach__thumb" src={attachment.previewUrl} alt="" />
-                <div className="termattach__body">
-                  <div className="termattach__name">{attachment.name}</div>
-                  <div className="termattach__path mono">{attachment.relativePath}</div>
-                  <div className="termattach__meta">
-                    <span>{formatBytes(attachment.size)}</span>
-                    {attachment.sent && <span className="termattach__ok">sent to terminal</span>}
-                  </div>
-                </div>
-                <div className="termattach__actions">
-                  <button
-                    className="iconbtn termattach__send"
-                    title="Send again"
-                    onClick={() => void sendCurrentAttachment()}
-                  >
-                    <IconImage width={12} height={12} />
-                  </button>
-                  <button className="iconbtn" title="Dismiss" onClick={() => setAttachment(null)}>
-                    <IconX width={13} height={13} />
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="termattach__loader" />
-                <div className="termattach__body">
-                  <div className="termattach__name">{saving ? 'Saving image...' : 'Image not attached'}</div>
-                  <div className="termattach__path">{error ?? 'Preparing project attachment.'}</div>
-                </div>
-              </>
-            )}
           </div>
         )}
       </div>
 
       <TerminalComposer
+        ref={composerRef}
         projectId={session.projectId}
         role={session.role}
         capturedHistory={capturedHistory}
+        attachments={attachments}
+        attachmentError={error}
+        onPickImages={() => fileInputRef.current?.click()}
+        onRemoveAttachment={removeAttachment}
+        onDismissAttachmentError={() => setError(null)}
         onSubmit={submitComposerDraft}
       />
 
@@ -543,10 +573,11 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
         className="termview__file"
         type="file"
         accept={IMAGE_ACCEPT}
+        multiple
         onChange={(event) => {
-          const file = event.currentTarget.files?.[0]
+          const files = Array.from(event.currentTarget.files ?? [])
           event.currentTarget.value = ''
-          if (file) void saveImage(file)
+          files.forEach((file) => void saveImage(file))
         }}
       />
     </div>
