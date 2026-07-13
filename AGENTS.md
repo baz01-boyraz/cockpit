@@ -1,4 +1,15 @@
-# AGENTS.md — instructions for Hermes
+# AGENTS.md — runtime-scoped instructions
+
+## Runtime applicability — read this first
+
+- If you are **Codex** running in an interactive terminal, you are the coding agent. You work directly in the repository.
+  Follow the user's requested implementation and verification
+  workflow, and do not create or propose a Swarm card. Ignore every Hermes-specific role,
+  quota, council, dispatch, and Swarm instruction below. The managed Cockpit memory contract at
+  the end of this file still applies.
+- If you are **Hermes** (`NousResearch/hermes-agent`) running from the cockpiT chat/orchestrator,
+  follow the Hermes instructions below.
+- Claude Code continues to read `CLAUDE.md`; these runtime-routing lines do not replace it.
 
 > This file is for **Hermes** (the orchestrator agent, NousResearch/hermes-agent). Claude Code
 > reads `CLAUDE.md` instead — that file is unrelated to this one, don't mix the two up. Full
