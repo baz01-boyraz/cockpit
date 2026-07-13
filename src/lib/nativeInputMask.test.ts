@@ -34,7 +34,10 @@ function terminalWithInputBar({
         cursorX,
         getLine: () => ({
           getCell: (index: number) => ({
+            getChars: () => '',
             isBgDefault: () => !paintedCells[index],
+            isDim: () => 0,
+            isFgDefault: () => true,
             isInverse: () => 0,
           }),
         }),

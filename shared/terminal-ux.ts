@@ -171,23 +171,39 @@ export interface NativeInputBarSpan {
 export function findNativeInputBarSpan(
   paintedCells: readonly boolean[],
   cursorColumn: number,
+  ghostCells: readonly boolean[] = [],
 ): NativeInputBarSpan | null {
   if (
     paintedCells.length === 0 ||
     cursorColumn < 0 ||
-    cursorColumn >= paintedCells.length ||
-    !paintedCells[cursorColumn]
+    cursorColumn >= paintedCells.length
   ) {
     return null
   }
 
-  let start = cursorColumn
-  let end = cursorColumn + 1
-  while (start > 0 && paintedCells[start - 1]) start -= 1
-  while (end < paintedCells.length && paintedCells[end]) end += 1
+  if (paintedCells[cursorColumn]) {
+    let start = cursorColumn
+    let end = cursorColumn + 1
+    while (start > 0 && paintedCells[start - 1]) start -= 1
+    while (end < paintedCells.length && paintedCells[end]) end += 1
 
-  const minimumWidth = Math.max(18, Math.ceil(paintedCells.length * 0.55))
-  return end - start >= minimumWidth ? { start, end } : null
+    const minimumWidth = Math.max(18, Math.ceil(paintedCells.length * 0.55))
+    if (end - start >= minimumWidth) return { start, end }
+  }
+
+  // Agent composers can render an unpainted prompt marker + cursor followed by
+  // a long, dim autosuggestion (for example Codex's "Run /review …"). A cursor
+  // near the left edge with substantial styled content after it is the same
+  // redundant writing affordance, just without a filled background.
+  if (cursorColumn > 4 || ghostCells.length !== paintedCells.length) return null
+  let end = ghostCells.length
+  while (end > cursorColumn && !ghostCells[end - 1]) end -= 1
+  const ghostWidth = ghostCells
+    .slice(cursorColumn + 1, end)
+    .reduce((count, painted) => count + (painted ? 1 : 0), 0)
+  if (ghostWidth < 12) return null
+
+  return { start: Math.max(0, cursorColumn - 2), end }
 }
 
 /**

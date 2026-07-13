@@ -43,11 +43,22 @@ export class NativeInputMask {
       return
     }
 
-    const paintedCells = Array.from({ length: this.term.cols }, (_, column) => {
+    const cells = Array.from({ length: this.term.cols }, (_, column) => {
       const cell = line.getCell(column)
-      return Boolean(cell && (!cell.isBgDefault() || cell.isInverse()))
+      return {
+        painted: Boolean(cell && (!cell.isBgDefault() || cell.isInverse())),
+        ghost: Boolean(
+          cell &&
+          cell.getChars().length > 0 &&
+          (cell.isDim() || !cell.isFgDefault()),
+        ),
+      }
     })
-    const span = findNativeInputBarSpan(paintedCells, buffer.cursorX)
+    const span = findNativeInputBarSpan(
+      cells.map((cell) => cell.painted),
+      buffer.cursorX,
+      cells.map((cell) => cell.ghost),
+    )
     if (!span) {
       this.clear()
       return
