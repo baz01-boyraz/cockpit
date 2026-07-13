@@ -10,6 +10,7 @@ import {
   type CouncilSessionStatus,
 } from '../electron/main/db/CouncilSessionStore'
 import {
+  COUNCIL_MODELS,
   councilSpecVerdictKind,
   normalizeCouncilResult,
   type CouncilResult,
@@ -19,6 +20,7 @@ import {
 } from '../shared/council'
 import type { Db } from '../electron/main/db/Database'
 import { COUNCIL_STAGE_BUDGETS } from '../shared/council-stages'
+import type { AgentUsageService } from '../electron/main/services/AgentUsageService'
 
 /** A spec-mode-aware fake engine: OpenRouter and Codex always throw (no key /
  *  second CLI absent) so their seats must fall back; every claude call answers.
@@ -153,27 +155,115 @@ function makeStore() {
   return { store: store as unknown as CouncilSessionStore, inserted, rows }
 }
 
-function makeService(storeParts = makeStore()) {
-  const service = new CouncilService(makeProjects(), makeAudit(), makeEngine(), storeParts.store)
+function makeUsage(usedPercent: number, available = true): AgentUsageService {
+  return {
+    getReport: vi.fn(async () => ({
+      providers: [
+        {
+          provider: 'claude',
+          label: 'Claude',
+          available,
+          plan: 'Max',
+          windows: available
+            ? [{ label: 'Session', usedPercent, resetAt: null }]
+            : [],
+          reason: available ? null : 'Usage unavailable.',
+          fetchedAt: '2026-07-12T00:00:00.000Z',
+        },
+      ],
+    })),
+  } as unknown as AgentUsageService
+}
+
+function makeService(
+  storeParts = makeStore(),
+  engine: EngineRunner = makeEngine(),
+  usage?: AgentUsageService,
+) {
+  const service = new CouncilService(
+    makeProjects(),
+    makeAudit(),
+    engine,
+    storeParts.store,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    usage,
+  )
   return { service, inserted: storeParts.inserted, rows: storeParts.rows }
 }
 
 describe('CouncilService — spec mode orchestration', () => {
-  it('falls back to the claude engine when a seat’s primary throws, and flags it', async () => {
-    const { service } = makeService()
+  it('uses Sonnet 5 while Claude usage has capacity', async () => {
+    const calls: Array<{ engine: string; model: string }> = []
+    const engine = {
+      call: vi.fn(async (spec: { engine: string; model: string }, prompt: string) => {
+        calls.push(spec)
+        if (prompt.includes('Refined Spec')) return '### Verdict\nAPPROVED\n\n### Refined Spec\nShip it.'
+        if (prompt.includes('FINAL RANKING')) return 'FINAL RANKING:\n1. Response A'
+        return 'Seat response.'
+      }),
+    } as unknown as EngineRunner
+    const { service } = makeService(makeStore(), engine, makeUsage(42))
     const result = await service.run('prj_1', { mode: 'spec', specText: 'Add caching to the gateway.' })
 
     const byId = Object.fromEntries(result.seats.map((s) => [s.id, s]))
-    expect(byId['first-principles'].usedFallback).toBe(true)
-    expect(byId['first-principles'].engine).toEqual({ engine: 'claude', model: 'sonnet' })
-    expect(byId['first-principles'].ok).toBe(true)
-    expect(byId.builder.usedFallback).toBe(true)
-    expect(byId.builder.engine).toEqual({ engine: 'claude', model: 'opus' })
-    // GPT-first seats reach Claude only after the Codex CLI is unavailable.
-    expect(byId.contrarian.usedFallback).toBe(true)
-    expect(byId.contrarian.engine).toEqual({ engine: 'claude', model: 'opus' })
+    expect(byId.builder.engine).toEqual({ engine: 'claude', model: COUNCIL_MODELS.sonnet5 })
+    expect(byId.builder.usedFallback).toBe(false)
+    expect(calls).not.toContainEqual({ engine: 'openrouter', model: COUNCIL_MODELS.glm52 })
     expect(result.stats.seatsRun).toBe(5)
     expect(result.stats.seatsFailed).toBe(0)
+  })
+
+  it('uses GLM 5.2 only when Claude usage has no remaining capacity', async () => {
+    const calls: Array<{ engine: string; model: string }> = []
+    const engine = {
+      call: vi.fn(async (spec: { engine: string; model: string }, prompt: string) => {
+        calls.push(spec)
+        if (prompt.includes('Refined Spec')) return '### Verdict\nAPPROVED\n\n### Refined Spec\nShip it.'
+        if (prompt.includes('FINAL RANKING')) return 'FINAL RANKING:\n1. Response A'
+        return 'Seat response.'
+      }),
+    } as unknown as EngineRunner
+    const { service } = makeService(makeStore(), engine, makeUsage(100))
+
+    const result = await service.run('prj_1', {
+      mode: 'spec',
+      specText: 'Add caching to the gateway.',
+    })
+
+    const builder = result.seats.find((seat) => seat.id === 'builder')!
+    expect(builder.engine).toEqual({ engine: 'openrouter', model: COUNCIL_MODELS.glm52 })
+    expect(builder.usedFallback).toBe(true)
+    expect(calls).not.toContainEqual({ engine: 'claude', model: COUNCIL_MODELS.sonnet5 })
+  })
+
+  it('does not use GLM when Sonnet has capacity but its call fails for another reason', async () => {
+    const calls: Array<{ engine: string; model: string }> = []
+    const engine = {
+      call: vi.fn(async (spec: { engine: string; model: string }, prompt: string) => {
+        calls.push(spec)
+        if (spec.engine === 'claude' && spec.model === COUNCIL_MODELS.sonnet5) {
+          throw new Error('Claude CLI crashed')
+        }
+        if (prompt.includes('Refined Spec')) return '### Verdict\nAPPROVED\n\n### Refined Spec\nShip it.'
+        if (prompt.includes('FINAL RANKING')) return 'FINAL RANKING:\n1. Response A'
+        return 'Seat response.'
+      }),
+    } as unknown as EngineRunner
+    const { service } = makeService(makeStore(), engine, makeUsage(20))
+
+    const result = await service.run('prj_1', {
+      mode: 'spec',
+      specText: 'Add caching to the gateway.',
+    })
+
+    const builder = result.seats.find((seat) => seat.id === 'builder')!
+    expect(builder.ok).toBe(false)
+    expect(calls).not.toContainEqual({ engine: 'openrouter', model: COUNCIL_MODELS.glm52 })
   })
 
   it('emits safe run-scoped seat, ranking, and chairman progress', async () => {

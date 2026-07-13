@@ -3,6 +3,7 @@ import type { SanitizedDiff } from '../shared/diff-sanitize'
 import {
   COUNCIL_SEATS,
   COUNCIL_SEAT_IDS,
+  COUNCIL_MODELS,
   CHAIRMAN,
   GPT56_MODELS,
   anonymizeSeats,
@@ -101,29 +102,36 @@ describe('council roster v2', () => {
     ])
   })
 
-  it('runs the GPT-5.6 family through Codex auth first, with vendor diversity and Claude fallbacks', () => {
+  it('uses the exact five-model roster with one quota-gated Sonnet fallback', () => {
     const byId = Object.fromEntries(COUNCIL_SEATS.map((s) => [s.id, s]))
     expect(GPT56_MODELS).toEqual({
       sol: 'gpt-5.6-sol',
       terra: 'gpt-5.6-terra',
       luna: 'gpt-5.6-luna',
     })
+    expect(COUNCIL_MODELS).toEqual({
+      sonnet5: 'claude-sonnet-5',
+      deepseekPro: 'deepseek/deepseek-v4-pro',
+      glm52: 'z-ai/glm-5.2',
+    })
     expect(byId.contrarian.engine).toEqual({ engine: 'codex', model: GPT56_MODELS.sol })
-    expect(byId['first-principles'].engine).toEqual({ engine: 'openrouter', model: 'deepseek/deepseek-chat' })
-    expect(byId['first-principles'].fallbacks).toEqual([
-      { engine: 'codex', model: GPT56_MODELS.terra },
-      { engine: 'claude', model: 'sonnet' },
-    ])
+    expect(byId['first-principles'].engine).toEqual({
+      engine: 'openrouter',
+      model: COUNCIL_MODELS.deepseekPro,
+    })
     expect(byId.expansionist.engine).toEqual({ engine: 'codex', model: GPT56_MODELS.luna })
     expect(byId.outsider.engine).toEqual({ engine: 'codex', model: GPT56_MODELS.terra })
-    expect(byId.builder.engine).toEqual({ engine: 'codex', model: GPT56_MODELS.sol })
-    expect(byId.builder.fallbacks).toEqual([{ engine: 'claude', model: 'opus' }])
+    expect(byId.builder.engine).toEqual({ engine: 'claude', model: COUNCIL_MODELS.sonnet5 })
+    expect(byId.builder.fallbacks).toBeUndefined()
+    expect(byId.builder.availabilityFallback).toEqual({
+      provider: 'claude',
+      engine: { engine: 'openrouter', model: COUNCIL_MODELS.glm52 },
+    })
+    expect(COUNCIL_SEATS.filter((seat) => seat.availabilityFallback)).toHaveLength(1)
+    expect(COUNCIL_SEATS.every((seat) => !seat.fallbacks?.length)).toBe(true)
     expect(CHAIRMAN).toEqual({
       engine: { engine: 'codex', model: GPT56_MODELS.sol },
-      fallbacks: [
-        { engine: 'codex', model: GPT56_MODELS.terra },
-        { engine: 'claude', model: 'opus' },
-      ],
+      fallbacks: [],
     })
   })
 })
