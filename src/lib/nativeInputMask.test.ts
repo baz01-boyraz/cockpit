@@ -25,6 +25,7 @@ function terminalWithInputBar({
   }
   const terminal = {
     cols: 80,
+    options: { cursorInactiveStyle: 'outline' },
     buffer: {
       active: {
         type: alternate ? 'alternate' : 'normal',
@@ -62,6 +63,7 @@ describe('NativeInputMask', () => {
       layer: 'top',
     })
     expect(element.classList.contains('terminal-native-input-mask')).toBe(true)
+    expect(terminal.options.cursorInactiveStyle).toBe('none')
   })
 
   it('reveals the native prompt immediately when the composer loses focus', () => {
@@ -73,6 +75,7 @@ describe('NativeInputMask', () => {
 
     expect(decoration.dispose).toHaveBeenCalledOnce()
     expect(marker.dispose).toHaveBeenCalledOnce()
+    expect(terminal.options.cursorInactiveStyle).toBe('outline')
   })
 
   it('never covers an alternate-screen terminal UI', () => {
