@@ -201,8 +201,13 @@ describe('CouncilService grounded analysis', () => {
       'export interface MemoryNoteMetadata { type: MemoryNoteType }',
     )
     expect(parts.collect).toHaveBeenCalledTimes(1)
-    // Five seats + five peer rankings + one chairman. Collection itself adds no model call.
-    expect(parts.call).toHaveBeenCalledTimes(11)
+    // Account-only egress cannot run the fixed DeepSeek seat and does not
+    // silently substitute another model: four seats + four rankings + chairman.
+    expect(parts.call).toHaveBeenCalledTimes(9)
+    expect(result.seats.find((seat) => seat.id === 'first-principles')).toMatchObject({
+      ok: false,
+      engine: { engine: 'openrouter' },
+    })
     expect(parts.call.mock.calls.every(([engine]) => engine.engine !== 'openrouter')).toBe(true)
     expect(parts.call.mock.calls.every(([, prompt]) => prompt.includes('repo-001'))).toBe(true)
     expect(parts.call.mock.calls.every(([, , opts]) => opts.evidenceOnly === true)).toBe(true)
@@ -247,7 +252,7 @@ describe('CouncilService grounded analysis', () => {
     expect(parts.call.mock.calls.some(([engine]) => engine.engine === 'openrouter')).toBe(true)
   })
 
-  it('keeps raw CLI failures private and reports only engines allowed by policy', async () => {
+  it('keeps raw CLI failures private and never calls engines disallowed by policy', async () => {
     const parts = makeParts('account-models')
     parts.call.mockRejectedValue({
       stderr: 'provider failed at /Users/example/private with sk-secret-secret-secret',
@@ -258,6 +263,10 @@ describe('CouncilService grounded analysis', () => {
     expect(result.ok).toBe(false)
     expect(JSON.stringify(result)).not.toContain('/Users/example/private')
     expect(JSON.stringify(result)).not.toContain('sk-secret-secret-secret')
-    expect(result.seats.every((seat) => seat.engine.engine !== 'openrouter')).toBe(true)
+    expect(parts.call.mock.calls.every(([engine]) => engine.engine !== 'openrouter')).toBe(true)
+    expect(result.seats.find((seat) => seat.id === 'first-principles')).toMatchObject({
+      ok: false,
+      engine: { engine: 'openrouter' },
+    })
   })
 })
