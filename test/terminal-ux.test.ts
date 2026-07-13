@@ -5,6 +5,7 @@ import {
   buildComposerMessage,
   buildTerminalComposerSubmission,
   buildTerminalHistorySuggestions,
+  findNativeInputBarSpan,
   isTerminalCopyShortcut,
   normalizePromptDraft,
   rememberTerminalHistory,
@@ -138,6 +139,24 @@ describe('Codex terminal UX', () => {
     ).toBe(false)
     // vim, htop & friends own the keyboard on the alternate screen.
     expect(shouldRouteKeyToComposer(keydown, { alternateScreen: true })).toBe(false)
+  })
+
+  it('finds a wide terminal-native input bar that contains the live cursor', () => {
+    const paintedCells = Array.from({ length: 80 }, (_, index) => index >= 2 && index < 76)
+
+    expect(findNativeInputBarSpan(paintedCells, 3)).toEqual({ start: 2, end: 76 })
+  })
+
+  it('does not mistake a short highlighted menu option for an input bar', () => {
+    const paintedCells = Array.from({ length: 80 }, (_, index) => index >= 2 && index < 18)
+
+    expect(findNativeInputBarSpan(paintedCells, 3)).toBeNull()
+  })
+
+  it('does not hide a wide terminal band when the cursor sits outside it', () => {
+    const paintedCells = Array.from({ length: 80 }, (_, index) => index >= 10 && index < 75)
+
+    expect(findNativeInputBarSpan(paintedCells, 2)).toBeNull()
   })
 
   it('folds staged image references into one composer message', () => {
