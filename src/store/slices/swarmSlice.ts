@@ -54,7 +54,7 @@ export const createSwarmSlice: SliceCreator<SwarmSlice> = (set, get) => ({
   },
 
   startCard: async (input) => {
-    const result = await cockpit().swarm.startCard(input)
+    const result = await cockpit().swarm.startCard({ ...input, userOrigin: 'swarm-panel' })
     // A gated start never moved the card — leave the board as-is and let the
     // panel surface the convene/skip prompt. A real start returns the fresh board.
     if (!result.gated) set({ board: result.board, boardProjectId: input.projectId })

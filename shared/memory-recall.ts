@@ -144,6 +144,12 @@ function conceptsFor(tokens: ReadonlySet<string>): ReadonlySet<MemoryConcept> {
 export interface RankableNote {
   name: string
   hook?: string | null
+  status?: string
+  eligible?: boolean
+  authority?: string
+  confidence?: string
+  stale?: boolean
+  conflicted?: boolean
 }
 
 export interface RankedNote {
@@ -209,7 +215,31 @@ export function rankNotes(
       exactNameMatches > 0 || exactHookMatches >= 2 || (query.size === 1 && exactHookMatches === 1)
     const hasStrongConceptEvidence = matchingConcepts.size >= 2 && hasDiscriminatingConcept
     const eligible = hasStrongExactEvidence || hasStrongConceptEvidence
-    return { name: note.name, hook, index, score: exactScore * 3 + conceptScore, eligible }
+    const authorityBoost: Record<string, number> = {
+      'human-directive': 6,
+      'code-verified': 5,
+      'source-authority': 4,
+      'equivalent-content': 3,
+      observed: 2,
+      'model-inference': 0,
+      legacy: -1,
+    }
+    const confidenceBoost: Record<string, number> = { high: 2, medium: 1, low: 0 }
+    const lifecycleEligible =
+      (note.status === undefined || note.status === 'active') &&
+      note.eligible !== false &&
+      note.conflicted !== true
+    const trustScore =
+      (authorityBoost[note.authority ?? 'legacy'] ?? 0) +
+      (confidenceBoost[note.confidence ?? 'low'] ?? 0) -
+      (note.stale ? 3 : 0)
+    return {
+      name: note.name,
+      hook,
+      index,
+      score: exactScore * 3 + conceptScore + trustScore,
+      eligible: eligible && lifecycleEligible,
+    }
   })
   // Highest score first; equal scores keep input (recency) order via the index.
   scored.sort((a, b) => b.score - a.score || a.index - b.index)

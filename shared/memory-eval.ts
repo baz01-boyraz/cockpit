@@ -164,7 +164,12 @@ export function evaluateMemoryRetrievalCorpus(
   const errors = validateMemoryEvalCorpus(corpus)
   if (errors.length > 0) throw new Error(`Invalid memory eval corpus: ${errors.join('; ')}`)
 
-  const notes = corpus.notes.map(({ name, hook }) => ({ name, hook }))
+  const notes = corpus.notes.map(({ name, hook, status, eligible }) => ({
+    name,
+    hook,
+    status,
+    eligible,
+  }))
   const noteMeta = new Map(corpus.notes.map((note) => [note.name, note]))
   const unsafeSelections: MemoryEvalUnsafeSelection[] = []
   const misses: MemoryEvalMiss[] = []

@@ -1,11 +1,17 @@
 ---
-schema: 1
+schema: 2
 name: memory-ux-overhaul
 title: Memory automation must reconcile the backlog, not only fresh captures
 class: gotcha
 capturedAt: 2026-07-05T04:40:55.944Z
 gate: save
 updatedAt: 2026-07-12T05:03:45.000Z
+status: active
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-05T04:40:55.944Z
+reviewAfter: 2026-10-11T05:20:43.983Z
 ---
 
 # Backlog reconciliation

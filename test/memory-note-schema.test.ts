@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   MEMORY_NOTE_SCHEMA_VERSION,
   type NoteFrontmatter,
+  noteLifecycle,
   parseNote,
   serializeNote,
   validateNoteContent,
@@ -15,10 +16,29 @@ const fm = (over: Partial<NoteFrontmatter> = {}): NoteFrontmatter => ({
   gate: 'save',
   updatedAt: '2026-07-04T10:00:00.000Z',
   tags: [],
+  status: 'active',
+  authority: 'observed',
+  scope: 'project',
+  confidence: 'medium',
+  firstSeenAt: '2026-07-04T10:00:00.000Z',
+  reviewAfter: '2026-10-02T10:00:00.000Z',
+  supersedes: [],
   ...over,
 })
 
 describe('serializeNote / parseNote round-trip', () => {
+  it('uses schema v2 with lifecycle and authority metadata', () => {
+    expect(MEMORY_NOTE_SCHEMA_VERSION).toBe(2)
+    const parsed = parseNote(serializeNote(fm({ authority: 'human-directive' }), 'fact'))
+    expect(parsed.frontmatter).toMatchObject({
+      schema: 2,
+      status: 'active',
+      authority: 'human-directive',
+      scope: 'project',
+      confidence: 'medium',
+    })
+  })
+
   it('round-trips a full frontmatter block losslessly', () => {
     const front = fm({
       session: 'sess-123',
@@ -46,6 +66,27 @@ describe('serializeNote / parseNote round-trip', () => {
 })
 
 describe('parseNote tolerance', () => {
+  it('keeps schema v1 notes readable with explicit legacy lifecycle defaults', () => {
+    const legacy = [
+      '---',
+      'schema: 1',
+      'name: legacy-note',
+      'title: Legacy note',
+      'class: reference',
+      'gate: manual',
+      'updatedAt: 2026-01-01T00:00:00.000Z',
+      '---',
+      'historical fact',
+    ].join('\n')
+    const parsed = parseNote(legacy)
+    expect(noteLifecycle(parsed.frontmatter)).toMatchObject({
+      status: 'active',
+      authority: 'legacy',
+      scope: 'project',
+      confidence: 'low',
+    })
+  })
+
   it('treats a plain human note (no frontmatter) as body-only', () => {
     const human = '# My note\n\nSome freeform thought with a [[link]].'
     const parsed = parseNote(human)

@@ -24,11 +24,6 @@ import type {
 } from '@shared/domain'
 import type { CockpitApi, SystemInfo, Unsubscribe } from '@shared/ipc'
 import {
-  dailyDigestId,
-  nextAutomationRun,
-  type AutomationJob,
-} from '@shared/automation'
-import {
   councilSpecVerdictKind,
   COUNCIL_SEATS,
   normalizeCouncilResult,
@@ -54,6 +49,7 @@ import { aggregateInsights, insightFromMatch } from '@shared/insight-aggregation
 import { assembleHubSnapshot, assembleNote, type MemoryDoc } from '@shared/memory-hub'
 import { assembleHealth } from '@shared/memory-health'
 import { analyzeConsolidation } from '@shared/memory-consolidate'
+import { assembleMemoryCaptureOverview, type CaptureJob } from '@shared/memory-capture'
 import type { CaptureResult } from '@shared/memory-pipeline'
 import { reviewOperation, type ReviewDecision, type ReviewItem } from '@shared/memory-review'
 import {
@@ -68,8 +64,61 @@ import {
 /** Browser-only review queue so the memory review UI has something to render. */
 const mockReviews = new Map<string, ReviewItem[]>()
 const mockTrustModes = new Map<string, MemoryTrustMode>()
+const mockCaptureJobs = new Map<string, CaptureJob[]>()
+const mockMemorySnapshots = new Map<string, string[]>()
 const reviewsFor = (projectId: string, scope: MemoryBrainScope): ReviewItem[] =>
   mockReviews.get(brainForAccess(projectId, scope)) ?? []
+
+function captureJobsFor(projectId: string): CaptureJob[] {
+  const existing = mockCaptureJobs.get(projectId)
+  if (existing) return existing
+  const timestamp = now()
+  const jobs: CaptureJob[] = [
+    {
+      id: `capture-${projectId}-claude-done`,
+      projectId,
+      provider: 'claude',
+      sessionId: 'mock-claude-session',
+      sourcePath: '/mock/claude/session.jsonl',
+      status: 'done',
+      lastOffset: 4096,
+      attempts: 0,
+      error: null,
+      nextRetryAt: null,
+      guidance: null,
+      enqueuedAt: timestamp,
+      updatedAt: timestamp,
+    },
+    {
+      id: `capture-${projectId}-codex-blocked`,
+      projectId,
+      provider: 'codex',
+      sessionId: 'mock-codex-session',
+      sourcePath: '/mock/codex/rollout.jsonl',
+      status: 'blocked',
+      lastOffset: 0,
+      attempts: 1,
+      error: 'OpenRouter key unavailable',
+      nextRetryAt: null,
+      guidance: 'Add or verify the OpenRouter key in Settings, then press Retry.',
+      enqueuedAt: timestamp,
+      updatedAt: timestamp,
+    },
+  ]
+  mockCaptureJobs.set(projectId, jobs)
+  return jobs
+}
+
+function snapshotsFor(projectId: string): string[] {
+  const existing = mockMemorySnapshots.get(projectId)
+  if (existing) return existing
+  const snapshots = [
+    '2026-07-13T12-00-00-000Z-a1b2c3d4',
+    '2026-07-12T09-30-00-000Z-e5f6a7b8',
+  ]
+  mockMemorySnapshots.set(projectId, snapshots)
+  return snapshots
+}
 import {
   appendPosition,
   assembleBoard,
@@ -110,66 +159,6 @@ const gitState = new Map<string, GitSnapshot>()
 const githubState = new Map<string, GitHubRepositoryStatus>()
 /** Browser-preview secret store (in-memory; values are never read back). */
 const mockSecrets = new Map<string, string>()
-/** Browser-preview Hermes chat turn counter, per project (reset on clear). */
-const mockHermesChats = new Map<string, number>()
-
-/** Browser-preview automation state. It mirrors the safe app-owned scheduler,
- * while keeping preview interactions instant and deterministic. */
-const mockAutomations = new Map<string, AutomationJob[]>()
-const automationListeners = new Set<(event: { projectId: string }) => void>()
-
-function automationsFor(projectId: string): AutomationJob[] {
-  const existing = mockAutomations.get(projectId)
-  if (existing) return existing
-  const at = now()
-  const dailySchedule = { kind: 'daily' as const, time: '09:00' }
-  const watchSchedule = { kind: 'interval' as const, minutes: 360 }
-  const seeded: AutomationJob[] = [
-    {
-      id: dailyDigestId(projectId),
-      projectId,
-      name: 'Daily briefing',
-      instruction: 'Give me a concise daily manager briefing from project health.',
-      kind: 'digest',
-      schedule: dailySchedule,
-      system: true,
-      enabled: true,
-      state: 'scheduled',
-      nextRunAt: nextAutomationRun(dailySchedule, at),
-      lastRunAt: at,
-      lastStatus: 'ok',
-      lastResult: 'Everything is calm. No action needs your attention today.',
-      lastError: null,
-      createdAt: at,
-      updatedAt: at,
-    },
-    {
-      id: `automation:memory-pulse:${projectId}`,
-      projectId,
-      name: 'Memory pulse',
-      instruction: 'Tell me only when memory capture or review pressure needs attention.',
-      kind: 'watch',
-      schedule: watchSchedule,
-      system: false,
-      enabled: true,
-      state: 'scheduled',
-      nextRunAt: nextAutomationRun(watchSchedule, at),
-      lastRunAt: at,
-      lastStatus: 'ok',
-      lastResult: 'Memory is healthy. Hermes stayed quiet.',
-      lastError: null,
-      createdAt: at,
-      updatedAt: at,
-    },
-  ]
-  mockAutomations.set(projectId, seeded)
-  return seeded
-}
-
-function notifyAutomations(projectId: string): void {
-  for (const listener of automationListeners) listener({ projectId })
-}
-
 /** Browser-preview sentinel feed, seeded lazily per project so the signal layer
  *  (Faz A) renders one alert + one notice without a backend. */
 const mockSentinel = new Map<string, SentinelSignal[]>()
@@ -1224,72 +1213,6 @@ export function createMockApi(): CockpitApi {
         return (() => approvalListeners.delete(cb)) as Unsubscribe
       },
     },
-    automations: {
-      list: async (projectId) => automationsFor(projectId).map((job) => ({ ...job })),
-      create: async (input) => {
-        const at = now()
-        const created: AutomationJob = {
-          id: id('auto'),
-          projectId: input.projectId,
-          name: input.name.trim(),
-          instruction: input.instruction.trim(),
-          kind: 'watch',
-          schedule: input.schedule,
-          system: false,
-          enabled: true,
-          state: 'scheduled',
-          nextRunAt: nextAutomationRun(input.schedule, at),
-          lastRunAt: null,
-          lastStatus: 'never',
-          lastResult: null,
-          lastError: null,
-          createdAt: at,
-          updatedAt: at,
-        }
-        automationsFor(input.projectId).push(created)
-        notifyAutomations(input.projectId)
-        return { ...created }
-      },
-      setEnabled: async (projectId, jobId, enabled) => {
-        const found = automationsFor(projectId).find((job) => job.id === jobId)
-        if (!found || found.state === 'running') return null
-        const at = now()
-        found.enabled = enabled
-        found.state = enabled ? 'scheduled' : 'paused'
-        found.updatedAt = at
-        if (enabled) found.nextRunAt = nextAutomationRun(found.schedule, at)
-        notifyAutomations(projectId)
-        return { ...found }
-      },
-      run: async (projectId, jobId) => {
-        const found = automationsFor(projectId).find((job) => job.id === jobId)
-        if (!found || !found.enabled || found.state === 'running') return null
-        const at = now()
-        found.state = 'scheduled'
-        found.lastStatus = 'ok'
-        found.lastRunAt = at
-        found.lastResult = found.kind === 'digest'
-          ? 'Everything is calm. No action needs your attention today.'
-          : 'Hermes checked the signal. Nothing needs your attention.'
-        found.lastError = null
-        found.nextRunAt = nextAutomationRun(found.schedule, at)
-        found.updatedAt = at
-        notifyAutomations(projectId)
-        return { ...found }
-      },
-      remove: async (projectId, jobId) => {
-        const jobs = automationsFor(projectId)
-        const found = jobs.find((job) => job.id === jobId)
-        if (!found || found.system) return false
-        mockAutomations.set(projectId, jobs.filter((job) => job.id !== jobId))
-        notifyAutomations(projectId)
-        return true
-      },
-      onChange: (cb) => {
-        automationListeners.add(cb)
-        return (() => automationListeners.delete(cb)) as Unsubscribe
-      },
-    },
     router: { route: async (_projectId, query) => classifyRoute(query) },
     memory: {
       list: async (projectId) => assembleHubSnapshot(memoryDocsFor(projectId)),
@@ -1328,8 +1251,8 @@ export function createMockApi(): CockpitApi {
         return assembleHubSnapshot(next)
       },
       health: async (projectId) => assembleHealth(memoryDocsFor(projectId)),
-      captureSession: async (projectId, sessionId, dryRun): Promise<CaptureResult> => {
-        // The browser mock has no Claude CLI, so it synthesizes one demo proposal
+      captureSession: async (projectId, provider, sessionId, dryRun): Promise<CaptureResult> => {
+        // The browser mock has no agent CLI, so it synthesizes one demo proposal
         // (a "review" so the UI can exercise the queue) instead of distilling.
         const slug = `session-${sessionId.slice(0, 6)}-insight`
         const proposedContent = `---\nschema: 1\nname: ${slug}\ntitle: Insight from ${sessionId.slice(0, 6)}\nclass: decision\ngate: asked\nupdatedAt: ${now()}\n---\nA demo fact the mock distiller proposed from this session.\n`
@@ -1343,7 +1266,7 @@ export function createMockApi(): CockpitApi {
             proposedContent,
             reason: 'mock distiller was unsure — asking Baz',
             existingContent: null,
-            sourceId: sessionId,
+            sourceId: `${provider}:${sessionId}`,
             alsoTrash: null,
             status: 'pending',
             createdAt: now(),
@@ -1373,6 +1296,23 @@ export function createMockApi(): CockpitApi {
           dryRun: !!dryRun,
         }
       },
+      captureStatus: async (projectId) =>
+        assembleMemoryCaptureOverview(resumableSessionsMock, captureJobsFor(projectId)),
+      retryCapture: async (projectId, jobId) => {
+        const jobs = captureJobsFor(projectId).map((job) =>
+          job.id === jobId
+            ? {
+                ...job,
+                status: 'queued' as const,
+                error: null,
+                guidance: 'Capture is queued again and will continue automatically.',
+                updatedAt: now(),
+              }
+            : job,
+        )
+        mockCaptureJobs.set(projectId, jobs)
+        return assembleMemoryCaptureOverview(resumableSessionsMock, jobs)
+      },
       trustState: async (projectId, scope) => {
         const brain = brainForAccess(projectId, scope)
         return {
@@ -1396,6 +1336,16 @@ export function createMockApi(): CockpitApi {
         return reviewsFor(projectId, scope)
       },
       ledger: async () => [],
+      noteActivity: async () => ({ history: [], recalls7d: 0, recalls30d: 0 }),
+      snapshots: async (projectId) => snapshotsFor(projectId),
+      restoreSnapshot: async (projectId, _snapshotId) => {
+        const safetySnapshotId = `${now().replace(/[:.]/g, '-')}-5afe0001`
+        mockMemorySnapshots.set(projectId, [safetySnapshotId, ...snapshotsFor(projectId)])
+        return {
+          snapshot: assembleHubSnapshot(memoryDocsFor(projectId)),
+          safetySnapshotId,
+        }
+      },
       consolidate: async (projectId) => {
         const report = analyzeConsolidation(memoryDocsFor(projectId))
         const autoApplied = applyMockCleanupBacklog(projectId)
@@ -1677,77 +1627,6 @@ export function createMockApi(): CockpitApi {
       onAlert: () => () => {},
     },
     review: {
-      // Staged review session so the surface is fully explorable in the
-      // browser preview: a short "thinking" delay, then realistic findings.
-      run: async (_projectId, opts) => {
-        await new Promise((r) => setTimeout(r, 1100))
-        return {
-          ok: true,
-          findings: [
-            {
-              severity: 'high' as const,
-              file: 'components/Hero.tsx',
-              line: 42,
-              title: 'Unvalidated intake form payload reaches the API call',
-              detail:
-                'The submit handler posts `formData` without schema validation. A crafted payload can hit the backend unchecked — validate with the shared zod schema before posting.',
-            },
-            {
-              severity: 'medium' as const,
-              file: 'app/page.tsx',
-              line: 18,
-              title: 'useEffect fetch races project switches',
-              detail:
-                'The fetch result is applied without checking whether the component is still mounted for the same project — add an abort/cancelled guard.',
-            },
-            {
-              severity: 'low' as const,
-              file: 'styles/tokens.css',
-              line: null,
-              title: 'Duplicate --accent-2 definition',
-              detail: 'The token is declared twice; the second silently wins. Remove one.',
-            },
-          ],
-          raw: null,
-          model: `Claude · ${resolveChatModel(opts?.model).label}`,
-          error: null,
-          stats: {
-            filesReviewed: 4,
-            filesBlocked: 1,
-            filesSummarized: 1,
-            injectionSuspects: 0,
-            truncated: false,
-            durationMs: 1100,
-          },
-        }
-      },
-      runText: async (_projectId, input, opts) => {
-        await new Promise((r) => setTimeout(r, 900))
-        return {
-          ok: true,
-          findings: [
-            {
-              severity: 'medium' as const,
-              file: input.label,
-              line: null,
-              title: 'Exit-1 caused by a missing dev dependency',
-              detail:
-                'The output shows the failure starts at the first unresolved import — run the install step before re-running this command.',
-            },
-          ],
-          raw: null,
-          model: `Claude · ${resolveChatModel(opts?.model).label}`,
-          error: null,
-          stats: {
-            filesReviewed: 1,
-            filesBlocked: 0,
-            filesSummarized: 0,
-            injectionSuspects: 0,
-            truncated: false,
-            durationMs: 900,
-          },
-        }
-      },
       diffStat: async (_projectId, _opts) => {
         await new Promise((r) => setTimeout(r, 250))
         return { files: 3, insertions: 42, deletions: 7 }
@@ -1979,26 +1858,6 @@ export function createMockApi(): CockpitApi {
         text: `(browser preview) Bu mock yanıt — gerçek uygulamada Claude cevaplar.\n\nSoru: "${prompt.slice(0, 120)}"`,
         model: `Claude · ${resolveChatModel(opts?.model).label}`,
       }),
-    },
-    hermesChat: {
-      // Canned per-project conversation so browser preview keeps working
-      // without a real `hermes` binary. Mirrors the real backend's shape:
-      // history is remembered until cleared.
-      ask: async (projectId, message, imagePath) => {
-        // A real turn is a full agentic loop that takes seconds-to-minutes; a
-        // short preview delay keeps the "thinking" state honest in the browser.
-        await new Promise((r) => setTimeout(r, 1200))
-        const turns = mockHermesChats.get(projectId) ?? 0
-        mockHermesChats.set(projectId, turns + 1)
-        const imageNote = imagePath ? '\n\n(Bir görsel aldım — gerçek uygulamada inceleyebilirim.)' : ''
-        return {
-          ok: true,
-          text: `(browser preview) Hermes burada — gerçek uygulamada orkestratör cevaplar.\n\nBu sohbetteki ${turns + 1}. mesajın: "${message.slice(0, 120)}"${imageNote}`,
-        }
-      },
-      clear: async (projectId) => {
-        mockHermesChats.delete(projectId)
-      },
     },
     secrets: {
       // In-memory only for the browser preview — never persisted, and (like the

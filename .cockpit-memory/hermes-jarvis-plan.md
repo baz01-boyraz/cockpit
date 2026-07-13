@@ -1,11 +1,17 @@
 ---
-schema: 1
+schema: 2
 name: hermes-jarvis-plan
 title: Hermes is cockpiT's bounded background orchestrator
 class: architecture
 capturedAt: 2026-07-05T21:31:21.396Z
 gate: save
 updatedAt: 2026-07-12T12:02:04.000Z
+status: archived
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-05T21:31:21.396Z
+reviewAfter: 2026-07-13T05:20:43.982Z
 ---
 
 # Hermes / Jarvis direction

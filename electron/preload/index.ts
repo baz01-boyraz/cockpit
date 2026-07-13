@@ -86,23 +86,10 @@ const api: CockpitApi = {
     decide: (approvalId, approve) => invoke(IPC.approvalsDecide, { approvalId, approve }),
     onChange: (cb) => subscribe(IPC.evtApprovalsChanged, () => cb()),
   },
-  automations: {
-    list: (projectId) => invoke(IPC.automationList, { projectId }),
-    create: (input) => invoke(IPC.automationCreate, input),
-    setEnabled: (projectId, jobId, enabled) =>
-      invoke(IPC.automationToggle, { projectId, jobId, enabled }),
-    run: (projectId, jobId) => invoke(IPC.automationRun, { projectId, jobId }),
-    remove: (projectId, jobId) => invoke(IPC.automationRemove, { projectId, jobId }),
-    onChange: (cb) => subscribe(IPC.evtAutomationsChanged, cb),
-  },
   router: {
     route: (projectId, query) => invoke(IPC.routerRoute, { projectId, query }),
   },
   review: {
-    run: (projectId, opts) =>
-      invoke(IPC.reviewRun, { projectId, model: opts?.model, dir: opts?.dir, lens: opts?.lens }),
-    runText: (projectId, input, opts) =>
-      invoke(IPC.reviewRunText, { projectId, ...input, model: opts?.model }),
     diffStat: (projectId, opts) => invoke(IPC.reviewDiffStat, { projectId, dir: opts?.dir }),
   },
   council: {
@@ -135,8 +122,10 @@ const api: CockpitApi = {
     rename: (projectId, from, to) => invoke(IPC.memoryRename, { projectId, from, to }),
     trash: (projectId, name) => invoke(IPC.memoryTrash, { projectId, name }),
     health: (projectId) => invoke(IPC.memoryHealth, { projectId }),
-    captureSession: (projectId, sessionId, dryRun) =>
-      invoke(IPC.memoryCaptureSession, { projectId, sessionId, dryRun }),
+    captureSession: (projectId, provider, sessionId, dryRun) =>
+      invoke(IPC.memoryCaptureSession, { projectId, provider, sessionId, dryRun }),
+    captureStatus: (projectId) => invoke(IPC.memoryCaptureStatus, { projectId }),
+    retryCapture: (projectId, jobId) => invoke(IPC.memoryCaptureRetry, { projectId, jobId }),
     trustState: (projectId, scope) => invoke(IPC.memoryTrustState, { projectId, scope }),
     setTrustMode: (projectId, scope, mode) =>
       invoke(IPC.memorySetTrustMode, { projectId, scope, mode }),
@@ -144,6 +133,11 @@ const api: CockpitApi = {
     resolveReview: (projectId, scope, reviewId, decision, editedContent) =>
       invoke(IPC.memoryResolveReview, { projectId, scope, reviewId, decision, editedContent }),
     ledger: (projectId, noteSlug) => invoke(IPC.memoryLedger, { projectId, noteSlug }),
+    noteActivity: (projectId, noteSlug) =>
+      invoke(IPC.memoryNoteActivity, { projectId, noteSlug }),
+    snapshots: (projectId) => invoke(IPC.memorySnapshots, { projectId }),
+    restoreSnapshot: (projectId, snapshotId) =>
+      invoke(IPC.memoryRestoreSnapshot, { projectId, snapshotId }),
     consolidate: (projectId) => invoke(IPC.memoryConsolidate, { projectId }),
     bazList: () => invoke(IPC.memoryBazList, {}),
     bazRead: (name) => invoke(IPC.memoryBazRead, { name }),
@@ -173,11 +167,6 @@ const api: CockpitApi = {
   },
   chat: {
     ask: (projectId, prompt, opts) => invoke(IPC.chatAsk, { projectId, prompt, opts }),
-  },
-  hermesChat: {
-    ask: (projectId, message, imagePath) =>
-      invoke(IPC.hermesChatAsk, { projectId, message, imagePath }),
-    clear: (projectId) => invoke(IPC.hermesChatClear, { projectId }),
   },
   secrets: {
     set: (kind, value) => invoke(IPC.secretSet, { kind, value }),

@@ -18,14 +18,14 @@ describe('MemoryContextService', () => {
 
     const result = service.forTask({
       projectId: 'prj_1',
-      surface: 'hermes_chat',
+      surface: 'terminal_codex',
       query: 'redesign the landing page',
     })
 
     expect(memory.listDocs).toHaveBeenCalledWith('prj_1')
     expect(result.receipt.status).toBe('ready')
     expect(result.receipt.delivery).toBe('lookup')
-    expect(result.block).toContain('read_memory_recent')
+    expect(result.block).toContain('.cockpit-memory/')
     expect(result.block).not.toContain('copper type on an obsidian surface')
     expect(recalls.record).not.toHaveBeenCalled()
     expect(audit.record).toHaveBeenCalledWith(
@@ -34,6 +34,43 @@ describe('MemoryContextService', () => {
         actionType: 'memory.context_lookup',
         payload: expect.objectContaining({ contextId: 'memctx_fixed', delivery: 'lookup' }),
       }),
+    )
+  })
+
+  it('searches project and global brains and records each recall against its owner', () => {
+    const memory = { listDocs: vi.fn(() => []) }
+    const globalMemory = {
+      listDocs: vi.fn(() => [{
+        name: 'global-visual-direction',
+        updatedAt: '2026-07-10T12:00:00.000Z',
+        content: 'Landing pages use copper type on an obsidian surface.',
+      }]),
+    }
+    const recalls = { record: vi.fn() }
+    const service = new MemoryContextService(
+      memory,
+      recalls,
+      undefined,
+      () => 'memctx_global',
+      globalMemory,
+    )
+
+    const result = service.forTask({
+      projectId: 'prj_1',
+      surface: 'council_spec',
+      query: 'landing page visual direction copper obsidian',
+    })
+
+    expect(globalMemory.listDocs).toHaveBeenCalledWith('baz-global')
+    expect(result.receipt.notes[0]).toMatchObject({
+      name: 'global-visual-direction',
+      path: 'baz-memory/global-visual-direction.md',
+      brain: 'global',
+    })
+    expect(recalls.record).toHaveBeenCalledWith(
+      'baz-global',
+      ['global-visual-direction'],
+      'council_spec',
     )
   })
 

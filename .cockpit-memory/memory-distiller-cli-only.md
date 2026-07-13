@@ -1,11 +1,17 @@
 ---
-schema: 1
+schema: 2
 name: memory-distiller-cli-only
 title: Memory distiller uses the explicit Hermes mechanical-model route
 class: decision
 capturedAt: 2026-07-04T20:49:58.279Z
 gate: save
 updatedAt: 2026-07-12T05:17:51.000Z
+status: archived
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-04T20:49:58.279Z
+reviewAfter: 2026-07-13T05:20:43.982Z
 ---
 
 # Distiller model route

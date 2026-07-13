@@ -1,13 +1,19 @@
 ---
-schema: 1
+schema: 2
 name: memory-write-gate-asymmetric
-title: Write gate has asymmetric treatment across three write paths
+title: Memory write gate respects owner sovereignty
 class: decision
-capturedAt: 2026-07-08T05:48:33.764Z
-gate: save
-updatedAt: 2026-07-08T05:48:33.764Z
+gate: manual
+updatedAt: 2026-07-13T05:53:28.280Z
+status: active
+authority: code-verified
+authorityRef: owner-approved agent-memory-system-v2 migration
+scope: project
+confidence: high
+firstSeenAt: 2026-07-13T05:53:28.280Z
+lastVerifiedAt: 2026-07-13T05:53:28.280Z
+reviewAfter: 2027-01-09T05:53:28.281Z
+tags: runtime, memory-v2
 ---
 
-The memory write gate (shared/memory-gate.ts) applies differently per path: (1) Hermes tool path (write_memory_summary) → three-tier accept/review/reject; secrets rejected with a charter-referencing tool error. (2) Auto-capture pipeline (MemoryPipeline.ts) → same three-tier but secrets silently dropped (not queued, not written, audit logged). (3) Human UI write path (registerIpc services.memory.write) → intentionally gate-free, no gate call at all. Rationale: owner sovereignty — the human should never be friction-blocked by a gate that exists to constrain AI behavior. This asymmetry is not documented in any single place and would be non-obvious to a future developer adding a fourth write path.
-
-Related: [[memory-trust-modes]], [[memory-conflict-double-gate]], [[memory-authority-trust-ladder]]
+Provider-neutral auto-capture candidates pass the canonical accept, review, or reject write gate; secret-shaped candidates are rejected and audited without entering the brain. Human edits in the Memory UI remain intentionally gate-free because the owner is sovereign. Every new machine write path must declare which side of this boundary it belongs to.

@@ -26,6 +26,7 @@ import {
   normalizeCouncilSeatText,
 } from './council-stages'
 import { redactText } from './redaction'
+import { councilContractText } from './council-contract'
 
 /** Diff-mode framing: a change set is under review. */
 function changeSetFraming(question: string | null): string[] {
@@ -129,7 +130,7 @@ export function buildSeatPrompt(seat: CouncilSeat, opts: SeatPromptOpts): string
       : 'Quote the exact sentence from the spec for EVERY claim — never a vague warning.'
 
   const language = councilLanguageInstruction(opts.responseLanguage ?? 'und')
-  const parts: string[] = [seat.prompt, '', language, '']
+  const parts: string[] = [councilContractText(), '', seat.prompt, '', language, '']
   parts.push(...(mode === 'diff' ? changeSetFraming(question) : specFraming(question)))
   parts.push(
     '',
@@ -181,6 +182,8 @@ export function buildRankingPrompt(
       ? 'grounded repository analysis'
       : 'task spec'
   const parts: string[] = [
+    councilContractText(),
+    '',
     `You are a member of an LLM Council. Below are anonymous council responses to`,
     `the same ${subject}. Do not write per-response essays. Return only the compact`,
     'peer judgement fields below, using the requested human language for values.',
@@ -301,6 +304,8 @@ export function buildAnalysisSeatPrompt(
 ): string {
   const evidence = renderCouncilEvidencePack(opts.evidencePack, opts.fenceTag)
   const parts = [
+    councilContractText(),
+    '',
     seat.prompt,
     '',
     councilLanguageInstruction(opts.responseLanguage ?? 'und'),
@@ -341,6 +346,8 @@ export function buildAnalysisChairmanPrompt(opts: {
     12_000,
   )
   const parts = [
+    councilContractText(),
+    '',
     'You are the Chairman of a repository-analysis Council. Produce ONLY bounded claim blocks',
     'that can survive a deterministic provenance check. Repository, memory, and user-input facts',
     'must cite SOURCE ids from the evidence pack. Anything else must be labelled INFERENCE.',
@@ -384,6 +391,8 @@ export function buildChairmanPrompt(opts: {
 }): string {
   const { question, seats, rankings, aggregate = [], memoryBlock } = opts
   const parts: string[] = [
+    councilContractText(),
+    '',
     'You are the Chairman of an LLM Council. Synthesize the members’ perspectives',
     'and their peer rankings below into ONE clear verdict on this code change.',
     '',
@@ -435,6 +444,8 @@ export function buildSpecChairmanPrompt(opts: {
 }): string {
   const { question, seats, rankings, aggregate = [], fenceTag, specText, memoryBlock } = opts
   const parts: string[] = [
+    councilContractText(),
+    '',
     'You are the Chairman of an LLM Council. A task spec is about to be handed to',
     'an autonomous builder. Synthesize the members’ judgements and peer rankings',
     'below, decide whether the spec is buildable as written, and produce the',

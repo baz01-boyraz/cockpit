@@ -2,6 +2,10 @@ import { spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AppRefreshResult } from '@shared/ipc'
+import type {
+  LifecycleApprovalAction,
+  LifecycleApprovalCapability,
+} from './LifecycleApprovalTokenService'
 
 /**
  * Kick off `npm run app:refresh` in a source checkout: rebuild the unsigned
@@ -53,6 +57,7 @@ function spawnDetachedNpmScript(
   sourceDir: string,
   script: string,
   successMessage: string,
+  approval: LifecycleApprovalCapability,
 ): AppRefreshResult {
   const shell = process.env.SHELL || '/bin/zsh'
   try {
@@ -60,7 +65,11 @@ function spawnDetachedNpmScript(
       cwd: sourceDir,
       detached: true,
       stdio: 'ignore',
-      env: { ...process.env },
+      env: {
+        ...process.env,
+        COCKPIT_LIFECYCLE_APPROVAL_FILE: approval.file,
+        COCKPIT_LIFECYCLE_APPROVAL_TOKEN: approval.token,
+      },
     })
     child.unref()
   } catch (err) {
@@ -70,17 +79,40 @@ function spawnDetachedNpmScript(
   return { ok: true, message: successMessage }
 }
 
-export function rebuildAndRelaunch(sourceDir: string): AppRefreshResult {
+function validateApproval(
+  approval: LifecycleApprovalCapability | undefined,
+  action: LifecycleApprovalAction,
+): AppRefreshResult | null {
+  if (!approval || approval.action !== action || !approval.file || !approval.token) {
+    return {
+      ok: false,
+      message: 'A current one-time Cockpit UI approval is required; lifecycle action refused.',
+    }
+  }
+  if (Date.parse(approval.expiresAt) <= Date.now()) {
+    return { ok: false, message: 'The one-time Cockpit UI approval expired; lifecycle action refused.' }
+  }
+  return null
+}
+
+export function rebuildAndRelaunch(
+  sourceDir: string,
+  approval?: LifecycleApprovalCapability,
+): AppRefreshResult {
   if (!isCockpitSource(sourceDir)) {
     return {
       ok: false,
       message: 'Active project is not the cockpiT source — rebuild refused.',
     }
   }
+  const refusal = validateApproval(approval, 'app_refresh')
+  if (refusal) return refusal
+  const capability = approval as LifecycleApprovalCapability
   return spawnDetachedNpmScript(
     sourceDir,
     'app:refresh',
     'Rebuilding… the app will quit and relaunch automatically in ~1–2 minutes.',
+    capability,
   )
 }
 
@@ -91,7 +123,10 @@ export function rebuildAndRelaunch(sourceDir: string): AppRefreshResult {
  * where in-app auto-update works. Same trust model as the rebuild path: only
  * cockpiT's own verified source may be an execution target.
  */
-export function installLatestRelease(sourceDir: string): AppRefreshResult {
+export function installLatestRelease(
+  sourceDir: string,
+  approval?: LifecycleApprovalCapability,
+): AppRefreshResult {
   if (!isCockpitSource(sourceDir)) {
     return {
       ok: false,
@@ -105,9 +140,13 @@ export function installLatestRelease(sourceDir: string): AppRefreshResult {
       message: 'This checkout has no app:install-release script — pull the latest source first.',
     }
   }
+  const refusal = validateApproval(approval, 'app_install_release')
+  if (refusal) return refusal
+  const capability = approval as LifecycleApprovalCapability
   return spawnDetachedNpmScript(
     sourceDir,
     'app:install-release',
     'Installing the latest release… the app will quit, replace itself and reopen in ~1 minute.',
+    capability,
   )
 }

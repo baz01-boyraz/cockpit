@@ -1,3 +1,18 @@
+---
+schema: 2
+name: signal-memory-capture-stopped-after-repeated-failures
+title: Memory capture stopped after repeated failures
+class: gotcha
+gate: manual
+updatedAt: 2026-07-13T05:20:43.982Z
+status: archived
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-13T05:20:43.982Z
+reviewAfter: 2026-07-13T05:20:43.982Z
+---
+
 # Memory capture stopped after repeated failures
 
 Symptom (verbatim):

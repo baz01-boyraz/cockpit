@@ -1,11 +1,19 @@
 ---
-schema: 1
+schema: 2
 name: swarm-completion-notification-gap
-title: Successful Swarm completion proactively reaches Hermes Pro
+title: Swarm completion publishes deterministic evidence
 class: architecture
-capturedAt: 2026-07-07T14:16:18.156Z
-gate: save
-updatedAt: 2026-07-12T05:44:00.000Z
+gate: manual
+updatedAt: 2026-07-13T05:53:28.280Z
+status: active
+authority: code-verified
+authorityRef: owner-approved agent-memory-system-v2 migration
+scope: project
+confidence: high
+firstSeenAt: 2026-07-13T05:53:28.280Z
+lastVerifiedAt: 2026-07-13T05:53:28.280Z
+reviewAfter: 2027-01-09T05:53:28.281Z
+tags: runtime, memory-v2
 ---
 
-The former notification gap was closed on 2026-07-12. A successful done-signal or clean worker exit now stages a structured `swarm-completion` Sentinel signal before any model call. Only bounded, redacted evidence from that card/session reaches tool-less Hermes V4 Pro; the enriched signal is then delivered once through the app toast and macOS notification, with Review card and Ask Hermes actions. Pro failure uses a deterministic fallback, staged rows resume after restart, and nonzero worker exits remain a separate failure signal.
+A successful Swarm done signal or clean worker exit stages one structured swarm-completion Sentinel signal from bounded card and session evidence. Production publication uses deterministic summary fallback, persists before delivery, resumes staged rows after restart, and keeps nonzero worker exits as separate failure signals. Completion handling does not open new cards or invoke an orchestrator persona.

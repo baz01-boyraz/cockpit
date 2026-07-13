@@ -25,8 +25,8 @@ export interface CompletionSummarizer {
 /**
  * Successful Swarm completion coordinator:
  * terminal tail → bounded deterministic evidence → silent durable Sentinel row
- * → tool-less Hermes Pro interpretation → one app/macOS publication. The model
- * is never load-bearing: invalid/slow/unavailable Pro gets a deterministic
+ * → optional tool-less interpretation → one app/macOS publication. The model
+ * is never load-bearing: invalid, slow or unavailable analysis gets a deterministic
  * manager-shaped fallback over the same evidence.
  */
 export class SwarmCompletionSteward {

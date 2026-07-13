@@ -168,7 +168,9 @@ for "open in browser" buttons).
 1. `hardenedRuntime: true` + minimal entitlements plist for the CI-signed path
    (keep the unsigned local dev path as-is if needed).
 2. Build-time-conditional CSP: drop `http://localhost:*` from packaged builds; add
-   `object-src 'none'`, `base-uri 'self'`, `form-action 'none'`, `frame-ancestors 'none'`.
+   `object-src 'none'`, `base-uri 'self'`, and `form-action 'none'`. Do not place
+   `frame-ancestors` in a meta policy: browsers ignore that delivery form and report
+   it as a console error.
 3. Allowlist `http:`/`https:` before any `shell.openExternal(url)`.
 **Files:** `package.json` (`build.mac`), `index.html` (~6–9), `electron/main/index.ts` (~46–49), `.github/workflows/release.yml`, `scripts/notarize.cjs`.
 **Verify:** CI release build passes notarization with hardened runtime; packaged

@@ -1,5 +1,10 @@
 # Hermes — cockpiT'in Jarvis'i (konsolide roadmap)
 
+> **ARCHIVED 2026-07-13 — SUPERSEDED.** Bu dosya artık aktif mimari veya ajan
+> talimatı değildir. Güncel runtime ve Memory tasarımı
+> `docs/plans/agent-memory-system-v2.md` ile `docs/MEMORY-CHARTER.md` içindedir.
+> Aşağıdaki içerik yalnızca geçmiş kararların kaydı olarak korunur.
+
 > **Bu dosya `docs/plans/hermes-jarvis-plan.md`'ın yerini alır.** O dosyada Docker sandbox
 > öneriliyordu ve Hermes coding fallback'i kendisi (DeepSeek ile) yapıyordu — ikisi de bu
 > sohbette **değişti** (aşağıda "v1'den farklar" bölümüne bak). Eski dosya arşiv olarak

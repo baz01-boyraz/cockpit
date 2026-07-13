@@ -1,0 +1,60 @@
+# Project-local defense in depth for direct Codex terminals. Cockpit's scripts
+# also require a short-lived one-time UI capability, so aliases or alternate
+# shells cannot turn a verification request into an app lifecycle operation.
+
+prefix_rule(
+    pattern = ["npm", "run", "app:refresh"],
+    decision = "forbidden",
+    justification = "App refresh requires a current explicit user request and one-time Cockpit UI approval.",
+    match = ["npm run app:refresh", "npm run app:refresh -- --skip-build"],
+    not_match = ["npm run build", "npm test"],
+)
+
+prefix_rule(
+    pattern = ["npm", "run", "app:install-release"],
+    decision = "forbidden",
+    justification = "Installing or replacing the app requires a current explicit user request and one-time Cockpit UI approval.",
+    match = ["npm run app:install-release", "npm run app:install-release -- --version v1.2.3"],
+    not_match = ["npm run package:release", "npm run typecheck"],
+)
+
+prefix_rule(
+    pattern = [
+        ["bash", "zsh", "sh"],
+        ["scripts/release/refresh-local-app.sh", "scripts/release/install-release.sh"],
+    ],
+    decision = "forbidden",
+    justification = "Direct lifecycle scripts are UI-capability gated and may not be invoked by a direct Codex session.",
+    match = [
+        "bash scripts/release/refresh-local-app.sh",
+        "zsh scripts/release/install-release.sh --no-relaunch",
+    ],
+    not_match = ["bash scripts/release/prepare-unsigned-beta.sh"],
+)
+
+prefix_rule(
+    pattern = [
+        "osascript",
+        "-e",
+        [
+            "tell application \"cockpiT\" to quit",
+            "tell application \"Baz Cockpit\" to quit",
+            "tell application id \"com.boyraz.cockpit\" to quit",
+        ],
+    ],
+    decision = "forbidden",
+    justification = "Quitting Cockpit is a separate high-impact lifecycle action.",
+    match = [
+        "osascript -e 'tell application \"cockpiT\" to quit'",
+        "osascript -e 'tell application id \"com.boyraz.cockpit\" to quit'",
+    ],
+    not_match = ["osascript -e 'tell application \"Finder\" to get name'"],
+)
+
+prefix_rule(
+    pattern = [["pkill", "killall"], ["cockpiT", "Cockpit", "Baz Cockpit"]],
+    decision = "forbidden",
+    justification = "Killing Cockpit is forbidden without an explicit lifecycle approval.",
+    match = ["killall cockpiT", "pkill Cockpit"],
+    not_match = ["pkill node"],
+)

@@ -2,13 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import type { CardStatus, KanbanCard } from '@shared/kanban'
-import type { ReviewResult } from '@shared/review'
 import type { CompletionReport } from '@shared/completion-report'
 import { formatCompletionSummary } from '@shared/completion-report'
 import type { CouncilResult, ScorecardEntry } from '@shared/council'
 import { COUNCIL_SEATS, normalizeCouncilResult } from '@shared/council'
 import { IconCheck, IconShieldSearch, IconWarning, IconX } from '../components/icons'
-import { ReviewFindings, reviewFailure } from '../components/ReviewFindings'
 import { CouncilVerdict } from '../components/CouncilVerdict'
 import { CouncilScorecard } from '../components/CouncilScorecard'
 import { SwarmBoard } from '../components/swarm/SwarmBoard'
@@ -33,8 +31,7 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * The active review surface under the header. `diff` is one advisory pass over
- * the worktree; `council` is the full LLM-Council (five advisors → peer review
+ * The active review surface under the header. `council` is the full LLM-Council (five advisors → peer review
  * → verdict). Each carries its own result shape; `result: null` = in flight.
  *
  * The `spec`-gate surface is NOT here: it lives in the store's council slice so a
@@ -42,7 +39,6 @@ function errorMessage(error: unknown): string {
  * closes). It is normalized back into `WideReview` for the shared render below.
  */
 type CardReviewState =
-  | { kind: 'diff'; cardTitle: string; result: ReviewResult | null }
   | { kind: 'council'; cardTitle: string; result: CouncilResult | null }
   | { kind: 'report'; cardTitle: string; result: CompletionReport | null }
 
@@ -75,8 +71,7 @@ function councilFailure(error: unknown, mode: CouncilResult['mode'] = 'diff'): C
  * Start spawns a worker in its own git worktree (card → Running, up to 3 in
  * parallel), Park stops the worker but keeps the worktree (Resume continues
  * there — also the crash-recovery path for orphaned cards), and the worker's
- * exit lands the card in In review, where "Review diff" runs one advisory AI
- * pass over the card's worktree and "Council" runs the same diff through
+ * exit lands the card in In review, where "Council" evaluates the diff through
  * every persona lens, merged into one tagged findings list. All data flows
  * through the swarm slice; API refusals surface in the inline notice.
  */
@@ -111,14 +106,12 @@ export function SwarmPanel() {
   // prompt (Finding 1). Cleared once the card starts, convenes, or on switch.
   const [gatedId, setGatedId] = useState<string | null>(null)
   const [parkingId, setParkingId] = useState<string | null>(null)
-  const [reviewingId, setReviewingId] = useState<string | null>(null)
   const [councilingId, setCouncilingId] = useState<string | null>(null)
   const [reportingId, setReportingId] = useState<string | null>(null)
   const [cardReview, setCardReview] = useState<CardReviewState | null>(null)
   const [scorecard, setScorecard] = useState<ScorecardEntry[] | null>(null)
 
   const reviewBusy =
-    reviewingId !== null ||
     councilingId !== null ||
     councilConveningCardId !== null ||
     reportingId !== null
@@ -132,7 +125,6 @@ export function SwarmPanel() {
     setEditing(null)
     setGatedId(null)
     setCardReview(null)
-    setReviewingId(null)
     setCouncilingId(null)
     setReportingId(null)
     setScorecard(null)
@@ -287,27 +279,6 @@ export function SwarmPanel() {
     }
   }, [projectId])
 
-  // AI diff review for an In review card — one advisory pass (read-only) over
-  // the card's own worktree when it has one, rendered under the header with
-  // the same ReviewFindings surface as Git.
-  const handleReview = useCallback(
-    async (card: KanbanCard) => {
-      if (!projectId || reviewBusy) return
-      clearCardCouncil()
-      setReviewingId(card.id)
-      setCardReview({ kind: 'diff', cardTitle: card.title, result: null })
-      try {
-        const result = await cockpit().review.run(projectId, { dir: card.worktreePath ?? undefined })
-        setCardReview({ kind: 'diff', cardTitle: card.title, result })
-      } catch (err: unknown) {
-        setCardReview({ kind: 'diff', cardTitle: card.title, result: reviewFailure(err) })
-      } finally {
-        setReviewingId(null)
-      }
-    },
-    [projectId, reviewBusy, clearCardCouncil],
-  )
-
   // Faz 2.5 — the decision-ready completion report for an In review card: branch,
   // diff stat, and the acceptance-criteria checklist, computed on demand and shown
   // in the same wide surface as the review/council results (kept visually quiet).
@@ -449,7 +420,6 @@ export function SwarmPanel() {
     () => ({
       startingId,
       parkingId,
-      reviewingId,
       councilingId,
       reportingId,
       gatedId,
@@ -457,21 +427,18 @@ export function SwarmPanel() {
       onConveneGate: (card) => handleGateConvene(card),
       onPark: (cardId) => void handlePark(cardId),
       onViewTerminal: () => setView('terminals'),
-      onReview: (card) => void handleReview(card),
       onCouncil: (card) => void handleCouncil(card),
       onReport: (card) => void handleReport(card),
     }),
     [
       startingId,
       parkingId,
-      reviewingId,
       councilingId,
       reportingId,
       gatedId,
       handleStart,
       handleGateConvene,
       handlePark,
-      handleReview,
       handleCouncil,
       handleReport,
       setView,
@@ -551,12 +518,8 @@ export function SwarmPanel() {
                 ? 'Convening the council on this spec — five seats, then a build/clarify gate…'
                 : wideReview.kind === 'council'
                   ? 'Convening the council — five seats, peer rankings, then a verdict…'
-                  : wideReview.kind === 'report'
-                    ? 'Gathering the completion report — diff stat and acceptance criteria…'
-                    : 'Reviewing the working-tree diff…'}
+                  : 'Gathering the completion report — diff stat and acceptance criteria…'}
             </div>
-          ) : wideReview.kind === 'diff' ? (
-            <ReviewFindings result={wideReview.result} />
           ) : wideReview.kind === 'report' ? (
             <CompletionReportView report={wideReview.result} />
           ) : (

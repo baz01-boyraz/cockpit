@@ -1,5 +1,11 @@
 # memory-imp — The Living Memory Brain
 
+> **SUPERSEDED 2026-07-13.** This is a historical implementation journal and
+> must not be used as current runtime or model-routing policy. The implemented
+> provider-neutral design is documented in `docs/MEMORY-CHARTER.md` and
+> `docs/plans/agent-memory-system-v2.md`. Historical names and routes below are
+> retained only to explain earlier decisions.
+
 > Created 2026-07-04. This is the **implementation roadmap** for turning cockpiT's
 > per-project markdown hub into a *living brain*: it captures the important parts of
 > the sessions we actually work in, classifies them, keeps itself organized, and

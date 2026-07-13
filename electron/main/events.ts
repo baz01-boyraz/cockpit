@@ -18,7 +18,6 @@ export interface CockpitEventMap {
   'terminal:data': TerminalOutputChunk
   'terminal:exit': TerminalExitEvent
   'approvals:changed': { projectId: string }
-  'automations:changed': { projectId: string }
   'logs:changed': { projectId: string }
   'appUpdate:changed': AppUpdateState
   'swarm:cardCompleted': SwarmCardCompletedEvent

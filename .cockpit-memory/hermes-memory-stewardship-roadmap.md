@@ -1,11 +1,17 @@
 ---
-schema: 1
+schema: 2
 name: hermes-memory-stewardship-roadmap
 title: Hermes Memory + Sentinel Stewardship roadmap
 class: decision
 capturedAt: 2026-07-11T23:10:24.000Z
 gate: save
 updatedAt: 2026-07-12T12:02:04.000Z
+status: archived
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-11T23:10:24.000Z
+reviewAfter: 2026-07-13T05:20:43.982Z
 ---
 
 cockpiT first tightens memory correctness, then expands Hermes/Sentinel into a proactive steward: sensors watch, Hermes judges meaningful signals, notifications reach the right channel, and durable outcomes return to memory.

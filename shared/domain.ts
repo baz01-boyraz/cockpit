@@ -149,6 +149,11 @@ export interface ResumableSessionSummary extends ClaudeSessionSummary {
   provider: ResumableSessionProvider
 }
 
+/** Internal capture candidate with its provider-owned transcript location. */
+export interface CapturableSessionSummary extends ResumableSessionSummary {
+  transcriptPath: string
+}
+
 // ---------------------------------------------------------------------------
 // Agents / router
 // ---------------------------------------------------------------------------
@@ -464,9 +469,6 @@ export type ApprovalActionType =
   | 'database_reset'
   | 'env_write'
   | 'shell_command'
-  // Hermes proposes opening a Swarm card for something it noticed on its own
-  // (Faz 6). Approving it lets the main process open+start the card directly.
-  | 'propose_open_swarm_card'
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
 

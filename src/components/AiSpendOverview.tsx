@@ -44,7 +44,7 @@ function OpenRouterCapacity({ snapshot }: { snapshot: OpenRouterUsageSnapshot | 
 
   if (!available || !snapshot) {
     return (
-      <article className="capEngine capEngine--hermes capEngine--off">
+      <article className="capEngine capEngine--openrouter capEngine--off">
         <CapacityHead
           glyph="OR"
           name="OpenRouter"
@@ -84,7 +84,7 @@ function OpenRouterCapacity({ snapshot }: { snapshot: OpenRouterUsageSnapshot | 
       : null
 
   return (
-    <article className={`capEngine capEngine--hermes capEngine--${tone}`}>
+    <article className={`capEngine capEngine--openrouter capEngine--${tone}`}>
       <CapacityHead glyph="OR" name="OpenRouter" kind="Council" tone={tone} />
       <div className="capEngine__credit">
         <CapacityRing percent={remainingPct} tone={tone} label="Limit" sub={ringSub} />

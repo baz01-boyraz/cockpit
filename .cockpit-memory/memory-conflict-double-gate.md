@@ -1,15 +1,19 @@
 ---
-schema: 1
+schema: 2
 name: memory-conflict-double-gate
-title: Conflict resolution is enforced by policy, mutation gateway, and Hermes tool
+title: Memory conflicts never use newer-wins
 class: gotcha
-capturedAt: 2026-07-06T02:32:23.678Z
-gate: save
-updatedAt: 2026-07-12T04:50:43.000Z
+gate: manual
+updatedAt: 2026-07-13T05:53:28.280Z
+status: active
+authority: code-verified
+authorityRef: owner-approved agent-memory-system-v2 migration
+scope: project
+confidence: high
+firstSeenAt: 2026-07-13T05:53:28.280Z
+lastVerifiedAt: 2026-07-13T05:53:28.280Z
+reviewAfter: 2027-01-09T05:53:28.281Z
+tags: runtime, memory-v2
 ---
 
-Conflict safety now has three aligned enforcement layers: (1) shared policy excludes conflict from Autopilot, Assisted, and Manual auto-commit sets; (2) `MemoryPipeline.resolveReview` refuses an AI conflict decision without an allowed delegated basis, rationale, evidence, and an audit sink; (3) the Hermes tool schema rejects unknown bases such as recency before the mutation call. Human inbox clicks remain an explicit owner decision.
-
-Successful Hermes replacements use ledger action/gate `replace/delegated` with before/after hashes and a redacted audit record containing actor, basis, rationale, and evidence. The existing-content compare still rejects stale reviews. This preserves the no-babysitting goal for evidence-clear cases without returning to silent “newer wins.”
-
-Related: [[memory-trust-modes]], [[hermes-mcp-architecture]]
+Conflict safety is enforced by shared trust policy, the stale-checked mutation gateway, and validated IPC boundaries. No trust mode auto-commits a conflict. A resolution needs the owner or a deliberately invoked closed basis of human-directive, code-verified, source-authority, or equivalent-content with rationale and evidence. Every replacement records before and after hashes; ambiguous items remain pending.

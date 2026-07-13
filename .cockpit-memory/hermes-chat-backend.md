@@ -1,11 +1,17 @@
 ---
-schema: 1
+schema: 2
 name: hermes-chat-backend
 title: Hermes chat widget backend (Faz 7) — service owns history, oneshot is stateless
 class: decision
 capturedAt: 2026-07-05T00:00:00.000Z
 gate: save
 updatedAt: 2026-07-12T05:17:51.000Z
+status: archived
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-05T00:00:00.000Z
+reviewAfter: 2026-07-13T05:20:43.982Z
 ---
 
 Hermes chat widget backend wired in Faz 7 (`docs/plans/hermes.md`). Key invariants:

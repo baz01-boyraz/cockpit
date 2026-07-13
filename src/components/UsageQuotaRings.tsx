@@ -6,10 +6,10 @@ import { describeAgentUsage, toneFor, type UsageTone } from '@shared/agent-usage
  * Capacity instruments for the Usage command center.
  *
  * One ring primitive (`CapacityRing`) drives every gauge on the page — a
- * Claude/Codex quota window or the Hermes credit line — so the whole hero reads
+ * Claude/Codex quota window or the OpenRouter credit line — so the whole hero reads
  * as a single matched instrument cluster instead of two lookalike card rows.
  * `SubscriptionCapacity` wraps the two windows of a flat CLI plan into one
- * per-engine module; the Hermes ($) module is composed in AiSpendOverview from
+ * per-engine module; the OpenRouter ($) module is composed in AiSpendOverview from
  * the same `CapacityRing`.
  */
 
@@ -186,5 +186,5 @@ export function SubscriptionCapacity({ snapshot }: { snapshot: AgentUsageSnapsho
   )
 }
 
-/** Re-exported so the Hermes module can tint its ring from a raw percent. */
+/** Re-exported so the OpenRouter module can tint its ring from a raw percent. */
 export { toneFor }

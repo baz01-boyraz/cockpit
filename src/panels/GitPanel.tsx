@@ -6,8 +6,6 @@ import type {
   TerminalRole,
   TerminalSession,
 } from '@shared/domain'
-import type { ReviewResult } from '@shared/review'
-import { HERMES_RUNTIME_ENABLED } from '@shared/hermes-runtime'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import type { ReactNode } from 'react'
@@ -22,14 +20,12 @@ import {
   IconRestart,
   IconServer,
   IconShield,
-  IconShieldSearch,
   IconStop,
   IconTerminal,
   IconUpload,
   IconWarning,
 } from '../components/icons'
 import { AnimatedDownload } from '../components/AnimatedDownload'
-import { ReviewFindings, reviewFailure } from '../components/ReviewFindings'
 
 const STATE_LABEL: Record<string, string> = {
   staged: 'Staged',
@@ -244,16 +240,12 @@ export function GitPanel() {
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [canRefreshApp, setCanRefreshApp] = useState(false)
-  const [review, setReview] = useState<ReviewResult | null>(null)
-  const [reviewing, setReviewing] = useState(false)
 
   useEffect(() => {
     setSelected(null)
     setDiff('')
     setNotice(null)
     setRunIds({ dev: null, test: null })
-    setReview(null)
-    setReviewing(false)
   }, [activeProjectId])
 
   // The rebuild button is only offered when main verifies the active project is
@@ -382,21 +374,6 @@ export function GitPanel() {
       setNotice(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(null)
-    }
-  }
-
-  // Pre-ship AI review: read-only advisory pass over the working tree via the
-  // sanitizer boundary. A click while a run is in flight is a no-op.
-  const runReview = async () => {
-    if (!activeProjectId || reviewing) return
-    setReviewing(true)
-    try {
-      const res = await cockpit().review.run(activeProjectId)
-      setReview(res)
-    } catch (err) {
-      setReview(reviewFailure(err))
-    } finally {
-      setReviewing(false)
     }
   }
 
@@ -702,39 +679,6 @@ export function GitPanel() {
         <span className="chip">{git.untrackedCount} untracked</span>
         {notice ? <span className="chip">{notice}</span> : null}
       </div>
-
-      {HERMES_RUNTIME_ENABLED && <section className="card review">
-        <div className="review__head">
-          <span className="review__icon" aria-hidden>
-            <IconShieldSearch width={18} height={18} />
-          </span>
-          <div className="review__headText">
-            <div className="eyebrow">pre-ship review</div>
-            <h3 className="review__title">Review before ship</h3>
-            <p className="review__sub">
-              The AI reviewer reads this change set — staged, unstaged and untracked — through the
-              sanitizer boundary and reports bugs, regressions and security holes. Read-only,
-              advisory; secrets never leave the machine.
-            </p>
-          </div>
-          <button
-            className="btn btn--accent review__cta"
-            onClick={() => void runReview()}
-            disabled={reviewing || !activeProjectId}
-          >
-            <IconShieldSearch width={13} height={13} />{' '}
-            {reviewing ? 'Reviewing…' : review ? 'Review again' : 'Review changes'}
-          </button>
-        </div>
-        {reviewing ? (
-          <div className="review__busy">
-            <span className="review__pulse" aria-hidden />
-            Reviewing {git.files.length} changed file{git.files.length === 1 ? '' : 's'}…
-          </div>
-        ) : review ? (
-          <ReviewFindings result={review} />
-        ) : null}
-      </section>}
 
       {hasFiles ? (
         <div className="git__cols">

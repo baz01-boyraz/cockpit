@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "scope": "project",
+  "appliedAt": "2026-07-13T18:33:55.743Z",
+  "snapshotId": "2026-07-13T18-33-55-743Z-44d612d0",
+  "inspected": 129,
+  "changed": 126,
+  "archived": 31,
+  "skipped": 0,
+  "skippedFiles": [],
+  "created": [],
+  "restoreCommand": "node scripts/memory/migrate-v2.mjs --root .cockpit-memory --scope project --restore 2026-07-13T18-33-55-743Z-44d612d0"
+}

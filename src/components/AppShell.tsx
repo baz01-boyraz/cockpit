@@ -1,15 +1,12 @@
 import { useStore } from '../store/useStore'
 import { CHAT_ENABLED } from '../lib/features'
-import { HERMES_RUNTIME_ENABLED } from '@shared/hermes-runtime'
 import { LeftRail } from './LeftRail'
 import { TopBar } from './TopBar'
 import { RightPanel } from './RightPanel'
 import { UpdateToast } from './UpdateToast'
 import { SentinelToasts } from './SentinelToasts'
-import { HermesWidget } from './HermesWidget'
 import { IconBolt } from './icons'
 import { DashboardPanel } from '../panels/DashboardPanel'
-import { AutomationsPanel } from '../panels/AutomationsPanel'
 import { TerminalsPanel } from '../panels/TerminalsPanel'
 import { GitPanel } from '../panels/GitPanel'
 import { SwarmPanel } from '../panels/SwarmPanel'
@@ -26,15 +23,11 @@ export function AppShell() {
   const view = useStore((s) => s.view)
   const chatOpen = useStore((s) => s.chatOpen)
   const toggleChat = useStore((s) => s.toggleChat)
-  const hermesOpen = useStore((s) => s.hermesOpen)
 
   // Chat is shelved behind a flag (see lib/features). When off, the AI Cockpit
-  // panel and its launcher are not rendered and the shell runs full-width —
-  // that's also the only state Hermes docks into today (`shell--hermes-open`
-  // widens a 3rd grid column); if CHAT_ENABLED ever comes back, the two
-  // docked panels sharing the grid needs a real decision, not a guess here.
+  // panel and its launcher are not rendered and the shell runs full-width.
   const shellClass = !CHAT_ENABLED
-    ? `shell shell--no-chat ${HERMES_RUNTIME_ENABLED && hermesOpen ? 'shell--hermes-open' : ''}`.trim()
+    ? 'shell shell--no-chat'
     : chatOpen
       ? 'shell'
       : 'shell shell--chat-collapsed'
@@ -46,7 +39,6 @@ export function AppShell() {
         <TopBar />
         <main className="shell__main scroll-y">
           {view === 'dashboard' && <DashboardPanel />}
-          {HERMES_RUNTIME_ENABLED && view === 'automations' && <AutomationsPanel />}
           <section
             className={`viewSlot viewSlot--terminals ${
               view === 'terminals' ? 'viewSlot--active' : 'viewSlot--hidden'
@@ -67,7 +59,6 @@ export function AppShell() {
           {view === 'settings' && <SettingsPanel />}
         </main>
       </div>
-      {HERMES_RUNTIME_ENABLED && !CHAT_ENABLED && <HermesWidget />}
       <div className="floatingCorner">
         <UpdateToast />
         <SentinelToasts />

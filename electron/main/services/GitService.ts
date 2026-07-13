@@ -108,7 +108,7 @@ export class GitService {
 
   /**
    * Read the repository's current HEAD as one NUL-delimited record. Git status
-   * deliberately does not include commit identity; callers such as Hermes must
+   * deliberately does not include commit identity; callers that need it must
    * receive this evidence explicitly instead of filling the gap from an older
    * conversation turn. A fresh repository with no commit returns null.
    */

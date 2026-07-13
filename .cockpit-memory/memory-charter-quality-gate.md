@@ -1,13 +1,19 @@
 ---
-schema: 1
+schema: 2
 name: memory-charter-quality-gate
-title: Proposed memory charter + quality gate (not yet approved)
+title: Memory charter and quality gate are active
 class: architecture
-capturedAt: 2026-07-08T04:16:44.713Z
-gate: asked
-updatedAt: 2026-07-08T04:16:44.713Z
+gate: manual
+updatedAt: 2026-07-13T05:53:28.280Z
+status: active
+authority: human-directive
+authorityRef: owner-approved agent-memory-system-v2 migration
+scope: project
+confidence: high
+firstSeenAt: 2026-07-13T05:53:28.280Z
+lastVerifiedAt: 2026-07-13T05:53:28.280Z
+reviewAfter: 2027-01-09T05:53:28.281Z
+tags: runtime, memory-v2
 ---
 
-AI proposed: (1) single _charter.md defining what enters/doesn't enter memory, 7-day test, naming conventions, size limits — distributed to all three agents; (2) structured quality gate at every write: three mandatory questions (7-day utility scenario, dedup check, evidence); (3) lifecycle: last_confirmed + access tracking + weekly curator sweep proposing archive/merge/delete; (4) recall over storage: relevance-ranked hub pointers, council seats receiving memory context, Hermes pre-response recall; (5) health metrics: hit rate, junk rate, staleness. Baz hasn't confirmed these.
-
-Related: [[memory-cornerstone-vision]], [[memory-hub]], [[memory-is-sacred]]
+Every agent-produced Memory candidate must pass the seven-day utility test, dedup-first check, evidence requirement, secret rejection, and one-fact-per-note rule. Claude and Codex share this provider-neutral gate. Lifecycle metadata, recall receipts, a review inbox, snapshots, and the mutation ledger make quality observable and reversible.

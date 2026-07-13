@@ -590,3 +590,47 @@ CREATE TABLE IF NOT EXISTS automation_jobs (
 CREATE INDEX IF NOT EXISTS idx_automation_jobs_due
   ON automation_jobs(enabled, state, next_run_at);
 `
+
+/**
+ * V22 — provider-aware durable memory capture. Existing rows predate Codex
+ * capture and therefore migrate as Claude. Rebuilding the small queue replaces
+ * the old session-only UNIQUE constraint with provider + session, so native ids
+ * can never collide across transcript stores.
+ */
+export const SCHEMA_V22 = /* sql */ `
+CREATE TABLE memory_capture_queue_v22 (
+  id            TEXT PRIMARY KEY,
+  project_id    TEXT NOT NULL,
+  provider      TEXT NOT NULL CHECK(provider IN ('claude', 'codex')),
+  session_id    TEXT NOT NULL,
+  source_path   TEXT NOT NULL,
+  status        TEXT NOT NULL,
+  last_offset   INTEGER NOT NULL DEFAULT 0,
+  attempts      INTEGER NOT NULL DEFAULT 0,
+  error         TEXT,
+  enqueued_at   TEXT NOT NULL,
+  updated_at    TEXT NOT NULL,
+  UNIQUE(provider, session_id)
+);
+
+INSERT INTO memory_capture_queue_v22
+  (id, project_id, provider, session_id, source_path, status, last_offset, attempts, error, enqueued_at, updated_at)
+SELECT
+  id, project_id, 'claude', session_id, source_path, status, last_offset, attempts, error, enqueued_at, updated_at
+FROM memory_capture_queue;
+
+DROP TABLE memory_capture_queue;
+ALTER TABLE memory_capture_queue_v22 RENAME TO memory_capture_queue;
+CREATE INDEX idx_mcq_status ON memory_capture_queue(status, enqueued_at);
+`
+
+/**
+ * V23 — observable Memory capture lifecycle. `status` now carries the live
+ * processing stage; retry scheduling and recovery guidance stay durable so a
+ * quit/crash never turns a blocked capture into a silent failure.
+ */
+export const SCHEMA_V23 = /* sql */ `
+ALTER TABLE memory_capture_queue ADD COLUMN next_retry_at TEXT;
+ALTER TABLE memory_capture_queue ADD COLUMN guidance TEXT;
+UPDATE memory_capture_queue SET status = 'reading' WHERE status = 'processing';
+`

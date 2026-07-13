@@ -89,29 +89,6 @@ vi.mock('node:child_process', async (importOriginal) => {
     },
   }
 })
-// HermesMcpServer.start() is fired forget-style in the constructor and binds a
-// loopback port. Stub node:http so the smoke test opens no real socket (and so
-// parallel/repeated constructions never collide on the fixed default port).
-vi.mock('node:http', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>
-  const { EventEmitter } = await import('node:events')
-  class FakeServer extends EventEmitter {
-    listen(): this {
-      setImmediate(() => this.emit('listening'))
-      return this
-    }
-    close(cb?: () => void): this {
-      cb?.()
-      return this
-    }
-    address() {
-      return { port: 0 }
-    }
-  }
-  const createServer = () => new FakeServer()
-  return { ...actual, createServer, default: { ...actual, createServer } }
-})
-
 import { Services } from '../electron/main/services/Services'
 import { CockpitEvents } from '../electron/main/events'
 
@@ -149,9 +126,6 @@ const EXPECTED_SERVICE_FIELDS = [
   'claudeSessions',
   'agentSessions',
   'chat',
-  'hermesChat',
-  'hermesTriage',
-  'hermesAutomation',
   'review',
   'council',
   'memory',
@@ -166,15 +140,9 @@ const EXPECTED_SERVICE_FIELDS = [
   'memoryCuration',
   'memoryLifecycle',
   'operationalHealth',
-  'automation',
   'swarm',
   'sentinel',
   'namedAgents',
-  'cardOutput',
-  'hermesChecks',
-  'appScreenshot',
-  'hermesMcp',
-  'hermesApprovalExecutor',
   'appUpdate',
 ] as const
 
@@ -187,10 +155,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   if (services) {
-    // stop() the MCP server explicitly (shutdown fires it forget-style); awaiting
-    // it here guarantees the (stubbed) server is torn down and no handle leaks.
     services.shutdown()
-    await services.hermesMcp.stop().catch(() => undefined)
     services = null
   }
   rmSync(userDataDir, { recursive: true, force: true })
@@ -361,17 +326,11 @@ describe('Services — shutdown', () => {
     services = new Services({ dbPath: ':memory:', userDataDir, events })
 
     const terminalsKill = vi.spyOn(services.terminals, 'killAll')
-    const chatKill = vi.spyOn(services.hermesChat, 'killAll')
-    const triageKill = vi.spyOn(services.hermesTriage, 'killAll')
-    const automationKill = vi.spyOn(services.hermesAutomation, 'killAll')
     const autoCaptureStop = vi.spyOn(services.memoryAutoCapture, 'stop')
 
     expect(() => services!.shutdown()).not.toThrow()
 
     expect(terminalsKill).toHaveBeenCalledOnce()
-    expect(chatKill).toHaveBeenCalledOnce()
-    expect(triageKill).toHaveBeenCalledOnce()
-    expect(automationKill).toHaveBeenCalledOnce()
     expect(autoCaptureStop).toHaveBeenCalledOnce()
     expect(close).toHaveBeenCalledOnce()
 
@@ -379,9 +338,6 @@ describe('Services — shutdown', () => {
     // die before the connection they might still be writing through is closed).
     const closeOrder = close.mock.invocationCallOrder[0]
     expect(closeOrder).toBeGreaterThan(terminalsKill.mock.invocationCallOrder[0])
-    expect(closeOrder).toBeGreaterThan(chatKill.mock.invocationCallOrder[0])
-    expect(closeOrder).toBeGreaterThan(triageKill.mock.invocationCallOrder[0])
-    expect(closeOrder).toBeGreaterThan(automationKill.mock.invocationCallOrder[0])
   })
 
   it('is idempotent — a second shutdown() is a no-op', () => {

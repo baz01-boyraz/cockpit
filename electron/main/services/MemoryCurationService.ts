@@ -1,13 +1,10 @@
-import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
-import { promisify } from 'node:util'
-import { buildHermesArgs } from '@shared/hermes-run'
 import {
-  HERMES_BACKGROUND_MODEL,
-  HERMES_MODEL_POLICY,
-} from '@shared/hermes-model-policy'
-import { assertHermesRuntimeEnabled } from '@shared/hermes-runtime'
+  MEMORY_ANALYSIS_ENGINE,
+  MEMORY_ANALYSIS_ROLE,
+  MEMORY_MODEL_POLICY_VERSION,
+} from '@shared/memory-model-policy'
 import { projectBrain } from '@shared/memory-ledger'
 import { mergeDuplicate } from '@shared/memory-consolidate'
 import { extractHook } from '@shared/memory-hub'
@@ -17,55 +14,34 @@ import {
   type CurationNote,
   type CurationProposal,
 } from '@shared/memory-curation'
-import { resolveBin } from './resolveBin'
 import type { AuditLogService } from './AuditLogService'
 import type { MemoryHubService } from './MemoryHubService'
 import type { MemoryReviewService } from './MemoryReviewService'
 
-const execFileAsync = promisify(execFile)
-
-/** A curation sweep is one oneshot judgement, not a conversation — 60s is plenty. */
-const CURATION_TIMEOUT_MS = 60 * 1000
-/** Curation output is a small JSON array; a modest ceiling caps a runaway response. */
-const MAX_OUTPUT_BYTES = 512 * 1024
-
 /**
- * Injectable so unit tests never spawn a real `hermes`. Mirrors the
- * HermesTriageService runner shape/hygiene exactly: the prompt is one discrete
- * argv entry (never a shell string), so the fenced untrusted inventory can't
- * break out into the command line.
+ * Provider-neutral analysis seam. The injected runner receives one bounded
+ * prompt and no tools or file-write capability.
  */
-export type HermesCurationRunner = (
-  cwd: string,
-  args: string[],
-  opts: { timeout: number; maxBuffer: number },
-) => Promise<{ stdout: string }>
-
-const defaultRunner: HermesCurationRunner = (cwd, args, opts) => {
-  assertHermesRuntimeEnabled()
-  return execFileAsync(resolveBin('hermes'), args, { cwd, ...opts })
-}
+export type CurationRunner = (cwd: string, prompt: string) => Promise<string>
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
 /**
- * The weekly curation sweep (Faz D, docs/MEMORY-CHARTER.md → Lifecycle). One cheap
- * Hermes oneshot reads the note inventory and proposes archive/merge for stale or
+ * The weekly curation sweep (docs/MEMORY-CHARTER.md → Lifecycle). One bounded
+ * analysis call reads the note inventory and proposes archive/merge for stale or
  * duplicate notes; each non-keep proposal is queued to the SAME review queue the
  * distiller uses — a suggestion for the owner, NEVER a direct file operation.
  *
  * Contract: {@link sweep} NEVER throws. A missing hub, an empty hub, a spawn
  * failure, a timeout, and garbage output all degrade to null; only real,
- * inventory-backed proposals become review items. It reuses the triage runner
- * pattern exactly (resolveBin('hermes'), buildHermesArgs, ignoreRules: true, the
- * cheap DeepSeek model) — a mechanical judgement, not a project-context conversation.
+ * inventory-backed proposals become review items.
  */
 export class MemoryCurationService {
   constructor(
     private readonly memory: Pick<MemoryHubService, 'listDocs'>,
     private readonly reviews: Pick<MemoryReviewService, 'create'>,
     private readonly audit: Pick<AuditLogService, 'record'>,
-    private readonly runner: HermesCurationRunner = defaultRunner,
+    private readonly runner: CurationRunner,
     private readonly now: () => number = () => Date.now(),
   ) {}
 
@@ -92,15 +68,8 @@ export class MemoryCurationService {
     try {
       const fenceTag = `====COCKPIT-UNTRUSTED-MEMORY-${randomUUID()}====`
       const prompt = buildCurationPrompt(inventory, fenceTag)
-      const args = buildHermesArgs(prompt, {
-        model: HERMES_BACKGROUND_MODEL,
-        ignoreRules: true,
-      })
-      const { stdout } = await this.runner(homedir(), args, {
-        timeout: CURATION_TIMEOUT_MS,
-        maxBuffer: MAX_OUTPUT_BYTES,
-      })
-      proposals = parseCurationResponse(stdout)
+      const output = await this.runner(homedir(), prompt)
+      proposals = parseCurationResponse(output)
     } catch {
       // Timeout / spawn-fail / anything: a missed sweep costs nothing. We build
       // NO error string from the argv (the raw-argv leak lesson).
@@ -164,9 +133,9 @@ export class MemoryCurationService {
       payload: {
         proposals: queued,
         notes: inventory.length,
-        model: HERMES_BACKGROUND_MODEL,
-        modelRole: HERMES_MODEL_POLICY.background.role,
-        modelPolicyVersion: HERMES_MODEL_POLICY.version,
+        model: MEMORY_ANALYSIS_ENGINE.model,
+        modelRole: MEMORY_ANALYSIS_ROLE,
+        modelPolicyVersion: MEMORY_MODEL_POLICY_VERSION,
       },
     })
     return { proposals: queued }

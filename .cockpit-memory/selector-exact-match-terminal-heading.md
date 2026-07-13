@@ -1,11 +1,17 @@
 ---
-schema: 1
+schema: 2
 name: selector-exact-match-terminal-heading
 title: Terminals empty-state heading text overlaps with section heading by default
 class: gotcha
 capturedAt: 2026-07-09T09:44:09.193Z
 gate: save
 updatedAt: 2026-07-09T09:44:09.193Z
+status: active
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-09T09:44:09.193Z
+reviewAfter: 2026-10-11T05:20:43.983Z
 ---
 
 During C1 Playwright E2E development: Terminals empty-state heading ('No terminals yet') substring-matches getByRole('heading', { name: 'Terminals' }) by default because 'No terminals yet' contains 'Terminals'. Fix: required exact: true. Also: SentinelToasts renders role='alert'/'status' explicitly on <article> elements, overriding implicit article role.

@@ -10,6 +10,7 @@ import {
 import { projectBrain } from '@shared/memory-ledger'
 import type { AuditLogService } from './AuditLogService'
 import type { MemoryHubService } from './MemoryHubService'
+import { BAZ_GLOBAL_BRAIN } from '@shared/memory-ledger'
 
 type RecallSink = {
   record(brain: string, slugs: readonly string[], surface: MemoryContextSurface): void
@@ -27,17 +28,26 @@ export class MemoryContextService implements MemoryContextProvider {
     private readonly recalls?: RecallSink,
     private readonly audit?: Pick<AuditLogService, 'record'>,
     private readonly idFactory: () => string = () => `memctx_${randomUUID()}`,
+    private readonly globalMemory?: Pick<MemoryHubService, 'listDocs'>,
   ) {}
 
   forTask(input: MemoryContextRequest): MemoryContextEnvelope {
     const contextId = this.idFactory()
     let result: MemoryContextEnvelope
     try {
+      const projectDocs = this.memory.listDocs(input.projectId).map((doc) => ({
+        ...doc,
+        brain: 'project' as const,
+      }))
+      const projectNames = new Set(projectDocs.map((doc) => doc.name))
+      const globalDocs = (this.globalMemory?.listDocs(BAZ_GLOBAL_BRAIN) ?? [])
+        .filter((doc) => !projectNames.has(doc.name))
+        .map((doc) => ({ ...doc, brain: 'global' as const }))
       result = buildMemoryContext({
         contextId,
         surface: input.surface,
         query: input.query,
-        docs: this.memory.listDocs(input.projectId),
+        docs: [...projectDocs, ...globalDocs],
       })
     } catch {
       result = buildUnavailableMemoryContext({ contextId, surface: input.surface })
@@ -46,7 +56,16 @@ export class MemoryContextService implements MemoryContextProvider {
     const slugs = result.receipt.notes.map((note) => note.name)
     if (result.receipt.delivery === 'inline' && slugs.length > 0) {
       try {
-        this.recalls?.record(projectBrain(input.projectId), slugs, input.surface)
+        const projectSlugs = result.receipt.notes
+          .filter((note) => note.brain === 'project')
+          .map((note) => note.name)
+        const globalSlugs = result.receipt.notes
+          .filter((note) => note.brain === 'global')
+          .map((note) => note.name)
+        if (projectSlugs.length > 0) {
+          this.recalls?.record(projectBrain(input.projectId), projectSlugs, input.surface)
+        }
+        if (globalSlugs.length > 0) this.recalls?.record(BAZ_GLOBAL_BRAIN, globalSlugs, input.surface)
       } catch {
         // Delivery already happened; telemetry can never revoke task context.
       }

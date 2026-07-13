@@ -445,7 +445,7 @@ describe('CouncilService — spec mode orchestration', () => {
               '**Goal** Memory sistemini sadeleştir.\n' + 'detay '.repeat(6_000),
             ].join('\n')
           }
-          if (prompt.startsWith('You are a member of an LLM Council. Below')) {
+          if (prompt.includes('You are a member of an LLM Council. Below')) {
             return [
               `Long ranking essay that must disappear. ${'essay '.repeat(1_000)}`,
               'STRONGEST CONTRIBUTION: Response A — En önemli migration riskini buldu.',

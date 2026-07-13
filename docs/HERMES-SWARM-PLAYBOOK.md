@@ -1,5 +1,11 @@
 # Hermes ↔ Swarm Playbook
 
+> **ARCHIVED 2026-07-13 — NOT AN ACTIVE CONTRACT.** The runtime described here
+> was removed. Direct Claude/Codex terminals never follow this playbook, never
+> infer card dispatch, and never require a Cockpit project id. Swarm starts only
+> from an explicit user-origin action in the Swarm UI. This file remains solely
+> as historical architecture evidence.
+
 > Written **for Hermes** (the orchestrator agent). Second person, imperative. This is the
 > step-by-step contract for turning a request into a well-specified, council-gated Swarm card.
 >

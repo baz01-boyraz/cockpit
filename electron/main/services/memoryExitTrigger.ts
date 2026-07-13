@@ -2,12 +2,11 @@ import type { CockpitEvents } from '../events'
 import type { MemoryAutoCapture } from './MemoryAutoCapture'
 
 /**
- * Wire the terminal-close memory-capture trigger (docs/plans/hermes.md Faz 5).
+ * Wire provider-aware terminal-close memory capture.
  *
- * When a Claude pane exits, capture its project's most-recent session right away
- * rather than waiting for the idle-poll. ONLY `claude`-role terminals trigger
- * this — a plain shell, dev server, git, or codex pane closing is not a Claude
- * conversation to distill, so it must never spawn a spurious capture. The
+ * When a Claude or Codex pane exits, capture that providers most-recent session
+ * right away rather than waiting for the idle-poll. Plain shell, dev server,
+ * and git panes must never spawn a spurious capture. The
  * capture is fire-and-forget: an exit event handler must never block or throw
  * back into the emitter, and the queue is durable so a dropped drain is picked
  * up on the next sweep.
@@ -20,7 +19,7 @@ export function registerMemoryExitCapture(
   autoCapture: Pick<MemoryAutoCapture, 'captureNow'>,
 ): void {
   events.onTyped('terminal:exit', ({ projectId, role }) => {
-    if (role !== 'claude') return
-    void autoCapture.captureNow(projectId)
+    if (role !== 'claude' && role !== 'codex') return
+    void autoCapture.captureNow(projectId, role)
   })
 }

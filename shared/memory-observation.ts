@@ -1,8 +1,8 @@
 /**
  * Distiller observations (docs/memory-imp.md Phase 2). Pure: the shape a single
  * distilled candidate fact takes, the model prompt that produces them, and a
- * tolerant parser for the model's JSON reply. The model call itself (a bounded
- * Hermes/DeepSeek Flash oneshot) lives in MemoryDistiller.
+ * tolerant parser for the model's JSON reply. The provider-neutral bounded
+ * model call itself lives in MemoryDistiller.
  *
  * Design decisions locked 2026-07-04:
  *  - The MODEL owns the save-vs-ask judgment (`decision`), no numeric threshold.

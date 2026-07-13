@@ -1,11 +1,17 @@
 ---
-schema: 1
+schema: 2
 name: memory-reconcile-dedup-gotcha
 title: Memory distiller dedup broken on multi-bullet notes: whole-body Jaccard dilutes as bullets accumulate
 class: gotcha
 capturedAt: 2026-07-06T01:21:16.713Z
 gate: save
 updatedAt: 2026-07-12T04:38:25.000Z
+status: active
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-06T01:21:16.713Z
+reviewAfter: 2026-10-11T05:20:43.983Z
 ---
 
 **Status: fixed 2026-07-11.** Reconciliation now compares the incoming observation with each atomic paragraph/list item and the combined note candidate; merge independently refuses to append a fact at or above the `0.82` duplicate threshold. Long-note, exact-boundary, repeated-capture, byte-idempotency, and Turkish-token regressions cover the failure. Existing historical bloat is intentionally left for the snapshot-first cleanup phase.

@@ -19,8 +19,8 @@ import type { MemoryReviewService } from './MemoryReviewService'
 import type { MemoryPolicyService } from './MemoryPolicyService'
 
 /**
- * The async triage seat (Faz B). Structural so a test can pass a fake and so the
- * spine never hard-depends on Hermes — absent, it degrades to the LLM-free spine.
+ * The optional async triage seat. Structural so tests can pass a fake and so the
+ * spine never depends on a model provider — absent, it stays fully deterministic.
  */
 export interface SentinelTriager {
   triage(signal: SentinelSignal): Promise<SentinelTriage | null>
@@ -420,10 +420,10 @@ export class SentinelService {
   }
 
   /**
-   * Enrich a just-persisted signal with an async Hermes triage verdict. Isolated
+   * Enrich a just-persisted signal with an optional async triage verdict. Isolated
    * from {@link report}: every step is guarded and this method NEVER throws (it is
    * called via `void`, so a rejection would be an unhandled one). A null verdict
-   * (Hermes missing/slow/wrong) is a no-op — the spine's original signal stands.
+   * (provider unavailable/slow/invalid) is a no-op — the original signal stands.
    *
    * On a non-null verdict it (a) persists the blob on the row, (b) re-emits
    * `sentinel:alert` with the enriched signal (same id — the renderer upserts by
@@ -480,7 +480,7 @@ export class SentinelService {
   /**
    * Turn a gotcha-flagged signal into a memory-review proposal, routed THROUGH the
    * charter write-gate first (so a secret-shaped signal is dropped, never queued)
-   * and into the SAME review queue the distiller/Hermes use — a human decides.
+   * and into the same review queue as session capture — a human decides.
    * Never auto-commits; the sentinel proposes, it does not write memory.
    */
   private routeGotcha(signal: SentinelSignal, triage: SentinelTriage): void {
@@ -529,8 +529,8 @@ export class SentinelService {
 
   /**
    * Track H3 — a dedup key has recurred {@link GOTCHA_RECURRENCE_THRESHOLD} times;
-   * turn it into a charter-compliant gotcha through the SAME write-gate the Hermes
-   * memory tool uses. The gate establishes quality; brain policy decides queue vs direct:
+   * turn it into a charter-compliant gotcha through the canonical write-gate.
+   * The gate establishes quality; brain policy decides queue vs direct:
    *   - `reject` (secret-shaped) → dropped, never written;
    *   - `accept` (justified, deduped, secret-free) → written only when policy allows;
    *   - `review` (weak/twin/oversize, or no hub write path) → the review queue.
@@ -581,7 +581,7 @@ export class SentinelService {
       }
 
       // Review (or accept with no hub write path) → the human review queue, the
-      // same queue the distiller/Hermes feed. Nothing to do without a sink.
+      // same queue session capture feeds. Nothing to do without a sink.
       if (!this.reviews) return
       this.reviews.create({
         brain,
@@ -615,7 +615,7 @@ export class SentinelService {
    * a null verdict. This re-enqueues recent (< 48h) untriaged notice/alert rows,
    * newest first and hard-capped, running them ONE AT A TIME (never N parallel
    * paid calls — the argos lesson) so combined with any live triage the process
-   * stays within HermesTriageService's own MAX_IN_FLIGHT ceiling. Fully guarded
+   * stays within the triage provider's own in-flight ceiling. Fully guarded
    * and fire-and-forget: it can never block or break boot, and a missing triager
    * makes it an immediate no-op.
    */

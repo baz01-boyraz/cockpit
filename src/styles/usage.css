@@ -134,10 +134,8 @@
   --provider-hi: var(--glacier-300);
   --logo-scale: 1.45;
 }
-.engineCore--hermes {
-  /* A premium platinum/white glow — deliberately outside the ember/glacier
-   * pair, since Hermes isn't a coding engine but the orchestrator + its own
-   * OpenRouter credit line. */
+.engineCore--openrouter {
+  /* OpenRouter uses a neutral platinum glow beside Claude and Codex. */
   --provider: #dde1e8;
   --provider-hi: #ffffff;
   --logo-scale: 1;
@@ -273,7 +271,7 @@
 /* ---------- logo + quota dial ----------
  * The provider's 3D logo stays pristine and full-color, seated inside a real
  * instrument dial: one fixed 56px SVG geometry shared by all three engines
- * (RING_SIZE/STROKE in UsageStrip.tsx) so Claude / Codex / Hermes always read
+ * (RING_SIZE/STROKE in UsageStrip.tsx) so Claude / Codex / OpenRouter always read
  * as a matched set — same size, same bezel weight — no matter how full each
  * one is or whether its quota telemetry is unavailable. Per-provider `--logo-scale`
  * normalizes the two logo marks to one visual size within the dial.
@@ -309,15 +307,6 @@
   font-weight: 760;
   letter-spacing: 0.04em;
   text-shadow: 0 0 12px color-mix(in srgb, var(--tone) 55%, transparent);
-}
-/* Hermes's mark is a face portrait, not a centered logo on transparent — crop
- * it round and zoom past its white margin instead of the contain/scale pair
- * the logo marks use. */
-.logoMeter__logo--avatar {
-  object-fit: cover;
-  object-position: 38% 32%;
-  border-radius: var(--r-pill);
-  transform: scale(1.08);
 }
 /* the halo: fixed 56px SVG, centered over the 40px logo box (-8px inset on
  * every side, overflow visible) so the wide glow blur has room to bloom

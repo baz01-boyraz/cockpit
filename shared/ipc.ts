@@ -10,7 +10,7 @@
  * `handle` registrations in lockstep.
  */
 import type { ClaudeRunOptions } from './claude-run'
-import type { DiffStat, ReviewResult } from './review'
+import type { DiffStat } from './review'
 import type {
   CouncilIntentMode,
   CouncilSessionSummary,
@@ -23,6 +23,7 @@ import type { OutcomeScorecard } from './outcomes'
 import type { MemoryHubSnapshot, MemoryNote } from './memory-hub'
 import type { MemoryHealth } from './memory-health'
 import type { CaptureResult } from './memory-pipeline'
+import type { MemoryCaptureOverview } from './memory-capture'
 import type { ReviewDecision, ReviewItem } from './memory-review'
 import type { LedgerEntry } from './memory-ledger'
 import type { ConsolidationResult } from './memory-consolidate'
@@ -33,7 +34,6 @@ import type { CompletionReport } from './completion-report'
 import type { Assignment } from './agent-taxonomy'
 import type { NamedAgentSummary } from './named-agents'
 import type { SentinelOutcome, SentinelSignal } from './sentinel'
-import type { AutomationCreateInput, AutomationJob } from './automation'
 import type { SecretKind } from './schemas'
 import type {
   AgentType,
@@ -117,18 +117,8 @@ export const IPC = {
   approvalsRequest: 'approvals:request',
   approvalsDecide: 'approvals:decide',
 
-  automationList: 'automation:list',
-  automationCreate: 'automation:create',
-  automationToggle: 'automation:toggle',
-  automationRun: 'automation:run',
-  automationRemove: 'automation:remove',
-
   routerRoute: 'router:route',
   chatAsk: 'chat:ask',
-  hermesChatAsk: 'hermesChat:ask',
-  hermesChatClear: 'hermesChat:clear',
-  reviewRun: 'review:run',
-  reviewRunText: 'review:runText',
   reviewDiffStat: 'review:diffStat',
   councilRun: 'council:run',
   councilScorecard: 'council:scorecard',
@@ -144,11 +134,16 @@ export const IPC = {
   memoryTrash: 'memory:trash',
   memoryHealth: 'memory:health',
   memoryCaptureSession: 'memory:captureSession',
+  memoryCaptureStatus: 'memory:captureStatus',
+  memoryCaptureRetry: 'memory:captureRetry',
   memoryTrustState: 'memory:trustState',
   memorySetTrustMode: 'memory:setTrustMode',
   memoryReviewQueue: 'memory:reviewQueue',
   memoryResolveReview: 'memory:resolveReview',
   memoryLedger: 'memory:ledger',
+  memoryNoteActivity: 'memory:noteActivity',
+  memorySnapshots: 'memory:snapshots',
+  memoryRestoreSnapshot: 'memory:restoreSnapshot',
   memoryConsolidate: 'memory:consolidate',
   memoryBazList: 'memory:bazList',
   memoryBazRead: 'memory:bazRead',
@@ -190,7 +185,6 @@ export const IPC = {
   evtTerminalData: 'evt:terminal:data',
   evtTerminalExit: 'evt:terminal:exit',
   evtApprovalsChanged: 'evt:approvals:changed',
-  evtAutomationsChanged: 'evt:automations:changed',
   evtLogsChanged: 'evt:logs:changed',
   evtAppUpdateChanged: 'evt:appUpdate:changed',
   evtSwarmCardCompleted: 'evt:swarm:cardCompleted',
@@ -213,19 +207,6 @@ export interface ChatReply {
   ok: boolean
   text: string
   model: string
-  memoryContext?: MemoryContextReceipt
-}
-
-/**
- * Reply from the Hermes chat widget backend. Unlike `ChatReply` there is no
- * model label (the model is fixed by the host's Hermes config, not picked per
- * call); a failed turn carries a human-readable `error` instead of throwing
- * across IPC.
- */
-export interface HermesChatReply {
-  ok: boolean
-  text: string
-  error?: string
   memoryContext?: MemoryContextReceipt
 }
 
@@ -351,7 +332,7 @@ export interface CockpitApi {
   openRouterUsage: {
     /**
      * Live remaining-credit snapshot for the OpenRouter key saved in Settings
-     * (Hermes's DeepSeek/OpenRouter model calls run on it). Probed in the main
+     * (Council and Memory analysis model calls run on it). Probed in the main
      * process; returns only the derived percent/dollar figures — never the key.
      */
     status(): Promise<OpenRouterUsageSnapshot>
@@ -367,34 +348,10 @@ export interface CockpitApi {
     decide(approvalId: string, approve: boolean): Promise<ApprovalRequest>
     onChange(cb: () => void): Unsubscribe
   }
-  automations: {
-    /** Human-readable schedules only; cron syntax never crosses this surface. */
-    list(projectId: string): Promise<AutomationJob[]>
-    create(input: AutomationCreateInput): Promise<AutomationJob>
-    setEnabled(projectId: string, jobId: string, enabled: boolean): Promise<AutomationJob | null>
-    run(projectId: string, jobId: string): Promise<AutomationJob | null>
-    remove(projectId: string, jobId: string): Promise<boolean>
-    onChange(cb: (event: { projectId: string }) => void): Unsubscribe
-  }
   router: {
     route(projectId: string, query: string): Promise<RouterResult>
   }
   review: {
-    /**
-     * Pre-ship AI diff review: working tree + staged + untracked, pushed
-     * through the sanitizer boundary, reviewed read-only by the local
-     * `claude` CLI. Never mutates anything.
-     */
-    run(projectId: string, opts?: { model?: string; dir?: string; lens?: string }): Promise<ReviewResult>
-    /**
-     * Review one piece of captured text (a command block's command + output)
-     * through the SAME sanitizer boundary as a diff review.
-     */
-    runText(
-      projectId: string,
-      input: { label: string; content: string },
-      opts?: { model?: string },
-    ): Promise<ReviewResult>
     /**
      * Cheap, LLM-free `+N −M · K files` summary of a worktree (staged +
      * unstaged + untracked). Read-only; a non-repo or clean tree is a zero.
@@ -474,11 +431,20 @@ export interface CockpitApi {
     /** Brain health — note/orphan/unresolved/oversized counts (memory-imp G6). */
     health(projectId: string): Promise<MemoryHealth>
     /**
-     * Distill a Claude session into memory (memory-imp Phases 2–3). Confident
+     * Distill a Claude or Codex session into memory. Confident
      * facts are saved, unsure/conflicting ones are queued for review. `dryRun`
      * previews the proposals without writing anything.
      */
-    captureSession(projectId: string, sessionId: string, dryRun?: boolean): Promise<CaptureResult>
+    captureSession(
+      projectId: string,
+      provider: ResumableSessionProvider,
+      sessionId: string,
+      dryRun?: boolean,
+    ): Promise<CaptureResult>
+    /** Provider coverage + durable queue stages; transcript paths/errors never cross IPC. */
+    captureStatus(projectId: string): Promise<MemoryCaptureOverview>
+    /** Retry one blocked/exhausted capture after its dependency was fixed. */
+    retryCapture(projectId: string, jobId: string): Promise<MemoryCaptureOverview>
     /** Brain-scoped trust lives in main/SQLite, never renderer localStorage. */
     trustState(projectId: string, scope: MemoryBrainScope): Promise<MemoryTrustState>
     setTrustMode(
@@ -498,6 +464,16 @@ export interface CockpitApi {
     ): Promise<ReviewItem[]>
     /** Provenance history for the project brain, optionally one note (memory-imp G7). */
     ledger(projectId: string, noteSlug?: string): Promise<LedgerEntry[]>
+    noteActivity(projectId: string, noteSlug: string): Promise<{
+      history: LedgerEntry[]
+      recalls7d: number
+      recalls30d: number
+    }>
+    snapshots(projectId: string): Promise<string[]>
+    restoreSnapshot(projectId: string, snapshotId: string): Promise<{
+      snapshot: MemoryHubSnapshot
+      safetySnapshotId: string
+    }>
     /**
      * Run the consolidation "sleep" pass (memory-imp G5): snapshot the hub, find
      * duplicates/oversized/dangling, and queue merge proposals for review.
@@ -560,6 +536,8 @@ export interface CockpitApi {
     startCard(input: {
       projectId: string
       cardId: string
+      /** Required marker from the explicit Swarm panel Start action. */
+      userOrigin: 'swarm-panel'
       /** Explicit developer override of the spec gate (audited as `swarm.gate_skipped`). */
       skipGate?: boolean
     }): Promise<StartCardResult>
@@ -619,23 +597,10 @@ export interface CockpitApi {
      */
     ask(projectId: string, prompt: string, opts?: ClaudeRunOptions): Promise<ChatReply>
   }
-  hermesChat: {
-    /**
-     * Send one turn to the Hermes orchestrator (`hermes --oneshot`, or
-     * `hermes chat -q --image` when `imagePath` is set) for this project. The
-     * backend keeps the conversation history itself — Hermes oneshot is
-     * stateless — and re-sends the transcript each turn. `imagePath` must be
-     * an absolute path already saved via `terminals.attachImage`.
-     */
-    ask(projectId: string, message: string, imagePath?: string): Promise<HermesChatReply>
-    /** Reset this project's conversation history ("new conversation"). */
-    clear(projectId: string): Promise<void>
-  }
   secrets: {
     /**
      * Store an encrypted secret (OS keychain via safeStorage). The value never
-     * comes back out over IPC — there is no `get`. Used by the upcoming Hermes
-     * integration to hold the OpenRouter API key.
+     * comes back out over IPC — there is no `get`. Used for the OpenRouter API key.
      */
     set(kind: SecretKind, value: string): Promise<void>
     /** Whether a secret of this kind is currently stored (no value revealed). */
@@ -734,18 +699,8 @@ export interface IpcResultMap {
   approvalsList: R<CockpitApi['approvals']['list']>
   approvalsRequest: R<CockpitApi['approvals']['request']>
   approvalsDecide: R<CockpitApi['approvals']['decide']>
-  automationList: R<CockpitApi['automations']['list']>
-  automationCreate: R<CockpitApi['automations']['create']>
-  automationToggle: R<CockpitApi['automations']['setEnabled']>
-  automationRun: R<CockpitApi['automations']['run']>
-  automationRemove: R<CockpitApi['automations']['remove']>
-
   routerRoute: R<CockpitApi['router']['route']>
   chatAsk: R<CockpitApi['chat']['ask']>
-  hermesChatAsk: R<CockpitApi['hermesChat']['ask']>
-  hermesChatClear: R<CockpitApi['hermesChat']['clear']>
-  reviewRun: R<CockpitApi['review']['run']>
-  reviewRunText: R<CockpitApi['review']['runText']>
   reviewDiffStat: R<CockpitApi['review']['diffStat']>
   councilRun: R<CockpitApi['council']['run']>
   councilScorecard: R<CockpitApi['council']['scorecard']>
@@ -759,11 +714,16 @@ export interface IpcResultMap {
   memoryTrash: R<CockpitApi['memory']['trash']>
   memoryHealth: R<CockpitApi['memory']['health']>
   memoryCaptureSession: R<CockpitApi['memory']['captureSession']>
+  memoryCaptureStatus: R<CockpitApi['memory']['captureStatus']>
+  memoryCaptureRetry: R<CockpitApi['memory']['retryCapture']>
   memoryTrustState: R<CockpitApi['memory']['trustState']>
   memorySetTrustMode: R<CockpitApi['memory']['setTrustMode']>
   memoryReviewQueue: R<CockpitApi['memory']['reviewQueue']>
   memoryResolveReview: R<CockpitApi['memory']['resolveReview']>
   memoryLedger: R<CockpitApi['memory']['ledger']>
+  memoryNoteActivity: R<CockpitApi['memory']['noteActivity']>
+  memorySnapshots: R<CockpitApi['memory']['snapshots']>
+  memoryRestoreSnapshot: R<CockpitApi['memory']['restoreSnapshot']>
   memoryConsolidate: R<CockpitApi['memory']['consolidate']>
   memoryBazList: R<CockpitApi['memory']['bazList']>
   memoryBazRead: R<CockpitApi['memory']['bazRead']>

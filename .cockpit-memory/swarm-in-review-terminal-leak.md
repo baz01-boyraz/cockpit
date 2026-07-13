@@ -1,13 +1,19 @@
 ---
-schema: 1
+schema: 2
 name: swarm-in-review-terminal-leak
-title: Terminal sızıntısı gerçek kaynağı: In-review kartları terminali açık bırakıyor
+title: In-review Swarm workers can consume terminal capacity
 class: gotcha
-capturedAt: 2026-07-08T03:54:23.468Z
-gate: save
-updatedAt: 2026-07-08T03:54:23.468Z
+gate: manual
+updatedAt: 2026-07-13T05:54:22.765Z
+status: active
+authority: code-verified
+authorityRef: owner-approved agent-memory-system-v2 migration
+scope: project
+confidence: high
+firstSeenAt: 2026-07-13T05:54:22.765Z
+lastVerifiedAt: 2026-07-13T05:54:22.765Z
+reviewAfter: 2027-01-09T05:54:22.767Z
+tags: runtime, memory-v2
 ---
 
-Hermes'in sandığı gibi onExit'in live map'ten delete yapmaması terminal tüketmez — countActiveAgents yalnızca role==='claude'||'codex' && status==='running' sayar, exited'ları görmez. Gerçek kaynak: SwarmService'de done kartı → In review'a taşırken terminali 'açık kalmalı takip için' diye deliberately açık bırakıyor (reaper yok). Park() terminali öldürüyor, pipeline advance eski worker'ı öldürüyor, ama In-review'e geçiş terminali öldürmüyor. Bu, geçmişteki 18x launchd respawn olayından ayrı bir sorun.
-
-Related: [[swarm-design]], [[terminal-exit-memory-trigger]]
+Exited session records do not fill terminal capacity because countActiveAgents counts only running Claude or Codex sessions. The actual leak is a worker process deliberately left running when a completed card moves to In review without a reaper. Park and pipeline advance terminate their workers; any In-review transition must receive the same explicit lifecycle treatment.

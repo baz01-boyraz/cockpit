@@ -1,6 +1,6 @@
-import type { ClaudeSessionSummary } from '@shared/domain'
+import type { CapturableSessionSummary, ResumableSessionProvider } from '@shared/domain'
 import type { ProjectService } from './ProjectService'
-import type { ClaudeSessionsService } from './ClaudeSessionsService'
+import type { AgentSessionsService } from './AgentSessionsService'
 import type { MemoryCaptureQueue } from './MemoryCaptureQueue'
 import type { MemoryPipeline } from './MemoryPipeline'
 
@@ -24,7 +24,7 @@ const DAY = 24 * 60 * MIN
 
 /**
  * Automatic capture (docs/memory-imp.md Phase 4, G1+G2). A gentle background
- * watcher: it sweeps each project's Claude sessions, enqueues the ones that have
+ * watcher: it sweeps each projects Claude and Codex sessions, enqueues the ones that have
  * gone quiet (and grown), and drains the durable queue through the pipeline —
  * confident facts save, unsure ones land in the review queue. Bounded per sweep
  * so a backlog never floods the CLI. All state lives in the queue, so a crash
@@ -44,7 +44,7 @@ export class MemoryAutoCapture {
     private readonly queue: MemoryCaptureQueue,
     private readonly pipeline: MemoryPipeline,
     private readonly projects: ProjectService,
-    private readonly sessions: ClaudeSessionsService,
+    private readonly sessions: AgentSessionsService,
     opts: AutoCaptureOptions = {},
   ) {
     this.idleMs = opts.idleMs ?? 10 * MIN
@@ -84,8 +84,8 @@ export class MemoryAutoCapture {
   }
 
   /**
-   * Terminal-close trigger (docs/plans/hermes.md Faz 5): the instant a Claude
-   * pane exits, capture its project's most-recent session immediately instead of
+   * Terminal-close trigger: the instant a Claude or Codex pane exits, capture
+   * that providers most-recent project session immediately instead of
    * waiting up to a full idle-poll interval. This is ADDITIVE — the idle-poll
    * (`sweep`) stays as the fallback for sessions that never emit a clean exit
    * (crashed panes, Mac sleep). The idle age filter is intentionally skipped
@@ -93,17 +93,28 @@ export class MemoryAutoCapture {
    * per-session growth guard in {@link enqueueSession} still prevents
    * re-mining an already-captured, unchanged transcript.
    */
-  async captureNow(projectId: string): Promise<void> {
+  async captureNow(projectId: string, provider: ResumableSessionProvider): Promise<void> {
     if (!this.enabled) return
     try {
       const project = this.projects.get(projectId)
-      // `list` is sorted most-recent-first, so the head is the session that was
-      // just active in the pane that closed.
-      const [latest] = this.sessions.list(project.path)
-      if (latest) this.enqueueSession(project.id, project.path, latest)
+      // `captureList` is sorted most-recent-first. Provider filtering prevents
+      // a nearby Claude write from being mistaken for a closing Codex pane, or
+      // vice versa.
+      const latest = this.sessions
+        .captureList(project.path)
+        .find((session) => session.provider === provider)
+      if (latest) this.enqueueSession(project.id, latest)
     } catch {
       /* a bad/removed project must never throw into the event emitter */
     }
+    await this.drain()
+  }
+
+  /** Owner-triggered recovery after fixing a blocked/exhausted dependency. */
+  async retry(projectId: string, jobId: string): Promise<void> {
+    const job = this.queue.list(projectId).find((candidate) => candidate.id === jobId)
+    if (!job) throw new Error('Capture job not found in this project.')
+    this.queue.retry(jobId)
     await this.drain()
   }
 
@@ -113,14 +124,14 @@ export class MemoryAutoCapture {
     for (const project of this.projects.list()) {
       let sessions
       try {
-        sessions = this.sessions.list(project.path)
+        sessions = this.sessions.captureList(project.path)
       } catch {
         continue
       }
       for (const s of sessions) {
         const age = nowMs - Date.parse(s.lastActiveAt)
         if (Number.isNaN(age) || age < this.idleMs || age > this.recentMs) continue
-        this.enqueueSession(project.id, project.path, s)
+        this.enqueueSession(project.id, s)
       }
     }
   }
@@ -130,13 +141,22 @@ export class MemoryAutoCapture {
    * the terminal-close trigger so both use the exact same "first time, or grew
    * since the last done/errored capture" rule — never two divergent copies.
    */
-  private enqueueSession(projectId: string, projectPath: string, s: ClaudeSessionSummary): void {
-    const job = this.queue.peek(s.id)
-    const source = this.sessions.transcriptPath(projectPath, s.id)
+  private enqueueSession(projectId: string, s: CapturableSessionSummary): void {
+    const job = this.queue.peek(s.provider, s.id)
     if (!job) {
-      this.queue.enqueue({ projectId, sessionId: s.id, sourcePath: source })
+      this.queue.enqueue({
+        projectId,
+        provider: s.provider,
+        sessionId: s.id,
+        sourcePath: s.transcriptPath,
+      })
     } else if ((job.status === 'done' || job.status === 'error') && s.sizeBytes > job.lastOffset) {
-      this.queue.enqueue({ projectId, sessionId: s.id, sourcePath: source })
+      this.queue.enqueue({
+        projectId,
+        provider: s.provider,
+        sessionId: s.id,
+        sourcePath: s.transcriptPath,
+      })
     }
   }
 
@@ -151,9 +171,11 @@ export class MemoryAutoCapture {
         try {
           const res = await this.pipeline.capture({
             projectId: job.projectId,
+            provider: job.provider,
             transcriptPath: job.sourcePath,
             fromOffset: job.lastOffset,
             sessionId: job.sessionId,
+            onStage: (stage) => this.queue.updateStage(job.id, stage),
           })
           if (res.error) this.queue.fail(job.id, res.error)
           else this.queue.complete(job.id, res.nextOffset)

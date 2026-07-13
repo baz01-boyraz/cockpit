@@ -5,12 +5,15 @@ import type { Db } from '../electron/main/db/Database'
 interface Row {
   id: string
   project_id: string
+  provider: string
   session_id: string
   source_path: string
   status: string
   last_offset: number
   attempts: number
   error: string | null
+  next_retry_at: string | null
+  guidance: string | null
   enqueued_at: string
   updated_at: string
 }
@@ -22,10 +25,15 @@ function makeQueueDb() {
     prepare(sql: string) {
       return {
         get: (...args: unknown[]) => {
-          if (sql.includes('WHERE session_id = ?')) return rows.find((r) => r.session_id === args[0])
+          if (sql.includes('WHERE provider = ? AND session_id = ?')) {
+            return rows.find((r) => r.provider === args[0] && r.session_id === args[1])
+          }
           if (sql.includes('WHERE id = ?')) return rows.find((r) => r.id === args[0])
-          if (sql.includes("status = 'queued' ORDER BY")) {
-            return [...rows].filter((r) => r.status === 'queued').sort((a, b) => a.enqueued_at.localeCompare(b.enqueued_at))[0]
+          if (sql.includes("status = 'queued' OR")) {
+            const now = String(args[0])
+            return [...rows]
+              .filter((r) => r.status === 'queued' || (r.status === 'retry_wait' && Boolean(r.next_retry_at && r.next_retry_at <= now)))
+              .sort((a, b) => a.enqueued_at.localeCompare(b.enqueued_at))[0]
           }
           return undefined
         },
@@ -35,14 +43,17 @@ function makeQueueDb() {
             rows.push({ ...(args[0] as Row) })
             return { changes: 1 }
           }
-          if (sql.includes("SET status = 'queued', error = NULL")) {
+          if (sql.includes("SET status = 'queued', attempts = 0")) {
             const r = rows.find((x) => x.id === args[1])
-            if (r) { r.status = 'queued'; r.error = null; r.updated_at = args[0] as string }
+            if (r) {
+              r.status = 'queued'; r.attempts = 0; r.error = null; r.next_retry_at = null
+              r.guidance = null; r.updated_at = args[0] as string
+            }
             return { changes: r ? 1 : 0 }
           }
-          if (sql.includes("SET status = 'processing'")) {
+          if (sql.includes("SET status = 'reading'")) {
             const r = rows.find((x) => x.id === args[1])
-            if (r) { r.status = 'processing'; r.updated_at = args[0] as string }
+            if (r) { r.status = 'reading'; r.next_retry_at = null; r.updated_at = args[0] as string }
             return { changes: r ? 1 : 0 }
           }
           if (sql.includes("SET status = 'done'")) {
@@ -51,13 +62,22 @@ function makeQueueDb() {
             return { changes: r ? 1 : 0 }
           }
           if (sql.includes('SET status = ?, attempts = ?')) {
-            const r = rows.find((x) => x.id === args[4])
-            if (r) { r.status = args[0] as string; r.attempts = args[1] as number; r.error = args[2] as string }
+            const r = rows.find((x) => x.id === args[6])
+            if (r) {
+              r.status = args[0] as string; r.attempts = args[1] as number
+              r.error = args[2] as string; r.next_retry_at = args[3] as string | null
+              r.guidance = args[4] as string | null; r.updated_at = args[5] as string
+            }
             return { changes: r ? 1 : 0 }
           }
-          if (sql.includes("SET status = 'queued', updated_at = ? WHERE status = 'processing'")) {
+          if (sql.includes('SET status = ?, updated_at = ?')) {
+            const r = rows.find((x) => x.id === args[2])
+            if (r) { r.status = args[0] as string; r.updated_at = args[1] as string }
+            return { changes: r ? 1 : 0 }
+          }
+          if (sql.includes("WHERE status IN ('reading'")) {
             let n = 0
-            for (const r of rows) if (r.status === 'processing') { r.status = 'queued'; n++ }
+            for (const r of rows) if (['reading', 'distilling', 'reconciling', 'committing', 'processing'].includes(r.status)) { r.status = 'queued'; n++ }
             return { changes: n }
           }
           return { changes: 0 }
@@ -68,7 +88,7 @@ function makeQueueDb() {
   return { db: fake as unknown as Db, rows }
 }
 
-const input = { projectId: 'p1', sessionId: 's1', sourcePath: '/x/s1.jsonl' }
+const input = { projectId: 'p1', provider: 'claude' as const, sessionId: 's1', sourcePath: '/x/s1.jsonl' }
 
 describe('MemoryCaptureQueue', () => {
   it('enqueues a new session as queued', () => {
@@ -76,6 +96,7 @@ describe('MemoryCaptureQueue', () => {
     const q = new MemoryCaptureQueue(db)
     const job = q.enqueue(input)
     expect(job.status).toBe('queued')
+    expect(job.provider).toBe('claude')
     expect(job.sessionId).toBe('s1')
   })
 
@@ -87,6 +108,16 @@ describe('MemoryCaptureQueue', () => {
     expect(rows).toHaveLength(1)
   })
 
+  it('keeps the same native session id distinct across providers', () => {
+    const { db, rows } = makeQueueDb()
+    const q = new MemoryCaptureQueue(db)
+    q.enqueue(input)
+    q.enqueue({ ...input, provider: 'codex', sourcePath: '/codex/s1.jsonl' })
+
+    expect(rows).toHaveLength(2)
+    expect(rows.map((row) => row.provider).sort()).toEqual(['claude', 'codex'])
+  })
+
   it('re-arms a done session so growth is captured', () => {
     const { db } = makeQueueDb()
     const q = new MemoryCaptureQueue(db)
@@ -96,23 +127,24 @@ describe('MemoryCaptureQueue', () => {
     expect(rearmed.status).toBe('queued')
   })
 
-  it('claims the oldest queued job and marks it processing', () => {
+  it('claims the oldest queued job and marks it reading', () => {
     const { db } = makeQueueDb()
     const q = new MemoryCaptureQueue(db)
     q.enqueue(input)
     const claimed = q.claimNext()
-    expect(claimed?.status).toBe('processing')
+    expect(claimed?.status).toBe('reading')
     expect(q.claimNext()).toBeNull() // nothing left queued
   })
 
-  it('retries on failure then gives up at the attempt ceiling', () => {
+  it('uses retry_wait with backoff, then gives up at the attempt ceiling', () => {
     const { db } = makeQueueDb()
     const observer = { captureFailed: vi.fn() }
     const q = new MemoryCaptureQueue(db, observer)
     const job = q.enqueue(input)
-    q.fail(job.id, 'boom') // 1 → queued
-    expect(q.list('p1')[0].status).toBe('queued')
-    q.fail(job.id, 'boom') // 2 → queued
+    q.fail(job.id, 'network timeout')
+    expect(q.list('p1')[0].status).toBe('retry_wait')
+    expect(q.list('p1')[0].nextRetryAt).toBeTruthy()
+    q.fail(job.id, 'network timeout')
     q.fail(job.id, 'boom') // 3 → error
     expect(q.list('p1')[0].status).toBe('error')
     expect(observer.captureFailed).toHaveBeenCalledTimes(3)
@@ -123,13 +155,35 @@ describe('MemoryCaptureQueue', () => {
     })
   })
 
+  it('moves through explicit processing stages', () => {
+    const { db } = makeQueueDb()
+    const q = new MemoryCaptureQueue(db)
+    const job = q.enqueue(input)
+    q.claimNext()
+    ;(q as MemoryCaptureQueue & { updateStage(id: string, stage: string): void })
+      .updateStage(job.id, 'distilling')
+    expect(q.list('p1')[0].status).toBe('distilling')
+    ;(q as MemoryCaptureQueue & { updateStage(id: string, stage: string): void })
+      .updateStage(job.id, 'reconciling')
+    expect(q.list('p1')[0].status).toBe('reconciling')
+  })
+
+  it('blocks configuration failures without burning attempts and provides recovery guidance', () => {
+    const { db } = makeQueueDb()
+    const q = new MemoryCaptureQueue(db)
+    const job = q.enqueue(input)
+    const blocked = q.fail(job.id, 'Add an OpenRouter key in Settings to continue.')
+    expect(blocked).toMatchObject({ status: 'blocked', attempts: 0 })
+    expect(blocked?.guidance).toMatch(/Settings.*Retry/i)
+  })
+
   it('recovers a job stuck processing after a crash', () => {
     const { db } = makeQueueDb()
     const q = new MemoryCaptureQueue(db)
     q.enqueue(input)
-    q.claimNext() // now processing
+    q.claimNext() // now reading
     const recovered = q.recoverStuck()
     expect(recovered).toBe(1)
-    expect(q.claimNext()?.status).toBe('processing') // re-claimable
+    expect(q.claimNext()?.status).toBe('reading') // re-claimable
   })
 })

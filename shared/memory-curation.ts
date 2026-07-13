@@ -1,6 +1,6 @@
 /**
  * Weekly memory-curation sweep (Faz D) — the pure prompt + parse core. A cheap
- * Hermes oneshot reads the note inventory (names + one-line hooks + ages) and
+ * A bounded, tool-less Memory analysis model reads note names, hooks and ages, then
  * proposes archive/merge/keep per the charter's Lifecycle rule
  * (docs/MEMORY-CHARTER.md). Proposals are SUGGESTIONS: they land in the existing
  * review queue for the owner, never a direct file operation. `delete` is

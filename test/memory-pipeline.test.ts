@@ -372,7 +372,7 @@ describe('MemoryPipeline.resolveReview', () => {
     expect(ledger.records).toHaveLength(0)
   })
 
-  it('audits an evidence-backed Hermes conflict decision and marks its ledger gate delegated', () => {
+  it('audits an evidence-backed delegated conflict decision and marks its ledger gate', () => {
     const reviews = fakeReviews()
     const { existing, proposed } = seedConflictReview(reviews, 'conflict-proven')
     memory.write('p1', 'release-process', existing)

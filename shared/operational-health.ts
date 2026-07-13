@@ -16,7 +16,7 @@ import type { ReviewItem } from './memory-review'
  */
 export const OPERATIONAL_HEALTH_POLICY = {
   sweepIntervalMs: 30 * 60_000,
-  /** Lookback for slow health sensors. The visible 09:00 automation owns digest delivery. */
+  /** Lookback for slow health sensors. Any digest delivery is owned by an explicit scheduler. */
   lookbackMs: 24 * 60 * 60_000,
   staleRunMs: 10 * 60_000,
   stuckWorkerMs: 20 * 60_000,
@@ -345,7 +345,9 @@ export function evaluateOperationalHealth(
 
   const captureJobs = input.memory?.captureJobs ?? []
   const reviews = input.memory?.reviews ?? []
-  const processing = captureJobs.filter((item) => item.status === 'processing')
+  const processing = captureJobs.filter((item) =>
+    ['reading', 'distilling', 'reconciling', 'committing'].includes(item.status),
+  )
   const captureErrors = captureJobs.filter((item) => item.status === 'error').length
   const stuckProcessing = processing.filter((item) =>
     ageAtLeast(item.updatedAt, now, OPERATIONAL_HEALTH_POLICY.stuckCaptureMs),

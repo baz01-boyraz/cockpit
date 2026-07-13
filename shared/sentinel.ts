@@ -29,11 +29,11 @@ export type SentinelSource =
   | 'automation'
 
 /**
- * The Hermes enrichment verdict — normally cheap async triage, and also the
+ * An optional enrichment verdict — normally cheap async triage, and also the
  * manager-shaped result attached to a staged successful completion. It is layered on top
  * of the deterministic spine. It is never load-bearing: standard signals emit
  * before generic triage, while specialist completions persist first and publish
- * once with this enrichment (using a deterministic fallback when Hermes fails).
+ * once with this enrichment (using a deterministic fallback when enrichment fails).
  */
 export interface SentinelTriage {
   /** false for noise / self-inflicted / duplicate-looking; true when it warrants attention. */
@@ -74,16 +74,16 @@ export interface SentinelSignal {
   /**
    * A compact plain-text payload (a log excerpt, a card ref) capped at
    * {@link CONTEXT_CAP} chars and stripped of control characters by
-   * {@link buildSignal}. It later seeds a Hermes chat opener, so the cap and the
-   * hygiene are load-bearing, not cosmetic.
+   * {@link buildSignal}. It may later seed a bounded analysis prompt, so the cap
+   * and hygiene are load-bearing, not cosmetic.
    */
   context: string | null
   fingerprint: string
   status: 'new' | 'seen'
   createdAt: string
   /**
-   * The async Hermes verdict (Faz B), or null when not-yet/never triaged. Null is
-   * the steady state whenever Hermes is missing, slow, or returns garbage — the
+   * The optional async verdict, or null when not-yet/never triaged. Null is the
+   * steady state whenever enrichment is unavailable, slow, or invalid — the
    * spine never depends on it.
    */
   triage: SentinelTriage | null

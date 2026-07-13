@@ -10,7 +10,6 @@ import { z } from 'zod'
 import { ROLE_IDS, SPEC_IDS, type Role, type Spec } from './agent-taxonomy'
 import { SENTINEL_OUTCOMES } from './sentinel'
 import { MEMORY_BRAIN_SCOPES, MEMORY_TRUST_MODES } from './memory-policy'
-import { AUTOMATION_POLICY } from './automation'
 
 export const approvalActionTypeSchema = z.enum([
   'git_push',
@@ -22,7 +21,6 @@ export const approvalActionTypeSchema = z.enum([
   'database_reset',
   'env_write',
   'shell_command',
-  'propose_open_swarm_card',
 ])
 
 export const terminalRoleSchema = z.enum([
@@ -172,39 +170,6 @@ export const chatAskSchema = z.object({
     .optional(),
 })
 
-/**
- * A single conversational turn with the Hermes chat widget. The service keeps
- * the history itself (Hermes oneshot is stateless), so each call sends only the
- * newest message; 8000 chars is a generous ceiling for a chat turn.
- */
-export const hermesChatAskSchema = z.object({
-  projectId: z.string().min(1),
-  message: z.string().min(1).max(8000),
-  /** Absolute path of an image already saved via `terminals.attachImage`. */
-  imagePath: z.string().min(1).max(4096).optional(),
-})
-
-/** Reset a project's in-memory Hermes conversation ("new conversation"). */
-export const hermesChatClearSchema = z.object({
-  projectId: z.string().min(1),
-})
-
-export const reviewRunSchema = z.object({
-  projectId: z.string().min(1),
-  model: z.string().min(1).max(120).optional(),
-  // Absolute path of a swarm worktree; main re-validates it sits inside the project.
-  dir: z.string().min(1).max(1024).optional(),
-  // Spec id from shared/agent-taxonomy; main resolves it against the catalog.
-  lens: z.string().min(1).max(60).optional(),
-})
-
-export const reviewRunTextSchema = z.object({
-  projectId: z.string().min(1),
-  label: z.string().min(1).max(200),
-  content: z.string().min(1).max(400_000),
-  model: z.string().min(1).max(120).optional(),
-})
-
 export const reviewDiffStatSchema = z.object({
   projectId: z.string().min(1),
   // Absolute path of a swarm worktree; main re-validates it sits inside the project.
@@ -283,11 +248,17 @@ export const memoryRenameSchema = z.object({
   to: z.string().min(1).max(120),
 })
 
-/** Session ids are Claude Code transcript UUIDs — no path characters allowed. */
+/** Provider-native transcript ids — no path characters or renderer-supplied paths. */
 export const memoryCaptureSchema = z.object({
   projectId: z.string().min(1),
+  provider: z.enum(['claude', 'codex']),
   sessionId: z.string().min(1).max(200).regex(/^[A-Za-z0-9._-]+$/, 'invalid session id'),
   dryRun: z.boolean().optional(),
+})
+
+export const memoryCaptureRetrySchema = z.object({
+  projectId: z.string().min(1),
+  jobId: z.string().min(1).max(200),
 })
 
 export const memoryBrainScopeSchema = z.enum(MEMORY_BRAIN_SCOPES)
@@ -311,6 +282,11 @@ export const memoryResolveReviewSchema = memoryBrainAccessSchema.extend({
 export const memoryLedgerSchema = z.object({
   projectId: z.string().min(1),
   noteSlug: z.string().min(1).max(120).optional(),
+})
+
+export const memorySnapshotSchema = z.object({
+  projectId: z.string().min(1),
+  snapshotId: z.string().min(1).max(160).regex(/^[0-9A-Za-z.-]+-[a-f0-9]{8}$/),
 })
 
 export const memoryBazReadSchema = z.object({
@@ -438,24 +414,6 @@ export const outcomesScorecardSchema = z.object({
   projectId: z.string().min(1),
 })
 
-// --- Hermes propose-card (Faz 6) ------------------------------------------
-//
-// `propose_swarm_card` does NOT open a card. It records an approval request the
-// human sees on the Dashboard; only after they approve does the main process
-// open+start the card (see HermesApprovalExecutor). `reason` explains WHY Hermes
-// thinks this is worth doing and becomes the approval summary. title/body reuse
-// the same limits as `swarmCreateCardSchema`; assignments reuse the pipeline cap.
-export const proposeSwarmCardSchema = z.object({
-  projectId: z.string().min(1),
-  title: z.string().min(1).max(200),
-  body: z.string().max(20_000).optional(),
-  reason: z.string().min(1).max(500),
-  assignments: z.array(assignmentSchema).max(6).optional(),
-  /** An approved council spec-gate session that shaped this proposal (Faz 3);
-   *  carried through to the card the executor opens on approval. History, no FK. */
-  councilSessionId: z.string().max(200).nullable().optional(),
-})
-
 // The subset stashed in the approval request's payload — what the executor reads
 // back and re-validates before opening the card (the stored payload is untrusted
 // input like anything crossing a boundary: it has been through redaction on disk).
@@ -487,85 +445,13 @@ export const swarmRemoveCardSchema = z.object({
 // approved (an explicit, audited override). Absent/false → the gate is enforced.
 export const swarmStartCardSchema = swarmRemoveCardSchema.extend({
   skipGate: z.boolean().optional(),
+  /** Explicit renderer-side proof that the user clicked Start in Swarm. */
+  userOrigin: z.literal('swarm-panel'),
 })
 
 // A completion report / a card-output tail take the same {projectId, cardId}
 // pair — aliased rather than re-declared, keeping one source of truth.
 export const swarmCompletionReportSchema = swarmRemoveCardSchema
-
-// --- Hermes MCP server (Faz 3): tool inputs -------------------------------
-//
-// The local MCP server exposes a NARROW set of tools so the Hermes agent can
-// drive the Swarm exactly the way a human does through the UI. MCP tool input
-// is as untrusted as renderer IPC input, so every tool re-parses with the SAME
-// schema its UI/IPC counterpart uses — no parallel validation.
-//
-// `subscribeCardOutputSchema` is the {projectId, cardId} pair (identical shape
-// to `swarmRemoveCardSchema`) — aliased rather than re-declared to keep a single
-// source of truth, mirroring how `swarmStartCardSchema` is aliased above.
-export const subscribeCardOutputSchema = swarmRemoveCardSchema
-
-/** get_usage_quota takes no input; the empty object is its validated contract. */
-export const usageQuotaSchema = z.object({})
-
-// --- Hermes MCP server (Faz 3): council spec gate --------------------------
-//
-// `council_refine_spec` runs a draft task spec through the LLM council's spec
-// gate before Hermes creates/proposes a card. The `spec` cap mirrors
-// `councilRunSchema.spec` (the same fenced-as-untrusted input the diff/spec
-// council already validates); `cardId`, when supplied, ties the run to an
-// existing card as session history (no FK).
-export const councilRefineSpecSchema = z.object({
-  projectId: z.string().min(1),
-  spec: z.string().min(1).max(16_000),
-  cardId: z.string().max(200).optional(),
-})
-
-// --- Hermes MCP server (Faz 3b): checks + screenshot -----------------------
-//
-// `run_checks` is deliberately NOT a "run any npm script" surface. `check` is a
-// CLOSED enum, never a free-form string — it is a trust boundary. The main
-// process maps each enum member to ONE fixed, hardcoded npm command; there is
-// no way to pass extra flags/args through. This keeps the raw-shell risk the
-// Hermes plan discusses out of this tool entirely.
-export const RUN_CHECKS = ['test', 'typecheck', 'lint'] as const
-export type RunCheck = (typeof RUN_CHECKS)[number]
-
-export const runChecksSchema = z.object({
-  projectId: z.string().min(1),
-  check: z.enum(RUN_CHECKS),
-})
-
-/**
- * `take_app_screenshot` input. `label` is passed to `screenshot.mjs` as an argv
- * arg and becomes part of the output filename, so it is constrained to a plain
- * slug (no path or shell metacharacters — belt-and-suspenders atop execFile's
- * arg-array, which already avoids shell interpolation). `url`, when supplied,
- * must be a loopback address: this tool drives a local build, never an arbitrary
- * external page.
- */
-export const takeAppScreenshotSchema = z.object({
-  projectId: z.string().min(1),
-  label: z
-    .string()
-    .min(1)
-    .max(80)
-    .regex(/^[A-Za-z0-9._-]+$/, 'label must be a simple slug (letters, numbers, dot, dash, underscore)'),
-  url: z
-    .string()
-    .url()
-    .max(2048)
-    .refine((raw) => {
-      try {
-        const host = new URL(raw).hostname
-        return host === 'localhost' || host === '127.0.0.1' || host === '::1'
-      } catch {
-        return false
-      }
-    }, 'Screenshot url must point at a loopback address (localhost/127.0.0.1).')
-    .optional(),
-  waitMs: z.number().int().min(0).max(60_000).optional(),
-})
 
 export const gitDiffInputSchema = z.object({
   projectId: z.string().min(1),
@@ -643,36 +529,3 @@ export const dismissInsightSchema = z.object({
 // Account usage is global to the developer's CLI auth, not project-scoped, so
 // the request carries no payload. We still validate it to reject stray input.
 export const agentUsageRequestSchema = z.union([z.undefined(), z.object({}).strict()])
-
-// --- safe app-owned Hermes automations -----------------------------------
-
-export const automationScheduleSchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('daily'),
-    time: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, 'Use a 24-hour time like 09:00.'),
-  }),
-  z.object({
-    kind: z.literal('interval'),
-    minutes: z
-      .number()
-      .int()
-      .min(AUTOMATION_POLICY.minIntervalMinutes)
-      .max(AUTOMATION_POLICY.maxIntervalMinutes),
-  }),
-])
-
-export const automationCreateSchema = z.object({
-  projectId: z.string().min(1),
-  name: z.string().trim().min(1).max(80),
-  instruction: z.string().trim().min(1).max(AUTOMATION_POLICY.maxInstructionChars),
-  schedule: automationScheduleSchema,
-})
-
-export const automationJobActionSchema = z.object({
-  projectId: z.string().min(1),
-  jobId: z.string().min(1).max(240),
-})
-
-export const automationToggleSchema = automationJobActionSchema.extend({
-  enabled: z.boolean(),
-})

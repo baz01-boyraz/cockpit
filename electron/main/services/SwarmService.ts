@@ -190,7 +190,7 @@ export class SwarmService {
     /** Automatic project-memory gateway. Production always wires this; the
      * filename-only hub path remains a compatibility fallback for tests. */
     private readonly memoryContexts?: MemoryContextProvider,
-    /** Optional persisted-evidence → Hermes Pro completion epilogue. */
+    /** Optional persisted-evidence completion epilogue. */
     private readonly completionSteward?: CompletionSteward,
   ) {
     // 6.4: any card still in_progress at construction is an orphan — its
@@ -389,9 +389,14 @@ export class SwarmService {
   async startCard(input: {
     projectId: string
     cardId: string
+    /** Main-process proof of an explicit user-originating Swarm action. */
+    origin: 'user-ui' | 'user-approved-proposal'
     /** Explicit developer override of the council spec gate (audited). */
     skipGate?: boolean
   }): Promise<StartCardResult> {
+    if (input.origin !== 'user-ui' && input.origin !== 'user-approved-proposal') {
+      throw new Error('Swarm start refused: an explicit user-origin action is required.')
+    }
     const card = this.cardOrThrow(input.projectId, input.cardId)
     if (card.status !== 'todo' && card.status !== 'parked') {
       throw new Error('Only a To do or Parked card can start.')
@@ -494,7 +499,7 @@ export class SwarmService {
       actor: 'user',
       actionType: 'swarm.start_card',
       summary: `Started swarm card "${card.title}"${this.pipelineSummary(assignments, step)}${worktree ? ` in ${worktree.branch}` : ' (project root — no worktree)'}`,
-      payload: { cardId: card.id, sessionId: session.id, worktree: worktree?.branch ?? null, assignments, step, councilBrief: councilBrief !== null },
+      payload: { cardId: card.id, sessionId: session.id, worktree: worktree?.branch ?? null, assignments, step, councilBrief: councilBrief !== null, origin: input.origin },
     })
     return { gated: false, board: assembleBoard(next) }
   }
@@ -839,8 +844,8 @@ export class SwarmService {
     } catch (err) {
       // better-sqlite3 surfaces an unhelpful raw "FOREIGN KEY constraint
       // failed" here when projectId doesn't match a real `projects` row —
-      // most commonly a Hermes MCP call that guessed the id instead of
-      // reading it from COCKPIT_PROJECT_ID (see AGENTS.md).
+      // most commonly an internal caller that supplied a stale or foreign id.
+      // Direct terminal agents never call this service or resolve project ids.
       const code = (err as { code?: string }).code
       if (code === 'SQLITE_CONSTRAINT_FOREIGNKEY' || code === 'SQLITE_CONSTRAINT') {
         throw new Error(

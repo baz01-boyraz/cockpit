@@ -1,10 +1,11 @@
 /**
- * Claude Code transcript parsing (pure — docs/memory-imp.md Phase 1.1).
+ * Claude Code and Codex transcript parsing (pure — Memory System v2 capture).
  *
  * A transcript is a `.jsonl` file: one JSON object per line. We only care about
- * the human/assistant turns and their text; tool calls, tool results, summaries
- * and system lines are not conversation and are dropped. This module is the pure
- * line→turn rule; the streaming fs read + redaction live in TranscriptReader.
+ * canonical human/assistant turns and their text; tool calls, tool results,
+ * summaries, reasoning, system lines, and duplicate provider mirrors are
+ * dropped. This module is the pure line→turn rule; the streaming fs read +
+ * redaction live in TranscriptReader.
  */
 
 export interface TranscriptTurn {
@@ -52,10 +53,29 @@ export function parseTranscriptLine(line: string): TranscriptTurn | null {
   } catch {
     return null
   }
-  const type = obj.type
-  if (type !== 'user' && type !== 'assistant') return null
-  const text = extractTurnText(obj.message)
-  if (!text) return null
   const timestamp = typeof obj.timestamp === 'string' ? obj.timestamp : null
-  return { role: type, text, timestamp }
+  const type = obj.type
+
+  // Claude Code stores canonical turns directly as user/assistant records.
+  if (type === 'user' || type === 'assistant') {
+    const text = extractTurnText(obj.message)
+    return text ? { role: type, text, timestamp } : null
+  }
+
+  // Codex writes the same conversation through more than one record family.
+  // `event_msg` is the compact canonical stream; deliberately ignore
+  // `response_item` below so one exchange is never distilled twice.
+  if (type === 'event_msg' && obj.payload && typeof obj.payload === 'object') {
+    const payload = obj.payload as Record<string, unknown>
+    const role =
+      payload.type === 'user_message'
+        ? 'user'
+        : payload.type === 'agent_message'
+          ? 'assistant'
+          : null
+    const text = typeof payload.message === 'string' ? payload.message.trim() : ''
+    return role && text ? { role, text, timestamp } : null
+  }
+
+  return null
 }

@@ -5,7 +5,7 @@ import { cockpit } from './cockpit'
 const POLL_MS = 60_000
 
 /**
- * Live OpenRouter credit snapshot for the Hermes engine core's quota ring.
+ * Live OpenRouter credit snapshot for the Council engine quota ring.
  * Single consumer (UsageStrip), so this is a plain poll rather than
  * useAgentUsage's shared multi-subscriber store — no need for that dedup
  * machinery here. Keeps the last good snapshot in place on a failed refresh.

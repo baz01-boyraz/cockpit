@@ -1,7 +1,7 @@
 import { closeSync, openSync, readdirSync, readSync, statSync, type Dirent } from 'node:fs'
 import { homedir } from 'node:os'
 import { resolve, join } from 'node:path'
-import type { ResumableSessionSummary } from '@shared/domain'
+import type { CapturableSessionSummary, ResumableSessionSummary } from '@shared/domain'
 
 const HEAD_BYTES = 128 * 1024
 const MAX_SESSIONS = 40
@@ -16,6 +16,11 @@ export class CodexSessionsService {
   constructor(private readonly root = join(homedir(), '.codex', 'sessions')) {}
 
   list(projectPath: string): ResumableSessionSummary[] {
+    return this.captureList(projectPath).map(({ transcriptPath: _transcriptPath, ...summary }) => summary)
+  }
+
+  /** Internal capture model; transcript paths never cross the renderer boundary. */
+  captureList(projectPath: string): CapturableSessionSummary[] {
     const files = this.collectFiles(this.root)
       .map((path) => {
         try {
@@ -27,7 +32,7 @@ export class CodexSessionsService {
       .filter((entry): entry is { path: string; mtimeMs: number } => entry !== null)
       .sort((a, b) => b.mtimeMs - a.mtimeMs)
 
-    const out: ResumableSessionSummary[] = []
+    const out: CapturableSessionSummary[] = []
     for (const file of files) {
       const summary = this.summarize(file.path, projectPath)
       if (summary) out.push(summary)
@@ -53,7 +58,7 @@ export class CodexSessionsService {
     return files
   }
 
-  private summarize(path: string, projectPath: string): ResumableSessionSummary | null {
+  private summarize(path: string, projectPath: string): CapturableSessionSummary | null {
     let stat: ReturnType<typeof statSync>
     try {
       stat = statSync(path)
@@ -107,6 +112,7 @@ export class CodexSessionsService {
       createdAt: createdAt ?? stat.birthtime.toISOString(),
       lastActiveAt: stat.mtime.toISOString(),
       sizeBytes: stat.size,
+      transcriptPath: path,
     }
   }
 

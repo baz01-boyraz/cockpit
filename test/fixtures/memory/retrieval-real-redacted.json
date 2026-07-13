@@ -4,25 +4,19 @@
   "notes": [
     {
       "name": "memory-ux-overhaul",
-      "hook": "Autopilot left existing technical Memory review cards queued, forcing the user to babysit them.",
+      "hook": "Memory shows a clear inbox, capture health, provider coverage, evidence, history, snapshots, and recovery without technical babysitting.",
       "status": "active",
       "eligible": true
     },
     {
-      "name": "hermes-memory-stewardship-roadmap",
-      "hook": "Tighten memory correctness, then let Hermes and Sentinel monitor Swarm, logs, errors, cron health, and notifications.",
+      "name": "runtime-architecture-no-hermes",
+      "hook": "Claude and Codex direct terminal work stays in the current repository; Swarm cards and project id lookup are never implicit.",
       "status": "active",
       "eligible": true
     },
     {
-      "name": "hermes-jarvis-plan",
-      "hook": "One background Hermes engine reaches the app and a sender-restricted phone or Telegram channel.",
-      "status": "active",
-      "eligible": true
-    },
-    {
-      "name": "sentinel-3-layer-architecture",
-      "hook": "Deterministic sensors detect errors and quota anomalies; Hermes triages meaningful signals and notifications open chat with context.",
+      "name": "memory-analysis-provider-neutral",
+      "hook": "Claude and Codex transcripts enter one provider-aware capture queue and bounded provider-neutral analysis pipeline.",
       "status": "active",
       "eligible": true
     },
@@ -34,21 +28,27 @@
     },
     {
       "name": "memory-trust-modes",
-      "hook": "Memory conflict decisions follow explicit trust modes and must not silently overwrite facts.",
+      "hook": "Memory conflict decisions follow explicit trust modes, evidence, a ledger, and owner control instead of newer-wins.",
       "status": "active",
       "eligible": true
     },
     {
       "name": "live-notification-requirement",
-      "hook": "Tab-independent bottom-right notifications report bugs and errors and open Hermes chat with context.",
+      "hook": "Tab-independent bottom-right notifications report important bugs and errors with bounded context and one next action.",
       "status": "active",
       "eligible": true
     },
     {
-      "name": "swarm-completion-notification-gap",
-      "hook": "A successful Swarm completion needs a proactive Hermes manager summary instead of manual checking.",
+      "name": "openrouter-secret-ref-gotcha",
+      "hook": "OpenRouter settings, usage, and engine calls share one canonical encrypted secret ref with legacy migration.",
       "status": "active",
       "eligible": true
+    },
+    {
+      "name": "hermes-jarvis-plan",
+      "hook": "Historical background orchestrator and automatic card dispatch plan.",
+      "status": "archived",
+      "eligible": false
     }
   ],
   "cases": [
@@ -58,7 +58,7 @@
       "language": "tr",
       "category": "positive",
       "severity": "high",
-      "query": "memory ekranında çok fazla teknik review sorusu var neyi approve edeceğimi anlamıyorum",
+      "query": "memory ekranında capture health provider coverage evidence history ve recovery tek yerde anlaşılır olsun",
       "expectedTop3": ["memory-ux-overhaul"],
       "forbiddenNotes": []
     },
@@ -68,9 +68,9 @@
       "language": "tr",
       "category": "positive",
       "severity": "critical",
-      "query": "Hermes swarm memory log error kota ve cron sağlığını izleyip sorun olunca bana bildirsin",
-      "expectedTop3": ["hermes-memory-stewardship-roadmap"],
-      "forbiddenNotes": []
+      "query": "Claude Codex direct terminal işi repository içinde yapsın swarm card ve project id istemesin",
+      "expectedTop3": ["runtime-architecture-no-hermes"],
+      "forbiddenNotes": ["hermes-jarvis-plan"]
     },
     {
       "id": "real-tr-03",
@@ -78,8 +78,8 @@
       "language": "tr",
       "category": "semantic",
       "severity": "high",
-      "query": "swarm başarıyla bitince hermes sonucu okuyup kısa bir yönetici özeti göndersin",
-      "expectedTop3": ["swarm-completion-notification-gap"],
+      "query": "hem claude hem codex transcript aynı provider aware capture queue ile memory öğrensin",
+      "expectedTop3": ["memory-analysis-provider-neutral"],
       "forbiddenNotes": []
     },
     {
@@ -98,7 +98,7 @@
       "language": "tr",
       "category": "semantic",
       "severity": "critical",
-      "query": "conflictlerde daha kontrollü güven politikası olsun",
+      "query": "memory conflict için evidence trust policy ledger olsun newer wins olmasın",
       "expectedTop3": ["memory-trust-modes"],
       "forbiddenNotes": []
     },
@@ -108,7 +108,7 @@
       "language": "tr",
       "category": "semantic",
       "severity": "high",
-      "query": "uygulamada hangi sekmede olursam olayım hata çıkınca sağ altta bildirim göster ve tıklayınca hermes chat aç",
+      "query": "uygulamada hangi sekmede olursam olayım hata çıkınca sağ altta notification göster ve next action ver",
       "expectedTop3": ["live-notification-requirement"],
       "forbiddenNotes": []
     },
@@ -118,8 +118,8 @@
       "language": "tr",
       "category": "positive",
       "severity": "high",
-      "query": "telefondan telegram ile hermese görev göndereyim mac başında olmayayım",
-      "expectedTop3": ["hermes-jarvis-plan"],
+      "query": "OpenRouter secret ref settings usage engine arasında aynı olsun legacy key migrate edilsin",
+      "expectedTop3": ["openrouter-secret-ref-gotcha"],
       "forbiddenNotes": []
     },
     {

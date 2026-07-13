@@ -1,16 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ClaudeSessionSummary } from '@shared/domain'
+import type { CapturableSessionSummary, ResumableSessionProvider } from '@shared/domain'
 import { CockpitEvents } from '../electron/main/events'
 import { MemoryAutoCapture } from '../electron/main/services/MemoryAutoCapture'
 import { registerMemoryExitCapture } from '../electron/main/services/memoryExitTrigger'
 import type { ProjectService } from '../electron/main/services/ProjectService'
-import type { ClaudeSessionsService } from '../electron/main/services/ClaudeSessionsService'
+import type { AgentSessionsService } from '../electron/main/services/AgentSessionsService'
 import type { MemoryCaptureQueue, EnqueueInput } from '../electron/main/services/MemoryCaptureQueue'
 import type { MemoryPipeline } from '../electron/main/services/MemoryPipeline'
 
 interface Job {
   id: string
   projectId: string
+  provider: ResumableSessionProvider
   sessionId: string
   sourcePath: string
   status: string
@@ -27,6 +28,7 @@ class FakeQueue {
     const job: Job = {
       id: `job-${this.enqueued.length}`,
       projectId: input.projectId,
+      provider: input.provider,
       sessionId: input.sessionId,
       sourcePath: input.sourcePath,
       status: 'queued',
@@ -40,15 +42,17 @@ class FakeQueue {
   fail = vi.fn()
 }
 
-const session = (id: string, lastActiveAt: string): ClaudeSessionSummary => ({
+const session = (id: string, lastActiveAt: string, provider: ResumableSessionProvider = 'claude'): CapturableSessionSummary => ({
   id,
+  provider,
   title: id,
   createdAt: lastActiveAt,
   lastActiveAt,
   sizeBytes: 1000,
+  transcriptPath: `/${provider}/${id}.jsonl`,
 })
 
-function makeCapture(sessions: ClaudeSessionSummary[]) {
+function makeCapture(sessions: CapturableSessionSummary[]) {
   const queue = new FakeQueue()
   const capture = vi.fn(async () => ({ nextOffset: 10 }))
   const pipeline = { capture } as unknown as MemoryPipeline
@@ -57,9 +61,8 @@ function makeCapture(sessions: ClaudeSessionSummary[]) {
     list: () => [{ id: 'p1', path: '/proj/p1' }],
   } as unknown as ProjectService
   const sessionsSvc = {
-    list: vi.fn(() => sessions),
-    transcriptPath: (path: string, sid: string) => `${path}/${sid}.jsonl`,
-  } as unknown as ClaudeSessionsService
+    captureList: vi.fn(() => sessions),
+  } as unknown as AgentSessionsService
   // No start() → no idle-poll timer is ever scheduled.
   const auto = new MemoryAutoCapture(
     queue as unknown as MemoryCaptureQueue,
@@ -77,21 +80,21 @@ describe('MemoryAutoCapture.captureNow (terminal-close trigger)', () => {
     // list() is most-recent-first, so the head is the just-closed session.
     const { auto, queue, capture } = makeCapture([newest, older])
 
-    await auto.captureNow('p1')
+    await auto.captureNow('p1', 'claude')
 
     // Enqueued exactly the newest session — never scanned the idle-age filter.
     expect(queue.enqueue).toHaveBeenCalledTimes(1)
-    expect(queue.enqueued[0]).toMatchObject({ projectId: 'p1', sessionId: 's-new' })
+    expect(queue.enqueued[0]).toMatchObject({ projectId: 'p1', provider: 'claude', sessionId: 's-new' })
     // Drained through the pipeline right away, not on a timer.
     expect(capture).toHaveBeenCalledTimes(1)
     expect(capture).toHaveBeenCalledWith(
-      expect.objectContaining({ projectId: 'p1', sessionId: 's-new' }),
+      expect.objectContaining({ projectId: 'p1', provider: 'claude', sessionId: 's-new' }),
     )
   })
 
   it('does nothing when the project has no Claude sessions', async () => {
     const { auto, queue, capture } = makeCapture([])
-    await auto.captureNow('p1')
+    await auto.captureNow('p1', 'claude')
     expect(queue.enqueue).not.toHaveBeenCalled()
     expect(capture).not.toHaveBeenCalled()
   })
@@ -105,9 +108,8 @@ describe('MemoryAutoCapture.captureNow (terminal-close trigger)', () => {
       list: () => [],
     } as unknown as ProjectService
     const sessionsSvc = {
-      list: vi.fn(() => [older]),
-      transcriptPath: (path: string, sid: string) => `${path}/${sid}.jsonl`,
-    } as unknown as ClaudeSessionsService
+      captureList: vi.fn(() => [older]),
+    } as unknown as AgentSessionsService
     const auto = new MemoryAutoCapture(
       queue as unknown as MemoryCaptureQueue,
       { capture } as unknown as MemoryPipeline,
@@ -115,14 +117,14 @@ describe('MemoryAutoCapture.captureNow (terminal-close trigger)', () => {
       sessionsSvc,
       { enabled: false },
     )
-    await auto.captureNow('p1')
+    await auto.captureNow('p1', 'claude')
     expect(queue.enqueue).not.toHaveBeenCalled()
     expect(capture).not.toHaveBeenCalled()
   })
 })
 
 describe('registerMemoryExitCapture', () => {
-  it('captures on a claude-role terminal exit and ignores every other role', () => {
+  it('captures on Claude and Codex terminal exits with provider provenance', () => {
     const events = new CockpitEvents()
     const captureNow = vi.fn(async () => {})
     registerMemoryExitCapture(events, { captureNow })
@@ -134,12 +136,18 @@ describe('registerMemoryExitCapture', () => {
       exitCode: 0,
       signal: null,
     })
-    expect(captureNow).toHaveBeenCalledTimes(1)
-    expect(captureNow).toHaveBeenCalledWith('p1')
+    events.emitTyped('terminal:exit', {
+      sessionId: 't2',
+      projectId: 'p1',
+      role: 'codex',
+      exitCode: 0,
+      signal: null,
+    })
+    expect(captureNow).toHaveBeenCalledTimes(2)
+    expect(captureNow).toHaveBeenNthCalledWith(1, 'p1', 'claude')
+    expect(captureNow).toHaveBeenNthCalledWith(2, 'p1', 'codex')
 
-    // A plain shell / dev-server / git / codex pane closing is not a Claude
-    // conversation — it must never spawn a spurious capture.
-    for (const role of ['general', 'frontend', 'backend', 'git', 'codex', null] as const) {
+    for (const role of ['general', 'frontend', 'backend', 'git', null] as const) {
       events.emitTyped('terminal:exit', {
         sessionId: 't2',
         projectId: 'p1',
@@ -148,6 +156,6 @@ describe('registerMemoryExitCapture', () => {
         signal: null,
       })
     }
-    expect(captureNow).toHaveBeenCalledTimes(1)
+    expect(captureNow).toHaveBeenCalledTimes(2)
   })
 })

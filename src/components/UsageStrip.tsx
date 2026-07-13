@@ -197,7 +197,7 @@ function OpenRouterEngineCore({
   return (
     <button
       type="button"
-      className={`engineCore engineCore--hermes engineCore--${tone}`}
+      className={`engineCore engineCore--openrouter engineCore--${tone}`}
       aria-label={ariaLabel}
       onClick={onOpen}
     >

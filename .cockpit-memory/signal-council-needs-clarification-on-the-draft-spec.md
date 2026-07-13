@@ -1,3 +1,18 @@
+---
+schema: 2
+name: signal-council-needs-clarification-on-the-draft-spec
+title: Council needs clarification on 'the draft spec'
+class: gotcha
+gate: manual
+updatedAt: 2026-07-13T05:20:43.982Z
+status: archived
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-13T05:20:43.982Z
+reviewAfter: 2026-07-13T05:20:43.982Z
+---
+
 # Council needs clarification on 'the draft spec'
 
 Symptom (verbatim):

@@ -1,3 +1,18 @@
+---
+schema: 2
+name: ipc-contract
+title: IPC Contract
+class: reference
+gate: manual
+updatedAt: 2026-07-13T05:20:43.982Z
+status: active
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-13T05:20:43.982Z
+reviewAfter: 2026-10-11T05:20:43.983Z
+---
+
 # IPC Contract
 
 The bridge has four type-bound participants: renderer, preload, browser mock,

@@ -68,6 +68,12 @@ case "$DEST_APP" in
     ;;
 esac
 
+# A real install must originate from Cockpit's current confirmation dialog.
+# Consume the short-lived capability before any download or lifecycle action.
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  node scripts/release/consume-lifecycle-approval.mjs app_install_release
+fi
+
 if ! command -v gh >/dev/null 2>&1; then
   echo "[install-release] gh CLI not found. Install it or download the release manually." >&2
   exit 69

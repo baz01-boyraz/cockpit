@@ -1,15 +1,19 @@
 ---
-schema: 1
+schema: 2
 name: memory-authority-trust-ladder
-title: Memory authority trust ladder — proposal-based start, autonomy after 90% accuracy
+title: Memory authority grows only through measured owner trust
 class: decision
-capturedAt: 2026-07-08T05:16:57.427Z
-gate: save
-updatedAt: 2026-07-12T04:50:43.000Z
+gate: manual
+updatedAt: 2026-07-13T05:53:28.280Z
+status: active
+authority: human-directive
+authorityRef: owner-approved agent-memory-system-v2 migration
+scope: project
+confidence: high
+firstSeenAt: 2026-07-13T05:53:28.280Z
+lastVerifiedAt: 2026-07-13T05:53:28.280Z
+reviewAfter: 2027-01-09T05:53:28.281Z
+tags: runtime, memory-v2
 ---
 
-Hermes starts as a proposal-based curator: it suggests archive/merge/delete actions, human batch-approves them. Only after a measurable accuracy track record (≥90% proposal hit rate) is autonomy discussed. This is not a nice-to-have delay — it solves the pre-trust risk of silent memory corruption before the system has proven its judgment. The accuracy metric must be observable (not self-reported) and surfaced when the threshold is approached.
-
-This ladder governs broad curation and cleanup autonomy. It does not prohibit the narrower controlled conflict resolver: Hermes may settle one evidence-clear conflict only through policy v2's closed basis+rationale+evidence contract, with stale-write protection, `replace/delegated` ledger provenance, and audit. Ambiguous conflicts and all bulk cleanup remain pending for the owner.
-
-Related: [[memory-trust-modes]], [[council-question-redact-gap]]
+Broad Memory cleanup and constitution promotion require explicit owner control. Reversible archive or merge automation may operate only inside the selected trust mode with a ledger and snapshot; conflicts remain human decisions unless a closed evidence-backed resolution path is deliberately invoked. No provider may grant itself broader authority, and recency alone is never evidence.

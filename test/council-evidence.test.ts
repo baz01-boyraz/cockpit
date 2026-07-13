@@ -139,6 +139,7 @@ describe('CouncilEvidenceService security boundary', () => {
             path: '.cockpit-memory/memory-charter.md',
             updatedAt: '2026-07-11T00:00:00.000Z',
             truncated: false,
+            brain: 'project',
           },
         ],
         characters: 120,
@@ -207,6 +208,7 @@ describe('CouncilEvidenceService security boundary', () => {
             path: '.cockpit-memory/memory-charter.md',
             updatedAt: '2026-07-11T00:00:00.000Z',
             truncated: false,
+            brain: 'project',
           },
         ],
         characters: 120,
@@ -245,7 +247,7 @@ describe('CouncilEvidenceService security boundary', () => {
     expect(repositorySources.find((source) => source.path === 'shared/memory-note-schema.ts')?.content)
       .toMatch(/decision|gotcha|architecture/)
     expect(repositorySources.find((source) => source.path === 'shared/memory-context.ts')?.content)
-      .toMatch(/MemoryContextSurface|LOOKUP_SURFACES/)
+      .toMatch(/MEMORY_CONTEXT_SURFACES|MemoryContextSurface|LOOKUP_SURFACES/)
     expect(result.repository.canonicalMemoryMdPresent).toBe(false)
     expect(result.sources.some((source) => source.path?.startsWith('.cockpit-memory/'))).toBe(false)
   })

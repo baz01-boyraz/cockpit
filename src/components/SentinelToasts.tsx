@@ -1,8 +1,7 @@
 /**
  * SentinelToasts — the app-shell-level toast host for the always-on sentinel
  * signal layer (Faz A UI). Mounted once inside `.floatingCorner` so it rides the
- * same bottom-right anchor (and the same `.shell--hermes-open` left-shift) as the
- * update toast, and is click-through outside its cards.
+ * same bottom-right anchor as the update toast and is click-through outside its cards.
  *
  * Delivery follows the severity contract (shared/sentinel.ts): `info` never
  * toasts (feed only), `notice` shows a quiet toast that auto-dismisses, `alert`
@@ -140,9 +139,7 @@ export function SentinelToasts() {
               <IconX width={12} height={12} />
             </button>
           </div>
-          {/* Once Hermes triage lands (a re-emit of the same id), its headline
-              and next action replace the raw sensor text — the toast gets
-              smarter in place instead of a second toast appearing. */}
+          {/* Optional persisted triage can refine the same signal in place. */}
           <p className="sentinelToast__title">{signal.triage?.headline ?? signal.title}</p>
           <p className="sentinelToast__summary">{signal.triage?.action ?? signal.summary}</p>
           <div className="sentinelToast__actions">

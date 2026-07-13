@@ -94,6 +94,19 @@ describe('CodexSessionsService', () => {
 
     expect(new CodexSessionsService(root).list(PROJECT)).toEqual([])
   })
+
+  it('exposes the exact transcript path only through the internal capture model', () => {
+    const root = tempRoot()
+    const id = '423e4567-e89b-12d3-a456-426614174000'
+    writeSession(root, { id, title: 'Capture this Codex session' })
+
+    const service = new CodexSessionsService(root)
+    const [capture] = service.captureList(PROJECT)
+
+    expect(capture).toMatchObject({ id, provider: 'codex' })
+    expect(capture.transcriptPath).toMatch(new RegExp(`rollout-${id}\\.jsonl$`))
+    expect(service.list(PROJECT)[0]).not.toHaveProperty('transcriptPath')
+  })
 })
 
 describe('mergeResumableSessions', () => {
@@ -153,5 +166,42 @@ describe('mergeResumableSessions', () => {
     expect(claude.list).toHaveBeenCalledWith(PROJECT)
     expect(codex.list).toHaveBeenCalledWith(PROJECT)
     expect(sessions.map(({ provider }) => provider)).toEqual(['codex', 'claude'])
+  })
+
+  it('combines provider-native transcript paths for memory capture', () => {
+    const claude = {
+      list: vi.fn(() => [
+        {
+          id: 'claude-id',
+          title: 'Claude task',
+          createdAt: '2026-07-09T18:00:00.000Z',
+          lastActiveAt: '2026-07-09T20:00:00.000Z',
+          sizeBytes: 10,
+        },
+      ]),
+      transcriptPath: vi.fn((_project: string, id: string) => `/claude/${id}.jsonl`),
+    } as unknown as ClaudeSessionsService
+    const codex = {
+      list: vi.fn(() => []),
+      captureList: vi.fn(() => [
+        {
+          id: 'codex-id',
+          provider: 'codex' as const,
+          title: 'Codex task',
+          createdAt: '2026-07-09T19:00:00.000Z',
+          lastActiveAt: '2026-07-09T21:00:00.000Z',
+          sizeBytes: 20,
+          transcriptPath: '/codex/rollout-codex-id.jsonl',
+        },
+      ]),
+    } as unknown as CodexSessionsService
+
+    const sessions = new AgentSessionsService(claude, codex).captureList(PROJECT)
+
+    expect(sessions.map(({ provider }) => provider)).toEqual(['codex', 'claude'])
+    expect(sessions.map(({ transcriptPath }) => transcriptPath)).toEqual([
+      '/codex/rollout-codex-id.jsonl',
+      '/claude/claude-id.jsonl',
+    ])
   })
 })

@@ -3,7 +3,6 @@ import type { KanbanCard } from '@shared/kanban'
 import type { NamedAgentSummary } from '@shared/named-agents'
 import type { DiffStat } from '@shared/review'
 import { assignmentLabel } from '@shared/agent-taxonomy'
-import { HERMES_RUNTIME_ENABLED } from '@shared/hermes-runtime'
 import { cockpit } from '../../lib/cockpit'
 import { useCardCompletion, useSessionActivity } from '../../store/swarmActivityStore'
 import {
@@ -22,8 +21,6 @@ export interface SwarmCardActions {
   startingId: string | null
   /** Card id with a parkCard call in flight, if any. */
   parkingId: string | null
-  /** Card id with a diff review in flight, if any. */
-  reviewingId: string | null
   /** Card id with a council run in flight, if any. */
   councilingId: string | null
   /** Card id with a completion-report fetch in flight, if any. */
@@ -36,7 +33,6 @@ export interface SwarmCardActions {
   onConveneGate: (card: KanbanCard) => void
   onPark: (cardId: string) => void
   onViewTerminal: () => void
-  onReview: (card: KanbanCard) => void
   onCouncil: (card: KanbanCard) => void
   onReport: (card: KanbanCard) => void
 }
@@ -115,8 +111,6 @@ interface SwarmCardProps {
   starting: boolean
   /** True while parkCard is in flight for THIS card. */
   parking: boolean
-  /** True while a diff review is running for THIS card. */
-  reviewing: boolean
   /** True while a council run is live for THIS card. */
   counciling: boolean
   /** True while a completion-report fetch is live for THIS card. */
@@ -134,8 +128,6 @@ interface SwarmCardProps {
   onPark: (cardId: string) => void
   /** Jump to the Terminals view (Running cards only). */
   onViewTerminal: () => void
-  /** Run the AI diff review (In review cards only). */
-  onReview: (card: KanbanCard) => void
   /** 6.5 — run the reviewer council: every persona lens over the same diff. */
   onCouncil: (card: KanbanCard) => void
   /** Faz 2.5 — fetch the decision-ready completion report (In review cards only). */
@@ -278,7 +270,6 @@ export function SwarmCard({
   index,
   starting,
   parking,
-  reviewing,
   counciling,
   reporting,
   gated,
@@ -289,7 +280,6 @@ export function SwarmCard({
   onConveneGate,
   onPark,
   onViewTerminal,
-  onReview,
   onCouncil,
   onReport,
 }: SwarmCardProps) {
@@ -499,27 +489,16 @@ export function SwarmCard({
           <button
             className="swarmCardLink"
             onClick={act(() => onReport(card))}
-            disabled={reviewing || counciling || reporting}
+            disabled={counciling || reporting}
             title="Decision-ready summary — diff stat and acceptance criteria"
           >
             <IconCheck width={11} height={11} />
             {reporting ? 'Report…' : 'Report'}
           </button>
-          {HERMES_RUNTIME_ENABLED && (
-            <button
-              className="swarmCardLink"
-              onClick={act(() => onReview(card))}
-              disabled={reviewing || counciling || reporting}
-              title="AI review of the card's worktree diff"
-            >
-              <IconShieldSearch width={11} height={11} />
-              {reviewing ? 'Reviewing…' : 'Review diff'}
-            </button>
-          )}
           <button
             className="swarmCardLink"
             onClick={act(() => onCouncil(card))}
-            disabled={reviewing || counciling || reporting}
+            disabled={counciling || reporting}
             title="LLM Council — five advisors debate the diff, then a chairman verdict"
           >
             <IconCouncil width={11} height={11} />

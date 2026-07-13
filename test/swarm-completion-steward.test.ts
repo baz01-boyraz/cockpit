@@ -1,13 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { CockpitEvents } from '../electron/main/events'
-import {
-  HERMES_COMPLETION_MODEL,
-  HermesCompletionSummaryService,
-  type HermesCompletionRunner,
-} from '../electron/main/services/hermes/HermesCompletionSummaryService'
 import { SwarmCompletionSteward } from '../electron/main/services/SwarmCompletionSteward'
 import type { CompletionReport } from '../shared/completion-report'
-import { HERMES_MAIN_MODEL } from '../shared/hermes-model-policy'
 import {
   COMPLETION_CONTEXT_CAP,
   buildCompletionEvidence,
@@ -135,100 +129,6 @@ describe('completion evidence', () => {
     expect(passed.action).toContain('acceptance criteria')
     const unknown = deterministicCompletionTriage(buildCompletionEvidence(REPORT, ''), now)
     expect(unknown.action).toContain('not confirmed')
-  })
-})
-
-describe('HermesCompletionSummaryService', () => {
-  it('pins nuanced completion judgment to Pro and runs tool-less over fenced evidence', async () => {
-    expect(HERMES_COMPLETION_MODEL).toBe(HERMES_MAIN_MODEL)
-    const runner: HermesCompletionRunner = vi.fn(async () => ({
-      stdout: JSON.stringify({
-        headline: MANAGER.headline,
-        action: MANAGER.action,
-      }),
-    }))
-    const service = new HermesCompletionSummaryService(
-      runner,
-      () => MANAGER.at,
-      () => 'fixed-fence',
-    )
-    const evidence = buildCompletionEvidence(REPORT, '24 tests passed')
-
-    await expect(service.summarize(evidence)).resolves.toEqual(MANAGER)
-
-    const args = (runner as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[]
-    expect(args).toContain('--ignore-rules')
-    expect(args).toContain('-m')
-    expect(args).toContain(HERMES_MAIN_MODEL)
-    expect(args).not.toContain('-t')
-    const prompt = args[args.indexOf('--oneshot') + 1]
-    expect(prompt).toContain('UNTRUSTED COMPLETION EVIDENCE')
-    expect(prompt).toContain('fixed-fence')
-  })
-
-  it('fails closed to null on runner or parser failure and never retries', async () => {
-    const runner: HermesCompletionRunner = vi.fn(async () => ({ stdout: 'not json' }))
-    const service = new HermesCompletionSummaryService(runner)
-    await expect(service.summarize(buildCompletionEvidence(REPORT, ''))).resolves.toBeNull()
-    expect(runner).toHaveBeenCalledTimes(1)
-  })
-
-  it('serializes overlapping completions instead of skipping a Pro summary', async () => {
-    let releaseFirst!: () => void
-    const firstGate = new Promise<void>((resolve) => {
-      releaseFirst = resolve
-    })
-    let calls = 0
-    const runner: HermesCompletionRunner = vi.fn(async () => {
-      calls += 1
-      if (calls === 1) await firstGate
-      return {
-        stdout: JSON.stringify({ headline: `summary ${calls}`, action: 'Review the card' }),
-      }
-    })
-    const service = new HermesCompletionSummaryService(runner)
-    const evidence = buildCompletionEvidence(REPORT, '')
-
-    const first = service.summarize(evidence)
-    const second = service.summarize(evidence)
-    await Promise.resolve()
-    expect(runner).toHaveBeenCalledTimes(1)
-    releaseFirst()
-
-    expect((await first)?.headline).toBe('summary 1')
-    expect((await second)?.headline).toBe('summary 2')
-    expect(runner).toHaveBeenCalledTimes(2)
-  })
-
-  it('stops queued work and terminates a tracked child on shutdown', async () => {
-    let resolveRun!: (value: { stdout: string }) => void
-    let close!: () => void
-    const child = {
-      kill: vi.fn(() => true),
-      once: vi.fn((_event: string, cb: () => void) => {
-        close = cb
-      }),
-    }
-    const runner: HermesCompletionRunner = vi.fn(() => {
-      const promise = new Promise<{ stdout: string }>((resolve) => {
-        resolveRun = resolve
-      }) as Promise<{ stdout: string }> & { child: typeof child }
-      promise.child = child
-      return promise
-    })
-    const service = new HermesCompletionSummaryService(runner)
-    const evidence = buildCompletionEvidence(REPORT, '')
-    const active = service.summarize(evidence)
-    await Promise.resolve()
-    await Promise.resolve()
-
-    service.killAll()
-    expect(child.kill).toHaveBeenCalledWith('SIGTERM')
-    close()
-    resolveRun({ stdout: '{"headline":"done","action":"review"}' })
-    await active
-    await expect(service.summarize(evidence)).resolves.toBeNull()
-    expect(runner).toHaveBeenCalledTimes(1)
   })
 })
 

@@ -1,11 +1,17 @@
 ---
-schema: 1
+schema: 2
 name: bridgespace-roadmap
 title: Command Blocks (BridgeSpace #1) complete
 class: decision
 capturedAt: 2026-07-04T20:47:11.887Z
 gate: save
 updatedAt: 2026-07-12T05:03:45.000Z
+status: active
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-04T20:47:11.887Z
+reviewAfter: 2026-10-11T05:20:43.983Z
 ---
 
 # BridgeSpace delivery

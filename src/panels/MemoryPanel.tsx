@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
 import type { MemoryHubSnapshot, MemoryNote } from '@shared/memory-hub'
+import type { LedgerEntry } from '@shared/memory-ledger'
 import { relativeTime } from '@shared/time'
 import { IconWarning, IconX } from '../components/icons'
 import { NoteBody } from '../components/memory/NoteBody'
@@ -15,6 +16,18 @@ import { MemoryOverview } from '../components/memory/MemoryOverview'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong writing to the hub.'
+}
+
+export interface MemoryNoteActivity {
+  history: LedgerEntry[]
+  recalls7d: number
+  recalls30d: number
+}
+
+const EMPTY_NOTE_ACTIVITY: MemoryNoteActivity = {
+  history: [],
+  recalls7d: 0,
+  recalls30d: 0,
 }
 
 /** "vision-roadmap" → "Vision Roadmap" — seed heading for a fresh note. */
@@ -40,6 +53,7 @@ export function MemoryPanel() {
   const [selected, setSelected] = useState<string | null>(null)
   const [note, setNote] = useState<MemoryNote | null>(null)
   const [noteLoading, setNoteLoading] = useState(false)
+  const [noteActivity, setNoteActivity] = useState<MemoryNoteActivity | null>(null)
   const [mode, setMode] = useState<'read' | 'edit'>('read')
   const [draft, setDraft] = useState('')
   const [saving, setSaving] = useState(false)
@@ -69,6 +83,7 @@ export function MemoryPanel() {
     setSnapshot(null)
     setSelected(null)
     setNote(null)
+    setNoteActivity(null)
     setMode('read')
     setPendingCreate(null)
     setNotice(null)
@@ -101,10 +116,15 @@ export function MemoryPanel() {
       setSelected(name)
       setMode('read')
       setNoteLoading(true)
+      setNoteActivity(null)
       try {
-        const loaded = await cockpit().memory.read(projectId, name)
+        const [loaded, activity] = await Promise.all([
+          cockpit().memory.read(projectId, name),
+          cockpit().memory.noteActivity(projectId, name).catch(() => EMPTY_NOTE_ACTIVITY),
+        ])
         if (loaded) {
           setNote(loaded)
+          setNoteActivity(activity)
         } else {
           setNote(null)
           setSelected(null)
@@ -131,6 +151,7 @@ export function MemoryPanel() {
         setPendingCreate(null)
         setSelected(written.name)
         setNote(written)
+        setNoteActivity(await cockpit().memory.noteActivity(projectId, written.name).catch(() => EMPTY_NOTE_ACTIVITY))
         setDraft(written.content)
         setMode('edit')
         return true
@@ -148,6 +169,7 @@ export function MemoryPanel() {
     try {
       const written = await cockpit().memory.write(projectId, note.name, draft)
       setNote(written)
+      setNoteActivity(await cockpit().memory.noteActivity(projectId, written.name).catch(() => EMPTY_NOTE_ACTIVITY))
       setMode('read')
       await refreshSnapshot()
       setSavedFlash(true)
@@ -168,6 +190,11 @@ export function MemoryPanel() {
         const renamed = await cockpit().memory.read(projectId, to)
         setNote(renamed)
         setSelected(renamed?.name ?? null)
+        setNoteActivity(
+          renamed
+            ? await cockpit().memory.noteActivity(projectId, renamed.name).catch(() => EMPTY_NOTE_ACTIVITY)
+            : null,
+        )
       } catch (err: unknown) {
         setNotice(errorMessage(err))
       }
@@ -181,6 +208,7 @@ export function MemoryPanel() {
       const snap = await cockpit().memory.trash(projectId, note.name)
       setSnapshot(snap)
       setNote(null)
+      setNoteActivity(null)
       setSelected(null)
     } catch (err: unknown) {
       setNotice(errorMessage(err))
@@ -291,6 +319,7 @@ export function MemoryPanel() {
                         aria-label="Close quick view"
                         onClick={() => {
                           setNote(null)
+                          setNoteActivity(null)
                           setSelected(null)
                         }}
                       >
@@ -333,6 +362,7 @@ export function MemoryPanel() {
               <MemoryReader
                 key={note.name}
                 note={note}
+                activity={noteActivity}
                 mode={mode}
                 draft={draft}
                 saving={saving}

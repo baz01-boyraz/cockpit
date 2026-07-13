@@ -213,7 +213,7 @@ interface AgentUsageBodyProps {
 }
 
 /**
- * The Hermes-style account-quota breakdown for one provider: a header with the
+ * The account-quota breakdown for one provider: a header with the
  * provider name + plan, then one row per quota window (5h session, weekly limit)
  * showing remaining headroom, a tone-driven bar, and the reset time. Shared by
  * the TopBar popover and the Usage panel so they never drift.

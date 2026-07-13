@@ -181,7 +181,7 @@
   overflow: hidden;
 }
 
-/* ---------- Hermes triage enrichment ---------- */
+/* ---------- Optional triage enrichment ---------- */
 .sigtriage {
   display: flex;
   flex-direction: column;

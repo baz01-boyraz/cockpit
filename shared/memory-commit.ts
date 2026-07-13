@@ -50,6 +50,10 @@ function scopeTags(obs: Observation): string[] {
   return obs.scope === 'user' ? ['baz'] : []
 }
 
+function reviewAfter(now: string): string {
+  return new Date(Date.parse(now) + 90 * 24 * 60 * 60_000).toISOString()
+}
+
 /** The `Related: [[a]], [[b]]` footer, or '' when there are no valid links. */
 function linksFooter(links: string[], selfSlug: string): string {
   const slugs = [
@@ -77,6 +81,13 @@ export function buildNoteFromObservation(
     gate: opts.gate,
     updatedAt: opts.now,
     tags: scopeTags(obs),
+    status: 'active',
+    authority: 'observed',
+    scope: obs.scope === 'user' ? 'global' : 'project',
+    confidence: 'medium',
+    firstSeenAt: opts.now,
+    reviewAfter: reviewAfter(opts.now),
+    supersedes: [],
   }
   const body = `${obs.body.trim()}${linksFooter(obs.links, slug)}`
   return { slug, content: serializeNote(frontmatter, body) }
@@ -102,7 +113,18 @@ export function mergeObservationIntoNote(
   }
   const { frontmatter, body } = parseNote(existingContent)
   const nextFront: NoteFrontmatter = frontmatter
-    ? { ...frontmatter, updatedAt: opts.now }
+    ? {
+        ...frontmatter,
+        schema: MEMORY_NOTE_SCHEMA_VERSION,
+        updatedAt: opts.now,
+        status: frontmatter.status ?? 'active',
+        authority: frontmatter.authority ?? 'observed',
+        scope: frontmatter.scope ?? (obs.scope === 'user' ? 'global' : 'project'),
+        confidence: frontmatter.confidence ?? 'medium',
+        firstSeenAt: frontmatter.firstSeenAt ?? frontmatter.capturedAt ?? frontmatter.updatedAt,
+        reviewAfter: frontmatter.reviewAfter ?? reviewAfter(opts.now),
+        supersedes: frontmatter.supersedes ?? [],
+      }
     : {
         schema: MEMORY_NOTE_SCHEMA_VERSION,
         name: slug,
@@ -111,6 +133,13 @@ export function mergeObservationIntoNote(
         gate: opts.gate,
         updatedAt: opts.now,
         tags: [],
+        status: 'active',
+        authority: 'observed',
+        scope: obs.scope === 'user' ? 'global' : 'project',
+        confidence: 'medium',
+        firstSeenAt: opts.now,
+        reviewAfter: reviewAfter(opts.now),
+        supersedes: [],
       }
   const addition = `\n- (${opts.now.slice(0, 10)}) ${obs.body.trim()}`
   const nextBody = `${body.trimEnd()}${addition}\n`

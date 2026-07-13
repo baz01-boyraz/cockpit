@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 import { MemoryHubService } from '../electron/main/services/MemoryHubService'
 import type { ProjectService } from '../electron/main/services/ProjectService'
+import { serializeNote, type NoteFrontmatter } from '@shared/memory-note-schema'
 
 const roots: string[] = []
 function makeHubProject(): { service: MemoryHubService; dir: string; hub: string } {
@@ -17,6 +18,34 @@ afterAll(() => {
 })
 
 describe('MemoryHubService', () => {
+  it('keeps archived/superseded notes browsable but excludes them from active retrieval', () => {
+    const { service } = makeHubProject()
+    const note = (name: string, status: NoteFrontmatter['status']) =>
+      serializeNote({
+        schema: 2,
+        name,
+        title: name,
+        class: 'reference',
+        gate: 'manual',
+        updatedAt: '2026-07-12T00:00:00.000Z',
+        tags: [],
+        status,
+        authority: 'human-directive',
+        scope: 'project',
+        confidence: 'high',
+        firstSeenAt: '2026-07-12T00:00:00.000Z',
+        reviewAfter: '2027-01-01T00:00:00.000Z',
+        supersedes: [],
+      }, 'durable fact')
+    service.write('prj_1', 'active-note', note('active-note', 'active'))
+    service.write('prj_1', 'archived-note', note('archived-note', 'archived'))
+    service.write('prj_1', 'superseded-note', note('superseded-note', 'superseded'))
+
+    expect(service.list('prj_1').notes).toHaveLength(3)
+    expect(service.read('prj_1', 'archived-note')).not.toBeNull()
+    expect(service.listDocs('prj_1').map((doc) => doc.name)).toEqual(['active-note'])
+  })
+
   it('writes, lists, and reads notes with backlinks and unresolved targets', () => {
     const { service } = makeHubProject()
     service.write('prj_1', 'Auth Flow', '# Auth Flow\nuses [[session-store]] and [[ghost]]')

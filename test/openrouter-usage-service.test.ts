@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  LEGACY_OPENROUTER_SECRET_REF,
   OPENROUTER_SECRET_REF,
   OpenRouterUsageService,
+  readOpenRouterKey,
 } from '../electron/main/services/OpenRouterUsageService'
 import type { SecretStore } from '../electron/main/services/SecretStore'
 
@@ -28,6 +30,20 @@ afterEach(() => {
 })
 
 describe('OpenRouterUsageService routing-key limits', () => {
+  it('migrates the legacy encrypted ref to the provider-neutral ref', () => {
+    const values = new Map([[LEGACY_OPENROUTER_SECRET_REF, API_KEY]])
+    const store = {
+      get: (ref: string) => values.get(ref) ?? null,
+      has: (ref: string) => values.has(ref),
+      set: (ref: string, value: string) => values.set(ref, value),
+      delete: (ref: string) => values.delete(ref),
+    }
+
+    expect(readOpenRouterKey(store)).toBe(API_KEY)
+    expect(values.get(OPENROUTER_SECRET_REF)).toBe(API_KEY)
+    expect(values.has(LEGACY_OPENROUTER_SECRET_REF)).toBe(false)
+  })
+
   it('reads a capped routing key from /api/v1/key', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       expect(String(input)).toBe(KEY_URL)

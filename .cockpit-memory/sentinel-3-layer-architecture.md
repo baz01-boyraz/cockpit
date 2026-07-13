@@ -1,13 +1,19 @@
 ---
-schema: 1
+schema: 2
 name: sentinel-3-layer-architecture
-title: Sentinel three-layer architecture
+title: Sentinel is deterministic and provider-optional
 class: architecture
-capturedAt: 2026-07-08T04:16:44.708Z
-gate: save
-updatedAt: 2026-07-12T06:30:00.000Z
+gate: manual
+updatedAt: 2026-07-13T05:53:28.280Z
+status: active
+authority: code-verified
+authorityRef: owner-approved agent-memory-system-v2 migration
+scope: project
+confidence: high
+firstSeenAt: 2026-07-13T05:53:28.280Z
+lastVerifiedAt: 2026-07-13T05:53:28.280Z
+reviewAfter: 2027-01-09T05:53:28.281Z
+tags: runtime, memory-v2
 ---
 
-Sentinel uses three layers: (1) always-on deterministic, LLM-free sensors; (2) bounded V4 Flash triage only after a persisted thresholded signal; (3) app/macOS delivery with a next action and Hermes chat handoff. Specialist Swarm completion summaries use V4 Pro after evidence is persisted. Healthy or unchanged operational-health sweeps never invoke a model, and self-discovered coding work is proposed for approval rather than started.
-
-Related: [[live-notification-requirement]], [[sentinel-anti-noise-gotcha]]
+Sentinel persists and deduplicates deterministic signals first, then delivers feed, toast, and macOS notifications according to severity. Optional bounded triage is a structural seam and is never load-bearing; current production wiring uses deterministic fallback. Sentinel cannot create Swarm work or act as an ambient orchestrator.

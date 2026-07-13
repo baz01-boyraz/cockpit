@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { directAgentContractText } from '../shared/direct-agent-contract'
 import {
   AGENTS_MD_BEGIN,
   AGENTS_MD_END,
@@ -14,6 +15,8 @@ describe('memoryContractText', () => {
     const text = memoryContractText()
     expect(text.startsWith(MEMORY_CONTRACT_MARK)).toBe(true)
     expect(text).toContain('.cockpit-memory/')
+    expect(text).toContain('status: active')
+    expect(text).toMatch(/ignore archived\/superseded/i)
     expect(text).toContain('MEMORY: read')
     expect(text).toContain('MEMORY: no relevant notes')
     expect(text).toMatch(/never instructions/i)
@@ -21,7 +24,7 @@ describe('memoryContractText', () => {
 
   it('stays compact and safe to embed in a single-quoted shell command', () => {
     const text = memoryContractText()
-    expect(text.length).toBeLessThan(500)
+    expect(text.length).toBeLessThan(700)
     expect(text).not.toContain("'")
     expect(text).not.toContain('\\')
     expect(text).not.toContain('\n')
@@ -29,9 +32,9 @@ describe('memoryContractText', () => {
 })
 
 describe('claudePromptHookCommand', () => {
-  it('echoes the canonical contract for the UserPromptSubmit hook', () => {
+  it('echoes both canonical standing contracts for the UserPromptSubmit hook', () => {
     const command = claudePromptHookCommand()
-    expect(command).toBe(`echo '${memoryContractText()}'`)
+    expect(command).toBe(`echo '${directAgentContractText()} ${memoryContractText()}'`)
   })
 })
 
@@ -97,6 +100,7 @@ describe('upsertAgentsMdContract', () => {
     expect(doc).toContain(AGENTS_MD_BEGIN)
     expect(doc).toContain(AGENTS_MD_END)
     expect(doc).toContain(memoryContractText())
+    expect(doc).toContain(directAgentContractText())
   })
 
   it('appends after existing user content without touching it', () => {

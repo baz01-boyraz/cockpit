@@ -1,10 +1,16 @@
 ---
-schema: 1
+schema: 2
 name: security-enforcement
 title: Main-process security gates and meta-CSP boundary
 class: gotcha
 gate: save
 updatedAt: 2026-07-12T05:03:45.000Z
+status: active
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-12T05:03:45.000Z
+reviewAfter: 2026-10-11T05:20:43.983Z
 ---
 
 # Security enforcement

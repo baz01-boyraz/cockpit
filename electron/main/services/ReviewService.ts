@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { readFileSync, statSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
-import { promisify } from 'node:util'
 import { simpleGit } from 'simple-git'
 import {
   PER_FILE_CHAR_CAP,
@@ -19,14 +17,9 @@ import {
   type ReviewStats,
 } from '@shared/review'
 import { SPECS, isSpec } from '@shared/agent-taxonomy'
-import { buildHermesArgs } from '@shared/hermes-run'
-import { assertHermesRuntimeEnabled, HERMES_RUNTIME_ENABLED } from '@shared/hermes-runtime'
 import type { MemoryContextProvider, MemoryContextSurface } from '@shared/memory-context'
 import type { AuditLogService } from './AuditLogService'
 import type { ProjectService } from './ProjectService'
-import { resolveBin } from './resolveBin'
-
-const execFileAsync = promisify(execFile)
 
 /** Injectable so tests never spawn a real CLI. */
 export type CliRunner = (
@@ -35,9 +28,8 @@ export type CliRunner = (
   opts: { cwd: string; timeout: number; maxBuffer: number },
 ) => Promise<{ stdout: string }>
 
-const defaultRunner: CliRunner = (bin, args, opts) => {
-  assertHermesRuntimeEnabled()
-  return execFileAsync(bin, args, { ...opts, env: { ...process.env } })
+const defaultRunner: CliRunner = async () => {
+  throw new Error('Standalone AI review was removed. Use the Council diff review instead.')
 }
 
 /**
@@ -114,8 +106,9 @@ export async function collectDiffInputs(projectPath: string): Promise<DiffFileIn
 
 /**
  * Pre-ship AI Diff Review (VISION Phase 4). Read-only by design: collects the
- * change set, pushes it through the shared sanitizer boundary, asks the local
- * `hermes` CLI for findings, and parses the answer defensively. Every run is
+ * change set, pushes it through the shared sanitizer boundary, and parses an
+ * injected reviewer defensively. Production uses Council for model review;
+ * this service retains deterministic diff-stat and sanitizer plumbing. Every run is
  * audit-logged with stats only — never content.
  */
 export class ReviewService {
@@ -244,7 +237,7 @@ export class ReviewService {
     memoryQuery: string,
   ): Promise<ReviewResult> {
     const sanitized = sanitizeDiff(inputs)
-    const modelLabel = opts.model?.trim() || (HERMES_RUNTIME_ENABLED ? 'Hermes' : 'Paused')
+    const modelLabel = opts.model?.trim() || 'Council review'
     const memoryContext = this.memoryContexts?.forTask({
       projectId,
       surface: memorySurface,
@@ -298,8 +291,8 @@ export class ReviewService {
       // conversation, so it skips AGENTS.md/persona/MCP-tool injection just
       // like the memory distiller does.
       const { stdout } = await this.runner(
-        resolveBin('hermes'),
-        buildHermesArgs(prompt, { model: opts.model, ignoreRules: true }),
+        'council-review',
+        [prompt],
         {
           cwd: project.path,
           // A real repo's full diff can legitimately take minutes to reason

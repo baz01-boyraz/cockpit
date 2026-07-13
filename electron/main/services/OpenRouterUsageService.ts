@@ -5,7 +5,35 @@ import type { SecretStore } from './SecretStore'
  *  in registerIpc.ts's `SECRET_REFS`, which is what Settings actually writes
  *  to. Exported so registerIpc imports this instead of hardcoding its own
  *  copy of the string (the two silently drifted once already). */
-export const OPENROUTER_SECRET_REF = 'hermes.openrouter'
+export const OPENROUTER_SECRET_REF = 'openrouter.api-key'
+/** Read-only compatibility with installs that saved the key before orchestration was removed. */
+export const LEGACY_OPENROUTER_SECRET_REF = 'hermes.openrouter'
+
+type OpenRouterSecretAccess = Pick<SecretStore, 'get' | 'has'> &
+  Partial<Pick<SecretStore, 'set' | 'delete'>>
+
+/** Read the canonical key and opportunistically migrate the legacy encrypted blob. */
+export function readOpenRouterKey(secrets: OpenRouterSecretAccess): string | null {
+  const current = secrets.get(OPENROUTER_SECRET_REF)
+  if (current) return current
+  const legacy = secrets.get(LEGACY_OPENROUTER_SECRET_REF)
+  if (!legacy) return null
+  try {
+    secrets.set?.(OPENROUTER_SECRET_REF, legacy)
+    secrets.delete?.(LEGACY_OPENROUTER_SECRET_REF)
+  } catch {
+    // The decrypted key remains usable for this process even if migration cannot write.
+  }
+  return legacy
+}
+
+export function hasOpenRouterKey(secrets: OpenRouterSecretAccess): boolean {
+  return (
+    Boolean(readOpenRouterKey(secrets)) ||
+    secrets.has(OPENROUTER_SECRET_REF) ||
+    secrets.has(LEGACY_OPENROUTER_SECRET_REF)
+  )
+}
 
 /** `/credits` requires a management key; Settings stores a normal routing key. */
 const KEY_URL = 'https://openrouter.ai/api/v1/key'
@@ -32,7 +60,7 @@ interface KeyResponse {
  * Live limit awareness for the OpenRouter routing key saved in Settings —
  * the key Council's remote seats run on. Mirrors
  * AgentUsageService's cache + stale-fallback shape so the rail's Engines row
- * can treat Hermes like a third provider next to Claude/Codex.
+ * can show OpenRouter beside Claude and Codex without exposing the key.
  *
  * Security model matches AgentUsageService: the decrypted key is read via
  * `SecretStore.get` (main-process only, per its own doc comment) and never
@@ -63,10 +91,10 @@ export class OpenRouterUsageService {
   }
 
   private async fetchSnapshot(): Promise<OpenRouterUsageSnapshot> {
-    const key = this.secrets.get(OPENROUTER_SECRET_REF)
+    const key = readOpenRouterKey(this.secrets)
     if (!key) {
       return this.unavailable(
-        this.secrets.has(OPENROUTER_SECRET_REF)
+        hasOpenRouterKey(this.secrets)
           ? 'The stored OpenRouter key cannot be decrypted by this app build. Re-save it in Settings.'
           : 'Add an OpenRouter key in Settings to see its live limit.',
       )

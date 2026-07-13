@@ -94,7 +94,7 @@ function makeParts(policy: CouncilAnalysisEgressPolicy) {
     prompt: string,
     _opts: { cwd: string; evidenceOnly?: boolean },
   ) => {
-    if (prompt.startsWith('You are the Chairman of a repository-analysis Council')) {
+    if (prompt.includes('You are the Chairman of a repository-analysis Council')) {
       return [
         'CLAIM 1:',
         'SOURCE: REPOSITORY',
@@ -137,6 +137,7 @@ function makeParts(policy: CouncilAnalysisEgressPolicy) {
             path: '.cockpit-memory/council-memory.md',
             updatedAt: '2026-07-11T00:00:00.000Z',
             truncated: false,
+            brain: 'project' as const,
           },
         ],
         characters: 80,

@@ -250,7 +250,7 @@ export const agentUsageReport = (): AgentUsageReport => ({
   ],
 })
 
-// Live OpenRouter credit for the Hermes engine core, browser-preview edition.
+// Live OpenRouter credit for remote Council analysis, browser-preview edition.
 export const openRouterUsageSnapshot = (): OpenRouterUsageSnapshot => ({
   available: true,
   remainingPercent: 62,

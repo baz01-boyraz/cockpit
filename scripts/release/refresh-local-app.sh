@@ -56,6 +56,13 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
+# A real lifecycle run must originate from Cockpit's current confirmation
+# dialog. Dry-run is intentionally exempt because it cannot build, quit, copy,
+# remove, install, or relaunch anything.
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  node scripts/release/consume-lifecycle-approval.mjs app_refresh
+fi
+
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
   if [[ "$DRY_RUN" -eq 1 ]]; then
     echo "[dry-run] npm run package:dir"

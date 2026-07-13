@@ -2,7 +2,7 @@ import { execFile, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
 import { buildClaudeArgs } from '@shared/claude-run'
 import { buildCodexArgs, type EngineSpec } from '@shared/engines'
-import { OPENROUTER_SECRET_REF } from './OpenRouterUsageService'
+import { readOpenRouterKey } from './OpenRouterUsageService'
 import { resolveBin } from './resolveBin'
 import type { SecretStore } from './SecretStore'
 
@@ -183,7 +183,7 @@ export class EngineRunner {
   }
 
   private async runOpenRouter(spec: EngineSpec, prompt: string, opts: EngineCallOpts): Promise<string> {
-    const key = this.secrets.get(OPENROUTER_SECRET_REF)
+    const key = readOpenRouterKey(this.secrets)
     if (!key) throw new Error(NO_KEY_MSG)
 
     const controller = new AbortController()

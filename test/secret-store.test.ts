@@ -20,6 +20,7 @@ vi.mock('electron', () => ({
 import { SecretStore } from '../electron/main/services/SecretStore'
 
 describe('SecretStore', () => {
+  const ref = 'openrouter.api-key'
   let baseDir: string
 
   beforeEach(() => {
@@ -36,23 +37,23 @@ describe('SecretStore', () => {
 
   it('round-trips set → has → get', () => {
     const store = new SecretStore(baseDir)
-    expect(store.has('hermes.openrouter')).toBe(false)
-    expect(store.get('hermes.openrouter')).toBeNull()
+    expect(store.has(ref)).toBe(false)
+    expect(store.get(ref)).toBeNull()
 
-    store.set('hermes.openrouter', 'sk-or-v1-secret-value')
+    store.set(ref, 'sk-or-v1-secret-value')
 
-    expect(store.has('hermes.openrouter')).toBe(true)
-    expect(store.get('hermes.openrouter')).toBe('sk-or-v1-secret-value')
+    expect(store.has(ref)).toBe(true)
+    expect(store.get(ref)).toBe('sk-or-v1-secret-value')
   })
 
   it('persists across store instances (same base dir)', () => {
-    new SecretStore(baseDir).set('hermes.openrouter', 'persisted-key')
-    expect(new SecretStore(baseDir).get('hermes.openrouter')).toBe('persisted-key')
+    new SecretStore(baseDir).set(ref, 'persisted-key')
+    expect(new SecretStore(baseDir).get(ref)).toBe('persisted-key')
   })
 
   it('never writes the secret as plaintext on disk', () => {
     const store = new SecretStore(baseDir)
-    store.set('hermes.openrouter', 'sk-or-v1-should-be-encrypted')
+    store.set(ref, 'sk-or-v1-should-be-encrypted')
     const secretsDir = join(baseDir, 'secrets')
     const files = readdirSync(secretsDir)
     expect(files.length).toBe(1)
@@ -63,13 +64,13 @@ describe('SecretStore', () => {
   it('delete removes the secret and is a no-op when absent', () => {
     const store = new SecretStore(baseDir)
     // No-op when nothing is stored.
-    expect(() => store.delete('hermes.openrouter')).not.toThrow()
+    expect(() => store.delete(ref)).not.toThrow()
 
-    store.set('hermes.openrouter', 'value')
-    expect(store.has('hermes.openrouter')).toBe(true)
+    store.set(ref, 'value')
+    expect(store.has(ref)).toBe(true)
 
-    store.delete('hermes.openrouter')
-    expect(store.has('hermes.openrouter')).toBe(false)
-    expect(store.get('hermes.openrouter')).toBeNull()
+    store.delete(ref)
+    expect(store.has(ref)).toBe(false)
+    expect(store.get(ref)).toBeNull()
   })
 })

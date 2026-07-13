@@ -43,19 +43,6 @@ describe('buildMemoryContext', () => {
     expect(result.block.length).toBeLessThan(400)
   })
 
-  it('gives tool-capable Hermes a compact instruction to query memory itself', () => {
-    const result = buildMemoryContext({
-      contextId: 'memctx_hermes',
-      surface: 'hermes_chat',
-      query: 'deployment gotcha',
-      docs,
-    })
-
-    expect(result.receipt.delivery).toBe('lookup')
-    expect(result.block).toContain('read_memory_recent')
-    expect(result.block).not.toContain('Invoices are reconciled')
-  })
-
   it('inlines at most two short relevant hooks for tool-less council/review surfaces', () => {
     const result = buildMemoryContext({
       contextId: 'memctx_inline',
@@ -133,7 +120,6 @@ describe('buildMemoryContext', () => {
 
   it.each([
     'claude_chat',
-    'hermes_chat',
     'swarm_worker',
     'terminal_claude',
     'terminal_codex',
@@ -149,7 +135,6 @@ describe('buildMemoryContext', () => {
     expect(result.receipt.delivery).toBe('lookup')
     expect(result.receipt.notes).toEqual([])
     expect(result.block).toContain('MEMORY: no relevant notes')
-    if (surface === 'hermes_chat') expect(result.block).toContain('read_memory_recent')
   })
 })
 

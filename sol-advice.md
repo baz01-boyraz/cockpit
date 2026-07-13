@@ -1,5 +1,9 @@
 # Sol'un cockpiT analizi ve tavsiyeleri
 
+> **HISTORICAL SNAPSHOT.** Bu rapor 2026-07-09 mimarisini anlatır; güncel runtime
+> sözleşmesi veya uygulama talimatı değildir. 2026-07-13 sonrası aktif kaynaklar
+> `docs/plans/agent-memory-system-v2.md` ve `docs/MEMORY-CHARTER.md` dosyalarıdır.
+
 > Tarih: 2026-07-09
 >
 > İncelenen sürüm: `v0.2.1` / `09dbc51`

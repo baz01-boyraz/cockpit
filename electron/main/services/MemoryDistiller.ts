@@ -1,43 +1,17 @@
-import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
-import { promisify } from 'node:util'
-import { buildHermesArgs } from '@shared/hermes-run'
-import { HERMES_BACKGROUND_MODEL } from '@shared/hermes-model-policy'
-import { assertHermesRuntimeEnabled } from '@shared/hermes-runtime'
 import {
   type Observation,
   buildDistillPrompt,
   parseObservations,
 } from '@shared/memory-observation'
 import type { ProjectService } from './ProjectService'
-import { resolveBin } from './resolveBin'
-import { TranscriptReader } from './TranscriptReader'
-
-const execFileAsync = promisify(execFile)
+import type { TranscriptReader } from './TranscriptReader'
 
 /**
- * Runs one non-interactive `hermes --oneshot` and returns its final message.
- *
- * The distiller was moved off the local `claude` CLI onto Hermes/DeepSeek
- * (docs/plans/hermes.md Faz 5): the local CLI looked "free" but drew down the
- * exact Claude coding quota we want to reserve for coding, whereas a DeepSeek
- * distill costs well under a cent per session. The transcript is redacted
- * upstream in `TranscriptReader.read(path, offset, true)` before it ever reaches
- * the prompt, so which binary runs the distillation does not affect redaction.
+ * Provider-neutral, tool-less analysis seam. Services binds this to the
+ * dedicated Memory model policy through EngineRunner; tests inject a pure fake.
  */
-export type DistillRunner = (cwd: string, prompt: string, model?: string) => Promise<string>
-
-const defaultRunner: DistillRunner = async (cwd, prompt, model) => {
-  assertHermesRuntimeEnabled()
-  const bin = resolveBin('hermes')
-  const { stdout } = await execFileAsync(bin, buildHermesArgs(prompt, { model }), {
-    cwd,
-    timeout: 180_000,
-    maxBuffer: 8 * 1024 * 1024,
-    env: { ...process.env },
-  })
-  return stdout
-}
+export type DistillRunner = (cwd: string, prompt: string) => Promise<string>
 
 export interface DistillRequest {
   projectId: string
@@ -45,6 +19,8 @@ export interface DistillRequest {
   fromOffset?: number
   projectSlugs: string[]
   userSlugs: string[]
+  /** Queue visibility hook fired after transcript reading, before model analysis. */
+  onDistilling?: () => void
 }
 
 export interface DistillOutput {
@@ -56,17 +32,16 @@ export interface DistillOutput {
 }
 
 /**
- * Stage 2 of the memory pipeline: read a redacted transcript and ask the Hermes
- * CLI for the few facts worth remembering (docs/memory-imp.md Phase 2,
- * docs/plans/hermes.md Faz 5). The CLI runner is injectable so the pipeline is
- * unit-testable without spawning `hermes`. One corrective retry guards against a
+ * Stage 2 of the memory pipeline: read a redacted Claude or Codex transcript and
+ * ask a bounded analysis seat for the few facts worth remembering. Capture and
+ * analysis providers are independent. One corrective retry guards against a
  * stray non-JSON reply.
  */
 export class MemoryDistiller {
   constructor(
     private readonly projects: ProjectService,
-    private readonly reader: TranscriptReader = new TranscriptReader(),
-    private readonly runner: DistillRunner = defaultRunner,
+    private readonly reader: TranscriptReader,
+    private readonly runner: DistillRunner,
   ) {}
 
   private cwdFor(projectId: string): string {
@@ -80,6 +55,7 @@ export class MemoryDistiller {
   async distill(req: DistillRequest): Promise<DistillOutput> {
     const { turns, nextOffset } = await this.reader.read(req.transcriptPath, req.fromOffset ?? 0, true)
     if (turns.length === 0) return { observations: [], nextOffset }
+    req.onDistilling?.()
 
     const cwd = this.cwdFor(req.projectId)
     const prompt = buildDistillPrompt({
@@ -90,9 +66,9 @@ export class MemoryDistiller {
 
     let raw: string
     try {
-      raw = await this.runner(cwd, prompt, HERMES_BACKGROUND_MODEL)
+      raw = await this.runner(cwd, prompt)
     } catch (err) {
-      return { observations: [], nextOffset, error: `distiller CLI failed: ${(err as Error).message}` }
+      return { observations: [], nextOffset, error: `memory analysis failed: ${(err as Error).message}` }
     }
 
     let parsed = parseObservations(raw)
@@ -102,7 +78,6 @@ export class MemoryDistiller {
         const retry = await this.runner(
           cwd,
           `${prompt}\n\nYour previous reply was not valid. Reply with STRICT JSON only, no prose, no code fence.`,
-          HERMES_BACKGROUND_MODEL,
         )
         parsed = parseObservations(retry)
       } catch (err) {

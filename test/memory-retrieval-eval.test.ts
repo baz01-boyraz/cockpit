@@ -76,9 +76,7 @@ describe('Memory R0 retrieval corpus', () => {
     expect(semanticCases).toHaveLength(12)
     expect(semanticCases.every((item) => item.top1Hit)).toBe(true)
     expect(semanticCases.every((item) => item.returned.length === 1)).toBe(true)
-    // The current ranker has no lifecycle filter. R0 must expose this gap rather
-    // than hide it; M5 is where the metric is driven to zero.
-    expect(first.unsafeSelections.length).toBeGreaterThan(0)
+    expect(first.unsafeSelections).toEqual([])
   })
 
   it('retrieves redacted notes from real Turkish project-query shapes', () => {

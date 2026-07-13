@@ -140,7 +140,6 @@ export function SwarmColumn({
                 index={i}
                 starting={cardActions.startingId === card.id}
                 parking={cardActions.parkingId === card.id}
-                reviewing={cardActions.reviewingId === card.id}
                 counciling={cardActions.councilingId === card.id}
                 reporting={cardActions.reportingId === card.id}
                 gated={cardActions.gatedId === card.id}
@@ -151,7 +150,6 @@ export function SwarmColumn({
                 onConveneGate={cardActions.onConveneGate}
                 onPark={cardActions.onPark}
                 onViewTerminal={cardActions.onViewTerminal}
-                onReview={cardActions.onReview}
                 onCouncil={cardActions.onCouncil}
                 onReport={cardActions.onReport}
               />

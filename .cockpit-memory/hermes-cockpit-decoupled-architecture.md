@@ -1,11 +1,17 @@
 ---
-schema: 1
+schema: 2
 name: hermes-cockpit-decoupled-architecture
 title: cockpiT does not package Hermes — 4-point decoupled integration surface
 class: architecture
 capturedAt: 2026-07-06T03:19:25.929Z
 gate: save
 updatedAt: 2026-07-06T06:27:41.587Z
+status: archived
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-06T03:19:25.929Z
+reviewAfter: 2026-07-13T05:20:43.982Z
 ---
 
 Hermes lives at ~/.hermes via its own installer (npm global); cockpiT resolves it via resolveBin('hermes') with no npm dependency on the hermes-agent package. The entire integration surface is 4 points: (1) CLI flags --oneshot/--ignore-rules/-m, (2) MCP client via hermes mcp add targeting cockpiT's local server at 127.0.0.1:47615, (3) ~/.hermes/config.yaml approvals.deny format for blocked git commands, (4) AGENTS.md auto-reading convention. An update that breaks any of these produces visible errors (resolveBin failure or JSON parse errors with ok:false), not silent corruption. No Hermes local state dependency — everything lives in cockpiT's SQLite/git.

@@ -21,6 +21,7 @@ import {
 } from '@shared/memory-hub'
 import { assembleHealth, type MemoryHealth } from '@shared/memory-health'
 import type { ProjectService } from './ProjectService'
+import { isActiveNote } from '@shared/memory-note-schema'
 
 const HUB_DIR = '.cockpit-memory'
 const TRASH_DIR = '.trash'
@@ -66,7 +67,7 @@ export class MemoryHubService {
     return slug
   }
 
-  private readDocs(projectId: string): MemoryDoc[] {
+  private readAllDocs(projectId: string): MemoryDoc[] {
     const hub = this.hubDir(projectId)
     let entries: string[]
     try {
@@ -96,12 +97,13 @@ export class MemoryHubService {
   }
 
   list(projectId: string): MemoryHubSnapshot {
-    return assembleHubSnapshot(this.readDocs(projectId))
+    return assembleHubSnapshot(this.readAllDocs(projectId))
   }
 
-  /** Raw docs (name + content + mtime) — for the pipeline's reconciliation. */
-  listDocs(projectId: string): MemoryDoc[] {
-    return this.readDocs(projectId)
+  /** Active raw docs for retrieval/reconciliation. Inactive history stays browsable via list/read. */
+  listDocs(projectId: string, options: { includeInactive?: boolean } = {}): MemoryDoc[] {
+    const docs = this.readAllDocs(projectId)
+    return options.includeInactive ? docs : docs.filter((doc) => isActiveNote(doc.content))
   }
 
   /**
@@ -112,18 +114,18 @@ export class MemoryHubService {
    * `list()` snapshot so adding a hook here never perturbs that UI shape.
    */
   listHooks(projectId: string): { name: string; hook: string | null; updatedAt: string }[] {
-    return this.readDocs(projectId)
+    return this.listDocs(projectId)
       .map((d) => ({ name: d.name, hook: extractHook(d.content), updatedAt: d.updatedAt }))
       .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
   }
 
   read(projectId: string, name: string): MemoryNote | null {
-    return assembleNote(this.readDocs(projectId), name)
+    return assembleNote(this.readAllDocs(projectId), name)
   }
 
   /** Brain health snapshot (memory-imp G6) — derived from the same docs. */
   health(projectId: string): MemoryHealth {
-    return assembleHealth(this.readDocs(projectId))
+    return assembleHealth(this.readAllDocs(projectId))
   }
 
   write(projectId: string, name: string, content: string): MemoryNote {
@@ -155,7 +157,7 @@ export class MemoryHubService {
       throw new Error(`A note named "${toSlug}" already exists.`)
     }
     renameSync(fromPath, toPath)
-    for (const doc of this.readDocs(projectId)) {
+    for (const doc of this.readAllDocs(projectId)) {
       if (doc.name === toSlug) continue
       const refreshed = renameLinkTargets(doc.content, fromSlug, toSlug)
       if (refreshed !== doc.content) {

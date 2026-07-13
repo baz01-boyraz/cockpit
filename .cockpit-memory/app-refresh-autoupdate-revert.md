@@ -1,11 +1,17 @@
 ---
-schema: 1
+schema: 2
 name: app-refresh-autoupdate-revert
 title: Local app:refresh build gets reverted by GitHub auto-update
 class: gotcha
 capturedAt: 2026-07-04T20:38:28.345Z
 gate: asked
 updatedAt: 2026-07-12T05:03:45.000Z
+status: active
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-04T20:38:28.345Z
+reviewAfter: 2026-10-11T05:20:43.983Z
 ---
 
 # Local build can be replaced by auto-update

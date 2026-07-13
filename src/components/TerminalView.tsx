@@ -461,7 +461,7 @@ export function TerminalView({ session, active }: { session: TerminalSession; ac
       <div className="termview__surface">
         <div className="termview__host" ref={hostRef} />
         {mode === 'blocks' && (
-          <BlocksView blocks={blocks} projectId={session.projectId} onRerun={rerunCommand} />
+          <BlocksView blocks={blocks} onRerun={rerunCommand} />
         )}
 
         <div className="termview__toolbar">

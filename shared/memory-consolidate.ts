@@ -185,7 +185,18 @@ export function mergeDuplicate(
   const keep = parseNote(keepContent)
   const dropBody = parseNote(dropContent).body.trim()
   const front: NoteFrontmatter = keep.frontmatter
-    ? { ...keep.frontmatter, updatedAt: now }
+    ? {
+        ...keep.frontmatter,
+        schema: MEMORY_NOTE_SCHEMA_VERSION,
+        updatedAt: now,
+        status: keep.frontmatter.status ?? 'active',
+        authority: keep.frontmatter.authority ?? 'equivalent-content',
+        scope: keep.frontmatter.scope ?? 'project',
+        confidence: keep.frontmatter.confidence ?? 'medium',
+        firstSeenAt: keep.frontmatter.firstSeenAt ?? keep.frontmatter.capturedAt ?? keep.frontmatter.updatedAt,
+        reviewAfter: keep.frontmatter.reviewAfter ?? new Date(Date.parse(now) + 90 * 24 * 60 * 60_000).toISOString(),
+        supersedes: [...new Set([...(keep.frontmatter.supersedes ?? []), dropSlug])],
+      }
     : {
         schema: MEMORY_NOTE_SCHEMA_VERSION,
         name: keepSlug,
@@ -194,6 +205,13 @@ export function mergeDuplicate(
         gate: 'consolidation',
         updatedAt: now,
         tags: [],
+        status: 'active',
+        authority: 'equivalent-content',
+        scope: 'project',
+        confidence: 'medium',
+        firstSeenAt: now,
+        reviewAfter: new Date(Date.parse(now) + 90 * 24 * 60 * 60_000).toISOString(),
+        supersedes: [dropSlug],
       }
   const mergedBody = `${keep.body.trimEnd()}\n\n<!-- merged from ${dropSlug} on ${now.slice(0, 10)} -->\n${dropBody}\n`
   return serializeNote(front, mergedBody)

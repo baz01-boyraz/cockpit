@@ -26,7 +26,6 @@ import type { SystemInfo } from '@shared/ipc'
 import type { BoardColumn, CardStatus, StartCardResult } from '@shared/kanban'
 import type { Assignment } from '@shared/agent-taxonomy'
 import type { NamedAgentSummary } from '@shared/named-agents'
-import type { SentinelSource } from '@shared/sentinel'
 import type {
   CouncilClarificationAnswer,
   CouncilIntentMode,
@@ -36,7 +35,6 @@ import type { CouncilAnalysisEgressPolicy } from '@shared/council-evidence'
 
 export type View =
   | 'dashboard'
-  | 'automations'
   | 'terminals'
   | 'git'
   | 'swarm'
@@ -49,37 +47,14 @@ export type View =
   | 'usage'
   | 'settings'
 
-/**
- * A "continue from the notification" handoff (Faz A UI): a sentinel signal the
- * user chose to take to Hermes. It opens the Hermes panel, seeds a muted signal
- * context card at the top of the thread, and prefills an editable draft question
- * — it does NOT auto-send (a later phase lets Hermes speak first).
- */
-export interface HermesOpener {
-  signalId: string
-  source: SentinelSource
-  title: string
-  summary: string
-  context: string | null
-}
-
 export interface UiSlice {
   view: View
   projectSwitcherOpen: boolean
   chatOpen: boolean
-  /** Hermes chat panel — triggered from the rail's Engines row, not a floating launcher. */
-  hermesOpen: boolean
-  /** A pending sentinel→Hermes handoff, consumed by the widget once rendered. */
-  hermesOpener: HermesOpener | null
   aiDraft: string | null
   setView: (view: View) => void
   toggleSwitcher: (open?: boolean) => void
   toggleChat: (open?: boolean) => void
-  toggleHermes: (open?: boolean) => void
-  /** Open Hermes carrying a signal's context (sets hermesOpen + stores the opener). */
-  openHermesWith: (opener: HermesOpener) => void
-  /** Clear the pending opener once the widget has absorbed it (single-use). */
-  clearHermesOpener: () => void
   setAiDraft: (text: string | null) => void
 }
 

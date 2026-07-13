@@ -535,7 +535,7 @@ describe('SentinelService enrich (Faz B triage)', () => {
     expect(proposal.proposedContent).toContain('[REDACTED]')
   })
 
-  it('a null verdict (Hermes missing/slow/wrong) changes nothing after the spine', async () => {
+  it('a null optional verdict changes nothing after the deterministic spine', async () => {
     const triager: SentinelTriager = { triage: vi.fn(async () => null) }
     const { reviews, create } = makeReviews()
     const svc = new SentinelService(store.db, events, undefined, triager, reviews)

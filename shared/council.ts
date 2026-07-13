@@ -811,7 +811,6 @@ function normalizedStats(value: unknown): CouncilStats | null {
 
 const MEMORY_CONTEXT_SURFACES = new Set([
   'claude_chat',
-  'hermes_chat',
   'council_spec',
   'council_diff',
   'council_analysis',
@@ -851,6 +850,7 @@ function normalizedMemoryContext(value: unknown): MemoryContextReceipt | null | 
       path: boundedText(note.path, 500),
       updatedAt: boundedText(note.updatedAt, 100),
       truncated: note.truncated,
+      brain: note.brain === 'global' ? 'global' as const : 'project' as const,
     }]
   }).slice(0, 10)
   if (notes.length !== item.notes.length) return null

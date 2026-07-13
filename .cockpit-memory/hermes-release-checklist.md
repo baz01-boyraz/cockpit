@@ -1,11 +1,17 @@
 ---
-schema: 1
+schema: 2
 name: hermes-release-checklist
 title: Next release checklist for the current Hermes worktree
-class: todo
+class: reference
 capturedAt: 2026-07-06T00:00:00.000Z
 gate: asked
 updatedAt: 2026-07-06T00:00:00.000Z
+status: archived
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-06T00:00:00.000Z
+reviewAfter: 2026-07-13T05:20:43.982Z
 ---
 
 Before the next release, treat the current dirty worktree as a protected checkpoint problem, not a cleanup problem. Do not use `git reset`, `git clean`, `git checkout --`, broad stash operations, or `git add .` while preserving the Hermes integration state.

@@ -33,14 +33,19 @@ import type { MemoryReviewService } from './MemoryReviewService'
 import type { MemoryDistiller } from './MemoryDistiller'
 import type { AuditLogService } from './AuditLogService'
 import type { MemoryPolicyService } from './MemoryPolicyService'
+import type { ResumableSessionProvider } from '@shared/domain'
+import type { CaptureProcessingStage } from '@shared/memory-capture'
 
 export interface CaptureRequest {
   projectId: string
+  provider?: ResumableSessionProvider
   transcriptPath: string
   fromOffset?: number
   /** Preview only — compute proposals, write nothing. */
   dryRun?: boolean
   sessionId?: string
+  /** Durable queue stage observer; omitted for manual dry-runs. */
+  onStage?: (stage: CaptureProcessingStage) => void
 }
 
 /**
@@ -82,6 +87,8 @@ export class MemoryPipeline {
   }
 
   async capture(req: CaptureRequest): Promise<CaptureResult> {
+    req.onStage?.('reading')
+    const sourceId = req.sessionId && req.provider ? `${req.provider}:${req.sessionId}` : req.sessionId
     const projectDocs = this.memory.listDocs(req.projectId)
     const userDocs = this.userMemory ? this.userMemory.listDocs(BAZ_GLOBAL_BRAIN) : []
 
@@ -91,6 +98,7 @@ export class MemoryPipeline {
       fromOffset: req.fromOffset,
       projectSlugs: projectDocs.map((d) => d.name),
       userSlugs: userDocs.map((d) => d.name),
+      onDistilling: () => req.onStage?.('distilling'),
     })
 
     if (distilled.error) {
@@ -120,6 +128,8 @@ export class MemoryPipeline {
     let committed = 0
     let queued = 0
     let skipped = 0
+    req.onStage?.('reconciling')
+    let persistenceStarted = false
 
     for (const obs of distilled.observations) {
       const target = this.route(obs.scope, req.projectId, projectDocs, userDocs)
@@ -147,6 +157,11 @@ export class MemoryPipeline {
 
       if (req.dryRun) continue
 
+      if (!persistenceStarted && gate !== 'skip') {
+        persistenceStarted = true
+        req.onStage?.('committing')
+      }
+
       if (gate === 'skip') {
         skipped += 1
       } else if (gate === 'commit' && proposedContent) {
@@ -168,11 +183,11 @@ export class MemoryPipeline {
           this.recordGate(req.projectId, rec.targetSlug, 'reject', decision.reasons)
           skipped += 1
         } else if (decision.verdict === 'review') {
-          this.queueReview(req.projectId, target.brain, rec, obs, proposedContent, req.sessionId, decision.reasons.join('; '))
+          this.queueReview(req.projectId, target.brain, rec, obs, proposedContent, sourceId, decision.reasons.join('; '))
           this.recordGate(req.projectId, rec.targetSlug, 'review', decision.reasons)
           queued += 1
         } else {
-          this.commit(target.memory, target.hubId, target.brain, rec, proposedContent, req.sessionId)
+          this.commit(target.memory, target.hubId, target.brain, rec, proposedContent, sourceId)
           committed += 1
           // keep the right docs list fresh so later same-batch observations reconcile correctly
           target.docs.push({ name: rec.targetSlug, content: proposedContent, updatedAt: this.now() })
@@ -182,7 +197,7 @@ export class MemoryPipeline {
           initialGate === 'commit'
             ? `${mode} policy requires review for a ${kind} proposal. ${obs.reason}`
             : obs.reason
-        this.queueReview(req.projectId, target.brain, rec, obs, proposedContent, req.sessionId, reason)
+        this.queueReview(req.projectId, target.brain, rec, obs, proposedContent, sourceId, reason)
         queued += 1
       }
     }

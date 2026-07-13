@@ -1,5 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { MemoryNote } from '@shared/memory-hub'
+import type { LedgerEntry } from '@shared/memory-ledger'
+import {
+  noteLifecycle,
+  parseNote,
+  type NoteAuthority,
+} from '@shared/memory-note-schema'
 import { normalizeNoteName } from '@shared/wikilink'
 import { relativeTime } from '@shared/time'
 import { IconCheck, IconPlus, IconX } from '../icons'
@@ -7,6 +13,11 @@ import { NoteBody } from './NoteBody'
 
 interface MemoryReaderProps {
   note: MemoryNote
+  activity: {
+    history: LedgerEntry[]
+    recalls7d: number
+    recalls30d: number
+  } | null
   mode: 'read' | 'edit'
   draft: string
   saving: boolean
@@ -33,12 +44,37 @@ function updatedLabel(iso: string): string {
   return t === 'now' ? 'just now' : `${t} ago`
 }
 
+const AUTHORITY_LABEL: Record<NoteAuthority, string> = {
+  'human-directive': 'Owner approved',
+  'code-verified': 'Verified in code',
+  'source-authority': 'Authoritative source',
+  'equivalent-content': 'Equivalent evidence',
+  observed: 'Observed',
+  'model-inference': 'Model inference',
+  legacy: 'Legacy / manual',
+}
+
+const ACTION_LABEL: Record<LedgerEntry['action'], string> = {
+  create: 'Created',
+  merge: 'Merged',
+  replace: 'Updated',
+  split: 'Split',
+  rename: 'Renamed',
+  trash: 'Moved to trash',
+  restore: 'Restored',
+}
+
+function shortEvidence(value: string): string {
+  return value.length > 42 ? `${value.slice(0, 18)}…${value.slice(-12)}` : value
+}
+
 /**
  * Center zone: reader (text + clickable wikilinks) and plain-textarea editor.
  * Mount with `key={note.name}` so rename/trash confirm state resets per note.
  */
 export function MemoryReader({
   note,
+  activity,
   mode,
   draft,
   saving,
@@ -61,6 +97,12 @@ export function MemoryReader({
   const [trashArmed, setTrashArmed] = useState(false)
   const renameSlug = normalizeNoteName(renameValue)
   const renameValid = renameSlug !== null && renameSlug !== note.name
+  const parsed = useMemo(() => parseNote(note.content), [note.content])
+  const lifecycle = useMemo(() => noteLifecycle(parsed.frontmatter), [parsed.frontmatter])
+  const evidenceRef = parsed.frontmatter?.authorityRef ?? parsed.frontmatter?.session ?? null
+  const reviewOverdue = lifecycle.reviewAfter
+    ? Date.parse(lifecycle.reviewAfter) < Date.now()
+    : false
 
   // A primed trash button quietly disarms — no destructive control lingers.
   useEffect(() => {
@@ -168,6 +210,16 @@ export function MemoryReader({
         <div className="memreader__trashNote">moves to .trash — recoverable, never deleted</div>
       )}
 
+      {mode === 'read' && (
+        <div className="memreader__trustline" aria-label="Memory trust metadata">
+          <span className={`memtrust memtrust--${lifecycle.status}`}>{lifecycle.status}</span>
+          <span className="memtrust">{AUTHORITY_LABEL[lifecycle.authority]}</span>
+          <span className="memtrust">{lifecycle.confidence} confidence</span>
+          <span className="memtrust">{lifecycle.scope === 'global' ? 'All projects' : 'This project'}</span>
+          {reviewOverdue && <span className="memtrust memtrust--review">Review due</span>}
+        </div>
+      )}
+
       {pendingCreate && (
         <div className="memoffer">
           <span className="memoffer__text">
@@ -188,6 +240,53 @@ export function MemoryReader({
 
       {mode === 'read' ? (
         <div className="memreader__body scroll-y">
+          <details className="memreader__evidence">
+            <summary>
+              <span>Evidence &amp; history</span>
+              <span>
+                {activity?.recalls30d ?? 0} recalls in 30 days · {activity?.history.length ?? 0} changes
+              </span>
+            </summary>
+            <div className="memreader__evidenceGrid">
+              <div className="memreader__evidenceFacts">
+                <div><span>Authority</span><strong>{AUTHORITY_LABEL[lifecycle.authority]}</strong></div>
+                <div><span>Confidence</span><strong>{lifecycle.confidence}</strong></div>
+                <div><span>Scope</span><strong>{lifecycle.scope === 'global' ? 'All projects' : 'This project'}</strong></div>
+                <div><span>Recalls</span><strong>{activity?.recalls7d ?? 0} / 7d · {activity?.recalls30d ?? 0} / 30d</strong></div>
+                {lifecycle.lastVerifiedAt && (
+                  <div><span>Verified</span><strong>{updatedLabel(lifecycle.lastVerifiedAt)}</strong></div>
+                )}
+                {lifecycle.reviewAfter && (
+                  <div>
+                    <span>Next review</span>
+                    <strong className={reviewOverdue ? 'memreader__overdue' : ''}>
+                      {reviewOverdue ? 'due now' : updatedLabel(lifecycle.reviewAfter)}
+                    </strong>
+                  </div>
+                )}
+                {evidenceRef && (
+                  <div><span>Evidence ref</span><strong className="mono" title={evidenceRef}>{shortEvidence(evidenceRef)}</strong></div>
+                )}
+              </div>
+              <div className="memreader__history">
+                <span className="memreader__historyTitle">Change history</span>
+                {activity && activity.history.length > 0 ? (
+                  <ol>
+                    {activity.history.slice(0, 8).map((entry) => (
+                      <li key={entry.id}>
+                        <span>{ACTION_LABEL[entry.action]} · {updatedLabel(entry.createdAt)}</span>
+                        <code title={entry.hashAfter ?? entry.hashBefore ?? 'no content hash'}>
+                          {(entry.hashAfter ?? entry.hashBefore)?.slice(0, 8) ?? 'no hash'}
+                        </code>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p>No ledgered changes yet. Legacy file history remains in Git.</p>
+                )}
+              </div>
+            </div>
+          </details>
           <NoteBody
             content={note.content}
             known={known}

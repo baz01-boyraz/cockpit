@@ -1,3 +1,18 @@
+---
+schema: 2
+name: migration-number-collision
+title: migration number collision
+class: reference
+gate: manual
+updatedAt: 2026-07-13T05:20:43.982Z
+status: active
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-13T05:20:43.982Z
+reviewAfter: 2026-10-11T05:20:43.983Z
+---
+
 Migrations in electron/main/db/schema.ts are append-only SCHEMA_Vn blocks registered by version
 in Database.ts. When multiple agents/worktree branches each add a DB migration independently,
 they both grab the next free SCHEMA_V number and collide — this is a NUMBER collision, not a

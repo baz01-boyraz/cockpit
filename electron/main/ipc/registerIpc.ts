@@ -7,14 +7,10 @@ import { formatIpcError } from '@shared/ipc-errors'
 import { requiresApproval } from '@shared/approval-rules'
 import { toSummary } from '@shared/named-agents'
 import { BAZ_GLOBAL_BRAIN, projectBrain } from '@shared/memory-ledger'
-import { HERMES_RUNTIME_ENABLED } from '@shared/hermes-runtime'
 import type { ApprovalActionType } from '@shared/domain'
 import {
   addProjectInputSchema,
   agentUsageRequestSchema,
-  automationCreateSchema,
-  automationJobActionSchema,
-  automationToggleSchema,
   approvalDecisionSchema,
   createTerminalInputSchema,
   gitCommitInputSchema,
@@ -23,14 +19,14 @@ import {
   gitStageInputSchema,
   githubCreateRepoInputSchema,
   chatAskSchema,
-  hermesChatAskSchema,
-  hermesChatClearSchema,
   dismissInsightSchema,
   ingestLogSchema,
   memoryBazReadSchema,
   memoryBrainAccessSchema,
   memoryCaptureSchema,
+  memoryCaptureRetrySchema,
   memoryLedgerSchema,
+  memorySnapshotSchema,
   memoryNameSchema,
   memoryRenameSchema,
   memoryResolveReviewSchema,
@@ -38,8 +34,6 @@ import {
   memoryWriteSchema,
   projectIdSchema,
   requestApprovalSchema,
-  reviewRunSchema,
-  reviewRunTextSchema,
   reviewDiffStatSchema,
   councilRunSchema,
   councilScorecardSchema,
@@ -73,7 +67,12 @@ import {
 import { z } from 'zod'
 import type { Services } from '../services/Services'
 import { installLatestRelease, isCockpitSource, rebuildAndRelaunch } from '../services/localRebuild'
-import { OPENROUTER_SECRET_REF } from '../services/OpenRouterUsageService'
+import {
+  hasOpenRouterKey,
+  LEGACY_OPENROUTER_SECRET_REF,
+  OPENROUTER_SECRET_REF,
+} from '../services/OpenRouterUsageService'
+import { assembleMemoryCaptureOverview } from '@shared/memory-capture'
 
 /**
  * Registers every IPC handler. Each handler validates its payload with a Zod
@@ -272,41 +271,13 @@ export function registerIpc(services: Services): void {
     return services.approvals.decide(approvalId, approve)
   })
 
-  // --- safe app-owned automations ---
-  handle('automationList', (p) =>
-    services.automation.list(projectIdSchema.parse(p).projectId),
-  )
-  handle('automationCreate', (p) =>
-    services.automation.create(automationCreateSchema.parse(p)),
-  )
-  handle('automationToggle', (p) => {
-    const { projectId, jobId, enabled } = automationToggleSchema.parse(p)
-    return services.automation.setEnabled(projectId, jobId, enabled)
-  })
-  handle('automationRun', (p) => {
-    const { projectId, jobId } = automationJobActionSchema.parse(p)
-    return services.automation.runNow(projectId, jobId)
-  })
-  handle('automationRemove', (p) => {
-    const { projectId, jobId } = automationJobActionSchema.parse(p)
-    return services.automation.remove(projectId, jobId)
-  })
-
   // --- router ---
   handle('routerRoute', (p) => {
     const { projectId, query } = routeQuerySchema.parse(p)
     return services.route(projectId, query)
   })
 
-  // --- review (read-only pre-ship AI diff review) ---
-  handle('reviewRun', (p) => {
-    const { projectId, model, dir, lens } = reviewRunSchema.parse(p)
-    return services.review.run(projectId, { model, dir, lens })
-  })
-  handle('reviewRunText', (p) => {
-    const { projectId, label, content, model } = reviewRunTextSchema.parse(p)
-    return services.review.runText(projectId, { label, content }, { model })
-  })
+  // --- review stats (LLM-free; model judgment belongs to Council) ---
   handle('reviewDiffStat', (p) => {
     const { projectId, dir } = reviewDiffStatSchema.parse(p)
     return services.review.diffStat(projectId, { dir })
@@ -341,18 +312,59 @@ export function registerIpc(services: Services): void {
   })
   handle('memoryWrite', (p) => {
     const { projectId, name, content } = memoryWriteSchema.parse(p)
-    return services.memory.write(projectId, name, content)
+    const before = services.memory.read(projectId, name)?.content ?? null
+    const written = services.memory.write(projectId, name, content)
+    services.memoryLedger.record({
+      brain: projectBrain(projectId),
+      noteSlug: written.name,
+      action: before === null ? 'create' : 'replace',
+      gate: 'manual',
+      contentBefore: before,
+      contentAfter: written.content,
+    })
+    return written
   })
   handle('memoryRename', (p) => {
     const { projectId, from, to } = memoryRenameSchema.parse(p)
-    return services.memory.rename(projectId, from, to)
+    const before = services.memory.read(projectId, from)?.content ?? null
+    const snapshot = services.memory.rename(projectId, from, to)
+    const after = services.memory.read(projectId, to)?.content ?? null
+    services.memoryLedger.record({
+      brain: projectBrain(projectId), noteSlug: to, action: 'rename', gate: 'manual',
+      sourceId: from, contentBefore: before, contentAfter: after,
+    })
+    return snapshot
   })
   handle('memoryHealth', (p) => services.memory.health(projectIdSchema.parse(p).projectId))
   handle('memoryCaptureSession', (p) => {
-    const { projectId, sessionId, dryRun } = memoryCaptureSchema.parse(p)
+    const { projectId, provider, sessionId, dryRun } = memoryCaptureSchema.parse(p)
     const projectPath = services.projects.get(projectId).path
-    const transcriptPath = services.claudeSessions.transcriptPath(projectPath, sessionId)
-    return services.memoryPipeline.capture({ projectId, transcriptPath, sessionId, dryRun })
+    const session = services.agentSessions
+      .captureList(projectPath)
+      .find((candidate) => candidate.provider === provider && candidate.id === sessionId)
+    if (!session) throw new Error('The selected agent session is no longer available for capture.')
+    return services.memoryPipeline.capture({
+      projectId,
+      provider,
+      transcriptPath: session.transcriptPath,
+      sessionId,
+      dryRun,
+    })
+  })
+  const captureOverview = (projectId: string) => {
+    const project = services.projects.get(projectId)
+    return assembleMemoryCaptureOverview(
+      services.agentSessions.captureList(project.path),
+      services.memoryCaptureQueue.list(projectId),
+    )
+  }
+  handle('memoryCaptureStatus', (p) =>
+    captureOverview(projectIdSchema.parse(p).projectId),
+  )
+  handle('memoryCaptureRetry', async (p) => {
+    const { projectId, jobId } = memoryCaptureRetrySchema.parse(p)
+    await services.memoryAutoCapture.retry(projectId, jobId)
+    return captureOverview(projectId)
   })
   handle('memoryTrustState', (p) => {
     const { projectId, scope } = memoryBrainAccessSchema.parse(p)
@@ -396,6 +408,39 @@ export function registerIpc(services: Services): void {
     const { projectId, noteSlug } = memoryLedgerSchema.parse(p)
     return services.memoryLedger.list(projectBrain(projectId), noteSlug)
   })
+  handle('memoryNoteActivity', (p) => {
+    const { projectId, noteSlug } = memoryLedgerSchema.parse(p)
+    if (!noteSlug) throw new Error('A note is required for Memory activity.')
+    services.projects.get(projectId)
+    const now = Date.now()
+    const count = (days: number) =>
+      services.memoryRecalls.recalledSince(
+        projectBrain(projectId),
+        new Date(now - days * 24 * 60 * 60_000).toISOString(),
+      ).get(noteSlug) ?? 0
+    return {
+      history: services.memoryLedger.list(projectBrain(projectId), noteSlug),
+      recalls7d: count(7),
+      recalls30d: count(30),
+    }
+  })
+  handle('memorySnapshots', (p) =>
+    services.memory.listSnapshots(projectIdSchema.parse(p).projectId),
+  )
+  handle('memoryRestoreSnapshot', (p) => {
+    const { projectId, snapshotId } = memorySnapshotSchema.parse(p)
+    services.projects.get(projectId)
+    const safety = services.memory.snapshot(projectId)
+    const snapshot = services.memory.restoreSnapshot(projectId, snapshotId)
+    services.audit.record({
+      projectId,
+      actor: 'user',
+      actionType: 'memory.snapshot_restored',
+      summary: 'Restored a Memory snapshot after creating a safety snapshot',
+      payload: { snapshotId, safetySnapshotId: safety.id },
+    })
+    return { snapshot, safetySnapshotId: safety.id }
+  })
   handle('memoryConsolidate', (p) => {
     const { projectId } = projectIdSchema.parse(p)
     const result = services.memoryConsolidator.consolidate(projectId)
@@ -406,7 +451,13 @@ export function registerIpc(services: Services): void {
   })
   handle('memoryTrash', (p) => {
     const { projectId, name } = memoryNameSchema.parse(p)
-    return services.memory.trash(projectId, name)
+    const before = services.memory.read(projectId, name)?.content ?? null
+    const snapshot = services.memory.trash(projectId, name)
+    services.memoryLedger.record({
+      brain: projectBrain(projectId), noteSlug: name, action: 'trash', gate: 'manual',
+      contentBefore: before, contentAfter: null,
+    })
+    return snapshot
   })
 
   // --- swarm (Phase 6 Kanban board; agent execution arrives in 6.2) ---
@@ -415,8 +466,11 @@ export function registerIpc(services: Services): void {
   handle('swarmUpdateCard', (p) => services.swarm.updateCard(swarmUpdateCardSchema.parse(p)))
   handle('swarmMoveCard', (p) => services.swarm.moveCard(swarmMoveCardSchema.parse(p)))
   handle('swarmRemoveCard', (p) => services.swarm.removeCard(swarmRemoveCardSchema.parse(p)))
-  handle('swarmStartCard', (p) => services.swarm.startCard(swarmStartCardSchema.parse(p)))
-  handle('swarmParkCard', (p) => services.swarm.parkCard(swarmStartCardSchema.parse(p)))
+  handle('swarmStartCard', (p) => {
+    const { projectId, cardId, skipGate } = swarmStartCardSchema.parse(p)
+    return services.swarm.startCard({ projectId, cardId, skipGate, origin: 'user-ui' })
+  })
+  handle('swarmParkCard', (p) => services.swarm.parkCard(swarmRemoveCardSchema.parse(p)))
   handle('swarmAgents', (p) =>
     services.namedAgents.list(swarmProjectSchema.parse(p).projectId).map(toSummary),
   )
@@ -457,19 +511,6 @@ export function registerIpc(services: Services): void {
     return services.chat.ask(projectId, prompt, opts)
   })
 
-  // --- Hermes chat widget (orchestrator persona + cockpit MCP tools; the
-  // service keeps conversation history itself since oneshot is stateless) ---
-  if (HERMES_RUNTIME_ENABLED) {
-    handle('hermesChatAsk', (p) => {
-      const { projectId, message, imagePath } = hermesChatAskSchema.parse(p)
-      return services.hermesChat.ask(projectId, message, imagePath)
-    })
-    handle('hermesChatClear', (p) => {
-      const { projectId } = hermesChatClearSchema.parse(p)
-      services.hermesChat.clear(projectId)
-    })
-  }
-
   // --- secrets (encrypted key/value; the value never crosses back to the
   // renderer — set/has/delete only, deliberately no get). Each kind maps to a
   // fixed storage ref so the ref namespace is owned here, in main, never by the
@@ -481,14 +522,18 @@ export function registerIpc(services: Services): void {
   handle('secretSet', (p) => {
     const { kind, value } = secretSetSchema.parse(p)
     services.secrets.set(SECRET_REFS[kind], value)
+    if (kind === 'openrouter') services.secrets.delete(LEGACY_OPENROUTER_SECRET_REF)
   })
   handle('secretHas', (p) => {
     const { kind } = secretKindOnlySchema.parse(p)
-    return services.secrets.has(SECRET_REFS[kind])
+    return kind === 'openrouter'
+      ? hasOpenRouterKey(services.secrets)
+      : services.secrets.has(SECRET_REFS[kind])
   })
   handle('secretDelete', (p) => {
     const { kind } = secretKindOnlySchema.parse(p)
     services.secrets.delete(SECRET_REFS[kind])
+    if (kind === 'openrouter') services.secrets.delete(LEGACY_OPENROUTER_SECRET_REF)
   })
 
   // --- audit ---
@@ -565,7 +610,8 @@ export function registerIpc(services: Services): void {
     if (response !== 0) {
       return { ok: false, message: 'Rebuild cancelled.' }
     }
-    const result = rebuildAndRelaunch(project.path)
+    const approval = services.lifecycleApprovals.issue('app_refresh', projectId, project.path)
+    const result = rebuildAndRelaunch(project.path, approval)
     services.audit.record({
       projectId,
       actor: 'user',
@@ -606,7 +652,12 @@ export function registerIpc(services: Services): void {
     if (response !== 0) {
       return { ok: false, message: 'Install cancelled.' }
     }
-    const result = installLatestRelease(project.path)
+    const approval = services.lifecycleApprovals.issue(
+      'app_install_release',
+      projectId,
+      project.path,
+    )
+    const result = installLatestRelease(project.path, approval)
     services.audit.record({
       projectId,
       actor: 'user',

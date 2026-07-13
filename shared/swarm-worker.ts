@@ -2,6 +2,7 @@
 // so this module is a security boundary: everything user-authored (card title,
 // body, hub note names) is control-char-stripped and single-quoted before it
 // can reach the shell's line editor.
+import { swarmWorkerContractText } from './swarm-worker-contract'
 
 /** Pointers only — the worker reads notes itself; contents are never inlined. */
 export const HUB_POINTER_CAP = 20
@@ -35,7 +36,7 @@ export function buildWorkerPrompt(
   memoryContext: string | null = null,
 ): string {
   const lines = [
-    `You are a swarm worker in the cockpiT Kanban board, started for one card.`,
+    swarmWorkerContractText(),
     ...(roleText ? [``, roleText] : []),
     ``,
     `CARD: ${card.title}`,

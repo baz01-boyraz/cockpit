@@ -10,7 +10,7 @@ import { classifyRoute } from '@shared/router'
 import { inferLogLevel } from '@shared/log-patterns'
 import type { TerminalScanState } from '@shared/log-sanitize'
 import { initialTerminalScanState, sanitizeChunkToLines, scanTerminalChunk } from '@shared/log-sanitize'
-import { HERMES_RUNTIME_ENABLED } from '@shared/hermes-runtime'
+import { MEMORY_ANALYSIS_ENGINE } from '@shared/memory-model-policy'
 import type { Db } from '../db/Database'
 import { openDatabase } from '../db/Database'
 import type { CockpitEvents } from '../events'
@@ -28,6 +28,7 @@ import { MemoryContextService } from './MemoryContextService'
 import { MemoryReviewService } from './MemoryReviewService'
 import { MemoryPolicyService } from './MemoryPolicyService'
 import { MemoryDistiller } from './MemoryDistiller'
+import { TranscriptReader } from './TranscriptReader'
 import { MemoryPipeline } from './MemoryPipeline'
 import { MemoryCaptureQueue } from './MemoryCaptureQueue'
 import { MemoryAutoCapture } from './MemoryAutoCapture'
@@ -36,21 +37,10 @@ import { MemoryCurationService } from './MemoryCurationService'
 import { MemoryLifecycleSentinel } from './MemoryLifecycleSentinel'
 import { OperationalHealthService } from './OperationalHealthService'
 import { OperationalHealthStateStore } from './OperationalHealthStateStore'
-import { AutomationService } from './AutomationService'
-import { AutomationStateStore } from './AutomationStateStore'
 import { registerMemoryExitCapture } from './memoryExitTrigger'
 import { SwarmService } from './SwarmService'
 import { SentinelService, type SentinelNotifier } from './SentinelService'
-import { CardOutputTracker } from './hermes/CardOutputTracker'
-import { HermesMcpServer } from './hermes/HermesMcpServer'
-import { HermesApprovalExecutor } from './hermes/HermesApprovalExecutor'
-import { HermesChecksService } from './hermes/HermesChecksService'
-import { HermesChatService } from './hermes/HermesChatService'
-import { HermesTriageService } from './hermes/HermesTriageService'
-import { HermesCompletionSummaryService } from './hermes/HermesCompletionSummaryService'
-import { HermesAutomationRunner } from './hermes/HermesAutomationRunner'
 import { SwarmCompletionSteward } from './SwarmCompletionSteward'
-import { AppScreenshotService } from './hermes/AppScreenshotService'
 import { NamedAgentsService } from './NamedAgentsService'
 import { SwarmWorktrees } from './SwarmWorktrees'
 import { SwarmDoneSignal } from './SwarmDoneSignal'
@@ -72,6 +62,7 @@ import { TerminalManager } from './TerminalManager'
 import { MemoryContractService } from './MemoryContractService'
 import { UsageService } from './UsageService'
 import { hasCli } from './cliDetect'
+import { LifecycleApprovalTokenService } from './LifecycleApprovalTokenService'
 
 /**
  * Composition root for the main process. Constructs every service, wires the
@@ -99,14 +90,6 @@ export class Services {
   readonly claudeSessions: ClaudeSessionsService
   readonly agentSessions: AgentSessionsService
   readonly chat: ChatService
-  /** Backend for the Hermes chat widget (docs/plans/hermes.md Faz 7). */
-  readonly hermesChat: HermesChatService
-  /** Faz B: the cheap DeepSeek seat that triages sentinel signals asynchronously. */
-  readonly hermesTriage: HermesTriageService
-  /** Pro seat that interprets already-persisted successful Swarm evidence. */
-  readonly hermesCompletion: HermesCompletionSummaryService
-  /** Flash seat with a harmless tool allowlist for bounded automation verdicts. */
-  readonly hermesAutomation: HermesAutomationRunner
   readonly review: ReviewService
   readonly council: CouncilService
   /** Bounded read-only repository evidence boundary for Council analysis. */
@@ -138,25 +121,15 @@ export class Services {
   readonly memoryLifecycle: MemoryLifecycleSentinel
   /** Scheduled content-free cross-system snapshot and change-only delivery. */
   readonly operationalHealth: OperationalHealthService
-  /** App-owned scheduler; Hermes interprets but never executes its advice. */
-  readonly automation: AutomationService
   readonly swarm: SwarmService
   /** Always-on deterministic signal layer: sensors → dedup → feed + notify. */
   readonly sentinel: SentinelService
   /** Durable success signal + bounded output + Pro summary coordinator. */
   readonly swarmCompletion: SwarmCompletionSteward
   readonly namedAgents: NamedAgentsService
-  /** Session-scoped terminal-output tap for the Hermes `subscribe_card_output` tool. */
-  readonly cardOutput: CardOutputTracker
-  /** Allowlist-only check runner (test/typecheck/lint) for the Hermes `run_checks` tool. */
-  readonly hermesChecks: HermesChecksService
-  /** Build + serve + screenshot pipeline for the Hermes `take_app_screenshot` tool. */
-  readonly appScreenshot: AppScreenshotService
-  /** Local MCP server exposing the narrow Swarm tool set to the Hermes agent. */
-  readonly hermesMcp: HermesMcpServer
-  /** Opens+starts a Swarm card once the human approves a Hermes proposal (Faz 6). */
-  readonly hermesApprovalExecutor: HermesApprovalExecutor
   readonly appUpdate: AppUpdateService
+  /** Mints UI-origin, short-lived, single-use capabilities for app lifecycle actions. */
+  readonly lifecycleApprovals: LifecycleApprovalTokenService
   private closing = false
   /** Per-pane full-screen-TUI mode, so repaint frames never reach the matchers. */
   private readonly tuiState = new Map<string, TerminalScanState>()
@@ -175,13 +148,9 @@ export class Services {
       if (!Notification.isSupported()) return
       new Notification({ title: input.title, body: input.body }).show()
     }
-    // Faz A: the sentinel is constructed BEFORE the sensors that feed it (log
-    // intelligence, approvals, council, swarm) so it can be injected as their
-    // optional collaborator. It is a fire-and-forget sink — report() never throws.
-    // Faz B: its two enrichment collaborators (the DeepSeek triage seat + the
-    // review-queue sink) are built here first so the sentinel gets them at
-    // construction; both are optional — absent, the spine behaves identically.
-    this.hermesTriage = new HermesTriageService()
+    // The sentinel is constructed before the sensors that feed it. Model triage
+    // is deliberately absent: the deterministic signal spine remains useful and
+    // never starts a background orchestrator.
     this.memoryReviews = new MemoryReviewService(this.db)
     this.memoryPolicy = new MemoryPolicyService(this.db)
     // ProjectService + the memory hub are built BEFORE the sentinel so the
@@ -190,28 +159,28 @@ export class Services {
     // verdict still routes to the queue (the hub only serves the direct branch).
     this.projects = new ProjectService(this.db)
     this.memory = new MemoryHubService(this.projects)
+    this.globalMemory = new MemoryHubService(this.projects, join(opts.userDataDir, 'baz-memory'))
     this.memoryRecalls = new MemoryRecallService(this.db)
     this.memoryContexts = new MemoryContextService(
       this.memory,
       this.memoryRecalls,
       this.audit,
+      undefined,
+      this.globalMemory,
     )
     this.sentinel = new SentinelService(
       this.db,
       opts.events,
       notifier,
-      HERMES_RUNTIME_ENABLED ? this.hermesTriage : undefined,
+      undefined,
       this.memoryReviews,
       this.memory,
       this.memoryPolicy,
     )
-    this.hermesCompletion = new HermesCompletionSummaryService()
     this.swarmCompletion = new SwarmCompletionSteward(
       opts.events,
       this.sentinel,
-      HERMES_RUNTIME_ENABLED
-        ? this.hermesCompletion
-        : { summarize: async () => null },
+      { summarize: async () => null },
     )
     this.memoryLifecycle = new MemoryLifecycleSentinel(
       this.sentinel,
@@ -227,17 +196,6 @@ export class Services {
     this.claudeSessions = new ClaudeSessionsService()
     this.agentSessions = new AgentSessionsService(this.claudeSessions)
     this.chat = new ChatService(this.projects, this.memoryContexts, undefined, this.audit)
-    // The MCP bearer token is minted by `hermesMcp` (constructed further down),
-    // so the token is read lazily at ask() time via a thunk — by then the server
-    // exists. This keeps the chat service decoupled from construction order.
-    this.hermesChat = new HermesChatService(
-      this.projects,
-      this.db,
-      undefined,
-      () => this.hermesMcp?.authToken,
-      this.memoryContexts,
-      this.audit,
-    )
     this.review = new ReviewService(this.projects, this.audit, undefined, this.memoryContexts)
     // One session store, shared: the council writes runs to it, the swarm reads
     // a card's approved session back from it at spawn (Faz 2a).
@@ -246,7 +204,6 @@ export class Services {
     // can take it as its Faz D collaborator too — in spec mode the seats gain an
     // inline, relevance-ranked memory-pointer block (file-blind OpenRouter seats
     // have no other view of it).
-    this.globalMemory = new MemoryHubService(this.projects, join(opts.userDataDir, 'baz-memory'))
     this.engineRunner = new EngineRunner(this.secrets)
     this.councilEvidence = new CouncilEvidenceService()
     this.council = new CouncilService(
@@ -275,7 +232,18 @@ export class Services {
     this.memoryLedger = new MemoryLedgerService(this.db)
     // this.memoryReviews is constructed earlier (Faz B) so the sentinel can take
     // it as its gotcha-route review sink.
-    this.memoryDistiller = new MemoryDistiller(this.projects)
+    this.memoryDistiller = new MemoryDistiller(
+      this.projects,
+      new TranscriptReader(),
+      (cwd, prompt) =>
+        this.engineRunner.call(MEMORY_ANALYSIS_ENGINE, prompt, {
+          cwd,
+          timeout: 180_000,
+          maxBuffer: 8 * 1024 * 1024,
+          maxTokens: 4_000,
+          evidenceOnly: true,
+        }),
+    )
     this.memoryPipeline = new MemoryPipeline(
       this.memory,
       this.memoryLedger,
@@ -287,16 +255,27 @@ export class Services {
       this.memoryPolicy,
     )
     this.memoryConsolidator = new MemoryConsolidator(this.memory, this.memoryReviews)
-    // Faz D: the weekly curation sweep. Reuses the triage runner pattern (a cheap
-    // Hermes oneshot); proposals route into the review queue, never a file op.
-    this.memoryCuration = new MemoryCurationService(this.memory, this.memoryReviews, this.audit)
+    // Weekly curation uses the same bounded, tool-less Memory analysis policy;
+    // proposals route into review and never perform a direct file operation.
+    this.memoryCuration = new MemoryCurationService(
+      this.memory,
+      this.memoryReviews,
+      this.audit,
+      (cwd, prompt) =>
+        this.engineRunner.call(MEMORY_ANALYSIS_ENGINE, prompt, {
+          cwd,
+          timeout: 60_000,
+          maxBuffer: 512 * 1024,
+          maxTokens: 2_000,
+          evidenceOnly: true,
+        }),
+    )
     this.memoryCaptureQueue = new MemoryCaptureQueue(this.db, this.memoryLifecycle)
     this.memoryAutoCapture = new MemoryAutoCapture(
       this.memoryCaptureQueue,
       this.memoryPipeline,
       this.projects,
-      this.claudeSessions,
-      { enabled: HERMES_RUNTIME_ENABLED },
+      this.agentSessions,
     )
     // Rehydrate lifecycle pressure from durable state. Models are not involved;
     // only queue status/counts/ages reach Sentinel.
@@ -321,6 +300,7 @@ export class Services {
       )
     }
     this.appUpdate = new AppUpdateService(opts.events)
+    this.lifecycleApprovals = new LifecycleApprovalTokenService(opts.userDataDir)
 
     this.terminals = new TerminalManager(
       this.db,
@@ -371,8 +351,8 @@ export class Services {
       this.memoryRecalls,
       // Real bounded note content reaches every worker prompt.
       this.memoryContexts,
-      // Successful completion: persist evidence first, then let Hermes Pro
-      // interpret and publish exactly one manager notification.
+      // Successful completion persists evidence and publishes one deterministic
+      // manager notification without an orchestrator process.
       this.swarmCompletion,
     )
     this.operationalHealth = new OperationalHealthService({
@@ -389,85 +369,30 @@ export class Services {
       reviews: this.memoryReviews,
       audit: this.audit,
     })
-    this.hermesAutomation = new HermesAutomationRunner()
-    this.automation = new AutomationService({
-      store: new AutomationStateStore(this.db),
-      projects: this.projects,
-      health: this.operationalHealth,
-      runner: this.hermesAutomation,
-      sentinel: this.sentinel,
-      approvals: this.approvals,
-      changed: (projectId) => opts.events.emitTyped('automations:changed', { projectId }),
-    })
     // Forget a pane's TUI-mode state once it exits, so session ids never leak.
     opts.events.onTyped('terminal:exit', ({ sessionId }) => this.tuiState.delete(sessionId))
-
-    // Hermes control surface: a session-scoped output tap plus the local MCP
-    // server that fronts the swarm/usage tools. The server binds to loopback and
-    // starts in the background — a bind failure logs and is swallowed so Hermes
-    // being unavailable can never keep the app from booting.
-    this.cardOutput = new CardOutputTracker(opts.events)
-    this.hermesChecks = new HermesChecksService(this.projects)
-    this.appScreenshot = new AppScreenshotService(this.projects)
-    this.hermesMcp = new HermesMcpServer({
-      swarm: this.swarm,
-      council: this.council,
-      agentUsage: this.agentUsage,
-      cardOutput: this.cardOutput,
-      git: this.git,
-      review: this.review,
-      checks: this.hermesChecks,
-      screenshot: this.appScreenshot,
-      memory: this.memory,
-      memoryReviews: this.memoryReviews,
-      memoryPolicy: this.memoryPolicy,
-      memoryPipeline: this.memoryPipeline,
-      memoryCuration: this.memoryCuration,
-      logs: this.logs,
-      approvals: this.approvals,
-      // Faz C: gate outcomes (accept/review/reject counts, no content) land here.
-      audit: this.audit,
-    })
-    if (HERMES_RUNTIME_ENABLED) {
-      void this.hermesMcp.start().catch((err) => {
-        // Last-resort surface; matches the main process's crash-log fallback.
-        console.error('[Services] HermesMcpServer failed to start:', err)
-      })
-    }
-
-    // Faz 6: when the human approves a Hermes `propose_open_swarm_card` request
-    // on the Dashboard, open+start the proposed card. Registered here alongside
-    // the other event listeners; consumes the approval single-use (idempotent).
-    this.hermesApprovalExecutor = new HermesApprovalExecutor({
-      events: opts.events,
-      approvals: this.approvals,
-      swarm: this.swarm,
-    })
-    if (HERMES_RUNTIME_ENABLED) this.hermesApprovalExecutor.start()
 
     // A crash between staging and Pro publication leaves a durable row. Resume
     // those oldest-first, sequentially; failure keeps the feed evidence intact.
     void this.swarmCompletion.resumePending()
 
-    // The living brain: sweep idle Claude sessions into memory in the background
-    // (docs/memory-imp.md Phase 4). Conservative defaults; all state is durable
+    // The living brain: sweep idle Claude and Codex sessions into memory in the
+    // background. Conservative defaults; all state is durable
     // in the capture queue, so a crash mid-drain resumes on the next boot.
-    if (HERMES_RUNTIME_ENABLED) this.memoryAutoCapture.start()
-    // Faz 5: capture the instant a Claude pane closes, instead of waiting for the
-    // idle-poll. Non-claude terminals never trigger a capture. The idle-poll
-    // above remains the fallback for panes that never emit a clean exit.
-    if (HERMES_RUNTIME_ENABLED) registerMemoryExitCapture(opts.events, this.memoryAutoCapture)
+    this.memoryAutoCapture.start()
+    // Capture when a Claude or Codex pane closes. Other terminal roles do not
+    // trigger capture; the idle poll remains the crash/sleep fallback.
+    registerMemoryExitCapture(opts.events, this.memoryAutoCapture)
 
     // Faz D: weekly memory curation cadence — no new table. Each project's last
     // sweep is read from the append-only audit trail; anything not swept in >7
     // days (or never) gets a fire-and-forget sweep. Fully isolated so it can
     // never block or crash startup.
-    if (HERMES_RUNTIME_ENABLED) this.scheduleCurationSweeps()
+    this.scheduleCurationSweeps()
     // Cross-system health starts only after every sensor dependency exists. Its
     // healthy/unchanged ticks remain silent; only a changed anomaly wakes its
-    // signal path. The visible AutomationService below owns daily delivery.
+    // signal path.
     this.operationalHealth.start()
-    if (HERMES_RUNTIME_ENABLED) this.automation.start()
   }
 
   /** Age threshold before a project's memory hub is re-swept (7 days). */
@@ -661,8 +586,8 @@ export class Services {
       const nowMs = Date.now()
       // Collect the due projects, then sweep SEQUENTIALLY inside one
       // fire-and-forget chain (argos H1): on this feature's first boot every
-      // project is due at once, and a parallel fan-out would mean one hermes
-      // spawn + one paid DeepSeek call PER PROJECT simultaneously. Awaiting
+      // project is due at once, and a parallel fan-out would mean one paid
+      // model call PER PROJECT simultaneously. Awaiting
       // each sweep bounds the fleet to a single spawn regardless of count.
       const due: string[] = []
       for (const project of this.projects.list()) {
@@ -772,19 +697,10 @@ export class Services {
     this.memoryAutoCapture.stop()
     this.memoryLifecycle.dispose()
     this.operationalHealth.stop()
-    this.automation.stop()
-    this.cardOutput.clear()
     this.swarmCompletion.clear()
-    // Fire-and-forget: the process is quitting; closing the socket is best-effort.
-    void this.hermesMcp.stop()
-    // Kill orphaned CLI children BEFORE closing the DB (roadmap A2). Council seats
-    // (claude/codex) and the three Hermes execFile paths (chat up to 5min, triage
-    // and completion summary 45s) otherwise reparent on quit and keep burning
-    // CPU/API spend until their own timeouts. All killAll()s are best-effort.
+    // Kill Council/Memory model children before closing the DB so they cannot
+    // reparent on quit and continue using CPU or provider capacity.
     this.engineRunner.killAll()
-    this.hermesChat.killAll()
-    this.hermesTriage.killAll()
-    this.hermesCompletion.killAll()
     // Kill terminals (flags TerminalManager so late pty events are ignored), then
     // close the DB. Order + flags prevent "database connection is not open".
     this.terminals.killAll()

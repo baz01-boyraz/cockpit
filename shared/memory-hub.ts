@@ -11,6 +11,8 @@ export interface MemoryDoc {
   name: string
   content: string
   updatedAt: string
+  /** Optional provenance for cross-brain retrieval. */
+  brain?: 'project' | 'global'
 }
 
 export interface MemoryNoteSummary {

@@ -585,7 +585,7 @@
 
 /* ==================== usage — capacity command center ====================
  * The Usage hero: one instrument cluster fusing Claude/Codex remaining
- * *capacity* (quota rings) with the Hermes metered *spend* ($), plus a slim
+ * *capacity* (quota rings) with OpenRouter metered *spend* ($), plus a slim
  * activity ledger. Replaces the old stat grid + AI-spend rows + account-quota
  * card that duplicated each other (Codex 18% appeared twice). */
 .capacity {
@@ -623,7 +623,7 @@
   opacity: 0.6;
 }
 
-/* ---------- one engine module (Claude / Codex / Hermes) ---------- */
+/* ---------- one engine module (Claude / Codex / OpenRouter) ---------- */
 .capEngine {
   --ring-a: var(--ember-300);
   --ring-b: var(--ember-500);
@@ -653,7 +653,7 @@
   --ring-b: var(--glacier-500);
   --engine: var(--glacier-400);
 }
-.capEngine--hermes {
+.capEngine--openrouter {
   --ring-a: #d8dce6;
   --ring-b: #a6adbe;
   --engine: #c7ccd6;
@@ -755,7 +755,7 @@
   font-size: var(--fs-xs);
   line-height: 1.5;
 }
-/* Hermes: one credit ring beside the metered-spend headline */
+/* OpenRouter: one credit ring beside the metered-spend headline */
 .capEngine__credit {
   flex: 1 1 auto;
   display: flex;
@@ -927,7 +927,7 @@
   font-size: var(--fs-sm);
 }
 
-/* Hermes dock leaves the command center narrow at a 1280px app window. Keep
+/* Narrow app windows leave the command center compact. Keep
  * all three engines comparable without sacrificing names or forcing 2 + 1. */
 @container (max-width: 700px) {
   .capEngine__head {

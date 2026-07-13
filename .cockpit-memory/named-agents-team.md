@@ -1,11 +1,17 @@
 ---
-schema: 1
+schema: 2
 name: named-agents-team
 title: Swarm identity uses Role × Domain with named-agent override
 class: architecture
 capturedAt: 2026-07-04T20:38:28.342Z
 gate: save
 updatedAt: 2026-07-12T05:03:45.000Z
+status: active
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-04T20:38:28.342Z
+reviewAfter: 2026-10-11T05:20:43.983Z
 ---
 
 # Swarm agent identity

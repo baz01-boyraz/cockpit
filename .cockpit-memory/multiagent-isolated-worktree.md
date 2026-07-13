@@ -1,13 +1,19 @@
 ---
-schema: 1
+schema: 2
 name: multiagent-isolated-worktree
-title: Uncommitted changes leak across parallel agents on same worktree
+title: Concurrent Swarm workers require isolated worktrees
 class: gotcha
-capturedAt: 2026-07-06T06:19:04.523Z
-gate: save
-updatedAt: 2026-07-06T06:19:04.523Z
+gate: manual
+updatedAt: 2026-07-13T05:54:22.765Z
+status: active
+authority: code-verified
+authorityRef: owner-approved agent-memory-system-v2 migration
+scope: project
+confidence: high
+firstSeenAt: 2026-07-13T05:54:22.765Z
+lastVerifiedAt: 2026-07-13T05:54:22.765Z
+reviewAfter: 2027-01-09T05:54:22.766Z
+tags: runtime, memory-v2
 ---
 
-When multiple Swarm agents share the same git working tree (not isolated worktrees), one agent's uncommitted changes are swept into another agent's commit if that second agent runs git add/commit before the first agent commits. Happened in v0.1.43: Agent A (copy button) committed, and its git add+commit picked up Agent B's uncommitted hermes.css changes from the working directory, merging both features into a single commit without Agent B's involvement. The git-bootstrap-flow (worktree isolation) is the fix — without it, cross-contamination is silent and merges unrelated changes into the wrong author's commit.
-
-Related: [[git-bootstrap-flow]], [[hermes-cockpit-decoupled-architecture]]
+When concurrent workers share one git working tree, one workers git add or commit can silently sweep another workers uncommitted files into the wrong change. Every Swarm worker therefore needs its own isolated worktree and scoped branch. Never use broad staging from a shared dirty tree; inspect the explicit file set before commit.

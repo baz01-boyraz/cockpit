@@ -194,7 +194,7 @@ describe('ReviewService.run', () => {
 
   it('degrades to ok:false with the CLI error when the run fails', async () => {
     const { service } = makeService({ staged: patchFor('src/a.ts', '+x') }, async () => {
-      throw Object.assign(new Error('spawn failed'), { stderr: 'hermes: not logged in' })
+      throw Object.assign(new Error('spawn failed'), { stderr: 'review provider: not logged in' })
     })
     const result = await service.run('prj_1')
     expect(result.ok).toBe(false)

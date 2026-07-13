@@ -2,7 +2,11 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { installLatestRelease, isCockpitSource } from '../electron/main/services/localRebuild'
+import {
+  installLatestRelease,
+  isCockpitSource,
+  rebuildAndRelaunch,
+} from '../electron/main/services/localRebuild'
 
 const roots: string[] = []
 
@@ -93,5 +97,28 @@ describe('installLatestRelease (release rebaseline guard)', () => {
 
   it('refuses a directory with no package.json', () => {
     expect(installLatestRelease(makeProject(null)).ok).toBe(false)
+  })
+})
+
+describe('local app lifecycle capability gate', () => {
+  const cockpitPkg = {
+    name: 'cockpit',
+    build: { appId: 'com.boyraz.cockpit' },
+    scripts: {
+      'app:refresh': 'bash scripts/release/refresh-local-app.sh',
+      'app:install-release': 'bash scripts/release/install-release.sh',
+    },
+  }
+
+  it('refuses refresh before spawning when the UI did not issue a one-time approval', () => {
+    const res = rebuildAndRelaunch(makeProject(cockpitPkg))
+    expect(res.ok).toBe(false)
+    expect(res.message).toMatch(/one-time.*approval/i)
+  })
+
+  it('refuses release installation before spawning without a current approval', () => {
+    const res = installLatestRelease(makeProject(cockpitPkg))
+    expect(res.ok).toBe(false)
+    expect(res.message).toMatch(/one-time.*approval/i)
   })
 })

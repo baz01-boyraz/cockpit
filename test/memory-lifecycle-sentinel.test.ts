@@ -15,12 +15,15 @@ const NOW = Date.parse('2026-07-12T06:00:00.000Z')
 const capture = (over: Partial<CaptureJob> = {}): CaptureJob => ({
   id: 'cap-1',
   projectId: 'p1',
+  provider: 'claude',
   sessionId: 'session-1',
   sourcePath: '/private/session.jsonl',
   status: 'queued',
   lastOffset: 0,
   attempts: 1,
   error: null,
+  nextRetryAt: null,
+  guidance: null,
   enqueuedAt: new Date(NOW - 60_000).toISOString(),
   updatedAt: new Date(NOW).toISOString(),
   ...over,
@@ -131,7 +134,7 @@ describe('MemoryLifecycleSentinel', () => {
     expect(classifyMemoryFailure('distiller retry failed: Command timed out')).toBe('timeout')
     expect(classifyMemoryFailure('invalid JSON observations')).toBe('parse')
     expect(classifyMemoryFailure('ENOENT transcript missing')).toBe('missing-input')
-    expect(classifyMemoryFailure('spawn hermes EACCES')).toBe('spawn')
+    expect(classifyMemoryFailure('spawn analysis-provider EACCES')).toBe('spawn')
     expect(classifyMemoryFailure('something else')).toBe('unknown')
   })
 

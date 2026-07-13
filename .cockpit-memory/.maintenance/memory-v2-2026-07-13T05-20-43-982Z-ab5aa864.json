@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "appliedAt": "2026-07-13T05:20:43.982Z",
+  "snapshotId": "2026-07-13T05-20-43-982Z-ab5aa864",
+  "inspected": 126,
+  "changed": 129,
+  "archived": 28,
+  "skipped": 0,
+  "skippedFiles": [],
+  "created": [
+    "runtime-architecture-no-hermes.md",
+    "memory-analysis-provider-neutral.md",
+    "chat-ui-interaction-patterns.md"
+  ],
+  "restoreCommand": "node scripts/memory/migrate-v2.mjs --root .cockpit-memory --restore 2026-07-13T05-20-43-982Z-ab5aa864"
+}

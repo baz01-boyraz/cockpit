@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   MemoryCurationService,
-  type HermesCurationRunner,
+  type CurationRunner,
 } from '../electron/main/services/MemoryCurationService'
 import type { MemoryDoc } from '../shared/memory-hub'
 
@@ -49,12 +49,12 @@ const NOW = () => Date.parse('2026-07-08T00:00:00.000Z')
 describe('MemoryCurationService.sweep', () => {
   it('queues a review + audits for each inventory-backed proposal (happy path)', async () => {
     const deps = makeDeps()
-    const runner: HermesCurationRunner = vi.fn(async () => ({
-      stdout: JSON.stringify([
+    const runner: CurationRunner = vi.fn(async () =>
+      JSON.stringify([
         { note: 'stale-fact', action: 'archive', reason: 'no longer true' },
         { note: 'duplicate', action: 'merge', into: 'canonical', reason: 'same as canonical' },
       ]),
-    }))
+    )
     const svc = new MemoryCurationService(deps.memory, deps.reviews, deps.audit, runner, NOW)
 
     const result = await svc.sweep('p1')
@@ -88,13 +88,13 @@ describe('MemoryCurationService.sweep', () => {
 
   it('drops proposals that reference notes not in the inventory', async () => {
     const deps = makeDeps()
-    const runner: HermesCurationRunner = vi.fn(async () => ({
-      stdout: JSON.stringify([
+    const runner: CurationRunner = vi.fn(async () =>
+      JSON.stringify([
         { note: 'ghost-note', action: 'archive', reason: 'hallucinated' },
         { note: 'duplicate', action: 'merge', into: 'also-ghost', reason: 'bad target' },
         { note: 'stale-fact', action: 'archive', reason: 'real one' },
       ]),
-    }))
+    )
     const svc = new MemoryCurationService(deps.memory, deps.reviews, deps.audit, runner, NOW)
 
     const result = await svc.sweep('p1')
@@ -106,7 +106,7 @@ describe('MemoryCurationService.sweep', () => {
 
   it('returns null and creates nothing when output is garbage', async () => {
     const deps = makeDeps()
-    const runner: HermesCurationRunner = vi.fn(async () => ({ stdout: 'I could not decide, sorry.' }))
+    const runner: CurationRunner = vi.fn(async () => 'I could not decide, sorry.')
     const svc = new MemoryCurationService(deps.memory, deps.reviews, deps.audit, runner, NOW)
 
     await expect(svc.sweep('p1')).resolves.toBeNull()
@@ -121,7 +121,7 @@ describe('MemoryCurationService.sweep', () => {
 
   it('records a zero-proposal sweep for a healthy hub ([] output)', async () => {
     const deps = makeDeps()
-    const runner: HermesCurationRunner = vi.fn(async () => ({ stdout: '[]' }))
+    const runner: CurationRunner = vi.fn(async () => '[]')
     const svc = new MemoryCurationService(deps.memory, deps.reviews, deps.audit, runner, NOW)
 
     const result = await svc.sweep('p1')
@@ -134,7 +134,7 @@ describe('MemoryCurationService.sweep', () => {
 
   it('returns null on a runner timeout — no throw, no creates', async () => {
     const deps = makeDeps()
-    const runner: HermesCurationRunner = vi.fn(async () => {
+    const runner: CurationRunner = vi.fn(async () => {
       throw Object.assign(new Error('Command failed'), { killed: true })
     })
     const svc = new MemoryCurationService(deps.memory, deps.reviews, deps.audit, runner, NOW)
@@ -151,25 +151,21 @@ describe('MemoryCurationService.sweep', () => {
 
   it('returns null for an empty hub without calling the model', async () => {
     const deps = makeDeps([])
-    const runner: HermesCurationRunner = vi.fn(async () => ({ stdout: '[]' }))
+    const runner: CurationRunner = vi.fn(async () => '[]')
     const svc = new MemoryCurationService(deps.memory, deps.reviews, deps.audit, runner, NOW)
 
     await expect(svc.sweep('p1')).resolves.toBeNull()
     expect(runner).not.toHaveBeenCalled()
   })
 
-  it('passes the cheap model + oneshot argv, prompt is a discrete argv entry', async () => {
+  it('passes one bounded prompt to the provider-neutral analysis runner', async () => {
     const deps = makeDeps()
-    const runner: HermesCurationRunner = vi.fn(async () => ({ stdout: '[]' }))
+    const runner: CurationRunner = vi.fn(async () => '[]')
     const svc = new MemoryCurationService(deps.memory, deps.reviews, deps.audit, runner, NOW)
 
     await svc.sweep('p1')
 
-    const args = (runner as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[]
-    expect(args).toContain('--ignore-rules')
-    expect(args).toEqual(expect.arrayContaining(['-m', 'deepseek/deepseek-v4-flash']))
-    expect(args).toContain('--oneshot')
-    const prompt = args[args.indexOf('--oneshot') + 1]
+    const prompt = (runner as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string
     expect(prompt).toMatch(/UNTRUSTED DATA/)
     expect(prompt).toMatch(/Lifecycle/)
   })

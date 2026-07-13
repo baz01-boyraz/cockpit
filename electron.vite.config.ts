@@ -18,7 +18,6 @@ const PROD_CSP = [
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'none'",
-  "frame-ancestors 'none'",
 ].join('; ')
 
 function strictCspPlugin(): Plugin {

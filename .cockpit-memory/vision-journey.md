@@ -1,3 +1,18 @@
+---
+schema: 2
+name: vision-journey
+title: Vision Journey
+class: reference
+gate: manual
+updatedAt: 2026-07-13T05:20:43.982Z
+status: archived
+authority: legacy
+scope: project
+confidence: low
+firstSeenAt: 2026-07-13T05:20:43.982Z
+reviewAfter: 2026-07-13T05:20:43.982Z
+---
+
 # Vision Journey
 
 The master execution roadmap lives in `docs/cockpit-VISION.md` — 7 phases, each

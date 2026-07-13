@@ -1,17 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CapturedBlock, TerminalCommandStatus } from '@shared/command-blocks'
-import type { ReviewResult } from '@shared/review'
 import { ansiToHtml } from '@shared/ansi-to-html'
 import { formatDuration, relativeTime } from '@shared/time'
-import { HERMES_RUNTIME_ENABLED } from '@shared/hermes-runtime'
-import { cockpit } from '../lib/cockpit'
-import { ReviewFindings, reviewFailure } from './ReviewFindings'
-import { IconChevron, IconCopy, IconCheck, IconRestart, IconShieldSearch, IconTerminal } from './icons'
+import { IconChevron, IconCopy, IconCheck, IconRestart, IconTerminal } from './icons'
 
 interface BlocksViewProps {
   blocks: CapturedBlock[]
-  /** Owning project — the block→review bridge reviews within its boundary. */
-  projectId: string
   /** Re-run a captured command (writes it back to the live terminal). */
   onRerun: (command: string) => void
 }
@@ -30,15 +24,12 @@ function statusLabel(block: CapturedBlock): string {
 
 interface BlockCardProps {
   block: CapturedBlock
-  projectId: string
   onRerun: (command: string) => void
 }
 
-function BlockCard({ block, projectId, onRerun }: BlockCardProps) {
+function BlockCard({ block, onRerun }: BlockCardProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [review, setReview] = useState<ReviewResult | null>(null)
-  const [reviewing, setReviewing] = useState(false)
   const outputHtml = useMemo(() => ansiToHtml(block.output), [block.output])
   const hasOutput = block.output.trim().length > 0
 
@@ -55,24 +46,6 @@ function BlockCard({ block, projectId, onRerun }: BlockCardProps) {
       setCopied(true)
     } catch {
       /* clipboard unavailable (e.g. insecure context) — ignore */
-    }
-  }
-
-  // Block → review bridge: the captured command + output travel through the
-  // SAME sanitizer boundary as a diff review. Re-click while running = no-op.
-  const runReview = async () => {
-    if (reviewing) return
-    setReviewing(true)
-    try {
-      const res = await cockpit().review.runText(projectId, {
-        label: block.command,
-        content: `$ ${block.command}\n${block.output}`,
-      })
-      setReview(res)
-    } catch (err) {
-      setReview(reviewFailure(err))
-    } finally {
-      setReviewing(false)
     }
   }
 
@@ -112,16 +85,6 @@ function BlockCard({ block, projectId, onRerun }: BlockCardProps) {
           >
             <IconRestart width={13} height={13} />
           </button>
-          {HERMES_RUNTIME_ENABLED && (
-            <button
-              className={`iconbtn ${reviewing ? 'iconbtn--busy' : ''}`}
-              title="Review this block with AI"
-              disabled={!block.command && !hasOutput}
-              onClick={() => void runReview()}
-            >
-              <IconShieldSearch width={13} height={13} />
-            </button>
-          )}
         </span>
       </div>
       {!collapsed && (
@@ -135,18 +98,6 @@ function BlockCard({ block, projectId, onRerun }: BlockCardProps) {
           )}
         </div>
       )}
-      {(reviewing || review) && (
-        <div className="cmdcard__review">
-          {reviewing ? (
-            <div className="review__busy review__busy--compact">
-              <span className="review__pulse" aria-hidden />
-              Reviewing this block…
-            </div>
-          ) : review ? (
-            <ReviewFindings result={review} compact />
-          ) : null}
-        </div>
-      )}
     </div>
   )
 }
@@ -157,7 +108,7 @@ function BlockCard({ block, projectId, onRerun }: BlockCardProps) {
  * cards: each shows the command, an exit-status pill, duration and timestamp, and
  * collapsible ANSI-coloured output. It overlays the live terminal when toggled on.
  */
-export function BlocksView({ blocks, projectId, onRerun }: BlocksViewProps) {
+export function BlocksView({ blocks, onRerun }: BlocksViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const atBottomRef = useRef(true)
   const lastCount = useRef(blocks.length)
@@ -191,7 +142,7 @@ export function BlocksView({ blocks, projectId, onRerun }: BlocksViewProps) {
   return (
     <div className="termblocks" ref={scrollRef} onScroll={onScroll}>
       {blocks.map((block) => (
-        <BlockCard key={block.id} block={block} projectId={projectId} onRerun={onRerun} />
+        <BlockCard key={block.id} block={block} onRerun={onRerun} />
       ))}
     </div>
   )

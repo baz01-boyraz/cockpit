@@ -25,7 +25,7 @@
 import { z } from 'zod'
 import { normalizeNoteName } from './wikilink'
 
-export const MEMORY_NOTE_SCHEMA_VERSION = 1
+export const MEMORY_NOTE_SCHEMA_VERSION = 2
 
 /** The classes the distiller may assign. Kept small and stable on purpose. */
 export const NOTE_CLASSES = [
@@ -40,6 +40,26 @@ export type NoteClass = (typeof NOTE_CLASSES)[number]
 /** How a note entered the brain. */
 export const NOTE_GATES = ['save', 'asked', 'manual', 'consolidation'] as const
 export type NoteGate = (typeof NOTE_GATES)[number]
+
+export const NOTE_STATUSES = ['active', 'superseded', 'archived'] as const
+export type NoteStatus = (typeof NOTE_STATUSES)[number]
+
+export const NOTE_AUTHORITIES = [
+  'human-directive',
+  'code-verified',
+  'source-authority',
+  'equivalent-content',
+  'observed',
+  'model-inference',
+  'legacy',
+] as const
+export type NoteAuthority = (typeof NOTE_AUTHORITIES)[number]
+
+export const NOTE_SCOPES = ['project', 'global'] as const
+export type NoteScope = (typeof NOTE_SCOPES)[number]
+
+export const NOTE_CONFIDENCE = ['high', 'medium', 'low'] as const
+export type NoteConfidence = (typeof NOTE_CONFIDENCE)[number]
 
 const isoString = z
   .string()
@@ -57,6 +77,29 @@ export const noteFrontmatterSchema = z.object({
   gate: z.enum(NOTE_GATES),
   updatedAt: isoString,
   tags: z.array(z.string().min(1)).default([]),
+  status: z.enum(NOTE_STATUSES).optional(),
+  authority: z.enum(NOTE_AUTHORITIES).optional(),
+  authorityRef: z.string().min(1).max(500).optional(),
+  scope: z.enum(NOTE_SCOPES).optional(),
+  confidence: z.enum(NOTE_CONFIDENCE).optional(),
+  firstSeenAt: isoString.optional(),
+  lastVerifiedAt: isoString.optional(),
+  reviewAfter: isoString.optional(),
+  supersedes: z.array(z.string().min(1)).optional(),
+}).superRefine((value, ctx) => {
+  if (value.schema < 2) return
+  for (const key of [
+    'status',
+    'authority',
+    'scope',
+    'confidence',
+    'firstSeenAt',
+    'reviewAfter',
+  ] as const) {
+    if (value[key] === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: `${key} is required in schema v2` })
+    }
+  }
 })
 
 export type NoteFrontmatter = z.infer<typeof noteFrontmatterSchema>
@@ -66,6 +109,37 @@ export interface ParsedNote {
   frontmatter: NoteFrontmatter | null
   /** Everything after the frontmatter block (or the whole file when absent). */
   body: string
+}
+
+export interface NoteLifecycle {
+  status: NoteStatus
+  authority: NoteAuthority
+  authorityRef: string | null
+  scope: NoteScope
+  confidence: NoteConfidence
+  firstSeenAt: string | null
+  lastVerifiedAt: string | null
+  reviewAfter: string | null
+  supersedes: string[]
+}
+
+/** Normalize legacy/plain notes without rewriting them on read. */
+export function noteLifecycle(frontmatter: NoteFrontmatter | null): NoteLifecycle {
+  return {
+    status: frontmatter?.status ?? 'active',
+    authority: frontmatter?.authority ?? 'legacy',
+    authorityRef: frontmatter?.authorityRef ?? null,
+    scope: frontmatter?.scope ?? 'project',
+    confidence: frontmatter?.confidence ?? 'low',
+    firstSeenAt: frontmatter?.firstSeenAt ?? frontmatter?.capturedAt ?? null,
+    lastVerifiedAt: frontmatter?.lastVerifiedAt ?? null,
+    reviewAfter: frontmatter?.reviewAfter ?? null,
+    supersedes: frontmatter?.supersedes ?? [],
+  }
+}
+
+export function isActiveNote(content: string): boolean {
+  return noteLifecycle(parseNote(content).frontmatter).status === 'active'
 }
 
 // Matches the leading `---` block and swallows the single blank line
@@ -109,7 +183,8 @@ function parseFlatBlock(block: string): Record<string, unknown> | null {
         break
       }
       case 'tags':
-        out.tags = value
+      case 'supersedes':
+        out[key] = value
           .split(',')
           .map((t) => t.trim())
           .filter(Boolean)
@@ -134,6 +209,15 @@ export function serializeNote(frontmatter: NoteFrontmatter, body: string): strin
   if (frontmatter.capturedAt) lines.push(`capturedAt: ${frontmatter.capturedAt}`)
   lines.push(`gate: ${frontmatter.gate}`)
   lines.push(`updatedAt: ${frontmatter.updatedAt}`)
+  if (frontmatter.status) lines.push(`status: ${frontmatter.status}`)
+  if (frontmatter.authority) lines.push(`authority: ${frontmatter.authority}`)
+  if (frontmatter.authorityRef) lines.push(`authorityRef: ${frontmatter.authorityRef}`)
+  if (frontmatter.scope) lines.push(`scope: ${frontmatter.scope}`)
+  if (frontmatter.confidence) lines.push(`confidence: ${frontmatter.confidence}`)
+  if (frontmatter.firstSeenAt) lines.push(`firstSeenAt: ${frontmatter.firstSeenAt}`)
+  if (frontmatter.lastVerifiedAt) lines.push(`lastVerifiedAt: ${frontmatter.lastVerifiedAt}`)
+  if (frontmatter.reviewAfter) lines.push(`reviewAfter: ${frontmatter.reviewAfter}`)
+  if (frontmatter.supersedes) lines.push(`supersedes: ${frontmatter.supersedes.join(', ')}`)
   if (frontmatter.tags.length > 0) lines.push(`tags: ${frontmatter.tags.join(', ')}`)
   lines.push('---', '')
   const trimmedBody = body.replace(/^\r?\n+/, '')
@@ -177,6 +261,7 @@ export function validateNoteContent(slug: string, content: string): NoteValidati
     if (frontmatter.schema > MEMORY_NOTE_SCHEMA_VERSION) {
       errors.push(`note schema ${frontmatter.schema} is newer than supported ${MEMORY_NOTE_SCHEMA_VERSION}`)
     }
+    if (frontmatter.schema < 1) errors.push('note schema must be at least 1')
   }
   if (body.trim().length === 0) {
     errors.push('note body is empty')

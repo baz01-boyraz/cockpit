@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cockpit } from '../../lib/cockpit'
 import type { MemoryHealth } from '@shared/memory-health'
 import type { MemoryHubSnapshot, MemoryNote } from '@shared/memory-hub'
+import type {
+  MemoryCaptureOverview,
+  MemoryCaptureProviderCoverage,
+} from '@shared/memory-capture'
 import type { ReviewItem } from '@shared/memory-review'
 import {
   GLOBAL_DEFAULT_TRUST_MODE,
@@ -13,6 +17,7 @@ import {
   type MemoryTrustMode,
 } from '@shared/memory-policy'
 import { BAZ_GLOBAL_BRAIN } from '@shared/memory-ledger'
+import { relativeTime } from '@shared/time'
 import { IconBolt, IconCheck, IconChevron, IconMemory, IconX } from '../icons'
 import {
   isBatchCleanup,
@@ -36,6 +41,34 @@ interface CaptureReport {
 
 function msg(err: unknown): string {
   return err instanceof Error ? err.message : 'The brain hit an error.'
+}
+
+const captureStageLabel: Record<MemoryCaptureOverview['jobs'][number]['status'], string> = {
+  queued: 'Waiting to read',
+  reading: 'Reading transcript',
+  distilling: 'Finding durable facts',
+  reconciling: 'Checking duplicates',
+  committing: 'Saving approved facts',
+  retry_wait: 'Waiting to retry',
+  blocked: 'Needs your help',
+  done: 'Captured',
+  error: 'Retry needed',
+}
+
+function providerState(provider: MemoryCaptureProviderCoverage): string {
+  if (provider.blocked > 0) return `${provider.blocked} need${provider.blocked === 1 ? 's' : ''} help`
+  if (provider.pending > 0) return `${provider.pending} in progress`
+  if (provider.captured > 0) return 'Up to date'
+  if (provider.sessions > 0) return 'Ready to learn'
+  return 'No sessions yet'
+}
+
+function snapshotWhen(id: string): string {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z/.exec(id)
+  if (!match) return id
+  const iso = `${match[1]}T${match[2]}:${match[3]}:${match[4]}.${match[5]}Z`
+  const relative = relativeTime(iso)
+  return relative === 'now' ? 'just now' : `${relative} ago`
 }
 
 const legacyTrustKey = (projectId: string): string => `cockpit.memory.trust.${projectId}`
@@ -86,6 +119,10 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
   const [showBaz, setShowBaz] = useState(false)
   const [mode, setMode] = useState<MemoryTrustMode>(PROJECT_DEFAULT_TRUST_MODE)
   const [globalMode, setGlobalMode] = useState<MemoryTrustMode>(GLOBAL_DEFAULT_TRUST_MODE)
+  const [captureOverview, setCaptureOverview] = useState<MemoryCaptureOverview | null>(null)
+  const [snapshots, setSnapshots] = useState<string[]>([])
+  const [retryingJob, setRetryingJob] = useState<string | null>(null)
+  const [restoreArmed, setRestoreArmed] = useState<string | null>(null)
   const activeProjectRef = useRef(projectId)
 
   const loadReviewQueues = useCallback(async (): Promise<ReviewItem[]> => {
@@ -111,17 +148,21 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
 
   const refresh = useCallback(async () => {
     try {
-      const [h, q, projectMode, bazMode] = await Promise.all([
+      const [h, q, projectMode, bazMode, captureState, recoveryPoints] = await Promise.all([
         cockpit().memory.health(projectId),
         loadReviewQueues(),
         loadTrustMode('project'),
         loadTrustMode('global'),
+        cockpit().memory.captureStatus(projectId),
+        cockpit().memory.snapshots(projectId),
       ])
       if (activeProjectRef.current !== projectId) return
       setHealth(h)
       setReviews(q)
       setMode(projectMode)
       setGlobalMode(bazMode)
+      setCaptureOverview(captureState)
+      setSnapshots(recoveryPoints)
     } catch (err) {
       if (activeProjectRef.current !== projectId) return
       setError(msg(err))
@@ -141,6 +182,10 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
     setActiveReviewId(null)
     setMode(PROJECT_DEFAULT_TRUST_MODE)
     setGlobalMode(GLOBAL_DEFAULT_TRUST_MODE)
+    setCaptureOverview(null)
+    setSnapshots([])
+    setRetryingJob(null)
+    setRestoreArmed(null)
     void refresh()
   }, [refresh, projectId])
 
@@ -224,14 +269,19 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
     setFlash(null)
     setReport(null)
     try {
-      const sessions = await cockpit().terminals.claudeSessions(projectId)
+      const sessions = await cockpit().terminals.agentSessions(projectId)
       if (sessions.length === 0) {
-        setFlash('No Claude sessions found for this project yet.')
+        setFlash('No Claude or Codex sessions found for this project yet.')
         return
       }
       const session = sessions[0]
       const beforeIds = new Set(reviews.map((r) => r.id))
-      const res = await cockpit().memory.captureSession(projectId, session.id, false)
+      const res = await cockpit().memory.captureSession(
+        projectId,
+        session.provider,
+        session.id,
+        false,
+      )
       if (res.error) {
         setError(res.error)
         return
@@ -261,6 +311,46 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
       setBusy(false)
     }
   }, [projectId, loadReviewQueues, refresh, onChanged, reviews])
+
+  const retryCapture = useCallback(async (jobId: string) => {
+    setRetryingJob(jobId)
+    setError(null)
+    setFlash(null)
+    try {
+      const overview = await cockpit().memory.retryCapture(projectId, jobId)
+      if (activeProjectRef.current !== projectId) return
+      setCaptureOverview(overview)
+      setFlash('Capture retried. Its live stage is shown below.')
+      await refresh()
+      onChanged()
+    } catch (err) {
+      if (activeProjectRef.current === projectId) setError(msg(err))
+    } finally {
+      if (activeProjectRef.current === projectId) setRetryingJob(null)
+    }
+  }, [onChanged, projectId, refresh])
+
+  const restoreSnapshot = useCallback(async (snapshotId: string) => {
+    if (restoreArmed !== snapshotId) {
+      setRestoreArmed(snapshotId)
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setFlash(null)
+    try {
+      const result = await cockpit().memory.restoreSnapshot(projectId, snapshotId)
+      if (activeProjectRef.current !== projectId) return
+      setRestoreArmed(null)
+      setFlash(`Memory restored. A new safety snapshot (${result.safetySnapshotId}) preserves the state from before this restore.`)
+      await refresh()
+      onChanged()
+    } catch (err) {
+      if (activeProjectRef.current === projectId) setError(msg(err))
+    } finally {
+      if (activeProjectRef.current === projectId) setBusy(false)
+    }
+  }, [onChanged, projectId, refresh, restoreArmed])
 
   const resolve = useCallback(
     async (item: ReviewItem, decision: 'accept' | 'edit' | 'discard') => {
@@ -391,6 +481,88 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
       </div>
 
       <p className="brainbar__mode">{MEMORY_TRUST_META[mode].effect}</p>
+
+      {captureOverview && (
+        <section className="captureHealth" aria-label="Claude and Codex memory capture status">
+          <div className="captureHealth__providers">
+            {captureOverview.providers.map((provider) => (
+              <article
+                key={provider.provider}
+                className={`captureProvider ${provider.blocked > 0 ? 'captureProvider--blocked' : ''}`}
+              >
+                <div className="captureProvider__head">
+                  <strong>{provider.provider === 'claude' ? 'Claude' : 'Codex'}</strong>
+                  <span>{providerState(provider)}</span>
+                </div>
+                <div className="captureProvider__numbers">
+                  <span><b>{provider.sessions}</b> sessions</span>
+                  <span><b>{provider.captured}</b> captured</span>
+                  {provider.lastCapturedAt && (
+                    <span>last {relativeTime(provider.lastCapturedAt)}</span>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+
+          {captureOverview.jobs.some((job) => job.status !== 'done') && (
+            <div className="captureJobs">
+              {captureOverview.jobs
+                .filter((job) => job.status !== 'done')
+                .map((job) => (
+                  <div className="captureJob" key={job.id}>
+                    <span className={`captureJob__dot captureJob__dot--${job.status}`} aria-hidden />
+                    <div className="captureJob__copy">
+                      <strong>{job.provider === 'claude' ? 'Claude' : 'Codex'} · {captureStageLabel[job.status]}</strong>
+                      {job.guidance && <span>{job.guidance}</span>}
+                    </div>
+                    {(job.status === 'blocked' || job.status === 'error') && (
+                      <button
+                        className="brainbtn brainbtn--sm"
+                        disabled={retryingJob === job.id}
+                        onClick={() => void retryCapture(job.id)}
+                      >
+                        {retryingJob === job.id ? 'Retrying…' : 'Retry'}
+                      </button>
+                    )}
+                  </div>
+                ))}
+            </div>
+          )}
+
+          <details className="memoryRecovery">
+            <summary>
+              Recovery · {snapshots.length} safety snapshot{snapshots.length === 1 ? '' : 's'}
+            </summary>
+            {snapshots.length === 0 ? (
+              <p>No recovery point yet. Consolidate creates one before changing anything.</p>
+            ) : (
+              <div className="memoryRecovery__list">
+                {snapshots.slice(0, 5).map((snapshotId, index) => (
+                  <div className="memoryRecovery__row" key={snapshotId}>
+                    <div>
+                      <strong>{index === 0 ? 'Latest safety point' : 'Earlier safety point'}</strong>
+                      <span className="mono">{snapshotWhen(snapshotId)}</span>
+                    </div>
+                    <button
+                      className={`brainbtn brainbtn--sm ${restoreArmed === snapshotId ? 'memoryRecovery__confirm' : ''}`}
+                      onClick={() => void restoreSnapshot(snapshotId)}
+                      disabled={busy}
+                    >
+                      {restoreArmed === snapshotId ? 'Confirm restore' : 'Restore'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {restoreArmed && (
+              <p className="memoryRecovery__warning">
+                Confirm once more. Cockpit will first save today&rsquo;s state as a new safety snapshot.
+              </p>
+            )}
+          </details>
+        </section>
+      )}
 
       {report && (
         <div className="capreport">

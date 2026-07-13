@@ -45,4 +45,39 @@ describe('parseTranscriptLine', () => {
     expect(parseTranscriptLine('{ not valid json')).toBeNull()
     expect(parseTranscriptLine('')).toBeNull()
   })
+
+  it('parses canonical Codex event messages without provider-specific duplication', () => {
+    const user = JSON.stringify({
+      timestamp: '2026-07-12T10:00:00Z',
+      type: 'event_msg',
+      payload: { type: 'user_message', message: 'Fix the capture pipeline' },
+    })
+    const assistant = JSON.stringify({
+      timestamp: '2026-07-12T10:01:00Z',
+      type: 'event_msg',
+      payload: { type: 'agent_message', message: 'Implemented and verified.' },
+    })
+
+    expect(parseTranscriptLine(user)).toEqual({
+      role: 'user',
+      text: 'Fix the capture pipeline',
+      timestamp: '2026-07-12T10:00:00Z',
+    })
+    expect(parseTranscriptLine(assistant)).toEqual({
+      role: 'assistant',
+      text: 'Implemented and verified.',
+      timestamp: '2026-07-12T10:01:00Z',
+    })
+  })
+
+  it('ignores Codex response_item mirrors, tool traffic, and reasoning records', () => {
+    for (const line of [
+      { type: 'response_item', payload: { role: 'user', content: 'duplicate user turn' } },
+      { type: 'response_item', payload: { role: 'assistant', content: 'duplicate reply' } },
+      { type: 'event_msg', payload: { type: 'agent_reasoning', text: 'private reasoning' } },
+      { type: 'event_msg', payload: { type: 'tool_call', command: 'npm test' } },
+    ]) {
+      expect(parseTranscriptLine(JSON.stringify(line))).toBeNull()
+    }
+  })
 })
