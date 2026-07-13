@@ -5,6 +5,7 @@ interface ActiveMask {
   key: string
   marker: IMarker
   decoration: IDecoration
+  cursorInactiveStyle: Terminal['options']['cursorInactiveStyle']
 }
 
 /**
@@ -75,7 +76,9 @@ export class NativeInputMask {
       element.classList.add('terminal-native-input-mask')
       element.setAttribute('aria-hidden', 'true')
     })
-    this.active = { key, marker, decoration }
+    const cursorInactiveStyle = this.term.options.cursorInactiveStyle
+    this.term.options.cursorInactiveStyle = 'none'
+    this.active = { key, marker, decoration, cursorInactiveStyle }
   }
 
   dispose(): void {
@@ -89,5 +92,6 @@ export class NativeInputMask {
     this.active = null
     active.decoration.dispose()
     active.marker.dispose()
+    this.term.options.cursorInactiveStyle = active.cursorInactiveStyle
   }
 }
