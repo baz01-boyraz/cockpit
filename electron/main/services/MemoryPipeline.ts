@@ -90,8 +90,13 @@ export class MemoryPipeline {
   async capture(req: CaptureRequest): Promise<CaptureResult> {
     req.onStage?.('reading')
     const sourceId = req.sessionId && req.provider ? `${req.provider}:${req.sessionId}` : req.sessionId
-    const projectDocs = this.memory.listDocs(req.projectId)
-    const userDocs = this.userMemory ? this.userMemory.listDocs(BAZ_GLOBAL_BRAIN) : []
+    // Archived/superseded notes stay out of retrieval, but reconciliation must
+    // still see their slugs and facts. Otherwise a new observation can collide
+    // with retired history and accidentally reactivate it at the write boundary.
+    const projectDocs = this.memory.listDocs(req.projectId, { includeInactive: true })
+    const userDocs = this.userMemory
+      ? this.userMemory.listDocs(BAZ_GLOBAL_BRAIN, { includeInactive: true })
+      : []
 
     const distilled = await this.distiller.distill({
       projectId: req.projectId,

@@ -228,6 +228,34 @@ describe('MemoryLifecycleSentinel', () => {
     )
   })
 
+  it('does not keep alerting on migrated legacy failures after capture has recovered', () => {
+    const h = harness()
+    const legacyFailures = Array.from({ length: 137 }, (_, index) =>
+      capture({
+        id: `legacy-${index}`,
+        sessionId: `legacy-session-${index}`,
+        status: 'error',
+        attempts: 3,
+        error: 'distiller CLI failed with legacy output',
+        guidance: null,
+        updatedAt: '2026-07-05T00:00:00.000Z',
+      }),
+    )
+    const recovered = capture({
+      id: 'recovered',
+      sessionId: 'current-session',
+      status: 'done',
+      attempts: 0,
+      error: null,
+      guidance: null,
+      updatedAt: '2026-07-12T05:59:00.000Z',
+    })
+
+    h.sensor.scanProject('p1', [...legacyFailures, recovered], false)
+
+    expect(h.reports).toHaveLength(0)
+  })
+
   it('does not call an empty hub stale merely because it has no sweep history', () => {
     const h = harness()
     h.sensor.registerProject(

@@ -3,7 +3,10 @@ import type { ProjectService } from './ProjectService'
 import type { AgentSessionsService } from './AgentSessionsService'
 import type { MemoryCaptureQueue } from './MemoryCaptureQueue'
 import type { MemoryPipeline } from './MemoryPipeline'
-import type { MemoryCaptureNotice } from '@shared/memory-capture'
+import {
+  MEMORY_CAPTURE_RECENT_MS,
+  type MemoryCaptureNotice,
+} from '@shared/memory-capture'
 
 export interface AutoCaptureOptions {
   /** A session must be quiet this long before it is captured (default 10 min). */
@@ -23,7 +26,6 @@ export interface AutoCaptureOptions {
 }
 
 const MIN = 60_000
-const DAY = 24 * 60 * MIN
 
 /**
  * Automatic capture (docs/memory-imp.md Phase 4, G1+G2). A gentle background
@@ -57,7 +59,7 @@ export class MemoryAutoCapture {
   ) {
     this.idleMs = opts.idleMs ?? 10 * MIN
     this.pollMs = opts.pollMs ?? 90_000
-    this.recentMs = opts.recentMs ?? 3 * DAY
+    this.recentMs = opts.recentMs ?? MEMORY_CAPTURE_RECENT_MS
     this.maxPerDrain = opts.maxPerDrain ?? 2
     this.now = opts.now ?? (() => Date.now())
     this.enabled = opts.enabled ?? true

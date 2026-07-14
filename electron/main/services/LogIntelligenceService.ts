@@ -1,8 +1,8 @@
-import type { ErrorInsight, LogEvent, LogLevel, LogSourceType } from '@shared/domain'
+import type { ErrorInsight, LogEvent, LogLevel, LogSourceType, TerminalRole } from '@shared/domain'
 import type { InsightOccurrence } from '@shared/insight-aggregation'
 import { aggregateInsights, insightFromMatch } from '@shared/insight-aggregation'
 import { inferLogLevel, matchLogLine } from '@shared/log-patterns'
-import { sanitizeStoredLine } from '@shared/log-sanitize'
+import { sanitizeStoredLine, terminalRoleProducesActionableLogs } from '@shared/log-sanitize'
 import { redactText } from '@shared/redaction'
 import type { Db } from '../db/Database'
 import type { CockpitEvents } from '../events'
@@ -26,6 +26,7 @@ interface LogRow {
   message: string
   metadata_json: string
   created_at: string
+  terminal_role?: string | null
 }
 
 interface InsightRow {
@@ -41,6 +42,8 @@ interface InsightRow {
   created_at: string
   /** Joined only by listInsights so legacy rows pass today's sanitizer. */
   log_message?: string | null
+  /** Joined so agent-pane rows captured by older builds can be retired on read. */
+  terminal_role?: string | null
 }
 
 /** Map a raw SQLite row to the shared per-occurrence shape. */
@@ -178,10 +181,21 @@ export class LogIntelligenceService {
     // Over-fetch, then drop legacy rows that are pure ANSI/TUI garbage so the
     // panel stays clean even for output captured before sanitization existed.
     const rows = this.db
-      .prepare('SELECT * FROM log_events WHERE project_id = ? ORDER BY created_at DESC LIMIT ?')
+      .prepare(
+        `SELECT l.*, t.role AS terminal_role
+         FROM log_events l
+         LEFT JOIN terminal_sessions t
+           ON l.source_type = 'terminal' AND t.id = l.source_id
+         WHERE l.project_id = ?
+           AND (t.role IS NULL OR t.role NOT IN ('claude', 'codex'))
+         ORDER BY l.created_at DESC LIMIT ?`,
+      )
       .all(projectId, Math.min(limit * 3, 600)) as LogRow[]
     const events: LogEvent[] = []
     for (const r of rows) {
+      if (!terminalRoleProducesActionableLogs((r.terminal_role ?? null) as TerminalRole | null)) {
+        continue
+      }
       // Redact on the way out too: rows ingested before redaction existed may
       // still hold secret-shaped content on disk.
       const sanitized = sanitizeStoredLine(r.message)
@@ -210,9 +224,11 @@ export class LogIntelligenceService {
     // (bounded per project), so aggregating in-process is cheap.
     const rows = this.db
       .prepare(
-        `SELECT i.*, l.message AS log_message
+        `SELECT i.*, l.message AS log_message, t.role AS terminal_role
          FROM error_insights i
          LEFT JOIN log_events l ON l.id = i.log_event_id
+         LEFT JOIN terminal_sessions t
+           ON l.source_type = 'terminal' AND t.id = l.source_id
          WHERE i.project_id = ?
          ORDER BY i.created_at DESC`,
       )
@@ -227,13 +243,34 @@ export class LogIntelligenceService {
       .all(projectId) as { pattern: string; dismissed_up_to: string }[]
     for (const d of drows) dismissals.set(d.pattern, d.dismissed_up_to)
 
-    // Re-run today's sanitizer on the linked legacy line. This removes known
-    // recovered-runtime/TUI false positives from existing databases without
-    // deleting the evidence that explains what was captured.
-    const actionableRows = rows.filter(
-      (row) => row.log_message == null || sanitizeStoredLine(row.log_message) !== null,
-    )
-    return aggregateInsights(actionableRows.map(toOccurrence), dismissals, limit)
+    // Re-run today's sanitizer AND matcher on linked legacy lines. Sanitizing
+    // alone is insufficient: old broad rules may have persisted an insight for
+    // an ordinary line which is still readable but no longer qualifies as that
+    // failure. When it does still qualify, project today's provider-neutral
+    // title/action/agent so stale Railway-era advice cannot survive forever.
+    const actionableRows: InsightOccurrence[] = []
+    for (const row of rows) {
+      if (!terminalRoleProducesActionableLogs((row.terminal_role ?? null) as TerminalRole | null)) {
+        continue
+      }
+      const occurrence = toOccurrence(row)
+      // An orphaned insight has no evidence left to sanitize or revalidate.
+      // Hiding it is safer than preserving stale legacy guidance indefinitely.
+      if (row.log_message == null) continue
+      const sanitized = sanitizeStoredLine(row.log_message)
+      if (sanitized === null) continue
+      const current = matchLogLine(sanitized)
+      if (!current || current.pattern !== row.matched_pattern) continue
+      actionableRows.push({
+        ...occurrence,
+        title: current.title,
+        likelyCause: current.likelyCause,
+        suggestedAction: current.suggestedAction,
+        suggestedAgent: current.suggestedAgent,
+        severity: current.severity,
+      })
+    }
+    return aggregateInsights(actionableRows, dismissals, limit)
   }
 
   /**

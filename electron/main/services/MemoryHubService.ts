@@ -133,6 +133,10 @@ export class MemoryHubService {
     if (content.length > MAX_NOTE_CHARS) {
       throw new Error('Note is too large — split it up.')
     }
+    const existing = this.read(projectId, slug)
+    if (existing && !isActiveNote(existing.content) && isActiveNote(content)) {
+      throw new Error('Archived or superseded Memory cannot be reactivated by an ordinary write.')
+    }
     const hub = this.hubDir(projectId)
     mkdirSync(hub, { recursive: true })
     const path = this.notePath(hub, slug)

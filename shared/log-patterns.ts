@@ -7,6 +7,7 @@
  * cheap, deterministic, and good enough to be useful before any LLM is involved.
  */
 import type { AgentType, ErrorSeverity } from './domain'
+import { isNonActionableLogLine } from './log-sanitize'
 
 export interface PatternMatch {
   pattern: string
@@ -86,8 +87,8 @@ const PATTERNS: PatternDef[] = [
     test: /(deploy(?:ment)?\s+(?:failed|crashed)|railway.*(?:error|failed|crashed)|(?:build|service)\s+crashed.*\bdeploy(?:ment)?\b)/i,
     title: 'Deployment problem',
     likelyCause: 'A deploy or service on the infrastructure provider failed or crashed.',
-    suggestedAction: 'Check the service logs in the Railway panel before redeploying (redeploy needs approval).',
-    suggestedAgent: 'railway',
+    suggestedAction: 'Check the configured deployment provider logs before retrying or redeploying.',
+    suggestedAgent: 'local',
     severity: 'high',
   },
   {
@@ -103,6 +104,7 @@ const PATTERNS: PatternDef[] = [
 
 /** Return the first matching pattern for a line, or null. */
 export function matchLogLine(line: string): PatternMatch | null {
+  if (isNonActionableLogLine(line)) return null
   for (const p of PATTERNS) {
     if (p.test.test(line)) {
       return {

@@ -138,11 +138,21 @@ export class MemoryCaptureQueue {
   /** Claim the oldest ready job (marking it reading), or null when idle/backing off. */
   claimNext(): CaptureJob | null {
     const now = this.now().toISOString()
-    const row = this.db
+    const ready = this.db
       .prepare(
-        "SELECT * FROM memory_capture_queue WHERE status = 'queued' OR (status = 'retry_wait' AND next_retry_at <= ?) ORDER BY enqueued_at ASC LIMIT 1",
+        "SELECT * FROM memory_capture_queue WHERE status = 'queued' OR (status = 'retry_wait' AND next_retry_at <= ?) ORDER BY enqueued_at ASC",
       )
-      .get(now) as QueueRow | undefined
+      .all(now) as QueueRow[]
+    const providerBlocks = new Set(
+      (this.db
+        .prepare("SELECT * FROM memory_capture_queue WHERE status = 'blocked'")
+        .all() as QueueRow[])
+        .filter((candidate) => classifyCaptureFailure(candidate.error ?? '').scope === 'provider')
+        .map((candidate) => `${candidate.project_id}\u0000${candidate.provider}`),
+    )
+    const row = ready.find(
+      (candidate) => !providerBlocks.has(`${candidate.project_id}\u0000${candidate.provider}`),
+    )
     if (!row) return null
     this.db
       .prepare("UPDATE memory_capture_queue SET status = 'reading', next_retry_at = NULL, updated_at = ? WHERE id = ?")

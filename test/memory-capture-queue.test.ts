@@ -37,7 +37,18 @@ function makeQueueDb() {
           }
           return undefined
         },
-        all: (...args: unknown[]) => rows.filter((r) => r.project_id === args[0]),
+        all: (...args: unknown[]) => {
+          if (sql.includes("status = 'queued' OR")) {
+            const now = String(args[0])
+            return [...rows]
+              .filter((r) => r.status === 'queued' || (r.status === 'retry_wait' && Boolean(r.next_retry_at && r.next_retry_at <= now)))
+              .sort((a, b) => a.enqueued_at.localeCompare(b.enqueued_at))
+          }
+          if (sql.includes("WHERE status = 'blocked'")) {
+            return rows.filter((r) => r.status === 'blocked')
+          }
+          return rows.filter((r) => r.project_id === args[0])
+        },
         run: (...args: unknown[]) => {
           if (sql.includes('INSERT INTO memory_capture_queue')) {
             rows.push({ ...(args[0] as Row) })
@@ -175,6 +186,21 @@ describe('MemoryCaptureQueue', () => {
     const blocked = q.fail(job.id, 'Add an OpenRouter key in Settings to continue.')
     expect(blocked).toMatchObject({ status: 'blocked', attempts: 0 })
     expect(blocked?.guidance).toMatch(/Settings.*Retry/i)
+  })
+
+  it('uses one provider configuration block instead of failing every queued session', () => {
+    const { db } = makeQueueDb()
+    const q = new MemoryCaptureQueue(db)
+    q.enqueue(input)
+    q.enqueue({ ...input, sessionId: 's2', sourcePath: '/x/s2.jsonl' })
+    q.enqueue({ ...input, provider: 'codex', sessionId: 'c1', sourcePath: '/x/c1.jsonl' })
+
+    const first = q.claimNext()!
+    q.fail(first.id, 'Add an OpenRouter key in Settings to continue.')
+
+    expect(q.claimNext()).toMatchObject({ provider: 'codex', sessionId: 'c1' })
+    q.retry(first.id)
+    expect(q.claimNext()).toMatchObject({ provider: 'claude' })
   })
 
   it('recovers a job stuck processing after a crash', () => {

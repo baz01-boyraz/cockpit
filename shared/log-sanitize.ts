@@ -13,6 +13,7 @@
  * Regexes are built with the RegExp constructor and string escapes so the
  * source file itself never embeds literal control bytes.
  */
+import type { TerminalRole } from './domain'
 
 // Matches ANSI escape sequences: CSI/SGR colour codes, OSC strings, etc.
 // Adapted from the `ansi-regex` package (MIT).
@@ -41,20 +42,58 @@ const CURSOR_CONTROL = new RegExp('\\u001B\\[[0-9;?]*[A-HJKSTfhlsu]')
 // A PTY chunk can begin halfway through an SGR sequence. With the ESC and
 // opening parameter lost, stripAnsi cannot recognize the remainder; it looks
 // like ordinary source text and can self-match words such as "eslint|error".
-const ORPHANED_SGR_PREFIX = /^;\d+(?:;\d+)*m/
+const ORPHANED_SGR_PREFIX = /^;?(?:\d{1,3};)*\d{1,3}m/
+
+// A chunk can also lose the ESC byte but retain the final CSI command itself.
+// `[K` is the most common shape in persisted rows from ink-style CLI repaints.
+const ORPHANED_CSI_PREFIX = /^\[(?:K|[0-9;?]*[A-HJKSTfhlsu])/
 
 // Chromium logs this exact self-recovery when Electron's network helper is
 // restarted. It is useful renderer diagnostics, but not an application/deploy
 // failure and therefore must never enter error intelligence or Sentinel.
 const ELECTRON_NETWORK_SERVICE_RECOVERY =
-  /\b(?:content\/browser\/)?network_service_instance_impl\.cc(?::\d+|\(\d+\))\]\s+Network service crashed(?: or was terminated)?,\s*restarting service\.?$/i
+  /\bnetwork_service_instance_impl\.cc(?:[:(]\d+\)?)?\]?[^\n]*\bNetwork service crashed(?: or was terminated)?[^\n]*\brestart/i
+
+// Rows persisted before cross-chunk TUI state existed can be fragments of a
+// source preview rather than command output. Keep these signatures narrow and
+// structural: assertions, code throws, rule fingerprints/regex definitions,
+// quoted object properties, and the exact pipe-delimited matcher vocabulary.
+const SOURCE_ASSERTION = /\b(?:expect|describe|it)\s*\(.*\)\.(?:toBe|toEqual|toMatch|toContain)\s*\(/i
+const SOURCE_THROW = /\bthrow\s+new\s+Error\s*\(/i
+const LOG_INTELLIGENCE_FINGERPRINT = /::log-intelligence::/i
+const QUOTED_FAILURE_PROPERTY =
+  /^[A-Za-z_$][\w$]*\s*:\s*["'`][^"'`]*(?:Error|failed|Cannot find module)/i
+const MATCHER_VOCAB_ALTERNATION =
+  /\b(?:typecheck|tsc|lint|eslint|fail(?:ed)?|error|crash(?:ed)?)(?:\s*\|\s*(?:typecheck|tsc|lint|eslint|fail(?:ed)?|error|crash(?:ed)?))+/i
+const REGEX_RULE_SOURCE =
+  /(?:\/.*(?:error|failed|crashed).*\/[dgimsuvy]*[,;]?\s*$|\.\*.*(?:error|failed|crashed).*\/[dgimsuvy]*[,;]?\s*$)/i
+const SUBSTITUTION_SOURCE = /^[a-z]\/\w+(?:\/\w+){2,}/i
+const LINE_NUMBERED_DIFF = /^\d+\s+[+-]\s+/
+
+function isLegacySourceEcho(line: string): boolean {
+  return (
+    SOURCE_ASSERTION.test(line) ||
+    SOURCE_THROW.test(line) ||
+    LOG_INTELLIGENCE_FINGERPRINT.test(line) ||
+    QUOTED_FAILURE_PROPERTY.test(line) ||
+    MATCHER_VOCAB_ALTERNATION.test(line) ||
+    REGEX_RULE_SOURCE.test(line) ||
+    SUBSTITUTION_SOURCE.test(line) ||
+    LINE_NUMBERED_DIFF.test(line)
+  )
+}
 
 /** Known transport/repaint chatter with no owner action. Kept narrow: each
  * signature is an exact runtime shape observed in Cockpit, not a generic
  * suppression of words such as "network" or "crashed". */
 export function isNonActionableLogLine(clean: string): boolean {
   const line = clean.trim()
-  return ORPHANED_SGR_PREFIX.test(line) || ELECTRON_NETWORK_SERVICE_RECOVERY.test(line)
+  return (
+    ORPHANED_SGR_PREFIX.test(line) ||
+    ORPHANED_CSI_PREFIX.test(line) ||
+    ELECTRON_NETWORK_SERVICE_RECOVERY.test(line) ||
+    isLegacySourceEcho(line)
+  )
 }
 
 /** Remove ANSI escape sequences and stray control characters from a string. */
@@ -159,6 +198,18 @@ export interface TerminalScanResult {
 /** Initial scan state for a freshly-opened pane. */
 export function initialTerminalScanState(): TerminalScanState {
   return { tuiActive: false }
+}
+
+/**
+ * Agent panes render prompts, patches, source previews, and test output rather
+ * than owning the commands being observed. Feeding those bytes back into log
+ * intelligence creates a self-ingestion loop, so only ordinary shell/tool
+ * roles are eligible for terminal log capture.
+ */
+export function terminalRoleProducesActionableLogs(
+  role: TerminalRole | null,
+): boolean {
+  return role !== 'claude' && role !== 'codex'
 }
 
 /** Index of the last match of `re` in `s`, or -1. Mutates only `re.lastIndex`. */

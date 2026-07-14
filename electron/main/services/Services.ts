@@ -9,7 +9,12 @@ import { DASHBOARD_RECENT_ERRORS_LIMIT, assembleDashboard } from '@shared/dashbo
 import { classifyRoute } from '@shared/router'
 import { inferLogLevel } from '@shared/log-patterns'
 import type { TerminalScanState } from '@shared/log-sanitize'
-import { initialTerminalScanState, sanitizeChunkToLines, scanTerminalChunk } from '@shared/log-sanitize'
+import {
+  initialTerminalScanState,
+  sanitizeChunkToLines,
+  scanTerminalChunk,
+  terminalRoleProducesActionableLogs,
+} from '@shared/log-sanitize'
 import { MEMORY_ANALYSIS_ENGINE } from '@shared/memory-model-policy'
 import type { Db } from '../db/Database'
 import { openDatabase } from '../db/Database'
@@ -669,6 +674,11 @@ export class Services {
    */
   private handleTerminalOutput(projectId: string, sessionId: string, data: string): void {
     if (this.closing) return
+    const role = this.terminals.get(sessionId)?.role ?? null
+    if (!terminalRoleProducesActionableLogs(role)) {
+      this.tuiState.delete(sessionId)
+      return
+    }
     const prev = this.tuiState.get(sessionId) ?? initialTerminalScanState()
     const scan = scanTerminalChunk(data, prev)
     this.tuiState.set(sessionId, scan.state)

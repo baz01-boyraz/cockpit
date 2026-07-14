@@ -323,4 +323,31 @@ describe('operational health evaluator', () => {
       expect(serialized).not.toContain(forbidden)
     }
   })
+
+  it('does not count recovered migration-era capture failures as current health errors', () => {
+    const legacyErrors = Array.from({ length: 137 }, (_, index) =>
+      capture({
+        id: `legacy-${index}`,
+        sessionId: `legacy-session-${index}`,
+        status: 'error',
+        attempts: 3,
+        guidance: null,
+        updatedAt: '2026-07-05T00:00:00.000Z',
+      }),
+    )
+    const recovered = capture({
+      id: 'recovered',
+      sessionId: 'current-session',
+      status: 'done',
+      attempts: 0,
+      error: null,
+      updatedAt: '2026-07-12T11:59:00.000Z',
+    })
+
+    const result = evaluateOperationalHealth(
+      healthy({ memory: { captureJobs: [...legacyErrors, recovered], reviews: [] } }),
+    )
+
+    expect(result.memory.errors).toBe(0)
+  })
 })

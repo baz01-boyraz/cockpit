@@ -12,6 +12,7 @@ import type { Observation } from '@shared/memory-observation'
 import type { ReviewItem } from '@shared/memory-review'
 import type { MemoryBrainScope, MemoryTrustMode } from '@shared/memory-policy'
 import { BAZ_GLOBAL_BRAIN, projectBrain } from '@shared/memory-ledger'
+import { serializeNote } from '@shared/memory-note-schema'
 
 const stubProjects = (path: string): ProjectService =>
   ({ get: () => ({ path }) }) as unknown as ProjectService
@@ -175,6 +176,33 @@ describe('MemoryPipeline.capture', () => {
     const res = await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
     expect(res.skipped).toBe(1)
     expect(res.committed).toBe(0)
+  })
+
+  it('treats archived notes as reconciliation history and never reactivates them', async () => {
+    const archived = serializeNote({
+      schema: 2,
+      name: 'router-placement',
+      title: 'Router in shared',
+      class: 'decision',
+      gate: 'manual',
+      updatedAt: '2026-07-12T00:00:00.000Z',
+      tags: [],
+      status: 'archived',
+      authority: 'human-directive',
+      scope: 'project',
+      confidence: 'high',
+      firstSeenAt: '2026-07-12T00:00:00.000Z',
+      reviewAfter: '2027-01-01T00:00:00.000Z',
+      supersedes: [],
+    }, obs().body)
+    memory.write('p1', 'router-placement', archived)
+    const pipe = new MemoryPipeline(memory, fakeLedger().svc, fakeReviews().svc, stubDistiller([obs()]))
+
+    const res = await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
+
+    expect(res).toMatchObject({ committed: 0, queued: 0, skipped: 1 })
+    expect(memory.read('p1', 'router-placement')?.content).toBe(archived)
+    expect(memory.list('p1').archived.map((note) => note.name)).toEqual(['router-placement'])
   })
 
   it('skips repeated captures of one bullet already buried in a long note', async () => {

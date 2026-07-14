@@ -5,7 +5,7 @@ import type {
   TerminalSession,
 } from './domain'
 import type { KanbanCard } from './kanban'
-import type { CaptureJob } from './memory-capture'
+import { actionableCaptureFailures, type CaptureJob } from './memory-capture'
 import type { ReviewItem } from './memory-review'
 
 /**
@@ -348,7 +348,7 @@ export function evaluateOperationalHealth(
   const processing = captureJobs.filter((item) =>
     ['reading', 'distilling', 'reconciling', 'committing'].includes(item.status),
   )
-  const captureErrors = captureJobs.filter((item) => item.status === 'error').length
+  const captureErrors = actionableCaptureFailures(captureJobs).length
   const stuckProcessing = processing.filter((item) =>
     ageAtLeast(item.updatedAt, now, OPERATIONAL_HEALTH_POLICY.stuckCaptureMs),
   ).length

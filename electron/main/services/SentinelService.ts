@@ -502,6 +502,11 @@ export class SentinelService {
     if (!this.reviews) return
     try {
       const slug = `signal-${kebab(signal.title)}`
+      const existingNames = this.hubNoteNames(signal.projectId)
+      // A recurrence note is a durable dedup key. Active twins need no second
+      // proposal; archived twins are an explicit owner decision and must never
+      // be resurrected or pushed back into the inbox by a later signal.
+      if (existingNames.includes(slug)) return
       const content = [
         signal.title,
         '',
@@ -514,8 +519,8 @@ export class SentinelService {
 
       // The gate here is the secret floor + charter shape check. We route to
       // review regardless of accept-vs-review (the sentinel never auto-commits),
-      // so only a hard `reject` (secret) changes the outcome. existingNames is []
-      // — the sentinel has no hub docs, and the human reviewer is the twin check.
+      // so only a hard `reject` (secret) changes the outcome. The durable hub
+      // twin check above keeps both active and archived notes out of this path.
       const gate = gateMemoryWrite({
         name: slug,
         content,
@@ -524,7 +529,7 @@ export class SentinelService {
           dedupChecked: 'no-overlap',
           evidence: `sentinel signal ${signal.id}: ${signal.title}`,
         },
-        existingNames: [],
+        existingNames,
       })
       if (gate.verdict === 'reject') return
 
@@ -557,6 +562,11 @@ export class SentinelService {
   private routeRecurrenceGotcha(signal: SentinelSignal, occurrences: number): void {
     try {
       const slug = `signal-${kebab(signal.title)}`
+      const existingNames = this.hubNoteNames(signal.projectId)
+      // The slug is the durable recurrence identity. An active note already
+      // captured the lesson; an archived one records the owner's decision to
+      // retire it. Neither may be duplicated, overwritten, or re-queued.
+      if (existingNames.includes(slug)) return
       const content = [
         `# ${signal.title}`,
         '',
@@ -569,7 +579,6 @@ export class SentinelService {
         `captured from recurring sentinel signal ${signal.id}`,
       ].join('\n')
 
-      const existingNames = this.hubNoteNames(signal.projectId)
       const gate = gateMemoryWrite({
         name: slug,
         content,
@@ -618,7 +627,10 @@ export class SentinelService {
    *  failure (or no hub), so a lookup problem degrades to no dedup, never a throw. */
   private hubNoteNames(projectId: string): string[] {
     try {
-      return this.memory?.list(projectId).notes.map((n) => n.name) ?? []
+      const snapshot = this.memory?.list(projectId)
+      return snapshot
+        ? [...snapshot.notes, ...snapshot.archived].map((note) => note.name)
+        : []
     } catch {
       return []
     }

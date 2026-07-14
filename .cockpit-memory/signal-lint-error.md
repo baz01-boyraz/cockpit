@@ -5,7 +5,7 @@ title: Generic recurring lint signal
 class: gotcha
 capturedAt: 2026-07-14T06:06:06.207Z
 gate: save
-updatedAt: 2026-07-14T06:06:06.207Z
+updatedAt: 2026-07-14T17:39:47.882Z
 status: archived
 authority: observed
 scope: project
@@ -14,14 +14,16 @@ firstSeenAt: 2026-07-14T06:06:06.207Z
 reviewAfter: 2026-10-12T06:06:06.207Z
 ---
 
-# Generic recurring lint signal
+# Lint error
 
 Symptom (verbatim):
 Lint error
 ESLint reported one or more errors. · Run the linter with --fix where possible, then address remaining errors.
 
-Recurred 3× as a `log-intelligence` sentinel signal — a repeat-offender pattern worth remembering.
+Recurred 4× as a `log-intelligence` sentinel signal — a repeat-offender pattern worth remembering.
 
-This generic signal is archived because it contains no project-specific root
-cause or durable resolution. Future capture should retain a lint incident only
-when it adds concrete evidence that can prevent recurrence.
+captured from recurring sentinel signal sig_7db9606915b94641
+
+This generic signal remains archived because the occurrences came from log
+classification noise and contain no project-specific root cause or durable
+resolution.

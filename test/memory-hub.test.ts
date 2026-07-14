@@ -52,6 +52,33 @@ describe('MemoryHubService', () => {
     expect(service.health('prj_1').noteCount).toBe(1)
   })
 
+  it('refuses to reactivate archived history through an ordinary write', () => {
+    const { service } = makeHubProject()
+    const archived = serializeNote({
+      schema: 2,
+      name: 'closed-incident',
+      title: 'Closed incident',
+      class: 'gotcha',
+      gate: 'manual',
+      updatedAt: '2026-07-12T00:00:00.000Z',
+      tags: [],
+      status: 'archived',
+      authority: 'human-directive',
+      scope: 'project',
+      confidence: 'high',
+      firstSeenAt: '2026-07-12T00:00:00.000Z',
+      reviewAfter: '2027-01-01T00:00:00.000Z',
+      supersedes: [],
+    }, 'This incident is closed history.')
+    service.write('prj_1', 'closed-incident', archived)
+
+    expect(() =>
+      service.write('prj_1', 'closed-incident', '# Closed incident\n\nA recurring signal tried to recreate it.'),
+    ).toThrow(/archived|inactive|reactivat/i)
+    expect(service.read('prj_1', 'closed-incident')?.content).toBe(archived)
+    expect(service.list('prj_1').archived.map((note) => note.name)).toEqual(['closed-incident'])
+  })
+
   it('writes, lists, and reads notes with backlinks and unresolved targets', () => {
     const { service } = makeHubProject()
     service.write('prj_1', 'Auth Flow', '# Auth Flow\nuses [[session-store]] and [[ghost]]')

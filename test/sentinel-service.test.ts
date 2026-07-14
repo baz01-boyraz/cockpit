@@ -59,10 +59,14 @@ function seedRow(
 }
 
 /** A hub write sink whose `list` reports the given existing note slugs (twin check). */
-function makeMemory(existing: string[] = []) {
+function makeMemory(existing: string[] = [], archived: string[] = []) {
   const write = vi.fn((_p: string, _n: string, _c: string) => ({}) as MemoryNote)
   const list = vi.fn(
-    (_p: string) => ({ notes: existing.map((name) => ({ name })) }) as unknown as MemoryHubSnapshot,
+    (_p: string) => ({
+      notes: existing.map((name) => ({ name })),
+      archived: archived.map((name) => ({ name })),
+      unresolved: [],
+    }) as unknown as MemoryHubSnapshot,
   )
   return { memory: { write, list } as unknown as SentinelMemorySink, write, list }
 }
@@ -664,7 +668,7 @@ describe('SentinelService recurrence gotcha (Track H3)', () => {
     expect(content).toContain('cannot find module @shared/x') // verbatim symptom text
   })
 
-  it('routes to the review queue when a twin note already exists (gate → review, not direct)', () => {
+  it('does not recreate or requeue a recurrence note that already exists', () => {
     const store = makeDb()
     seedRow(store.rows, { projectId: 'p1', source: 'approval', title: 'Approval keeps timing out', createdAt: '2020-01-01T00:00:00.000Z' })
     seedRow(store.rows, { projectId: 'p1', source: 'approval', title: 'Approval keeps timing out', createdAt: '2020-01-02T00:00:00.000Z' })
@@ -674,8 +678,28 @@ describe('SentinelService recurrence gotcha (Track H3)', () => {
 
     svc.report({ projectId: 'p1', severity: 'notice', source: 'approval', title: 'Approval keeps timing out', summary: 's' })
     expect(write).not.toHaveBeenCalled()
-    expect(create).toHaveBeenCalledTimes(1)
-    expect(create.mock.calls[0][0].slug).toBe('signal-approval-keeps-timing-out')
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('never resurrects an archived recurrence note or sends it back to the inbox', () => {
+    const store = makeDb()
+    seedRow(store.rows, { projectId: 'p1', source: 'memory-lifecycle', title: 'Memory capture stopped after repeated failures', createdAt: '2020-01-01T00:00:00.000Z' })
+    seedRow(store.rows, { projectId: 'p1', source: 'memory-lifecycle', title: 'Memory capture stopped after repeated failures', createdAt: '2020-01-02T00:00:00.000Z' })
+    const slug = 'signal-memory-capture-stopped-after-repeated-failures'
+    const { memory, write } = makeMemory([], [slug])
+    const { reviews, create } = makeReviewSink()
+    const svc = new SentinelService(store.db, new CockpitEvents(), undefined, undefined, reviews, memory)
+
+    svc.report({
+      projectId: 'p1',
+      severity: 'alert',
+      source: 'memory-lifecycle',
+      title: 'Memory capture stopped after repeated failures',
+      summary: '137 capture jobs exhausted automatic retries.',
+    })
+
+    expect(write).not.toHaveBeenCalled()
+    expect(create).not.toHaveBeenCalled()
   })
 
   it('routes an otherwise accepted recurrence to review when the project brain is Manual', () => {

@@ -7,6 +7,7 @@ import {
   sanitizeStoredLine,
   scanTerminalChunk,
   stripAnsi,
+  terminalRoleProducesActionableLogs,
 } from '@shared/log-sanitize'
 
 const ESC = '\u001b'
@@ -85,6 +86,32 @@ describe('sanitizeChunkToLines', () => {
     ).toEqual([])
     expect(sanitizeChunkToLines(';43m         st|typecheck|tsc|lint|eslint|fail|error')).toEqual([])
   })
+
+  it('drops the exact split-SGR and source-echo debris captured in the Logs screen', () => {
+    const polluted = [
+      '33;58;43m: var(--warning-wash);',
+      "44;48;2;33;58;43m 'Build failed',",
+      "2;205;214;244;48;2;33;58;43msignal) throw new Error('Signal was not found in this project.')",
+      'm [42684:0713/232525.513342:ERROR:content/browser/network_service_instance_impl.cc:721] Network service crashed or was terminated, restart',
+      '[K    tsc|lint|eslint|fail|error',
+      'rds such as "eslint|error".',
+      'ext: "Error: Cannot find module \'@shared/schemas\'",',
+      "rint: 'p1::log-intelligence::build failed',",
+      '4;34;29m: /(deploy(ment)? failed|railway.*(error|failed)|build.*cr',
+    ]
+
+    for (const line of polluted) expect(sanitizeChunkToLines(line)).toEqual([])
+  })
+
+  it('keeps real line-oriented failures while rejecting source previews', () => {
+    expect(sanitizeChunkToLines("Error: Cannot find module '@shared/schemas'")).toEqual([
+      "Error: Cannot find module '@shared/schemas'",
+    ])
+    expect(sanitizeChunkToLines('Deployment failed: production build crashed')).toEqual([
+      'Deployment failed: production build crashed',
+    ])
+    expect(sanitizeChunkToLines('ESLint: 2 errors')).toEqual(['ESLint: 2 errors'])
+  })
 })
 
 describe('sanitizeStoredLine', () => {
@@ -107,6 +134,16 @@ describe('sanitizeStoredLine', () => {
   it('hides legacy orphaned SGR rows from the log stream', () => {
     expect(
       sanitizeStoredLine(';244;48;2;74;34;29mtypecheck|tsc|lint|eslint|fail|error|w'),
+    ).toBeNull()
+  })
+
+  it('hides legacy screenshot debris even when the escape prefix was split differently', () => {
+    expect(sanitizeStoredLine('33;58;43m: var(--warning-wash);')).toBeNull()
+    expect(sanitizeStoredLine("44;48;2;33;58;43m 'Build failed',")).toBeNull()
+    expect(sanitizeStoredLine('[K    tsc|lint|eslint|fail|error')).toBeNull()
+    expect(sanitizeStoredLine('ext: "Error: Cannot find module \'@shared/schemas\'",')).toBeNull()
+    expect(
+      sanitizeStoredLine('7 +      "Error: Cannot find module \'@shared/schemas\'",'),
     ).toBeNull()
   })
 })
@@ -160,5 +197,14 @@ describe('scanTerminalChunk', () => {
     expect(entered.state.tuiActive).toBe(true)
     const left = scanTerminalChunk(`${ESC}[?1049l`, entered.state)
     expect(left.state.tuiActive).toBe(false)
+  })
+})
+
+describe('terminalRoleProducesActionableLogs', () => {
+  it('never feeds Claude/Codex TUI output back into log intelligence', () => {
+    expect(terminalRoleProducesActionableLogs('claude')).toBe(false)
+    expect(terminalRoleProducesActionableLogs('codex')).toBe(false)
+    expect(terminalRoleProducesActionableLogs('backend')).toBe(true)
+    expect(terminalRoleProducesActionableLogs(null)).toBe(true)
   })
 })

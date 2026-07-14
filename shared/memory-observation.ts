@@ -40,7 +40,7 @@ export const observationSchema = z.object({
 export type Observation = z.infer<typeof observationSchema>
 
 export const distillResultSchema = z.object({
-  observations: z.array(observationSchema),
+  observations: z.array(observationSchema).max(3),
 })
 
 export type DistillResult = z.infer<typeof distillResultSchema>
@@ -63,6 +63,13 @@ Extract only durable, high-signal facts. GOOD: an architectural decision and its
 reason, a non-obvious gotcha, a stable preference of Baz's, a hard constraint.
 BAD: transient status, routine edits, anything obvious from the code, anything
 that will be stale next week. If nothing is worth keeping, return an empty list.
+
+Return at most 3 observations per capture. Combine closely related findings into
+one self-contained note instead of producing a cluster of tiny incident notes.
+An unresolved diagnosis, a planned fix, or a statement that work is still in
+progress is transient status — omit it. For a failure-mode gotcha, the transcript
+must show the verified outcome: what failed, why, what replaced it, and how the
+replacement was checked. A diagnosis without a verified correction is not Memory.
 
 Also surface a failure-mode observation when the session shows a clear
 mistake-then-correction pattern — an approach was tried, did NOT work, and a

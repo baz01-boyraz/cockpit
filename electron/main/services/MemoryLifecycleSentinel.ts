@@ -1,5 +1,5 @@
 import type { AuditEntry } from '@shared/domain'
-import type { CaptureJob } from '@shared/memory-capture'
+import { actionableCaptureFailures, type CaptureJob } from '@shared/memory-capture'
 import { projectBrain } from '@shared/memory-ledger'
 import {
   MEMORY_LIFECYCLE_POLICY,
@@ -50,7 +50,7 @@ export class MemoryLifecycleSentinel {
     captureJobs: readonly CaptureJob[] = [],
     curationExpected = true,
   ): void {
-    const exhausted = captureJobs.filter((job) => job.status === 'error')
+    const exhausted = actionableCaptureFailures(captureJobs)
     if (exhausted.length > 0) this.reportCapturePressure(projectId, exhausted)
     this.scanReviews(projectId, projectBrain(projectId))
     if (curationExpected) this.scanCurationStaleness(projectId)

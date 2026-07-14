@@ -47,6 +47,14 @@ describe('buildDistillPrompt', () => {
     expect(p).toContain('precision over recall')
     expect(p).toContain('empty list')
   })
+
+  it('forbids unresolved task status and caps one turn to a few consolidated facts', () => {
+    const p = buildDistillPrompt({ turns, projectSlugs: [], userSlugs: [] })
+    expect(p).toMatch(/at most 3 observations/i)
+    expect(p).toMatch(/planned fix|unresolved diagnosis/i)
+    expect(p).toMatch(/verified/i)
+    expect(p).toMatch(/combine|consolidat/i)
+  })
 })
 
 describe('parseObservations', () => {
@@ -87,5 +95,17 @@ describe('parseObservations', () => {
       observations: [{ scope: 'project', class: 'decision', targetSlug: 'Bad Slug/../x', isNew: true, title: 'x', body: 'y', decision: 'save', reason: 'z' }],
     })
     expect(parseObservations(badSlug).ok).toBe(false)
+  })
+
+  it('rejects a noisy reply with more than three observations', () => {
+    const one = JSON.parse(validReply).observations[0]
+    const noisy = JSON.stringify({
+      observations: Array.from({ length: 4 }, (_, index) => ({
+        ...one,
+        targetSlug: `fact-${index}`,
+      })),
+    })
+
+    expect(parseObservations(noisy).ok).toBe(false)
   })
 })

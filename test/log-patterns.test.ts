@@ -21,10 +21,11 @@ describe('matchLogLine', () => {
     expect(m?.suggestedAgent).toBe('claude')
   })
 
-  it('detects a deploy failure and routes to railway', () => {
+  it('detects a deploy failure without assuming a specific infrastructure provider', () => {
     const m = matchLogLine('Deployment failed: service crashed during build')
     expect(m?.pattern).toBe('deploy_failed')
-    expect(m?.suggestedAgent).toBe('railway')
+    expect(m?.suggestedAgent).toBe('local')
+    expect(m?.suggestedAction).not.toMatch(/railway/i)
   })
 
   it('does not misroute a recovered Electron network-service crash as a deployment failure', () => {
@@ -42,6 +43,19 @@ describe('matchLogLine', () => {
 
   it('returns null for benign output', () => {
     expect(matchLogLine('compiled successfully in 240ms')).toBeNull()
+  })
+
+  it('does not classify echoed source, tests, or matcher definitions as live failures', () => {
+    const sourceEchoes = [
+      'ext: "Error: Cannot find module \'@shared/schemas\'",',
+      "rint: 'p1::log-intelligence::build failed',",
+      'rds such as "eslint|error".',
+      "expect(sanitizeChunkToLines(';43m tsc|lint|eslint|fail|error')).toEqual([])",
+      ': /(deploy(?:ment)?\\s+(?:failed|crashed)|railway.*(?:error|failed|crashed))/i,',
+      "if (!signal) throw new Error('Signal was not found in this project.')",
+    ]
+
+    for (const line of sourceEchoes) expect(matchLogLine(line)).toBeNull()
   })
 })
 
