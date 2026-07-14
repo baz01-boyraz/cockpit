@@ -156,7 +156,7 @@ export const COUNCIL_SEAT_IDS: readonly CouncilTone[] = COUNCIL_SEATS.map((s) =>
  */
 export const CHAIRMAN: { engine: EngineSpec; fallbacks: readonly EngineSpec[] } = {
   engine: { engine: 'codex', model: GPT56_MODELS.sol },
-  fallbacks: [],
+  fallbacks: [{ engine: 'claude', model: COUNCIL_MODELS.sonnet5 }],
 }
 
 /** One seat's outcome: its reply, plus which engine produced it and whether the
