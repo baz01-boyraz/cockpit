@@ -1693,6 +1693,40 @@ export function createMockApi(): CockpitApi {
         )
         return assembleBoard(nextCards)
       },
+      askAgent: async (projectId, signalId, agent) => {
+        const signal = sentinelFor(projectId).find((item) => item.id === signalId)
+        if (!signal) throw new Error('Signal was not found in this project.')
+        const list = terminals[projectId] ?? (terminals[projectId] = [])
+        const session: TerminalSession = {
+          id: id('term'),
+          projectId,
+          name: agent === 'claude' ? 'Claude Code' : 'Codex',
+          role: agent,
+          alias: 'Signal review',
+          cwd: '.',
+          shell: '/bin/zsh',
+          status: 'running',
+          pid: Math.floor(Math.random() * 90000) + 1000,
+          exitCode: null,
+          createdAt: now(),
+          lastActiveAt: now(),
+        }
+        list.push(session)
+        mockSentinel.set(
+          projectId,
+          sentinelFor(projectId).map((item) =>
+            item.id === signalId ? { ...item, status: 'seen' as const } : item,
+          ),
+        )
+        setTimeout(
+          () => emit(
+            session.id,
+            `\x1b[38;5;208m●\x1b[0m ${agent} received Sentinel signal \x1b[2m${signal.id}\x1b[0m…\r\n`,
+          ),
+          140,
+        )
+        return session
+      },
       // The mock never pushes signals (no backend sensors), so this is a no-op
       // subscription — matching how the other push events are mocked.
       onAlert: () => () => {},
@@ -1941,7 +1975,11 @@ export function createMockApi(): CockpitApi {
         mockSecrets.delete(kind)
       },
     },
-    audit: { list: async (projectId) => audit.filter((a) => a.projectId === projectId) },
+    audit: {
+      list: async (projectId) => audit.filter((a) => a.projectId === projectId),
+      // Browser preview has no background writers; keep event-shape parity.
+      onRecord: () => () => {},
+    },
     system: {
       info: async (): Promise<SystemInfo> => ({
         platform: 'darwin',

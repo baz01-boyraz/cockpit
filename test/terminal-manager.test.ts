@@ -334,6 +334,17 @@ describe('TerminalManager lifecycle', () => {
     expect(ptyState.spawned[1].write).toHaveBeenCalledWith('codex --no-alt-screen\r')
   })
 
+  it('launchAgent() can start a scoped investigation without shell interpolation', () => {
+    vi.useFakeTimers()
+    const { mgr } = makeManager()
+    mgr.launchAgent('prj_1', 'claude', "Inspect it; $(touch /tmp/never); it's broken")
+    vi.advanceTimersByTime(120)
+
+    expect(ptyState.spawned[0].write).toHaveBeenCalledWith(
+      "claude 'Inspect it; $(touch /tmp/never); it'\\''s broken'\r",
+    )
+  })
+
   it('resumeClaude() launches claude with the resume flag and session id', () => {
     vi.useFakeTimers()
     const { mgr } = makeManager()

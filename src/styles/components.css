@@ -1135,6 +1135,260 @@
 .sentinelRow--new { background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .sentinelRow--new .sentinelRow__source { color: var(--accent-hi); }
 
+/* One compact decision card shared by the bell, live toast, and full signal
+   center. Impact labels are intentionally plain text as well as color-coded. */
+.signalDecision {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 12px 12px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.signalDecision__edge {
+  position: absolute;
+  inset: 9px auto 9px 0;
+  width: 3px;
+  border-radius: 0 var(--r-pill) var(--r-pill) 0;
+  background: var(--text-faint);
+}
+.signalDecision--notice .signalDecision__edge { background: var(--ember-400); }
+.signalDecision--alert .signalDecision__edge {
+  background: var(--ember-300);
+  box-shadow: 0 0 9px var(--accent-glow);
+}
+.signalDecision--info .signalDecision__edge { background: var(--glacier-500); }
+.signalDecision__head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.signalDecision__identity,
+.signalDecision__indicators {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.signalDecision__source {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--fs-micro);
+  font-weight: 650;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.signalDecision__time {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.signalDecision__importance,
+.signalDecision__restart {
+  display: inline-flex;
+  align-items: center;
+  min-height: 21px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface-inset);
+  font-size: var(--fs-micro);
+  font-weight: 680;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.signalDecision__importance--critical {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 38%, var(--border));
+  background: var(--danger-wash);
+}
+.signalDecision__importance--high {
+  color: var(--accent-hi);
+  border-color: var(--border-accent);
+  background: var(--accent-wash);
+}
+.signalDecision__importance--medium {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 36%, var(--border));
+  background: var(--warning-wash);
+}
+.signalDecision__importance--low {
+  color: var(--glacier-300);
+  border-color: color-mix(in srgb, var(--glacier-400) 30%, var(--border));
+  background: var(--glacier-wash);
+}
+.signalDecision__restart--required {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border));
+  background: var(--danger-wash);
+}
+.signalDecision__restart--safe {
+  color: var(--signal);
+  border-color: color-mix(in srgb, var(--signal) 38%, var(--border));
+  background: var(--signal-dim);
+}
+.signalDecision__restart--unknown {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 36%, var(--border));
+  background: var(--warning-wash);
+}
+.signalDecision__body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.signalDecision__body--button {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.signalDecision__body--button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--r-sm);
+}
+.signalDecision__title {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 620;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.signalDecision__summary {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.signalDecision__error {
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  border-radius: var(--r-sm);
+  background: var(--danger-wash);
+  color: var(--danger);
+  font-size: var(--fs-micro);
+  line-height: 1.4;
+}
+.signalDecision__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 1px;
+}
+.signalDecision__ask,
+.signalDecision__dismiss {
+  pointer-events: auto;
+  min-height: 29px;
+  padding: 0 10px;
+  border-radius: var(--r-md);
+  font-size: var(--fs-xs);
+  font-weight: 620;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.signalDecision__ask {
+  flex: 1 1 92px;
+  border: 1px solid var(--border-accent);
+  background: var(--accent-wash);
+  color: var(--accent-hi);
+}
+.signalDecision__ask--codex {
+  border-color: color-mix(in srgb, var(--glacier-400) 34%, var(--border));
+  background: var(--glacier-wash);
+  color: var(--glacier-300);
+}
+.signalDecision__ask:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  transform: translateY(-1px);
+}
+.signalDecision__ask--codex:hover:not(:disabled) {
+  border-color: var(--glacier-400);
+  background: color-mix(in srgb, var(--glacier-400) 13%, transparent);
+}
+.signalDecision__dismiss {
+  flex: 0 1 auto;
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+}
+.signalDecision__dismiss:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 30%, var(--border));
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+.signalDecision__ask:focus-visible,
+.signalDecision__dismiss:focus-visible {
+  outline: 2px solid var(--accent-hi);
+  outline-offset: 2px;
+}
+.signalDecision__ask:disabled,
+.signalDecision__dismiss:disabled {
+  opacity: 0.52;
+  cursor: default;
+  transform: none;
+}
+
+/* Surface-specific framing: the shared content stays identical while each host
+   keeps its existing size, elevation, and notification behavior. */
+.sentinelRow.signalDecision {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 12px 12px 18px;
+  background: transparent;
+}
+.sentinelRow.signalDecision:hover,
+.sentinelRow.signalDecision:focus-within {
+  background: var(--surface-3);
+}
+.sentinelToast.signalDecision {
+  pointer-events: none;
+  width: 340px;
+  padding: var(--sp-4) var(--sp-4) var(--sp-4) calc(var(--sp-4) + 5px);
+  gap: 8px;
+}
+.sentinelToast.signalDecision .signalDecision__body,
+.sentinelToast.signalDecision .signalDecision__head {
+  pointer-events: none;
+}
+.sigrow__decision.signalDecision {
+  padding: 0 0 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.sigrow__decision.signalDecision .signalDecision__edge {
+  inset-block: 1px;
+}
+
 @keyframes sentinel-pop-in {
   from { opacity: 0; transform: translateY(-6px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -2359,7 +2613,14 @@
   align-items: flex-end;
   gap: var(--sp-3);
   pointer-events: none; /* the corner is click-through; only children catch clicks */
-  transition: right 420ms var(--ease-spring);
+  transition: right 420ms var(--ease-spring), opacity var(--dur-fast) var(--ease-out);
+}
+/* Opening the bell is an explicit review action. Passive corner cards yield so
+   their translucent surfaces never bleed through or cover decision controls. */
+body:has(.sentinelBell__btn[aria-expanded='true']) .floatingCorner {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 /* ----------------------------------------------------------------------------

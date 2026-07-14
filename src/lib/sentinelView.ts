@@ -24,6 +24,16 @@ export function sourceLabel(source: SentinelSource): string {
   return SOURCE_LABELS[source] ?? source
 }
 
+export type ImportanceTone = 'low' | 'medium' | 'high' | 'critical'
+
+/** Plain-language companion to the deterministic importance percentage. */
+export function importanceMeta(score: number): { label: string; tone: ImportanceTone } {
+  if (score >= 90) return { label: 'Critical', tone: 'critical' }
+  if (score >= 75) return { label: 'High', tone: 'high' }
+  if (score >= 50) return { label: 'Medium', tone: 'medium' }
+  return { label: 'Low', tone: 'low' }
+}
+
 /** Short, human label for a severity (feed filter chips + row meta). */
 export const SEVERITY_LABELS: Record<SentinelSeverity, string> = {
   info: 'Info',

@@ -30,6 +30,7 @@ function seedRow(
     createdAt: string
     severity?: string
     summary?: string
+    context?: string | null
     triage?: string | null
     status?: string
   },
@@ -46,7 +47,7 @@ function seedRow(
     source: over.source,
     title: over.title,
     summary: over.summary ?? 'a recurring problem',
-    context: null,
+    context: over.context ?? null,
     fingerprint,
     status: over.status ?? 'new',
     created_at: over.createdAt,
@@ -440,6 +441,23 @@ describe('SentinelService.markSeen / list / unseenCount', () => {
     expect(svc.unseenCount('p2')).toBe(0)
     expect(svc.list('p2')).toEqual([])
   })
+
+  it('keeps known legacy log noise out of the feed and badge without deleting evidence', () => {
+    const store = makeDb()
+    seedRow(store.rows, {
+      projectId: 'p1',
+      source: 'log-intelligence',
+      title: 'Deployment problem',
+      createdAt: iso(0),
+      context:
+        '[42684:0713/232525.513342:ERROR:content/browser/network_service_instance_impl.cc:721] Network service crashed or was terminated, restarting service.',
+    })
+    const svc = new SentinelService(store.db, new CockpitEvents())
+
+    expect(svc.list('p1')).toEqual([])
+    expect(svc.unseenCount('p1')).toBe(0)
+    expect(store.rows).toHaveLength(1)
+  })
 })
 
 describe('SentinelService enrich (Faz B triage)', () => {
@@ -492,6 +510,7 @@ describe('SentinelService enrich (Faz B triage)', () => {
 
     expect(alerts).toHaveLength(2)
     expect(alerts[1].triage?.reportWorthy).toBe(false)
+    expect(alerts[1].status).toBe('seen')
     // Badge pressure cleared: the row is demoted to seen.
     expect(store.rows[0].status).toBe('seen')
     expect(svc.unseenCount('p1')).toBe(0)

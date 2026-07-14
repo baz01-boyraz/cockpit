@@ -2,21 +2,21 @@
  * SentinelPanel — the full sentinel signal feed (Track E3). Where the top-bar
  * bell popover is a capped glance (20 newest), this is the filterable history:
  * severity chips, seen/unseen + outcome badges, legacy triage enrichment where
- * present, and the two owner affordances (Track H) — "Create card" (signal→Swarm)
- * and "Dismiss as noise" (records the G3 outcome). Read + act; the feed itself is
+ * present, and the owner decisions — ask Claude, ask Codex, or dismiss as noise.
+ * Read + act; the feed itself is
  * fetched on demand, the badge count stays in the store.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SentinelSeverity, SentinelSignal } from '@shared/sentinel'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
-import { relativeTime } from '@shared/time'
+import { SEVERITY_LABELS } from '../lib/sentinelView'
+import { IconBell, IconCheck } from '../components/icons'
+import { isSignalForProject, upsertLiveSignal } from '../lib/sentinelLive'
 import {
-  OUTCOME_META,
-  SEVERITY_LABELS,
-  sourceLabel,
-} from '../lib/sentinelView'
-import { IconBell, IconCheck, IconPlus, IconX } from '../components/icons'
+  SentinelDecisionCard,
+  type SentinelDecisionAgent,
+} from '../components/SentinelDecisionCard'
 
 const FETCH_LIMIT = 200
 
@@ -26,12 +26,16 @@ const SEVERITY_ORDER: SentinelSeverity[] = ['alert', 'notice', 'info']
 export function SentinelPanel() {
   const activeProjectId = useStore((s) => s.activeProjectId)
   const markSignalsSeen = useStore((s) => s.markSignalsSeen)
+  const refreshTerminals = useStore((s) => s.refreshTerminals)
+  const setView = useStore((s) => s.setView)
 
   const [signals, setSignals] = useState<SentinelSignal[]>([])
   const [severity, setSeverity] = useState<SeverityFilter>('all')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
+  const [busy, setBusy] = useState<{ signalId: string; agent: SentinelDecisionAgent } | null>(null)
+  const [actionError, setActionError] = useState<{ signalId: string; text: string } | null>(null)
 
   const load = useCallback(async () => {
     if (!activeProjectId) {
@@ -53,6 +57,15 @@ export function SentinelPanel() {
   useEffect(() => {
     void load()
   }, [load])
+
+  // Keep an open signal center live. Triage publishes the same id again, so
+  // replace in place; other projects' broadcasts never enter this feed.
+  useEffect(() => {
+    return cockpit().sentinel.onAlert((signal) => {
+      if (!isSignalForProject(activeProjectId, signal)) return
+      setSignals((current) => upsertLiveSignal(current, signal, FETCH_LIMIT))
+    })
+  }, [activeProjectId])
 
   // A quiet, self-clearing confirmation line (card created / dismissed).
   const flashTimer = useRef<number | null>(null)
@@ -94,6 +107,7 @@ export function SentinelPanel() {
   const dismiss = async (signal: SentinelSignal) => {
     if (!activeProjectId) return
     // Optimistic: an explicit "noise" verdict, and clear it from the badge.
+    setActionError(null)
     patch(signal.id, { outcome: 'dismissed', status: 'seen' })
     void markSignalsSeen([signal.id])
     try {
@@ -105,16 +119,23 @@ export function SentinelPanel() {
     }
   }
 
-  const createCard = async (signal: SentinelSignal) => {
+  const askAgent = async (signal: SentinelSignal, agent: SentinelDecisionAgent) => {
     if (!activeProjectId) return
-    patch(signal.id, { outcome: 'card_created', status: 'seen' })
-    void markSignalsSeen([signal.id])
+    setBusy({ signalId: signal.id, agent })
+    setActionError(null)
     try {
-      await cockpit().sentinel.createCard(activeProjectId, signal.id)
-      announce('Card created in Swarm.')
+      await cockpit().sentinel.askAgent(activeProjectId, signal.id, agent)
+      patch(signal.id, { status: 'seen' })
+      void markSignalsSeen([signal.id])
+      await refreshTerminals()
+      setView('terminals')
     } catch {
-      setError('Could not create the card. Retry in a moment.')
-      patch(signal.id, { outcome: signal.outcome })
+      setActionError({
+        signalId: signal.id,
+        text: `Could not open ${agent === 'claude' ? 'Claude' : 'Codex'}. Try again.`,
+      })
+    } finally {
+      setBusy(null)
     }
   }
 
@@ -193,8 +214,10 @@ export function SentinelPanel() {
                 key={signal.id}
                 signal={signal}
                 index={i}
-                onCreateCard={() => void createCard(signal)}
+                onAsk={(agent) => void askAgent(signal, agent)}
                 onDismiss={() => void dismiss(signal)}
+                busyAgent={busy?.signalId === signal.id ? busy.agent : null}
+                error={actionError?.signalId === signal.id ? actionError.text : null}
               />
             ))}
           </ul>
@@ -207,89 +230,51 @@ export function SentinelPanel() {
 interface SignalRowProps {
   signal: SentinelSignal
   index: number
-  onCreateCard: () => void
+  onAsk: (agent: SentinelDecisionAgent) => void
   onDismiss: () => void
+  busyAgent: SentinelDecisionAgent | null
+  error: string | null
 }
 
-function SignalRow({ signal, index, onCreateCard, onDismiss }: SignalRowProps) {
-  const { triage, outcome } = signal
-  const outcomeMeta = outcome ? OUTCOME_META[outcome] : null
-  const cardCreated = outcome === 'card_created'
-  const dismissed = outcome === 'dismissed'
+function SignalRow({ signal, index, onAsk, onDismiss, busyAgent, error }: SignalRowProps) {
+  const { triage } = signal
 
   return (
     <li
       className={`sigrow sigrow--${signal.severity} ${signal.status === 'new' ? 'sigrow--new' : ''} u-rise`}
       style={{ animationDelay: `${Math.min(index, 12) * 22}ms` }}
     >
-      <span className="sigrow__edge" aria-hidden="true" />
-      <div className="sigrow__body">
-        <div className="sigrow__top">
-          <span className="sigrow__source">{sourceLabel(signal.source)}</span>
-          <div className="sigrow__meta">
-            {signal.status === 'new' && <span className="sigbadge sigbadge--new">New</span>}
-            {outcomeMeta && (
-              <span className={`sigbadge sigbadge--${outcomeMeta.tone}`}>{outcomeMeta.label}</span>
-            )}
-            <time
-              className="sigrow__time mono"
-              dateTime={signal.createdAt}
-              title={new Date(signal.createdAt).toLocaleString()}
+      <SentinelDecisionCard
+        signal={signal}
+        className="sigrow__decision"
+        onAsk={onAsk}
+        onDismiss={onDismiss}
+        busyAgent={busyAgent}
+        error={error}
+      />
+
+      {triage && (
+        <div className="sigtriage">
+          <div className="sigtriage__head">
+            <span className="sigtriage__eyebrow">Legacy triage</span>
+            <span
+              className={`sigbadge ${triage.reportWorthy ? 'sigbadge--accent' : 'sigbadge--muted'}`}
             >
-              {relativeTime(signal.createdAt) || 'now'}
-            </time>
+              {triage.reportWorthy ? 'Worth attention' : 'Likely noise'}
+            </span>
+            {triage.gotchaCandidate && <span className="sigbadge sigbadge--signal">Lesson</span>}
+          </div>
+          <div className="sigtriage__headline">{triage.headline}</div>
+          <div className="sigtriage__action">
+            <span className="sigtriage__arrow" aria-hidden="true">
+              →
+            </span>
+            {triage.action}
           </div>
         </div>
+      )}
 
-        <div className="sigrow__title">{signal.title}</div>
-        <div className="sigrow__summary">{signal.summary}</div>
-
-        {triage && (
-          <div className="sigtriage">
-            <div className="sigtriage__head">
-              <span className="sigtriage__eyebrow">Legacy triage</span>
-              <span
-                className={`sigbadge ${triage.reportWorthy ? 'sigbadge--accent' : 'sigbadge--muted'}`}
-              >
-                {triage.reportWorthy ? 'Worth attention' : 'Likely noise'}
-              </span>
-              {triage.gotchaCandidate && (
-                <span className="sigbadge sigbadge--signal">Lesson</span>
-              )}
-            </div>
-            <div className="sigtriage__headline">{triage.headline}</div>
-            <div className="sigtriage__action">
-              <span className="sigtriage__arrow" aria-hidden="true">
-                →
-              </span>
-              {triage.action}
-            </div>
-          </div>
-        )}
-
-        {signal.context && <div className="sigrow__context mono">{signal.context}</div>}
-
-        <div className="sigrow__actions">
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            onClick={onCreateCard}
-            disabled={cardCreated}
-          >
-            {cardCreated ? <IconCheck width={13} height={13} /> : <IconPlus width={13} height={13} />}
-            {cardCreated ? 'Card created' : 'Create card'}
-          </button>
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm sigrow__dismiss"
-            onClick={onDismiss}
-            disabled={dismissed}
-          >
-            <IconX width={13} height={13} />
-            {dismissed ? 'Dismissed' : 'Dismiss as noise'}
-          </button>
-        </div>
-      </div>
+      {signal.context && <div className="sigrow__context mono">{signal.context}</div>}
     </li>
   )
 }

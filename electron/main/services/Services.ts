@@ -41,6 +41,7 @@ import { OperationalHealthStateStore } from './OperationalHealthStateStore'
 import { registerMemoryExitCapture } from './memoryExitTrigger'
 import { SwarmService } from './SwarmService'
 import { SentinelService, type SentinelNotifier } from './SentinelService'
+import { SentinelAgentHandoff } from './SentinelAgentHandoff'
 import { SwarmCompletionSteward } from './SwarmCompletionSteward'
 import { NamedAgentsService } from './NamedAgentsService'
 import { SwarmWorktrees } from './SwarmWorktrees'
@@ -126,6 +127,8 @@ export class Services {
   readonly swarm: SwarmService
   /** Always-on deterministic signal layer: sensors → dedup → feed + notify. */
   readonly sentinel: SentinelService
+  /** Explicit signal → direct Claude/Codex terminal handoff. */
+  readonly sentinelHandoff: SentinelAgentHandoff
   /** Durable success signal + bounded output + Pro summary coordinator. */
   readonly swarmCompletion: SwarmCompletionSteward
   readonly namedAgents: NamedAgentsService
@@ -140,6 +143,10 @@ export class Services {
     this.db = openDatabase(opts.dbPath)
     this.secrets = new SecretStore(opts.userDataDir)
     this.audit = new AuditLogService(this.db)
+    // Audit writes are already durable before subscribers run. Mirror each
+    // successful append onto the shared event bus so Audit and Dashboard stay
+    // live without polling; observer failures remain isolated by the service.
+    this.audit.subscribe((entry) => opts.events.emitTyped('audit:recorded', entry))
     this.usage = new UsageService(this.db)
     this.agentUsage = new AgentUsageService()
     this.openRouterUsage = new OpenRouterUsageService(this.secrets)
@@ -337,6 +344,12 @@ export class Services {
     // The standing memory-first contract rides each agent CLI's native channel
     // (Claude hook / Codex AGENTS.md) — user prompts are never modified.
     this.memoryContract = new MemoryContractService(this.projects, this.audit)
+    this.sentinelHandoff = new SentinelAgentHandoff({
+      signals: this.sentinel,
+      contracts: this.memoryContract,
+      terminals: this.terminals,
+      audit: this.audit,
+    })
     this.memoryLiveCapture = new MemoryLiveCapture(
       opts.events,
       this.terminals,

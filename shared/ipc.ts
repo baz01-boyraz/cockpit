@@ -163,6 +163,7 @@ export const IPC = {
   sentinelUnseenCount: 'sentinel:unseenCount',
   sentinelRecordOutcome: 'sentinel:recordOutcome',
   sentinelCreateCard: 'sentinel:createCard',
+  sentinelAskAgent: 'sentinel:askAgent',
 
   secretSet: 'secret:set',
   secretHas: 'secret:has',
@@ -186,6 +187,7 @@ export const IPC = {
   evtTerminalExit: 'evt:terminal:exit',
   evtApprovalsChanged: 'evt:approvals:changed',
   evtLogsChanged: 'evt:logs:changed',
+  evtAuditRecorded: 'evt:audit:recorded',
   evtAppUpdateChanged: 'evt:appUpdate:changed',
   evtSwarmCardCompleted: 'evt:swarm:cardCompleted',
   evtSentinelAlert: 'evt:sentinel:alert',
@@ -588,6 +590,16 @@ export interface CockpitApi {
      */
     createCard(projectId: string, signalId: string): Promise<BoardColumn[]>
     /**
+     * Explicitly open Claude or Codex with this signal's bounded, fenced
+     * evidence. The main process composes the prompt and returns the new direct
+     * terminal session; no fix, restart, or publication happens automatically.
+     */
+    askAgent(
+      projectId: string,
+      signalId: string,
+      agent: 'claude' | 'codex',
+    ): Promise<TerminalSession>
+    /**
      * Fires when a fresh signal is recorded, so the feed/badge update without
      * polling. `notice`/`alert` also drive a renderer toast; `alert` additionally
      * pops a macOS notification from main. The mock never emits it.
@@ -614,6 +626,8 @@ export interface CockpitApi {
   }
   audit: {
     list(projectId: string): Promise<AuditEntry[]>
+    /** Fires after an append succeeds; consumers still scope by project id. */
+    onRecord(cb: (entry: AuditEntry) => void): Unsubscribe
   }
   system: {
     info(): Promise<SystemInfo>
@@ -745,6 +759,7 @@ export interface IpcResultMap {
   sentinelUnseenCount: R<CockpitApi['sentinel']['unseenCount']>
   sentinelRecordOutcome: R<CockpitApi['sentinel']['recordOutcome']>
   sentinelCreateCard: R<CockpitApi['sentinel']['createCard']>
+  sentinelAskAgent: R<CockpitApi['sentinel']['askAgent']>
   secretSet: R<CockpitApi['secrets']['set']>
   secretHas: R<CockpitApi['secrets']['has']>
   secretDelete: R<CockpitApi['secrets']['delete']>

@@ -133,6 +133,15 @@ export function DashboardPanel() {
     if (activeProjectId) void cockpit().audit.list(activeProjectId).then(setActivity)
   }, [activeProjectId, approvalsCount])
 
+  // Activity is an audit preview, so it should move when any durable action
+  // lands — not only when the approvals array happens to change.
+  useEffect(() => {
+    return cockpit().audit.onRecord((entry) => {
+      if (entry.projectId !== activeProjectId) return
+      setActivity((current) => [entry, ...current.filter((item) => item.id !== entry.id)].slice(0, 100))
+    })
+  }, [activeProjectId])
+
   const errorGroups = useMemo(
     () => (dashboard ? groupErrors(dashboard.recentErrors) : []),
     [dashboard],

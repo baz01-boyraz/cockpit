@@ -16,10 +16,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { cockpit, isMockBackend } from '../lib/cockpit'
-import { sourceLabel } from '../lib/sentinelView'
-import { IconX } from './icons'
 import type { SentinelSignal } from '@shared/sentinel'
-import { completionCardId } from '@shared/swarm-completion'
+import { isSignalForProject } from '../lib/sentinelLive'
+import {
+  SentinelDecisionCard,
+  type SentinelDecisionAgent,
+} from './SentinelDecisionCard'
 
 /** How long a `notice` toast lingers before auto-dismissing. Alerts never auto-dismiss. */
 const NOTICE_TTL_MS = 12_000
@@ -29,15 +31,18 @@ const MAX_VISIBLE = 3
 export function SentinelToasts() {
   const activeProjectId = useStore((s) => s.activeProjectId)
   const markSignalsSeen = useStore((s) => s.markSignalsSeen)
-  const bumpSentinelUnseen = useStore((s) => s.bumpSentinelUnseen)
+  const refreshSentinelUnseen = useStore((s) => s.refreshSentinelUnseen)
+  const refreshTerminals = useStore((s) => s.refreshTerminals)
   const setView = useStore((s) => s.setView)
 
   const [toasts, setToasts] = useState<SentinelSignal[]>([])
   const [expanded, setExpanded] = useState(false)
+  const [busy, setBusy] = useState<{ signalId: string; agent: SentinelDecisionAgent } | null>(null)
+  const [actionError, setActionError] = useState<{ signalId: string; text: string } | null>(null)
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const shownRef = useRef<Set<string>>(new Set())
 
-  const dismiss = useCallback((id: string) => {
+  const removeToast = useCallback((id: string) => {
     const timer = timersRef.current.get(id)
     if (timer) {
       clearTimeout(timer)
@@ -59,22 +64,36 @@ export function SentinelToasts() {
       shownRef.current.add(signal.id)
       setToasts((prev) => [signal, ...prev])
       if (signal.severity === 'notice') {
-        const timer = setTimeout(() => dismiss(signal.id), NOTICE_TTL_MS)
+        const timer = setTimeout(() => removeToast(signal.id), NOTICE_TTL_MS)
         timersRef.current.set(signal.id, timer)
       }
     },
-    [dismiss],
+    [removeToast],
   )
 
+  // Toast state belongs to one active project. Switching workspaces must not
+  // leave the prior project's cards, timers, or id-dedup history on screen.
+  useEffect(() => {
+    timersRef.current.forEach((timer) => clearTimeout(timer))
+    timersRef.current.clear()
+    shownRef.current.clear()
+    setToasts([])
+    setExpanded(false)
+    setBusy(null)
+    setActionError(null)
+  }, [activeProjectId])
+
   // Live push: notice/alert become toasts; every signal (incl. info) bumps the
-  // bell badge. The mock never fires this — see the replay effect below.
+  // active project's authoritative bell count. Re-emits reuse an id, so a
+  // fresh count read stays idempotent where a blind increment could not.
   useEffect(() => {
     const off = cockpit().sentinel.onAlert((signal) => {
-      bumpSentinelUnseen()
+      if (!isSignalForProject(activeProjectId, signal)) return
+      void refreshSentinelUnseen()
       if (signal.severity === 'notice' || signal.severity === 'alert') enqueue(signal)
     })
     return off
-  }, [bumpSentinelUnseen, enqueue])
+  }, [activeProjectId, enqueue, refreshSentinelUnseen])
 
   // Browser-preview only: stand in for push delivery by replaying the project's
   // seeded notice/alert signals once. Oldest first so the freshest lands on top.
@@ -107,10 +126,39 @@ export function SentinelToasts() {
     }
   }, [])
 
-  const reviewCard = (signal: SentinelSignal) => {
-    setView('swarm')
+  const dismissDecision = async (signal: SentinelSignal) => {
+    if (!activeProjectId) return
+    setActionError(null)
     void markSignalsSeen([signal.id])
-    dismiss(signal.id)
+    removeToast(signal.id)
+    try {
+      await cockpit().sentinel.recordOutcome(activeProjectId, signal.id, 'dismissed')
+    } catch {
+      setToasts((current) =>
+        current.some((item) => item.id === signal.id) ? current : [signal, ...current],
+      )
+      setActionError({ signalId: signal.id, text: 'Could not dismiss this signal. Try again.' })
+    }
+  }
+
+  const askAgent = async (signal: SentinelSignal, agent: SentinelDecisionAgent) => {
+    if (!activeProjectId) return
+    setBusy({ signalId: signal.id, agent })
+    setActionError(null)
+    try {
+      await cockpit().sentinel.askAgent(activeProjectId, signal.id, agent)
+      void markSignalsSeen([signal.id])
+      removeToast(signal.id)
+      await refreshTerminals()
+      setView('terminals')
+    } catch {
+      setActionError({
+        signalId: signal.id,
+        text: `Could not open ${agent === 'claude' ? 'Claude' : 'Codex'}. Try again.`,
+      })
+    } finally {
+      setBusy(null)
+    }
   }
 
   if (toasts.length === 0) return null
@@ -121,46 +169,16 @@ export function SentinelToasts() {
   return (
     <div className="sentinelToasts" aria-label="Signal notifications">
       {visible.map((signal) => (
-        <article
+        <SentinelDecisionCard
           key={signal.id}
+          signal={signal}
           className={`sentinelToast sentinelToast--${signal.severity}`}
           role={signal.severity === 'alert' ? 'alert' : 'status'}
-        >
-          <span className="sentinelToast__edge" aria-hidden="true" />
-          <div className="sentinelToast__head">
-            <span className="sentinelToast__source">{sourceLabel(signal.source)}</span>
-            <button
-              type="button"
-              className="sentinelToast__close"
-              onClick={() => dismiss(signal.id)}
-              aria-label="Dismiss notification"
-              title="Dismiss"
-            >
-              <IconX width={12} height={12} />
-            </button>
-          </div>
-          {/* Optional persisted triage can refine the same signal in place. */}
-          <p className="sentinelToast__title">{signal.triage?.headline ?? signal.title}</p>
-          <p className="sentinelToast__summary">{signal.triage?.action ?? signal.summary}</p>
-          <div className="sentinelToast__actions">
-            {completionCardId(signal) && (
-              <button
-                type="button"
-                className="sentinelToast__ask"
-                onClick={() => reviewCard(signal)}
-              >
-                Review card
-              </button>
-            )}
-            <button
-              type="button"
-              className="sentinelToast__dismiss"
-              onClick={() => dismiss(signal.id)}
-            >
-              Dismiss
-            </button>
-          </div>
-        </article>
+          onAsk={(agent) => void askAgent(signal, agent)}
+          onDismiss={() => void dismissDecision(signal)}
+          busyAgent={busy?.signalId === signal.id ? busy.agent : null}
+          error={actionError?.signalId === signal.id ? actionError.text : null}
+        />
       ))}
 
       {overflow > 0 && (

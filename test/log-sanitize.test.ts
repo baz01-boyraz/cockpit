@@ -71,6 +71,20 @@ describe('sanitizeChunkToLines', () => {
       'downloading 100%',
     ])
   })
+
+  it('drops Electron network-service recovery chatter before log intelligence sees it', () => {
+    const recovered =
+      '[42684:0713/232525.513342:ERROR:content/browser/network_service_instance_impl.cc:721] Network service crashed or was terminated, restarting service.'
+
+    expect(sanitizeChunkToLines(recovered)).toEqual([])
+  })
+
+  it('drops orphaned SGR fragments from a split TUI repaint', () => {
+    expect(
+      sanitizeChunkToLines(';244;48;2;74;34;29mtypecheck|tsc|lint|eslint|fail|error|w'),
+    ).toEqual([])
+    expect(sanitizeChunkToLines(';43m         st|typecheck|tsc|lint|eslint|fail|error')).toEqual([])
+  })
 })
 
 describe('sanitizeStoredLine', () => {
@@ -80,6 +94,20 @@ describe('sanitizeStoredLine', () => {
 
   it('cleans a stored colourised line', () => {
     expect(sanitizeStoredLine(`${ESC}[33mwarning: deprecated${ESC}[0m`)).toBe('warning: deprecated')
+  })
+
+  it('hides legacy Electron network-service recovery rows from the log stream', () => {
+    expect(
+      sanitizeStoredLine(
+        '[42738:0701/004621.823171:ERROR:network_service_instance_impl.cc(613)] Network service crashed, restarting service.',
+      ),
+    ).toBeNull()
+  })
+
+  it('hides legacy orphaned SGR rows from the log stream', () => {
+    expect(
+      sanitizeStoredLine(';244;48;2;74;34;29mtypecheck|tsc|lint|eslint|fail|error|w'),
+    ).toBeNull()
   })
 })
 

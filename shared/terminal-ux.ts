@@ -8,8 +8,30 @@
  */
 export const CODEX_INTERACTIVE_COMMAND = 'codex --no-alt-screen'
 
+import { shellQuote } from './swarm-worker'
+
 export function buildCodexResumeCommand(sessionId: string): string {
   return `${CODEX_INTERACTIVE_COMMAND} resume ${sessionId}`
+}
+
+/**
+ * Start a direct agent with an optional bounded opening request. The prompt is
+ * stripped of PTY control bytes and single-quoted, so signal text can never
+ * submit an early command or interpolate shell syntax.
+ */
+export function buildAgentLaunchCommand(
+  agent: 'claude' | 'codex',
+  initialPrompt?: string,
+): string {
+  const base = agent === 'codex' ? CODEX_INTERACTIVE_COMMAND : 'claude'
+  if (!initialPrompt) return base
+  const safe = initialPrompt
+    .replace(/\r\n/g, '\n')
+    // eslint-disable-next-line no-control-regex -- PTY control bytes are the security boundary here
+    .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, '')
+    .trim()
+    .slice(0, 5_000)
+  return safe ? `${base} ${shellQuote(safe)}` : base
 }
 
 /** Preserve the draft exactly, apart from normalizing platform newlines. */

@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events'
 import type {
   AppUpdateState,
+  AuditEntry,
   ResumableSessionProvider,
   SwarmCardCompletedEvent,
   TerminalExitEvent,
@@ -29,6 +30,7 @@ export interface CockpitEventMap {
   'memory:captureNotice': MemoryCaptureNotice
   'approvals:changed': { projectId: string }
   'logs:changed': { projectId: string }
+  'audit:recorded': AuditEntry
   'appUpdate:changed': AppUpdateState
   'swarm:cardCompleted': SwarmCardCompletedEvent
   'sentinel:alert': SentinelSignal

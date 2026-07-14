@@ -38,6 +38,25 @@ const CONTROL_CHARS_TEST = new RegExp('[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]')
 // eslint-disable-next-line no-control-regex -- matching the ESC byte is the point
 const CURSOR_CONTROL = new RegExp('\\u001B\\[[0-9;?]*[A-HJKSTfhlsu]')
 
+// A PTY chunk can begin halfway through an SGR sequence. With the ESC and
+// opening parameter lost, stripAnsi cannot recognize the remainder; it looks
+// like ordinary source text and can self-match words such as "eslint|error".
+const ORPHANED_SGR_PREFIX = /^;\d+(?:;\d+)*m/
+
+// Chromium logs this exact self-recovery when Electron's network helper is
+// restarted. It is useful renderer diagnostics, but not an application/deploy
+// failure and therefore must never enter error intelligence or Sentinel.
+const ELECTRON_NETWORK_SERVICE_RECOVERY =
+  /\b(?:content\/browser\/)?network_service_instance_impl\.cc(?::\d+|\(\d+\))\]\s+Network service crashed(?: or was terminated)?,\s*restarting service\.?$/i
+
+/** Known transport/repaint chatter with no owner action. Kept narrow: each
+ * signature is an exact runtime shape observed in Cockpit, not a generic
+ * suppression of words such as "network" or "crashed". */
+export function isNonActionableLogLine(clean: string): boolean {
+  const line = clean.trim()
+  return ORPHANED_SGR_PREFIX.test(line) || ELECTRON_NETWORK_SERVICE_RECOVERY.test(line)
+}
+
 /** Remove ANSI escape sequences and stray control characters from a string. */
 export function stripAnsi(input: string): string {
   return input.replace(ANSI_PATTERN, '').replace(CONTROL_CHARS_GLOBAL, '').replace(/\t/g, ' ')
@@ -81,6 +100,7 @@ export function sanitizeChunkToLines(rawChunk: string): string[] {
     if (raw.trim().length === 0) continue
     if (hasCursorControl(raw)) continue
     const clean = stripAnsi(raw).trim()
+    if (isNonActionableLogLine(clean)) continue
     if (looksLikeGarbage(clean)) continue
     out.push(clean)
   }
@@ -91,6 +111,7 @@ export function sanitizeChunkToLines(rawChunk: string): string[] {
 export function sanitizeStoredLine(message: string): string | null {
   if (hasCursorControl(message)) return null
   const clean = stripAnsi(message).trim()
+  if (isNonActionableLogLine(clean)) return null
   if (looksLikeGarbage(clean)) return null
   return clean
 }

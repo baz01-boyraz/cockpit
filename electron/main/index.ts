@@ -124,6 +124,7 @@ function forwardEvents(): void {
   events.onTyped('memory:captureNotice', (p) => send(IPC.evtMemoryCaptureNotice, p))
   events.onTyped('approvals:changed', (p) => send(IPC.evtApprovalsChanged, p))
   events.onTyped('logs:changed', (p) => send(IPC.evtLogsChanged, p))
+  events.onTyped('audit:recorded', (p) => send(IPC.evtAuditRecorded, p))
   events.onTyped('appUpdate:changed', (p) => send(IPC.evtAppUpdateChanged, p))
   events.onTyped('swarm:cardCompleted', (p) => send(IPC.evtSwarmCardCompleted, p))
   events.onTyped('sentinel:alert', (p) => send(IPC.evtSentinelAlert, p))

@@ -79,7 +79,11 @@ const PATTERNS: PatternDef[] = [
   },
   {
     id: 'deploy_failed',
-    test: /(deploy(ment)? failed|railway.*(error|failed)|build.*crashed|service crashed)/i,
+    // A generic "service crashed" is not deployment evidence. Electron emits
+    // exactly that phrase when Chromium's network helper restarts itself; the
+    // old broad branch turned a recovered local subprocess into a Railway
+    // incident. Require deploy/provider context so Sentinel stays trustworthy.
+    test: /(deploy(?:ment)?\s+(?:failed|crashed)|railway.*(?:error|failed|crashed)|(?:build|service)\s+crashed.*\bdeploy(?:ment)?\b)/i,
     title: 'Deployment problem',
     likelyCause: 'A deploy or service on the infrastructure provider failed or crashed.',
     suggestedAction: 'Check the service logs in the Railway panel before redeploying (redeploy needs approval).',

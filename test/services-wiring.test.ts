@@ -143,6 +143,7 @@ const EXPECTED_SERVICE_FIELDS = [
   'operationalHealth',
   'swarm',
   'sentinel',
+  'sentinelHandoff',
   'namedAgents',
   'appUpdate',
 ] as const
@@ -203,6 +204,23 @@ describe('Services — composition root construction', () => {
     services = new Services({ dbPath: ':memory:', userDataDir, events })
     expect(h.autoUpdater.autoDownload).toBe(false)
     expect(h.autoUpdater.autoInstallOnAppQuit).toBe(false)
+  })
+
+  it('publishes newly persisted audit entries onto the live event bus', () => {
+    const { rec } = makeDbWithClose()
+    h.dbHolder.db = rec.db
+    const seen = vi.fn()
+    events.onTyped('audit:recorded', seen)
+    services = new Services({ dbPath: ':memory:', userDataDir, events })
+
+    const entry = services.audit.record({
+      projectId: 'p1',
+      actor: 'system',
+      actionType: 'test.live_audit',
+      summary: 'Live audit transport check',
+    })
+
+    expect(seen).toHaveBeenCalledWith(entry)
   })
 })
 

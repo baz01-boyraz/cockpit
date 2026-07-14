@@ -10,6 +10,7 @@ import { IconSearch, IconShield, IconShieldSearch, IconX } from '../components/i
 type AuditTab = 'trail' | 'approvals'
 
 const PAGE = 20
+const AUDIT_FEED_LIMIT = 100
 
 /** `ai` reads as "Agent" in the trail — the same taxonomy the roadmap uses. */
 const ACTOR_LABEL: Record<AuditActor, string> = {
@@ -63,6 +64,15 @@ export function AuditPanel() {
     return () => {
       alive = false
     }
+  }, [activeProjectId])
+
+  // Audit is append-only and now pushed after the durable write. Keep the open
+  // trail live, project-scoped, deduped, and bounded to the same server window.
+  useEffect(() => {
+    return cockpit().audit.onRecord((entry) => {
+      if (entry.projectId !== activeProjectId) return
+      setEntries((current) => [entry, ...current.filter((item) => item.id !== entry.id)].slice(0, AUDIT_FEED_LIMIT))
+    })
   }, [activeProjectId])
 
   const actionTypes = useMemo(

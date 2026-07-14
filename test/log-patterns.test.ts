@@ -27,6 +27,19 @@ describe('matchLogLine', () => {
     expect(m?.suggestedAgent).toBe('railway')
   })
 
+  it('does not misroute a recovered Electron network-service crash as a deployment failure', () => {
+    expect(
+      matchLogLine(
+        '[42684:0713/232525.513342:ERROR:content/browser/network_service_instance_impl.cc:721] Network service crashed or was terminated, restarting service.',
+      ),
+    ).toBeNull()
+    expect(
+      matchLogLine(
+        '[42738:0701/004621.823171:ERROR:network_service_instance_impl.cc(613)] Network service crashed, restarting service.',
+      ),
+    ).toBeNull()
+  })
+
   it('returns null for benign output', () => {
     expect(matchLogLine('compiled successfully in 240ms')).toBeNull()
   })
@@ -42,6 +55,10 @@ describe('inferLogLevel', () => {
   })
   it('defaults to info', () => {
     expect(inferLogLevel('server ready on port 3000')).toBe('info')
+  })
+  it('classifies debug/trace diagnostics without promoting them to warnings', () => {
+    expect(inferLogLevel('DEBUG: reconnecting transport')).toBe('debug')
+    expect(inferLogLevel('trace request lifecycle')).toBe('debug')
   })
   it('treats success lines that merely count warnings/errors as info', () => {
     expect(inferLogLevel('lint (0 warnings) ✅')).toBe('info')

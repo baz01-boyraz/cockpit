@@ -2,7 +2,7 @@ import type { ErrorInsight, LogEvent, LogLevel, LogSourceType } from '@shared/do
 import type { InsightOccurrence } from '@shared/insight-aggregation'
 import { aggregateInsights, insightFromMatch } from '@shared/insight-aggregation'
 import { inferLogLevel, matchLogLine } from '@shared/log-patterns'
-import { sanitizeStoredLine, stripAnsi } from '@shared/log-sanitize'
+import { sanitizeStoredLine } from '@shared/log-sanitize'
 import { redactText } from '@shared/redaction'
 import type { Db } from '../db/Database'
 import type { CockpitEvents } from '../events'
@@ -39,6 +39,8 @@ interface InsightRow {
   severity: string
   matched_pattern: string
   created_at: string
+  /** Joined only by listInsights so legacy rows pass today's sanitizer. */
+  log_message?: string | null
 }
 
 /** Map a raw SQLite row to the shared per-occurrence shape. */
@@ -102,7 +104,9 @@ export class LogIntelligenceService {
     // anything is persisted — log_events must never store raw secrets.
     const lines = input.message
       .split(/\r?\n/)
-      .map((l) => redactText(stripAnsi(l).trim()))
+      .map((line) => sanitizeStoredLine(line))
+      .filter((line): line is string => line !== null)
+      .map((line) => redactText(line))
       .filter((l) => l.length > 0)
     if (lines.length === 0) return null
 
@@ -205,7 +209,13 @@ export class LogIntelligenceService {
     // browser mock runs, so the two bridges can never drift. Tables are small
     // (bounded per project), so aggregating in-process is cheap.
     const rows = this.db
-      .prepare('SELECT * FROM error_insights WHERE project_id = ? ORDER BY created_at DESC')
+      .prepare(
+        `SELECT i.*, l.message AS log_message
+         FROM error_insights i
+         LEFT JOIN log_events l ON l.id = i.log_event_id
+         WHERE i.project_id = ?
+         ORDER BY i.created_at DESC`,
+      )
       .all(projectId) as InsightRow[]
 
     // A dismissal hides a pattern only up to the occurrence the user had seen.
@@ -217,7 +227,13 @@ export class LogIntelligenceService {
       .all(projectId) as { pattern: string; dismissed_up_to: string }[]
     for (const d of drows) dismissals.set(d.pattern, d.dismissed_up_to)
 
-    return aggregateInsights(rows.map(toOccurrence), dismissals, limit)
+    // Re-run today's sanitizer on the linked legacy line. This removes known
+    // recovered-runtime/TUI false positives from existing databases without
+    // deleting the evidence that explains what was captured.
+    const actionableRows = rows.filter(
+      (row) => row.log_message == null || sanitizeStoredLine(row.log_message) !== null,
+    )
+    return aggregateInsights(actionableRows.map(toOccurrence), dismissals, limit)
   }
 
   /**

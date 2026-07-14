@@ -337,6 +337,14 @@ export const sentinelCreateCardSchema = z.object({
   signalId: z.string().min(1).max(200),
 })
 
+// Explicit owner action: open one direct agent with the persisted signal's
+// bounded evidence. The renderer supplies ids + the closed agent choice only.
+export const sentinelAskAgentSchema = z.object({
+  projectId: z.string().min(1),
+  signalId: z.string().min(1).max(200),
+  agent: z.enum(['claude', 'codex']),
+})
+
 // --- secret store (encrypted, OS-keychain backed) -------------------------
 //
 // The kind is a closed enum, not a bare string: it is a trust boundary. Each

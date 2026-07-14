@@ -64,6 +64,13 @@ describe('IPC contract parity', () => {
     const missing = eventKeys.filter((k) => !new RegExp(`subscribe\\(IPC\\.${k}\\b`).test(preloadSrc))
     expect(missing, `add a subscribe(IPC.${missing[0]}, …) method to preload`).toEqual([])
   })
+
+  it('wires the explicit Sentinel ask handoff through main and preload', () => {
+    expect(IPC.sentinelAskAgent).toBe('sentinel:askAgent')
+    expect(mainSrc).toContain("handle('sentinelAskAgent'")
+    expect(mainSrc).toContain('services.sentinelHandoff.ask')
+    expect(preloadSrc).toContain('invoke(IPC.sentinelAskAgent')
+  })
 })
 
 describe('Council v3 run transport', () => {

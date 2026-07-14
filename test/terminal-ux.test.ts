@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   CODEX_INTERACTIVE_COMMAND,
+  buildAgentLaunchCommand,
   buildCodexResumeCommand,
   buildComposerMessage,
   buildTerminalComposerSubmission,
@@ -18,6 +19,19 @@ describe('Codex terminal UX', () => {
     expect(buildCodexResumeCommand('session-123')).toBe(
       'codex --no-alt-screen resume session-123',
     )
+  })
+
+  it('launches Claude or Codex with a shell-quoted Sentinel investigation prompt', () => {
+    const prompt = "Investigate: it's failing; $(touch /tmp/never)\nReport restart impact."
+
+    expect(buildAgentLaunchCommand('claude', prompt)).toBe(
+      "claude 'Investigate: it'\\''s failing; $(touch /tmp/never)\nReport restart impact.'",
+    )
+    expect(buildAgentLaunchCommand('codex', prompt)).toBe(
+      "codex --no-alt-screen 'Investigate: it'\\''s failing; $(touch /tmp/never)\nReport restart impact.'",
+    )
+    expect(buildAgentLaunchCommand('claude')).toBe('claude')
+    expect(buildAgentLaunchCommand('codex')).toBe(CODEX_INTERACTIVE_COMMAND)
   })
 
   it('keeps normal editor text while rejecting an empty prompt draft', () => {

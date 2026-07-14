@@ -7,6 +7,7 @@ import {
   type SentinelTriage,
 } from '@shared/sentinel'
 import { gateMemoryWrite } from '@shared/memory-gate'
+import { isNonActionableLogLine } from '@shared/log-sanitize'
 import { redactText } from '@shared/redaction'
 import { projectBrain } from '@shared/memory-ledger'
 import { canAutoCommit, defaultTrustModeForBrain } from '@shared/memory-policy'
@@ -302,13 +303,23 @@ export class SentinelService {
 
   /** The project's recent signals, newest first (the feed). */
   list(projectId: string, limit = 50): SentinelSignal[] {
+    const bounded = Number.isFinite(limit)
+      ? Math.max(1, Math.min(200, Math.floor(limit)))
+      : 50
+    // Over-fetch a small bounded window so legacy noise rows do not displace a
+    // real signal at the requested edge. The evidence remains in SQLite; only
+    // the owner-facing feed excludes signatures now known to be non-actionable.
+    const scanLimit = Math.min(600, bounded * 3)
     const rows = this.db
       .prepare(
         `SELECT * FROM sentinel_signals WHERE project_id = ?
          ORDER BY created_at DESC LIMIT ?`,
       )
-      .all(projectId, limit) as SignalRow[]
-    return rows.map((r) => this.toSignal(r))
+      .all(projectId, scanLimit) as SignalRow[]
+    return rows
+      .filter((row) => this.isFeedVisibleRow(row))
+      .slice(0, bounded)
+      .map((row) => this.toSignal(row))
   }
 
   /**
@@ -411,12 +422,13 @@ export class SentinelService {
 
   /** How many of the project's signals are still unseen (the rail badge). */
   unseenCount(projectId: string): number {
-    const row = this.db
+    const rows = this.db
       .prepare(
-        `SELECT COUNT(*) AS n FROM sentinel_signals WHERE project_id = ? AND status = 'new'`,
+        `SELECT source, context, status FROM sentinel_signals
+         WHERE project_id = ? AND status = 'new'`,
       )
-      .get(projectId) as { n: number }
-    return row.n
+      .all(projectId) as Pick<SignalRow, 'source' | 'context' | 'status'>[]
+    return rows.filter((row) => row.status === 'new' && this.isFeedVisibleRow(row)).length
   }
 
   /**
@@ -435,8 +447,6 @@ export class SentinelService {
     try {
       const triage = await this.triager?.triage(signal)
       if (!triage) return
-      const enriched: SentinelSignal = { ...signal, triage }
-
       // (a) Persist the enrichment blob. A write failure must not stop the
       // re-emit below — the renderer still gets the enriched signal in-memory.
       try {
@@ -453,11 +463,9 @@ export class SentinelService {
         logFatal('sentinel:enrich:persist', err)
       }
 
-      // (b) Re-emit under the same id so the feed/toast upserts in place.
-      this.events.emitTyped('sentinel:alert', enriched)
-
-      // (c) Quietly demote noise: the toast may already be up, but the unseen
-      // badge should not press for something triage judged not worth reporting.
+      // (b) Quietly demote noise BEFORE the re-emit. The event must carry the
+      // durable `seen` state; emitting `new` and demoting afterwards made the
+      // renderer re-add badge pressure for the same signal id.
       if (triage.reportWorthy === false) {
         try {
           this.markSeen(signal.projectId, [signal.id])
@@ -465,6 +473,13 @@ export class SentinelService {
           logFatal('sentinel:enrich:demote', err)
         }
       }
+
+      // (c) Re-emit under the same id so the feed/toast upserts in place. Read
+      // the current row first: the owner may have marked it seen while triage
+      // was in flight, and that state must not be resurrected as `new`.
+      const current = this.get(signal.projectId, signal.id)
+      const enriched: SentinelSignal = { ...(current ?? signal), triage }
+      this.events.emitTyped('sentinel:alert', enriched)
 
       // (d) A reusable lesson → propose a memory note (human-reviewed, never auto).
       if (triage.gotchaCandidate === true) {
@@ -633,6 +648,7 @@ export class SentinelService {
         )
         .all(cutoff, RETRIAGE_SWEEP_LIMIT) as SignalRow[]
       for (const row of rows) {
+        if (!this.isFeedVisibleRow(row)) continue
         // Serialized on purpose: await each enrich before the next so the sweep
         // adds at most one in-flight triage at a time (no parallel fan-out of
         // paid model calls). enrich() owns all its own error handling.
@@ -663,6 +679,16 @@ export class SentinelService {
       outcome: isSentinelOutcome(row.outcome) ? row.outcome : null,
       outcomeAt: row.outcome_at,
     }
+  }
+
+  /** A historical misclassification stays queryable in the append-only table,
+   * but no longer pressures the feed, badge, triage provider, or scorecard. */
+  private isFeedVisibleRow(row: Pick<SignalRow, 'source' | 'context'>): boolean {
+    return !(
+      row.source === 'log-intelligence' &&
+      row.context !== null &&
+      isNonActionableLogLine(row.context)
+    )
   }
 }
 

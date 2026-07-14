@@ -164,6 +164,8 @@ const api: CockpitApi = {
       invoke(IPC.sentinelRecordOutcome, { projectId, id, outcome }),
     createCard: (projectId, signalId) =>
       invoke(IPC.sentinelCreateCard, { projectId, signalId }),
+    askAgent: (projectId, signalId, agent) =>
+      invoke(IPC.sentinelAskAgent, { projectId, signalId, agent }),
     onAlert: (cb) => subscribe(IPC.evtSentinelAlert, cb),
   },
   chat: {
@@ -176,6 +178,7 @@ const api: CockpitApi = {
   },
   audit: {
     list: (projectId) => invoke(IPC.auditList, { projectId }),
+    onRecord: (cb) => subscribe(IPC.evtAuditRecorded, cb),
   },
   system: {
     info: () => invoke(IPC.systemInfo),

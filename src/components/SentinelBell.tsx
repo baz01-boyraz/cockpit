@@ -8,10 +8,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { cockpit } from '../lib/cockpit'
-import { relativeTime } from '@shared/time'
-import { OUTCOME_META, sourceLabel } from '../lib/sentinelView'
-import { IconBell, IconCheck, IconChevron, IconPlus, IconX } from './icons'
+import { IconBell, IconChevron } from './icons'
 import type { SentinelSignal } from '@shared/sentinel'
+import { isSignalForProject, upsertLiveSignal } from '../lib/sentinelLive'
+import {
+  SentinelDecisionCard,
+  type SentinelDecisionAgent,
+} from './SentinelDecisionCard'
 
 export function SentinelBell() {
   const unseen = useStore((s) => s.sentinelUnseen)
@@ -19,10 +22,13 @@ export function SentinelBell() {
   const activeProjectId = useStore((s) => s.activeProjectId)
   const setView = useStore((s) => s.setView)
   const markSignalsSeen = useStore((s) => s.markSignalsSeen)
+  const refreshTerminals = useStore((s) => s.refreshTerminals)
 
   const [open, setOpen] = useState(false)
   const [signals, setSignals] = useState<SentinelSignal[]>([])
   const [loading, setLoading] = useState(false)
+  const [busy, setBusy] = useState<{ signalId: string; agent: SentinelDecisionAgent } | null>(null)
+  const [actionError, setActionError] = useState<{ signalId: string; text: string } | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
@@ -45,6 +51,22 @@ export function SentinelBell() {
   useEffect(() => {
     if (open) void load()
   }, [open, load])
+
+  // Keep an already-open popover current and idempotent. The global event is
+  // project-agnostic at the window boundary, so scope it before touching state.
+  useEffect(() => {
+    return cockpit().sentinel.onAlert((signal) => {
+      if (!isSignalForProject(activeProjectId, signal)) return
+      setSignals((current) => upsertLiveSignal(current, signal, 20))
+    })
+  }, [activeProjectId])
+
+  useEffect(() => {
+    setSignals([])
+    setOpen(false)
+    setBusy(null)
+    setActionError(null)
+  }, [activeProjectId])
 
   // Dismiss on outside click / Escape while the popover is open.
   useEffect(() => {
@@ -72,27 +94,40 @@ export function SentinelBell() {
   const patch = (id: string, next: Partial<SentinelSignal>) =>
     setSignals((prev) => prev.map((s) => (s.id === id ? { ...s, ...next } : s)))
 
-  // Track H affordances, compact: record an outcome without leaving the popover.
-  // Both also clear the signal from the badge (an answered signal isn't unseen).
+  // An explicit noise decision stays in history but clears the active badge.
   const dismiss = async (signal: SentinelSignal) => {
     if (!activeProjectId) return
+    setActionError(null)
     patch(signal.id, { outcome: 'dismissed', status: 'seen' })
     void markSignalsSeen([signal.id])
     try {
       await cockpit().sentinel.recordOutcome(activeProjectId, signal.id, 'dismissed')
     } catch {
       patch(signal.id, { outcome: signal.outcome })
+      setActionError({ signalId: signal.id, text: 'Could not dismiss this signal. Try again.' })
     }
   }
 
-  const createCard = async (signal: SentinelSignal) => {
+  // Ask opens a direct Claude/Codex terminal with bounded evidence. It does not
+  // authorize a fix, restart, refresh, release, or any other follow-on action.
+  const askAgent = async (signal: SentinelSignal, agent: SentinelDecisionAgent) => {
     if (!activeProjectId) return
-    patch(signal.id, { outcome: 'card_created', status: 'seen' })
-    void markSignalsSeen([signal.id])
+    setBusy({ signalId: signal.id, agent })
+    setActionError(null)
     try {
-      await cockpit().sentinel.createCard(activeProjectId, signal.id)
+      await cockpit().sentinel.askAgent(activeProjectId, signal.id, agent)
+      patch(signal.id, { status: 'seen' })
+      void markSignalsSeen([signal.id])
+      await refreshTerminals()
+      setView('terminals')
+      setOpen(false)
     } catch {
-      patch(signal.id, { outcome: signal.outcome })
+      setActionError({
+        signalId: signal.id,
+        text: `Could not open ${agent === 'claude' ? 'Claude' : 'Codex'}. Try again.`,
+      })
+    } finally {
+      setBusy(null)
     }
   }
 
@@ -156,65 +191,20 @@ export function SentinelBell() {
                 </span>
               </div>
             ) : (
-              signals.map((signal) => {
-                const outcomeMeta = signal.outcome ? OUTCOME_META[signal.outcome] : null
-                return (
-                  <div
-                    key={signal.id}
-                    className={`sentinelRow sentinelRow--${signal.severity} ${
-                      signal.status === 'new' ? 'sentinelRow--new' : ''
-                    }`}
-                  >
-                    <span className="sentinelRow__edge" aria-hidden="true" />
-                    <button
-                      type="button"
-                      className="sentinelRow__main"
-                      onClick={() => pick(signal)}
-                      title="Open signal center"
-                    >
-                      <span className="sentinelRow__top">
-                        <span className="sentinelRow__source">{sourceLabel(signal.source)}</span>
-                        <span className="sentinelRow__time mono">
-                          {relativeTime(signal.createdAt) || 'now'}
-                        </span>
-                      </span>
-                      <span className="sentinelRow__title">{signal.title}</span>
-                      <span className="sentinelRow__summary">{signal.summary}</span>
-                    </button>
-                    <div className="sentinelRow__acts">
-                      {outcomeMeta && (
-                        <span className={`sigbadge sigbadge--${outcomeMeta.tone}`}>
-                          {outcomeMeta.label}
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        className="sentinelRow__act"
-                        onClick={() => void createCard(signal)}
-                        disabled={signal.outcome === 'card_created'}
-                        aria-label="Create Swarm card from this signal"
-                        title="Create card"
-                      >
-                        {signal.outcome === 'card_created' ? (
-                          <IconCheck width={13} height={13} />
-                        ) : (
-                          <IconPlus width={13} height={13} />
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        className="sentinelRow__act sentinelRow__act--dismiss"
-                        onClick={() => void dismiss(signal)}
-                        disabled={signal.outcome === 'dismissed'}
-                        aria-label="Dismiss this signal as noise"
-                        title="Dismiss as noise"
-                      >
-                        <IconX width={13} height={13} />
-                      </button>
-                    </div>
-                  </div>
-                )
-              })
+              signals.map((signal) => (
+                <SentinelDecisionCard
+                  key={signal.id}
+                  signal={signal}
+                  className={`sentinelRow sentinelRow--${signal.severity} ${
+                    signal.status === 'new' ? 'sentinelRow--new' : ''
+                  }`}
+                  onOpen={() => pick(signal)}
+                  onAsk={(agent) => void askAgent(signal, agent)}
+                  onDismiss={() => void dismiss(signal)}
+                  busyAgent={busy?.signalId === signal.id ? busy.agent : null}
+                  error={actionError?.signalId === signal.id ? actionError.text : null}
+                />
+              ))
             )}
           </div>
           <div className="sentinelPopover__footer">

@@ -47,6 +47,7 @@ import {
   secretKindOnlySchema,
   secretSetSchema,
   sentinelCreateCardSchema,
+  sentinelAskAgentSchema,
   sentinelListSchema,
   sentinelMarkSeenSchema,
   sentinelRecordOutcomeSchema,
@@ -505,6 +506,9 @@ export function registerIpc(services: Services): void {
     const { projectId, signalId } = sentinelCreateCardSchema.parse(p)
     return services.swarm.createCardFromSignal({ projectId, signalId })
   })
+  handle('sentinelAskAgent', (p) =>
+    services.sentinelHandoff.ask(sentinelAskAgentSchema.parse(p)),
+  )
 
   // --- chat (real answers via the local Claude Code CLI) ---
   handle('chatAsk', (p) => {
