@@ -134,7 +134,7 @@ app.whenReady().then(() => {
   app.setName('Cockpit')
   if (process.platform === 'darwin') {
     const dockIcon = nativeImage.createFromPath(appIconPath())
-    if (!dockIcon.isEmpty()) app.dock.setIcon(dockIcon)
+    if (!dockIcon.isEmpty()) app.dock?.setIcon(dockIcon)
   }
 
   const userDataDir = app.getPath('userData')

@@ -23,7 +23,6 @@ const fixturePath = resolve('test/fixtures/memory/retrieval-corpus.json')
 const realRedactedFixturePath = resolve('test/fixtures/memory/retrieval-real-redacted.json')
 const manifestScript = resolve('scripts/diagnostics/memory-manifest.mjs')
 const retrievalScript = resolve('scripts/diagnostics/memory-retrieval-baseline.ts')
-const viteNode = resolve('node_modules/vite-node/vite-node.mjs')
 const tempRoots: string[] = []
 
 function loadCorpus(): MemoryEvalCorpus {
@@ -185,12 +184,12 @@ describe('Memory R0 retrieval corpus', () => {
     const before = readFileSync(fixturePath, 'utf8')
     const first = execFileSync(
       process.execPath,
-      [viteNode, retrievalScript, '--input', fixturePath],
+      ['--import', 'tsx', retrievalScript, '--input', fixturePath],
       { cwd: process.cwd(), encoding: 'utf8' },
     )
     const second = execFileSync(
       process.execPath,
-      [viteNode, retrievalScript, '--input', fixturePath],
+      ['--import', 'tsx', retrievalScript, '--input', fixturePath],
       { cwd: process.cwd(), encoding: 'utf8' },
     )
     const report = JSON.parse(first) as ReturnType<typeof evaluateMemoryRetrievalCorpus>

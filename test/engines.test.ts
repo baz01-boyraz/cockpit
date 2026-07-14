@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildCodexArgs } from '@shared/engines'
+import { buildCodexArgs, engineLabel, type EngineSpec } from '@shared/engines'
 
 const DEFAULT_ARGS = [
   'exec',
@@ -87,5 +87,23 @@ describe('buildCodexArgs', () => {
       'gpt-5-codex',
       'bounded evidence',
     ])
+  })
+})
+
+describe('engineLabel', () => {
+  it.each([
+    [{ engine: 'claude', model: 'opus' }, 'opus'],
+    [{ engine: 'claude', model: '' }, 'claude'],
+    [{ engine: 'codex', model: 'gpt-5-codex' }, 'gpt-5-codex'],
+    [{ engine: 'codex', model: '' }, 'codex'],
+    [{ engine: 'openrouter', model: 'deepseek/deepseek-chat' }, 'deepseek'],
+    [{ engine: 'openrouter', model: 'standalone-model' }, 'standalone-model'],
+    [{ engine: 'openrouter', model: '' }, 'openrouter'],
+  ] satisfies Array<[EngineSpec, string]>)('labels %o as %s', (spec, expected) => {
+    expect(engineLabel(spec)).toBe(expected)
+  })
+
+  it('fails visibly if an unrecognised runtime engine bypasses validation', () => {
+    expect(engineLabel({ engine: 'future-engine', model: '' } as unknown as EngineSpec)).toBe('future-engine')
   })
 })

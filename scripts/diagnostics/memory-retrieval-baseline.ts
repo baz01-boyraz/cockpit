@@ -1,4 +1,4 @@
-#!/usr/bin/env vite-node
+#!/usr/bin/env tsx
 import { readFileSync } from 'node:fs'
 import {
   evaluateMemoryRetrievalCorpus,
