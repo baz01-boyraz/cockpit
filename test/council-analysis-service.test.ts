@@ -270,4 +270,36 @@ describe('CouncilService grounded analysis', () => {
       engine: { engine: 'openrouter' },
     })
   })
+
+  it('uses the allowed Claude Chairman fallback when Codex is unavailable', async () => {
+    const parts = makeParts('account-models')
+    parts.call.mockImplementation(async (engine, prompt) => {
+      if (engine.engine === 'codex') throw new Error('Codex launcher failed')
+      if (prompt.includes('You are the Chairman of a repository-analysis Council')) {
+        return [
+          'CLAIM 1:',
+          'SOURCE: REPOSITORY',
+          'EVIDENCE: repo-001',
+          'TEXT: MemoryNoteMetadata is the typed note metadata contract.',
+        ].join('\n')
+      }
+      return [
+        'FINDING 1: The metadata type is directly visible in repo-001.',
+        'IMPACT: The typed contract remains available for analysis.',
+        'RECOMMENDATION: Preserve the contract.',
+        'BASIS: EVIDENCE',
+        'EVIDENCE: repo-001',
+      ].join('\n')
+    })
+
+    const result = await parts.run(true)
+
+    expect(result.ok).toBe(true)
+    expect(result.evidence.rawChairman).toContain('CLAIM 1:')
+    const chairmanEngines = parts.call.mock.calls
+      .filter(([, prompt]) => prompt.includes('You are the Chairman of a repository-analysis Council'))
+      .map(([engine]) => engine.engine)
+    expect(chairmanEngines).toEqual(['codex', 'claude'])
+    expect(parts.call.mock.calls.every(([engine]) => engine.engine !== 'openrouter')).toBe(true)
+  })
 })

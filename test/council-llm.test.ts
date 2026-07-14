@@ -102,7 +102,7 @@ describe('council roster v2', () => {
     ])
   })
 
-  it('uses the exact five-model roster with one quota-gated Sonnet fallback', () => {
+  it('uses the exact five-model roster with quota-gated Builder and Claude Chairman failover', () => {
     const byId = Object.fromEntries(COUNCIL_SEATS.map((s) => [s.id, s]))
     expect(GPT56_MODELS).toEqual({
       sol: 'gpt-5.6-sol',
@@ -131,7 +131,7 @@ describe('council roster v2', () => {
     expect(COUNCIL_SEATS.every((seat) => !seat.fallbacks?.length)).toBe(true)
     expect(CHAIRMAN).toEqual({
       engine: { engine: 'codex', model: GPT56_MODELS.sol },
-      fallbacks: [],
+      fallbacks: [{ engine: 'claude', model: COUNCIL_MODELS.sonnet5 }],
     })
   })
 })
