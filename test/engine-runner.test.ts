@@ -168,6 +168,58 @@ describe('EngineRunner.killAll — orphan CLI child cleanup (A2)', () => {
   })
 })
 
+describe('EngineRunner — CLI failure sanitization', () => {
+  const PROMPT = 'distill this transcript: the user rotated the deploy token yesterday'
+
+  /** Node's execFile rejection embeds the full command line — argv included. */
+  function execFileStyleError(over: Partial<{ code: unknown; killed: boolean; signal: string | null }>): Error {
+    const err = new Error(`Command failed: codex exec ${PROMPT}`) as Error & {
+      code?: unknown
+      killed?: boolean
+      signal?: string | null
+    }
+    Object.assign(err, { killed: false, signal: null, ...over })
+    return err
+  }
+
+  function failingCli(err: Error): CliRunner {
+    return () => Promise.reject(err)
+  }
+
+  it('maps ENOENT to fixed install guidance without the command line', async () => {
+    const service = new EngineRunner(fakeSecrets(null), failingCli(execFileStyleError({ code: 'ENOENT' })))
+    const thrown = await service.call({ engine: 'codex', model: '' }, PROMPT, OPTS).catch((e: Error) => e)
+    expect(thrown).toBeInstanceOf(Error)
+    expect((thrown as Error).message).toMatch(/not installed|not on PATH/i)
+    expect((thrown as Error).message).not.toContain('transcript')
+    expect((thrown as Error).message).not.toContain(PROMPT)
+  })
+
+  it('maps a timeout kill to fixed text without the command line', async () => {
+    const service = new EngineRunner(
+      fakeSecrets(null),
+      failingCli(execFileStyleError({ killed: true, signal: 'SIGTERM' })),
+    )
+    const thrown = await service.call({ engine: 'claude', model: 'haiku' }, PROMPT, OPTS).catch((e: Error) => e)
+    expect((thrown as Error).message).toMatch(/timed out|terminated/i)
+    expect((thrown as Error).message).not.toContain(PROMPT)
+  })
+
+  it('maps a non-zero exit to the bare exit code without the command line', async () => {
+    const service = new EngineRunner(fakeSecrets(null), failingCli(execFileStyleError({ code: 2 })))
+    const thrown = await service.call({ engine: 'codex', model: '' }, PROMPT, OPTS).catch((e: Error) => e)
+    expect((thrown as Error).message).toMatch(/exited with code 2/i)
+    expect((thrown as Error).message).not.toContain(PROMPT)
+  })
+
+  it('maps any other CLI failure to generic fixed text without the command line', async () => {
+    const service = new EngineRunner(fakeSecrets(null), failingCli(execFileStyleError({})))
+    const thrown = await service.call({ engine: 'claude', model: 'haiku' }, PROMPT, OPTS).catch((e: Error) => e)
+    expect((thrown as Error).message).toMatch(/failed to run/i)
+    expect((thrown as Error).message).not.toContain(PROMPT)
+  })
+})
+
 describe('EngineRunner — openrouter branch', () => {
   const spec: EngineSpec = { engine: 'openrouter', model: 'deepseek/deepseek-chat' }
 

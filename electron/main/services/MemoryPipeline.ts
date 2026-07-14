@@ -4,7 +4,7 @@ import {
   mergeObservationIntoNote,
   type GateOutcome,
 } from '@shared/memory-commit'
-import { noteLifecycle, parseNote, validateNoteContent } from '@shared/memory-note-schema'
+import { isActiveNote, noteLifecycle, parseNote, validateNoteContent } from '@shared/memory-note-schema'
 import { BAZ_GLOBAL_BRAIN, projectBrain } from '@shared/memory-ledger'
 import { gateMemoryWrite } from '@shared/memory-gate'
 import { reconcile, type Reconciled } from '@shared/memory-reconcile'
@@ -140,6 +140,21 @@ export class MemoryPipeline {
     for (const obs of distilled.observations) {
       const target = this.route(obs.scope, req.projectId, projectDocs, userDocs)
       const rec = reconcile(obs, target.docs)
+      // Retired history is reference, never a write target. Reconciliation sees
+      // archived slugs so the brain never grows twins, but an observation that
+      // resolves onto one is dropped here — letting it reach the hub would trip
+      // the reactivation guard and poison the whole batch. Exact duplicates
+      // keep flowing through decideGate so their counters stay unchanged.
+      if (rec.existingContent && rec.decision !== 'duplicate' && !isActiveNote(rec.existingContent)) {
+        if (!req.dryRun) {
+          this.recordGate(req.projectId, rec.targetSlug, 'reject', [
+            'target note is archived or superseded',
+          ])
+          skipped += 1
+        }
+        proposals.push(this.proposal(obs, rec, 'skip', null))
+        continue
+      }
       const initialGate = decideGate(obs, rec)
       const kind = this.reviewKind(rec)
       const mode = this.policy?.trustModeForBrain(target.brain) ?? defaultTrustModeForBrain(target.brain)
@@ -167,58 +182,81 @@ export class MemoryPipeline {
         req.onStage?.('committing')
       }
 
-      if (gate === 'skip') {
-        skipped += 1
-      } else if (gate === 'commit' && proposedContent) {
-        // Faz C charter gate — a last, cautious pass over a would-be auto-commit.
-        // It can only make the pipeline MORE careful: a secret-shaped note is
-        // dropped (never persisted), a vague/oversized one downgrades to review.
-        const decision = gateMemoryWrite({
-          name: rec.targetSlug,
-          content: proposedContent,
-          justification: {
-            sevenDayScenario: obs.reason,
-            dedupChecked: rec.decision === 'merge' ? 'updates-existing' : 'no-overlap',
-            targetNote: rec.targetSlug,
-            evidence: obs.body,
-          },
-          existingNames: target.docs.map((d) => d.name),
-        })
-        if (decision.verdict === 'reject') {
-          this.recordGate(req.projectId, rec.targetSlug, 'reject', decision.reasons)
-          gate = 'skip'
-          proposedContent = null
+      try {
+        if (gate === 'skip') {
           skipped += 1
-        } else if (decision.verdict === 'review') {
-          this.recordGate(req.projectId, rec.targetSlug, 'review', decision.reasons)
-          if (mode === 'manual' || this.needsOwnerDecision(obs, rec)) {
-            startPersistence()
-            this.queueReview(req.projectId, target.brain, rec, obs, proposedContent, sourceId, decision.reasons.join('; '))
-            gate = 'review'
-            queued += 1
-          } else {
+        } else if (gate === 'commit' && proposedContent) {
+          // Faz C charter gate — a last, cautious pass over a would-be auto-commit.
+          // It can only make the pipeline MORE careful: a secret-shaped note is
+          // dropped (never persisted), a vague/oversized one downgrades to review.
+          const decision = gateMemoryWrite({
+            name: rec.targetSlug,
+            content: proposedContent,
+            justification: {
+              sevenDayScenario: obs.reason,
+              dedupChecked: rec.decision === 'merge' ? 'updates-existing' : 'no-overlap',
+              targetNote: rec.targetSlug,
+              evidence: obs.body,
+            },
+            existingNames: target.docs.map((d) => d.name),
+          })
+          if (decision.verdict === 'reject') {
+            this.recordGate(req.projectId, rec.targetSlug, 'reject', decision.reasons)
             gate = 'skip'
             proposedContent = null
             skipped += 1
+          } else if (decision.verdict === 'review') {
+            this.recordGate(req.projectId, rec.targetSlug, 'review', decision.reasons)
+            if (mode === 'manual' || this.needsOwnerDecision(obs, rec)) {
+              startPersistence()
+              this.queueReview(req.projectId, target.brain, rec, obs, proposedContent, sourceId, decision.reasons.join('; '))
+              gate = 'review'
+              queued += 1
+            } else {
+              gate = 'skip'
+              proposedContent = null
+              skipped += 1
+            }
+          } else {
+            startPersistence()
+            this.commit(req.projectId, target.memory, target.hubId, target.brain, rec, proposedContent, sourceId)
+            committed += 1
+            // keep the right docs list fresh so later same-batch observations reconcile correctly
+            target.docs.push({ name: rec.targetSlug, content: proposedContent, updatedAt: this.now() })
           }
-        } else {
+        } else if (gate === 'review' && proposedContent) {
           startPersistence()
-          this.commit(target.memory, target.hubId, target.brain, rec, proposedContent, sourceId)
-          committed += 1
-          // keep the right docs list fresh so later same-batch observations reconcile correctly
-          target.docs.push({ name: rec.targetSlug, content: proposedContent, updatedAt: this.now() })
+          const reason =
+            initialGate === 'commit'
+              ? `${mode} policy requires review for a ${kind} proposal. ${obs.reason}`
+              : obs.reason
+          this.queueReview(req.projectId, target.brain, rec, obs, proposedContent, sourceId, reason)
+          queued += 1
         }
-      } else if (gate === 'review' && proposedContent) {
-        startPersistence()
-        const reason =
-          initialGate === 'commit'
-            ? `${mode} policy requires review for a ${kind} proposal. ${obs.reason}`
-            : obs.reason
-        this.queueReview(req.projectId, target.brain, rec, obs, proposedContent, sourceId, reason)
-        queued += 1
-      }
 
-      proposals.push(this.proposal(obs, rec, gate, proposedContent))
+        proposals.push(this.proposal(obs, rec, gate, proposedContent))
+      } catch (err) {
+        // One bad candidate must never poison its batch: siblings still commit
+        // and the session cursor still advances. The drop is audited
+        // content-free; every counter above only increments after its write
+        // succeeded, so nothing here is double-counted.
+        skipped += 1
+        proposals.push(this.proposal(obs, rec, 'skip', null))
+        try {
+          this.audit?.record({
+            projectId: req.projectId,
+            actor: 'system',
+            actionType: 'memory.observation_failed',
+            summary: 'A memory observation failed at the write boundary and was dropped',
+            payload: {
+              slug: rec.targetSlug,
+              failureKind: classifyMemoryFailure(err instanceof Error ? err.message : String(err)),
+            },
+          })
+        } catch {
+          // Audit storage being down must not undo the batch isolation.
+        }
+      }
     }
 
     return {
@@ -329,6 +367,7 @@ export class MemoryPipeline {
 
   /** Validate, write atomically, and ledger a committed note (G3/G7). */
   private commit(
+    originProjectId: string,
     memory: MemoryHubService,
     hubId: string,
     brain: string,
@@ -342,15 +381,37 @@ export class MemoryPipeline {
     }
     const before = rec.existingContent
     memory.write(hubId, rec.targetSlug, content)
-    this.ledger.record({
-      brain,
-      noteSlug: rec.targetSlug,
-      action: rec.decision === 'merge' ? 'merge' : 'create',
-      gate: 'save',
-      sourceId: sessionId ?? null,
-      contentBefore: before,
-      contentAfter: content,
-    })
+    try {
+      this.ledger.record({
+        brain,
+        noteSlug: rec.targetSlug,
+        action: rec.decision === 'merge' ? 'merge' : 'create',
+        gate: 'save',
+        sourceId: sessionId ?? null,
+        contentBefore: before,
+        contentAfter: content,
+      })
+    } catch (err) {
+      // The note IS on disk. Throwing here would relabel a successful write as
+      // a skip AND leave the caller's docs list stale, letting a same-batch
+      // sibling reconcile against old state and silently overwrite this note.
+      // The lost provenance row is audited (content-free) and the commit stands.
+      try {
+        this.audit?.record({
+          projectId: originProjectId,
+          actor: 'system',
+          actionType: 'memory.ledger_failed',
+          summary: 'A committed memory note could not be ledgered — provenance row lost',
+          payload: {
+            slug: rec.targetSlug,
+            brain,
+            failureKind: classifyMemoryFailure(err instanceof Error ? err.message : String(err)),
+          },
+        })
+      } catch {
+        // Audit storage down too — the write outcome still stands.
+      }
+    }
   }
 
   /** The hub + id a review's brain writes to (project hub, or the global Baz brain). */

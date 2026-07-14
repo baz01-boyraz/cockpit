@@ -448,11 +448,35 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
     expect(deps.spawned).toHaveLength(3)
   })
 
-  it('falls back to the project root when worktree creation fails', async () => {
+  it('refuses to start a coding crew in the project root when worktree creation fails', async () => {
+    // "Fix the form" routes to a Fixer — a mutating role. Running it unisolated
+    // in the human's working tree would silently break the parallel-safety
+    // promise, so the start is refused, audited, and the card stays To do.
     deps.worktrees.create.mockRejectedValueOnce(new Error('not a git repo'))
-    await svc.startCard({ origin: 'user-ui', projectId: 'p1', cardId: 'a', skipGate: true })
-    expect(deps.spawned[0].cwd).toBeUndefined()
-    expect(store.rows.find((r) => r.id === 'a')!.worktree_path).toBeNull()
+    await expect(
+      svc.startCard({ origin: 'user-ui', projectId: 'p1', cardId: 'a', skipGate: true }),
+    ).rejects.toThrow(/[Ww]orktree/)
+    expect(deps.spawned).toHaveLength(0)
+    expect(store.rows.find((r) => r.id === 'a')!.status).toBe('todo')
+    expect(deps.audits).toContain('swarm.start_refused')
+  })
+
+  it('falls back to the project root for a read-only crew when worktree creation fails', async () => {
+    const localStore = makeStore([
+      {
+        id: 'r',
+        status: 'todo',
+        position: POSITION_GAP,
+        title: 'Review the auth module',
+        assignments: '[{"role":"reviewer","spec":"security"}]',
+      },
+    ])
+    const localDeps = makeDeps()
+    const localSvc = build(localStore, localDeps)
+    localDeps.worktrees.create.mockRejectedValueOnce(new Error('not a git repo'))
+    await localSvc.startCard({ origin: 'user-ui', projectId: 'p1', cardId: 'r', skipGate: true })
+    expect(localDeps.spawned[0].cwd).toBeUndefined()
+    expect(localStore.rows.find((r) => r.id === 'r')!.worktree_path).toBeNull()
   })
 
   it('moves the card to In review when its worker exits', async () => {
@@ -522,10 +546,24 @@ describe('SwarmService startCard / worktrees / park / exit (6.2–6.4)', () => {
   it('arms the done signal for the worktree before the worker spawns', async () => {
     await svc.startCard({ origin: 'user-ui', projectId: 'p1', cardId: 'a', skipGate: true })
     expect(deps.armed).toEqual(['/proj/.cockpit-worktrees/a'])
-    // No worktree (fallback run) → nothing to arm.
-    deps.worktrees.create.mockRejectedValueOnce(new Error('not a git repo'))
-    await svc.startCard({ origin: 'user-ui', projectId: 'p1', cardId: 'b', skipGate: true })
-    expect(deps.armed).toHaveLength(1)
+  })
+
+  it('does not arm the done signal for a read-only fallback run (no worktree)', async () => {
+    const localStore = makeStore([
+      {
+        id: 'r',
+        status: 'todo',
+        position: POSITION_GAP,
+        title: 'Review the auth module',
+        assignments: '[{"role":"scout"}]',
+      },
+    ])
+    const localDeps = makeDeps()
+    const localSvc = build(localStore, localDeps)
+    localDeps.worktrees.create.mockRejectedValueOnce(new Error('not a git repo'))
+    await localSvc.startCard({ origin: 'user-ui', projectId: 'p1', cardId: 'r', skipGate: true })
+    expect(localDeps.spawned).toHaveLength(1)
+    expect(localDeps.armed).toHaveLength(0)
   })
 
   it('a turn-finished signal moves the Running card to In review; the terminal stays alive', async () => {

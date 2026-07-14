@@ -205,6 +205,119 @@ describe('MemoryPipeline.capture', () => {
     expect(memory.list('p1').archived.map((note) => note.name)).toEqual(['router-placement'])
   })
 
+  it('drops a merge into an archived note instead of failing the whole batch', async () => {
+    const archived = serializeNote({
+      schema: 2,
+      name: 'router-placement',
+      title: 'Router in shared',
+      class: 'decision',
+      gate: 'manual',
+      updatedAt: '2026-07-12T00:00:00.000Z',
+      tags: [],
+      status: 'archived',
+      authority: 'human-directive',
+      scope: 'project',
+      confidence: 'high',
+      firstSeenAt: '2026-07-12T00:00:00.000Z',
+      reviewAfter: '2027-01-01T00:00:00.000Z',
+      supersedes: [],
+    }, obs().body)
+    memory.write('p1', 'router-placement', archived)
+    const ledger = fakeLedger()
+    const audit = fakeAudit()
+    // A model merge (isNew: false, different content) into the retired slug —
+    // exactly the shape the write boundary's reactivation guard rejects.
+    const archivedTarget = obs({
+      isNew: false,
+      body: 'Terminal capture now drains through the durable queue with provider-scoped blocking.',
+    })
+    const sibling = obs({
+      targetSlug: 'fresh-fact',
+      title: 'Fresh fact',
+      body: 'The idle sweep enqueues sessions quiet for ten minutes so abandoned panes still capture.',
+    })
+    const pipe = new MemoryPipeline(
+      memory,
+      ledger.svc,
+      fakeReviews().svc,
+      stubDistiller([archivedTarget, sibling]),
+      undefined,
+      undefined,
+      audit.svc,
+    )
+
+    const res = await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
+
+    expect(res.error).toBeUndefined()
+    expect(res).toMatchObject({ committed: 1, queued: 0, skipped: 1, nextOffset: 128 })
+    expect(memory.read('p1', 'router-placement')?.content).toBe(archived)
+    expect(memory.read('p1', 'fresh-fact')?.content).toContain('idle sweep')
+    expect(
+      audit.records.some(
+        (r) => r.actionType === 'memory_write_gate' && r.payload?.verdict === 'reject',
+      ),
+    ).toBe(true)
+  })
+
+  it('a ledger failure after a successful write keeps the commit and audits the lost provenance', async () => {
+    const audit = fakeAudit()
+    const throwingLedger = {
+      record: () => {
+        throw new Error('SQLITE_BUSY: database is locked')
+      },
+    } as unknown as MemoryLedgerService
+    const pipe = new MemoryPipeline(
+      memory,
+      throwingLedger,
+      fakeReviews().svc,
+      stubDistiller([obs()]),
+      undefined,
+      undefined,
+      audit.svc,
+    )
+
+    const res = await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
+
+    // The note IS on disk — the counters must say so, not relabel it a skip.
+    expect(res).toMatchObject({ committed: 1, queued: 0, skipped: 0 })
+    expect(memory.read('p1', 'router-placement')?.content).toContain('lives in shared')
+    expect(audit.records.some((r) => r.actionType === 'memory.ledger_failed')).toBe(true)
+    expect(audit.records.some((r) => r.actionType === 'memory.observation_failed')).toBe(false)
+  })
+
+  it('isolates a write-boundary failure to its observation and still advances the batch', async () => {
+    const ledger = fakeLedger()
+    const audit = fakeAudit()
+    const realWrite = memory.write.bind(memory)
+    vi.spyOn(memory, 'write').mockImplementation((projectId, name, content) => {
+      if (name === 'router-placement') throw new Error('EIO: disk write failed')
+      return realWrite(projectId, name, content)
+    })
+    const sibling = obs({
+      targetSlug: 'fresh-fact',
+      title: 'Fresh fact',
+      body: 'The idle sweep enqueues sessions quiet for ten minutes so abandoned panes still capture.',
+    })
+    const pipe = new MemoryPipeline(
+      memory,
+      ledger.svc,
+      fakeReviews().svc,
+      stubDistiller([obs(), sibling]),
+      undefined,
+      undefined,
+      audit.svc,
+    )
+
+    const res = await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
+
+    expect(res.error).toBeUndefined()
+    expect(res).toMatchObject({ committed: 1, queued: 0, skipped: 1, nextOffset: 128 })
+    expect(memory.read('p1', 'fresh-fact')).not.toBeNull()
+    expect(audit.records.some((r) => r.actionType === 'memory.observation_failed')).toBe(true)
+    // The failed observation never reached the ledger; the sibling did.
+    expect(ledger.records).toHaveLength(1)
+  })
+
   it('skips repeated captures of one bullet already buried in a long note', async () => {
     const repeatedFact =
       'The router lives in shared so both bridges classify identically and stay in lockstep.'

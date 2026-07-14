@@ -15,7 +15,7 @@ import {
   scanTerminalChunk,
   terminalRoleProducesActionableLogs,
 } from '@shared/log-sanitize'
-import { MEMORY_ANALYSIS_ENGINE } from '@shared/memory-model-policy'
+import { runMemoryAnalysis, type MemoryAnalysisFallbackNotice } from '@shared/memory-model-policy'
 import type { Db } from '../db/Database'
 import { openDatabase } from '../db/Database'
 import type { CockpitEvents } from '../events'
@@ -250,13 +250,17 @@ export class Services {
       this.projects,
       new TranscriptReader(),
       (cwd, prompt) =>
-        this.engineRunner.call(MEMORY_ANALYSIS_ENGINE, prompt, {
-          cwd,
-          timeout: 180_000,
-          maxBuffer: 8 * 1024 * 1024,
-          maxTokens: 4_000,
-          evidenceOnly: true,
-        }),
+        runMemoryAnalysis(
+          (spec) =>
+            this.engineRunner.call(spec, prompt, {
+              cwd,
+              timeout: 180_000,
+              maxBuffer: 8 * 1024 * 1024,
+              maxTokens: 4_000,
+              evidenceOnly: true,
+            }),
+          (notice) => this.recordMemoryAnalysisFallback(notice),
+        ),
     )
     this.memoryPipeline = new MemoryPipeline(
       this.memory,
@@ -276,13 +280,17 @@ export class Services {
       this.memoryReviews,
       this.audit,
       (cwd, prompt) =>
-        this.engineRunner.call(MEMORY_ANALYSIS_ENGINE, prompt, {
-          cwd,
-          timeout: 60_000,
-          maxBuffer: 512 * 1024,
-          maxTokens: 2_000,
-          evidenceOnly: true,
-        }),
+        runMemoryAnalysis(
+          (spec) =>
+            this.engineRunner.call(spec, prompt, {
+              cwd,
+              timeout: 60_000,
+              maxBuffer: 512 * 1024,
+              maxTokens: 2_000,
+              evidenceOnly: true,
+            }),
+          (notice) => this.recordMemoryAnalysisFallback(notice),
+        ),
     )
     this.memoryCaptureQueue = new MemoryCaptureQueue(this.db, this.memoryLifecycle)
     this.memoryAutoCapture = new MemoryAutoCapture(
@@ -437,6 +445,30 @@ export class Services {
     // healthy/unchanged ticks remain silent; only a changed anomaly wakes its
     // signal path.
     this.operationalHealth.start()
+  }
+
+  /**
+   * Content-free audit line for a memory-analysis engine hop (distiller or
+   * curation falling past OpenRouter onto a local CLI). The failure text is an
+   * EngineRunner fixed guidance string — never key material or prompt bytes.
+   * Audit storage being down must not affect the analysis chain itself.
+   */
+  private recordMemoryAnalysisFallback(notice: MemoryAnalysisFallbackNotice): void {
+    try {
+      this.audit.record({
+        projectId: null,
+        actor: 'system',
+        actionType: 'memory.analysis_fallback',
+        summary: `Memory analysis fell back from ${notice.failed.engine} to ${notice.next.engine}`,
+        payload: {
+          failedEngine: notice.failed.engine,
+          nextEngine: notice.next.engine,
+          failure: notice.failure,
+        },
+      })
+    } catch {
+      // Telemetry only — the fallback chain already carries the outcome.
+    }
   }
 
   /** Age threshold before a project's memory hub is re-swept (7 days). */

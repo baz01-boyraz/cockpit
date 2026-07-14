@@ -136,8 +136,31 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test
-        run: npm test
+      # Release blocker: the same Vitest suite as `npm test`, but with the
+      # coverage ratchet from vitest.config.ts enforced (lines 70 / functions 80
+      # / branches 80 / statements 70). A drop below the ratchet fails the tag.
+      - name: Test (coverage ratchet)
+        run: npm run test:coverage
+
+      # Release blocker: the Playwright smoke suite against the built renderer
+      # (mock bridge on localhost, same workflow as local `npm run test:e2e`).
+      # This is the only pre-publish check that exercises the composed UI.
+      - name: Build renderer for E2E
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: E2E smoke suite
+        run: npm run test:e2e
+
+      - name: Upload E2E artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
 
       - name: Clear any partial release for this tag
         run: gh release delete "$GITHUB_REF_NAME" --yes || true

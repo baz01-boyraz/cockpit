@@ -149,9 +149,9 @@ GitHub for a tagged release.** A previous mixed local+CI publish left `latest-ma
 at one ZIP/DMG while GitHub assets were overwritten by another build; `electron-updater` then
 failed download validation. Keep metadata and assets from the same CI run.
 
-1. Commit all app changes to `main`. `npm test` must be green — the redaction and
-   force-push-gate suites are release blockers (the IPC contract test joins them in Phase 2
-   of `docs/cockpit-VISION.md`).
+1. Commit all app changes to `main`. `npm run test:coverage` and `npm run test:e2e` must be
+   green — CI enforces both as release blockers (coverage ratchet from `vitest.config.ts`
+   plus the Playwright smoke suite), alongside the redaction and force-push-gate suites.
 2. Bump `package.json` version and tag the release (`vX.Y.Z`).
 3. Push `main` with tags.
 4. GitHub Actions runs `.github/workflows/release.yml`.

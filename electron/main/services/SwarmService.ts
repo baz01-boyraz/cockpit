@@ -19,6 +19,7 @@ import {
 import {
   assignmentLabel,
   assignmentPrompt,
+  assignmentsRequireIsolation,
   legacyIdentityToAssignment,
   parseAssignments,
   pipelinePrompt,
@@ -382,9 +383,11 @@ export class SwarmService {
    * Card → running agent. Each card gets its own git worktree on a
    * `swarm/<slug>` branch (plan D4) so parallel workers never clobber each
    * other or the human's working tree; a parked card resumes in the SAME
-   * worktree (6.4). Cap: RUNNING_CAP concurrent cards (plan D6). Falls back
-   * to the project root when worktree creation fails (e.g. not a git repo) —
-   * a refused start would be worse than an unisolated one.
+   * worktree (6.4). Cap: RUNNING_CAP concurrent cards (plan D6). When worktree
+   * creation fails (e.g. not a git repo), only a read-only crew falls back to
+   * the project root; a crew that writes code fails closed with an audited
+   * refusal, because an unisolated coding run silently breaks the
+   * parallel-safety promise.
    */
   async startCard(input: {
     projectId: string
@@ -446,20 +449,42 @@ export class SwarmService {
         return { gated: false, board: this.parkMissingWorktree(input.projectId, card) }
       }
     }
-    if (!worktree) {
-      try {
-        worktree = await this.worktrees.create(projectPath, card.title, card.id)
-      } catch {
-        worktree = null
-      }
-    }
-
     // Auto-assign at Start: an unassigned card (no explicit pipeline, no named
     // override) is routed to a role pipeline from its text — the "give a task,
     // the swarm picks the agents" path. An explicit pipeline or a named agent
-    // is honoured as-is. Steps run sequentially in this one worktree.
+    // is honoured as-is. Steps run sequentially in this one worktree. Resolved
+    // BEFORE the worktree so a creation failure can be judged by the crew's
+    // write capability.
     const assignments = this.resolveAssignments(card)
     const step = Math.min(card.pipelineStep, Math.max(0, assignments.length - 1))
+
+    if (!worktree) {
+      try {
+        worktree = await this.worktrees.create(projectPath, card.title, card.id)
+      } catch (err) {
+        // Fail closed for a crew that writes: a builder/fixer/tester (or a
+        // named/legacy identity whose capability is unknown) must never run
+        // unisolated in the human's working tree — that silently breaks the
+        // parallel-safety promise. Only a read-only crew may proceed without
+        // a worktree.
+        if (assignmentsRequireIsolation(assignments)) {
+          this.audit.record({
+            projectId: input.projectId,
+            actor: 'system',
+            actionType: 'swarm.start_refused',
+            summary: `Swarm card "${card.title}" refused to start — worktree creation failed and the crew writes code`,
+            payload: {
+              cardId: card.id,
+              reason: err instanceof Error ? err.message : String(err),
+            },
+          })
+          throw new Error(
+            'Worktree creation failed — a coding crew will not run in the project working tree. Fix the repository state and try again.',
+          )
+        }
+        worktree = null
+      }
+    }
 
     // Arm the turn-finished signal BEFORE the worker spawns: clears any stale
     // sentinel from a previous run and installs the Stop hook the new session

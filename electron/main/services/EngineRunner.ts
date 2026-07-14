@@ -50,6 +50,32 @@ function mapHttpStatus(status: number): string {
   return `OpenRouter request failed (HTTP ${status}).`
 }
 
+/**
+ * Map a CLI child failure to fixed guidance text — the CLI twin of the
+ * OpenRouter discipline above. Node's execFile rejection embeds the FULL
+ * command line in `.message`, and the prompt rides argv, so the raw error must
+ * never leave this module: audit rows, capture-queue errors, and council seat
+ * cards all render these messages verbatim. Exit codes and signals are safe;
+ * message bytes are not.
+ */
+function mapCliFailure(bin: string, err: unknown): string {
+  const tool = bin.split('/').pop() || bin
+  const e = (typeof err === 'object' && err !== null ? err : {}) as {
+    code?: unknown
+    killed?: unknown
+    signal?: unknown
+  }
+  if (e.code === 'ENOENT') return `The ${tool} CLI is not installed or not on PATH.`
+  if (e.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+    return `The ${tool} CLI produced more output than this call allows.`
+  }
+  if (e.killed === true || typeof e.signal === 'string') {
+    return `The ${tool} CLI timed out or was terminated.`
+  }
+  if (typeof e.code === 'number') return `The ${tool} CLI exited with code ${e.code}.`
+  return `The ${tool} CLI failed to run.`
+}
+
 /** Parse `choices[0].message.content` from an unknown JSON body without trusting
  *  its shape at any level. Returns null when the reply is not a plain string. */
 function extractMessageContent(body: unknown): string | null {
@@ -178,8 +204,12 @@ export class EngineRunner {
   private async runCli(bin: string, args: string[], opts: EngineCallOpts): Promise<string> {
     const running = this.cliRunner(bin, args, opts)
     this.track(running)
-    const { stdout } = await running
-    return stdout.trim()
+    try {
+      const { stdout } = await running
+      return stdout.trim()
+    } catch (err) {
+      throw new Error(mapCliFailure(bin, err))
+    }
   }
 
   private async runOpenRouter(spec: EngineSpec, prompt: string, opts: EngineCallOpts): Promise<string> {

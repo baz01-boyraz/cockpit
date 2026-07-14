@@ -56,6 +56,22 @@ export const ROLES: Record<Role, CatalogEntry> = {
   },
 }
 
+/** Roles whose job includes mutating the checkout: builder writes features,
+ *  fixer patches code, tester adds test files. Planner/reviewer/scout are
+ *  read-only by their own prompts. */
+export const MUTATING_ROLES: ReadonlySet<Role> = new Set<Role>(['builder', 'fixer', 'tester'])
+
+/**
+ * Whether a card's crew may write to disk — the signal SwarmService uses to
+ * refuse an unisolated start when worktree creation fails. An empty pipeline
+ * means a named/legacy identity whose write capability is unknown at this
+ * layer, so it fails closed as mutating.
+ */
+export function assignmentsRequireIsolation(assignments: readonly Assignment[]): boolean {
+  if (assignments.length === 0) return true
+  return assignments.some((a) => MUTATING_ROLES.has(a.role))
+}
+
 /** Specialisations are domain lenses folded onto a role (formal, not a persona). */
 export const SPECS: Record<Spec, CatalogEntry> = {
   frontend: {

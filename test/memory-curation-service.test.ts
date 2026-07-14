@@ -82,7 +82,7 @@ describe('MemoryCurationService.sweep', () => {
       notes: 3,
       model: 'deepseek/deepseek-v4-flash',
       modelRole: 'bounded-mechanical-analysis',
-      modelPolicyVersion: 1,
+      modelPolicyVersion: 2,
     })
   })
 
