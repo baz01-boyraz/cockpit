@@ -435,6 +435,46 @@
   color: var(--ember-200);
   border-color: color-mix(in oklab, var(--ember-400) 44%, var(--border));
 }
+.memreader__sourceLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px var(--sp-4);
+  padding: 7px var(--sp-4);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+}
+.memreader__sourceLine > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.memsource {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 220px;
+  color: var(--text-muted);
+  font-size: inherit;
+  font-weight: 580;
+}
+.memsource__label { flex: none; }
+.memsource__session {
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 450;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.memsource__session::before { content: '· '; }
+.memsource--claude { color: var(--ember-200); }
+.memsource--codex { color: var(--signal); }
+.memsource--cockpit { color: var(--accent-hi); }
+.memsource--manual { color: var(--text); }
+.memsource--legacy { color: var(--text-faint); }
 .memreader__rename {
   display: flex;
   align-items: center;
@@ -516,6 +556,9 @@
 .memreader__historyTitle { display: block; margin-bottom: 5px; color: var(--text-faint); font-size: var(--fs-micro); }
 .memreader__history ol { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .memreader__history li { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); color: var(--text-muted); font-size: var(--fs-micro); }
+.memreader__historyAction { flex: 1; min-width: 0; }
+.memreader__historyMeta { display: inline-flex; align-items: center; justify-content: flex-end; gap: 7px; min-width: 0; }
+.memreader__historyMeta .memsource { max-width: 150px; }
 .memreader__history code { color: var(--text-faint); font-family: var(--font-mono); font-size: 10px; }
 .memreader__history p { margin: 0; color: var(--text-faint); font-size: var(--fs-micro); line-height: 1.5; }
 .wikitext {
@@ -1603,7 +1646,7 @@
 .bazbrain__head { display: flex; align-items: center; gap: var(--sp-2); justify-content: space-between; margin-bottom: var(--sp-2); }
 .bazbrain__title { font-weight: 600; font-size: var(--fs-sm); }
 .bazbrain__empty { font-size: var(--fs-xs); color: var(--text-muted); margin: 4px 0 0; }
-.bazbrain__grid { display: grid; grid-template-columns: minmax(160px, 220px) 1fr; gap: var(--sp-3); align-items: start; }
+.bazbrain__grid { display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); gap: var(--sp-3); align-items: start; }
 .bazbrain__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
 .bazbrain__item {
   width: 100%; text-align: left; padding: 6px 9px; font-size: var(--fs-xs); color: var(--text-muted);
@@ -1612,6 +1655,34 @@
 }
 .bazbrain__item:hover { color: var(--text); background: var(--surface-base, var(--bg)); }
 .bazbrain__item--active { color: var(--ember-200); border-color: color-mix(in oklab, var(--ember-400) 40%, var(--border)); }
+.bazbrain__detail { min-width: 0; }
+.bazbrain__provenance {
+  margin-bottom: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: color-mix(in oklab, var(--surface-base, var(--bg)) 72%, transparent);
+}
+.bazbrain__sourceSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px var(--sp-3);
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+}
+.bazbrain__sourceSummary > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.bazbrain__recalls { margin-left: auto; }
+.bazbrain__provenance .memreader__history {
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border);
+}
 .bazbrain__reader { margin: 0; max-height: 260px; }
 
 /* ============================================================================
@@ -1792,6 +1863,10 @@
   .captureHealth__providers,
   .memreader__evidenceGrid { grid-template-columns: 1fr; }
   .memreader__evidence > summary > span:last-child { display: none; }
+  .bazbrain__grid { grid-template-columns: 1fr; }
+  .bazbrain__recalls { margin-left: 0; }
+  .memreader__history li { align-items: flex-start; flex-direction: column; }
+  .memreader__historyMeta { width: 100%; justify-content: flex-start; }
 }
 
 @media (prefers-reduced-motion: reduce) {

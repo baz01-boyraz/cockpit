@@ -284,6 +284,13 @@ export const memoryLedgerSchema = z.object({
   noteSlug: z.string().min(1).max(120).optional(),
 })
 
+/** A note can live in the current project brain or the cross-project Baz brain. */
+export const memoryNoteActivitySchema = z.object({
+  projectId: z.string().min(1),
+  noteSlug: z.string().min(1).max(120),
+  scope: memoryBrainScopeSchema.default('project'),
+})
+
 export const memorySnapshotSchema = z.object({
   projectId: z.string().min(1),
   snapshotId: z.string().min(1).max(160).regex(/^[0-9A-Za-z.-]+-[a-f0-9]{8}$/),

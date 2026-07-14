@@ -467,7 +467,8 @@ export interface CockpitApi {
     ): Promise<ReviewItem[]>
     /** Provenance history for the project brain, optionally one note (memory-imp G7). */
     ledger(projectId: string, noteSlug?: string): Promise<LedgerEntry[]>
-    noteActivity(projectId: string, noteSlug: string): Promise<{
+    /** Provenance + recall activity for one project or global-brain note. */
+    noteActivity(projectId: string, noteSlug: string, scope?: MemoryBrainScope): Promise<{
       history: LedgerEntry[]
       recalls7d: number
       recalls30d: number

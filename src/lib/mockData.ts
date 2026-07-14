@@ -332,6 +332,17 @@ export const memoryHub = new Map<string, MemoryDoc[]>([
       },
     ],
   ],
+  [
+    'baz-global',
+    [
+      {
+        name: 'verification-preference',
+        content:
+          '---\nschema: 1\nname: verification-preference\ntitle: Verification preference\nclass: user\nsession: claude:mock-claude-session\ncapturedAt: 2026-07-13T10:00:00.000Z\ngate: save\nupdatedAt: 2026-07-13T10:15:00.000Z\ntags: workflow, quality\n---\n\n# Verification preference\n\nBaz prefers meaningful tests and a clear verification summary before delivery.',
+        updatedAt: ago(15),
+      },
+    ],
+  ],
 ])
 
 export const BANNER = [

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cockpit } from '../../lib/cockpit'
 import type { MemoryHealth } from '@shared/memory-health'
 import type { MemoryHubSnapshot, MemoryNote } from '@shared/memory-hub'
+import type { LedgerEntry } from '@shared/memory-ledger'
+import { parseNote } from '@shared/memory-note-schema'
 import type {
   MemoryCaptureOverview,
   MemoryCaptureProviderCoverage,
@@ -18,7 +20,9 @@ import {
 } from '@shared/memory-policy'
 import { BAZ_GLOBAL_BRAIN } from '@shared/memory-ledger'
 import { relativeTime } from '@shared/time'
+import { summarizeMemoryProvenance } from '../../lib/memoryProvenance'
 import { IconBolt, IconCheck, IconChevron, IconMemory, IconX } from '../icons'
+import { MemoryChangeHistory, MemorySourceValue } from './MemoryProvenance'
 import {
   isBatchCleanup,
   presentMemoryReview,
@@ -37,6 +41,12 @@ interface CaptureReport {
   autoSaved: string[]
   needsReview: string[]
   skipped: number
+}
+
+interface NoteActivity {
+  history: LedgerEntry[]
+  recalls7d: number
+  recalls30d: number
 }
 
 function msg(err: unknown): string {
@@ -116,6 +126,7 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
   const [activeReviewId, setActiveReviewId] = useState<string | null>(null)
   const [baz, setBaz] = useState<MemoryHubSnapshot | null>(null)
   const [bazNote, setBazNote] = useState<MemoryNote | null>(null)
+  const [bazActivity, setBazActivity] = useState<NoteActivity | null>(null)
   const [showBaz, setShowBaz] = useState(false)
   const [mode, setMode] = useState<MemoryTrustMode>(PROJECT_DEFAULT_TRUST_MODE)
   const [globalMode, setGlobalMode] = useState<MemoryTrustMode>(GLOBAL_DEFAULT_TRUST_MODE)
@@ -180,6 +191,10 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
     setReviewBusy(false)
     setInboxOpen(false)
     setActiveReviewId(null)
+    setBaz(null)
+    setBazNote(null)
+    setBazActivity(null)
+    setShowBaz(false)
     setMode(PROJECT_DEFAULT_TRUST_MODE)
     setGlobalMode(GLOBAL_DEFAULT_TRUST_MODE)
     setCaptureOverview(null)
@@ -216,6 +231,7 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
     const next = !showBaz
     setShowBaz(next)
     setBazNote(null)
+    setBazActivity(null)
     if (next) {
       try {
         setBaz(await cockpit().memory.bazList())
@@ -227,11 +243,17 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
 
   const openBazNote = useCallback(async (name: string) => {
     try {
-      setBazNote(await cockpit().memory.bazRead(name))
+      const [note, activity] = await Promise.all([
+        cockpit().memory.bazRead(name),
+        cockpit().memory.noteActivity(projectId, name, 'global'),
+      ])
+      if (activeProjectRef.current !== projectId) return
+      setBazNote(note)
+      setBazActivity(activity)
     } catch (err) {
-      setError(msg(err))
+      if (activeProjectRef.current === projectId) setError(msg(err))
     }
-  }, [])
+  }, [projectId])
 
   const consolidate = useCallback(async () => {
     setBusy(true)
@@ -399,6 +421,10 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
   )
 
   const reviewSummary = useMemo(() => summarizeMemoryReviews(reviews), [reviews])
+  const bazProvenance = useMemo(() => {
+    const fallback = bazNote ? parseNote(bazNote.content).frontmatter?.session : null
+    return summarizeMemoryProvenance(bazActivity?.history ?? [], fallback)
+  }, [bazActivity?.history, bazNote])
   const cleanupReviews = useMemo(() => reviews.filter(isBatchCleanup), [reviews])
   const requestedReviewIndex = activeReviewId
     ? reviews.findIndex((item) => item.id === activeReviewId)
@@ -661,7 +687,32 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
                   </li>
                 ))}
               </ul>
-              {bazNote && <pre className="reviewcard__pre mono bazbrain__reader">{bazNote.content}</pre>}
+              {bazNote && (
+                <div className="bazbrain__detail">
+                  <section className="bazbrain__provenance" aria-label="Baz brain memory provenance">
+                    <div className="bazbrain__sourceSummary">
+                      <span>
+                        Created from{' '}
+                        {bazProvenance.created ? (
+                          <MemorySourceValue source={bazProvenance.created} />
+                        ) : (
+                          <strong className="memsource memsource--legacy">Not recorded</strong>
+                        )}
+                      </span>
+                      {bazProvenance.latest && (
+                        <span>
+                          Last changed by <MemorySourceValue source={bazProvenance.latest} />
+                        </span>
+                      )}
+                      <span className="bazbrain__recalls">
+                        {bazActivity?.recalls30d ?? 0} recalls in 30 days
+                      </span>
+                    </div>
+                    <MemoryChangeHistory history={bazActivity?.history ?? []} limit={6} />
+                  </section>
+                  <pre className="reviewcard__pre mono bazbrain__reader">{bazNote.content}</pre>
+                </div>
+              )}
             </div>
           )}
         </div>

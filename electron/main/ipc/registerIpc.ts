@@ -26,6 +26,7 @@ import {
   memoryCaptureSchema,
   memoryCaptureRetrySchema,
   memoryLedgerSchema,
+  memoryNoteActivitySchema,
   memorySnapshotSchema,
   memoryNameSchema,
   memoryRenameSchema,
@@ -409,17 +410,17 @@ export function registerIpc(services: Services): void {
     return services.memoryLedger.list(projectBrain(projectId), noteSlug)
   })
   handle('memoryNoteActivity', (p) => {
-    const { projectId, noteSlug } = memoryLedgerSchema.parse(p)
-    if (!noteSlug) throw new Error('A note is required for Memory activity.')
+    const { projectId, noteSlug, scope } = memoryNoteActivitySchema.parse(p)
     services.projects.get(projectId)
+    const brain = scope === 'global' ? BAZ_GLOBAL_BRAIN : projectBrain(projectId)
     const now = Date.now()
     const count = (days: number) =>
       services.memoryRecalls.recalledSince(
-        projectBrain(projectId),
+        brain,
         new Date(now - days * 24 * 60 * 60_000).toISOString(),
       ).get(noteSlug) ?? 0
     return {
-      history: services.memoryLedger.list(projectBrain(projectId), noteSlug),
+      history: services.memoryLedger.list(brain, noteSlug),
       recalls7d: count(7),
       recalls30d: count(30),
     }

@@ -134,8 +134,8 @@ const api: CockpitApi = {
     resolveReview: (projectId, scope, reviewId, decision, editedContent) =>
       invoke(IPC.memoryResolveReview, { projectId, scope, reviewId, decision, editedContent }),
     ledger: (projectId, noteSlug) => invoke(IPC.memoryLedger, { projectId, noteSlug }),
-    noteActivity: (projectId, noteSlug) =>
-      invoke(IPC.memoryNoteActivity, { projectId, noteSlug }),
+    noteActivity: (projectId, noteSlug, scope) =>
+      invoke(IPC.memoryNoteActivity, { projectId, noteSlug, scope }),
     snapshots: (projectId) => invoke(IPC.memorySnapshots, { projectId }),
     restoreSnapshot: (projectId, snapshotId) =>
       invoke(IPC.memoryRestoreSnapshot, { projectId, snapshotId }),

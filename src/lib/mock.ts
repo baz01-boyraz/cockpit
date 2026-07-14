@@ -48,6 +48,7 @@ import { assembleDashboard, countActiveAgents } from '@shared/dashboard-assembly
 import { aggregateInsights, insightFromMatch } from '@shared/insight-aggregation'
 import { assembleHubSnapshot, assembleNote, type MemoryDoc } from '@shared/memory-hub'
 import { assembleHealth } from '@shared/memory-health'
+import type { LedgerEntry } from '@shared/memory-ledger'
 import { analyzeConsolidation } from '@shared/memory-consolidate'
 import {
   assembleMemoryCaptureOverview,
@@ -278,6 +279,46 @@ function emitCouncilProgress(
 
 const memoryDocsFor = (projectId: string): MemoryDoc[] => memoryHub.get(projectId) ?? []
 const kanbanFor = (projectId: string): KanbanCard[] => kanbanSeed.get(projectId) ?? []
+
+function mockNoteActivity(
+  projectId: string,
+  noteSlug: string,
+  scope: MemoryBrainScope = 'project',
+): { history: LedgerEntry[]; recalls7d: number; recalls30d: number } {
+  if (scope !== 'global' || noteSlug !== 'verification-preference') {
+    return { history: [], recalls7d: 0, recalls30d: 0 }
+  }
+  const brain = brainForAccess(projectId, scope)
+  return {
+    // The real ledger is most-recent-first; keep browser-preview parity.
+    history: [
+      {
+        id: 'mock-ledger-codex-merge',
+        brain,
+        noteSlug,
+        action: 'merge',
+        gate: 'save',
+        sourceId: 'codex:mock-codex-session',
+        hashBefore: 'a'.repeat(64),
+        hashAfter: 'b'.repeat(64),
+        createdAt: '2026-07-13T10:15:00.000Z',
+      },
+      {
+        id: 'mock-ledger-claude-create',
+        brain,
+        noteSlug,
+        action: 'create',
+        gate: 'save',
+        sourceId: 'claude:mock-claude-session',
+        hashBefore: null,
+        hashAfter: 'a'.repeat(64),
+        createdAt: '2026-07-13T10:00:00.000Z',
+      },
+    ],
+    recalls7d: 2,
+    recalls30d: 4,
+  }
+}
 
 /**
  * Apply one review decision to the mock hub — the single rule shared by the
@@ -1365,7 +1406,8 @@ export function createMockApi(): CockpitApi {
         return reviewsFor(projectId, scope)
       },
       ledger: async () => [],
-      noteActivity: async () => ({ history: [], recalls7d: 0, recalls30d: 0 }),
+      noteActivity: async (projectId, noteSlug, scope) =>
+        mockNoteActivity(projectId, noteSlug, scope),
       snapshots: async (projectId) => snapshotsFor(projectId),
       restoreSnapshot: async (projectId, _snapshotId) => {
         const safetySnapshotId = `${now().replace(/[:.]/g, '-')}-5afe0001`

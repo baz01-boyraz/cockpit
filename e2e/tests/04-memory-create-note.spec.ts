@@ -50,6 +50,12 @@ test('creates and saves a note through the empty-state composer', async ({ page 
     'aria-pressed',
     'true',
   )
+  await page.getByRole('button', { name: 'Verification preference' }).click()
+  const globalProvenance = page.getByRole('region', { name: 'Baz brain memory provenance' })
+  await expect(globalProvenance).toContainText('Created from Claude')
+  await expect(globalProvenance).toContainText('mock-claude-session')
+  await expect(globalProvenance).toContainText('Last changed by Codex')
+  await expect(globalProvenance).toContainText('mock-codex-session')
   await page.getByRole('button', { name: 'Baz brain' }).click()
 
   const memory = new MemoryPage(page)

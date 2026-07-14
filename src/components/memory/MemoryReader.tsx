@@ -8,8 +8,10 @@ import {
 } from '@shared/memory-note-schema'
 import { normalizeNoteName } from '@shared/wikilink'
 import { relativeTime } from '@shared/time'
+import { summarizeMemoryProvenance } from '../../lib/memoryProvenance'
 import { IconCheck, IconPlus, IconX } from '../icons'
 import { NoteBody } from './NoteBody'
+import { MemoryChangeHistory, MemorySourceValue } from './MemoryProvenance'
 
 interface MemoryReaderProps {
   note: MemoryNote
@@ -54,16 +56,6 @@ const AUTHORITY_LABEL: Record<NoteAuthority, string> = {
   legacy: 'Legacy / manual',
 }
 
-const ACTION_LABEL: Record<LedgerEntry['action'], string> = {
-  create: 'Created',
-  merge: 'Merged',
-  replace: 'Updated',
-  split: 'Split',
-  rename: 'Renamed',
-  trash: 'Moved to trash',
-  restore: 'Restored',
-}
-
 function shortEvidence(value: string): string {
   return value.length > 42 ? `${value.slice(0, 18)}…${value.slice(-12)}` : value
 }
@@ -99,6 +91,10 @@ export function MemoryReader({
   const renameValid = renameSlug !== null && renameSlug !== note.name
   const parsed = useMemo(() => parseNote(note.content), [note.content])
   const lifecycle = useMemo(() => noteLifecycle(parsed.frontmatter), [parsed.frontmatter])
+  const provenance = useMemo(
+    () => summarizeMemoryProvenance(activity?.history ?? [], parsed.frontmatter?.session),
+    [activity?.history, parsed.frontmatter?.session],
+  )
   const evidenceRef = parsed.frontmatter?.authorityRef ?? parsed.frontmatter?.session ?? null
   const reviewOverdue = lifecycle.reviewAfter
     ? Date.parse(lifecycle.reviewAfter) < Date.now()
@@ -220,6 +216,24 @@ export function MemoryReader({
         </div>
       )}
 
+      {mode === 'read' && (
+        <div className="memreader__sourceLine" aria-label="Memory source provenance">
+          <span>
+            Created from{' '}
+            {provenance.created ? (
+              <MemorySourceValue source={provenance.created} />
+            ) : (
+              <strong className="memsource memsource--legacy">Not recorded</strong>
+            )}
+          </span>
+          {provenance.latest && (
+            <span>
+              Last changed by <MemorySourceValue source={provenance.latest} />
+            </span>
+          )}
+        </div>
+      )}
+
       {pendingCreate && (
         <div className="memoffer">
           <span className="memoffer__text">
@@ -268,23 +282,7 @@ export function MemoryReader({
                   <div><span>Evidence ref</span><strong className="mono" title={evidenceRef}>{shortEvidence(evidenceRef)}</strong></div>
                 )}
               </div>
-              <div className="memreader__history">
-                <span className="memreader__historyTitle">Change history</span>
-                {activity && activity.history.length > 0 ? (
-                  <ol>
-                    {activity.history.slice(0, 8).map((entry) => (
-                      <li key={entry.id}>
-                        <span>{ACTION_LABEL[entry.action]} · {updatedLabel(entry.createdAt)}</span>
-                        <code title={entry.hashAfter ?? entry.hashBefore ?? 'no content hash'}>
-                          {(entry.hashAfter ?? entry.hashBefore)?.slice(0, 8) ?? 'no hash'}
-                        </code>
-                      </li>
-                    ))}
-                  </ol>
-                ) : (
-                  <p>No ledgered changes yet. Legacy file history remains in Git.</p>
-                )}
-              </div>
+              <MemoryChangeHistory history={activity?.history ?? []} />
             </div>
           </details>
           <NoteBody
