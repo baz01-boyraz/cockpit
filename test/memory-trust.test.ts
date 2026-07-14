@@ -68,8 +68,8 @@ describe('canonical memory policy', () => {
     expect(set.has('conflict')).toBe(false)
   })
 
-  it('lets Assisted commit only high-quality new facts and Manual commit nothing', () => {
-    expect([...autoCommitKinds('assisted')]).toEqual(['new'])
+  it('lets Assisted commit high-quality new facts and safe merges while Manual commits nothing', () => {
+    expect([...autoCommitKinds('assisted')]).toEqual(['new', 'merge'])
     expect(autoCommitKinds('manual').size).toBe(0)
   })
 

@@ -139,4 +139,29 @@ describe('MemoryAutoCapture.sweep', () => {
       transcriptPath: '/codex/codex-session.jsonl',
     }))
   })
+
+  it('live capture enqueues every grown provider session active since the pane started', async () => {
+    const q = fakeQueue()
+    const pipe = okPipeline()
+    const { projects, sessions } = stubs([
+      session('current-claude-a', 1 * MIN, 1000, 'claude'),
+      session('current-claude-b', 2 * MIN, 1000, 'claude'),
+      session('old-claude', 40 * MIN, 1000, 'claude'),
+      session('current-codex', 1 * MIN, 1000, 'codex'),
+    ])
+    const auto = new MemoryAutoCapture(q.svc, pipe, projects, sessions, { now: () => T })
+
+    const enqueued = await auto.captureRecent(
+      'p1',
+      'claude',
+      new Date(T - 5 * MIN).toISOString(),
+    )
+
+    expect(enqueued).toBe(2)
+    expect([...q.jobs.keys()].sort()).toEqual([
+      'claude:current-claude-a',
+      'claude:current-claude-b',
+    ])
+    expect(pipe.capture).toHaveBeenCalledTimes(2)
+  })
 })

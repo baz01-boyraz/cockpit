@@ -160,6 +160,36 @@ describe('TerminalManager IO forwarding', () => {
     expect(() => mgr.resize('term_missing', 80, 24)).not.toThrow()
   })
 
+  it('emits a content-free live-capture turn signal only for submitted Claude/Codex input', () => {
+    const { mgr, events } = makeManager()
+    const turnSpy = vi.fn()
+    events.onTyped('terminal:agentTurn', turnSpy)
+    const claude = mgr.create({ projectId: 'prj_1', role: 'claude' })
+    const codex = mgr.create({ projectId: 'prj_1', role: 'codex' })
+    const shell = mgr.create({ projectId: 'prj_1', role: 'general' })
+
+    mgr.write(claude.id, 'draft only')
+    mgr.write(shell.id, 'npm test\r')
+    expect(turnSpy).not.toHaveBeenCalled()
+
+    mgr.write(claude.id, 'remember this\r')
+    mgr.write(codex.id, 'learn this\n')
+
+    expect(turnSpy).toHaveBeenCalledTimes(2)
+    expect(turnSpy).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      sessionId: claude.id,
+      projectId: 'prj_1',
+      provider: 'claude',
+    }))
+    expect(turnSpy).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      sessionId: codex.id,
+      projectId: 'prj_1',
+      provider: 'codex',
+    }))
+    expect(JSON.stringify(turnSpy.mock.calls)).not.toContain('remember this')
+    expect(JSON.stringify(turnSpy.mock.calls)).not.toContain('learn this')
+  })
+
   it('resize() forwards and swallows failures from an exited pty', () => {
     const { mgr } = makeManager()
     const session = mgr.create({ projectId: 'prj_1' })

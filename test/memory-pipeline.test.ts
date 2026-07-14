@@ -157,15 +157,16 @@ describe('MemoryPipeline.capture', () => {
     expect(ledger.records).toHaveLength(1)
   })
 
-  it('queues an unsure fact for review instead of writing it', async () => {
+  it('suppresses an ordinary unsure fact instead of filling the review inbox', async () => {
     const ledger = fakeLedger()
     const reviews = fakeReviews()
     const pipe = new MemoryPipeline(memory, ledger.svc, reviews.svc, stubDistiller([obs({ decision: 'ask' })]))
     const res = await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
-    expect(res.queued).toBe(1)
+    expect(res.queued).toBe(0)
+    expect(res.skipped).toBe(1)
     expect(res.committed).toBe(0)
     expect(memory.read('p1', 'router-placement')).toBeNull()
-    expect(reviews.items.size).toBe(1)
+    expect(reviews.items.size).toBe(0)
   })
 
   it('skips a duplicate of an existing note', async () => {
@@ -238,7 +239,7 @@ describe('MemoryPipeline.capture', () => {
     expect(audit.records.some((r) => r.payload?.verdict === 'reject')).toBe(true)
   })
 
-  it('CHARTER GATE: downgrades a confident commit with a too-vague reason to review', async () => {
+  it('CHARTER GATE: suppresses a vague candidate instead of asking the owner to curate it', async () => {
     const reviews = fakeReviews()
     const audit = fakeAudit()
     const vague = obs({ reason: 'idk' }) // shorter than the 20-char scenario floor
@@ -247,7 +248,8 @@ describe('MemoryPipeline.capture', () => {
     )
     const res = await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
     expect(res.committed).toBe(0)
-    expect(res.queued).toBe(1)
+    expect(res.queued).toBe(0)
+    expect(res.skipped).toBe(1)
     expect(memory.read('p1', 'router-placement')).toBeNull()
     expect(audit.records.some((r) => r.payload?.verdict === 'review')).toBe(true)
   })
@@ -313,7 +315,7 @@ describe('MemoryPipeline.capture', () => {
     expect(memory.read('p1', 'router-placement')).toBeNull()
   })
 
-  it('Assisted routes a high-quality merge to review instead of changing the note', async () => {
+  it('Assisted applies a high-quality, evidence-safe merge without creating review work', async () => {
     memory.write('p1', 'router-placement', 'The router was originally placed in the renderer only.')
     const reviews = fakeReviews()
     const merge = obs({
@@ -333,10 +335,71 @@ describe('MemoryPipeline.capture', () => {
 
     const res = await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
 
-    expect(res.committed).toBe(0)
+    expect(res.committed).toBe(1)
+    expect(res.queued).toBe(0)
+    expect(res.proposals[0]).toMatchObject({ gate: 'commit', reconcile: 'merge' })
+    expect(memory.read('p1', 'router-placement')?.content).toContain('now belongs')
+  })
+
+  it('asks only when a high-impact protected fact has a genuinely ambiguous replacement', async () => {
+    memory.write('p1', 'refresh-consent', [
+      '---',
+      'schema: 2',
+      'name: refresh-consent',
+      'title: Refresh consent',
+      'class: decision',
+      'gate: manual',
+      'updatedAt: 2026-07-13T00:00:00.000Z',
+      'status: active',
+      'authority: human-directive',
+      'scope: project',
+      'confidence: high',
+      'firstSeenAt: 2026-07-13T00:00:00.000Z',
+      'reviewAfter: 2027-01-13T00:00:00.000Z',
+      '---',
+      '',
+      'Refresh requires explicit current-message approval.',
+    ].join('\n'))
+    const reviews = fakeReviews()
+    const replacement = obs({
+      targetSlug: 'refresh-consent',
+      title: 'Refresh consent changed',
+      body: 'Agents may refresh automatically after tests complete.',
+      class: 'decision',
+      isNew: true,
+      decision: 'ask',
+      reason: 'The new transcript directly contradicts a protected owner safety rule.',
+    })
+    const pipe = new MemoryPipeline(memory, fakeLedger().svc, reviews.svc, stubDistiller([replacement]))
+
+    const res = await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
+
     expect(res.queued).toBe(1)
-    expect(res.proposals[0]).toMatchObject({ gate: 'review', reconcile: 'merge' })
-    expect(memory.read('p1', 'router-placement')?.content).not.toContain('now belongs')
+    expect(res.skipped).toBe(0)
+    expect(reviews.items.size).toBe(1)
+    expect(res.proposals[0]).toMatchObject({ gate: 'review', reconcile: 'conflict' })
+  })
+
+  it('keeps an ordinary ambiguous collision out of both active Memory and the inbox', async () => {
+    memory.write('p1', 'minor-layout-note', '# Minor layout note\n\nThe card gap is eight pixels.')
+    const reviews = fakeReviews()
+    const collision = obs({
+      targetSlug: 'minor-layout-note',
+      title: 'Minor layout note changed',
+      body: 'The card gap might be ten pixels.',
+      class: 'reference',
+      isNew: true,
+      decision: 'ask',
+      reason: 'The transcript is uncertain about a minor presentation detail.',
+    })
+    const pipe = new MemoryPipeline(memory, fakeLedger().svc, reviews.svc, stubDistiller([collision]))
+
+    const res = await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
+
+    expect(res.queued).toBe(0)
+    expect(res.skipped).toBe(1)
+    expect(reviews.items.size).toBe(0)
+    expect(memory.read('p1', 'minor-layout-note')?.content).not.toContain('ten pixels')
   })
 })
 

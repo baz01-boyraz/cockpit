@@ -149,4 +149,19 @@ describe('MemoryReviewService brain authorization', () => {
     })
     expect(JSON.stringify(seen.mock.calls)).not.toContain('# observed-note')
   })
+
+  it('coalesces repeated pending conflicts for one brain and slug', () => {
+    const first = reviews.create({
+      ...proposal(projectBrain('proj-a'), 'refresh-consent'),
+      kind: 'conflict',
+    })
+    const second = reviews.create({
+      ...proposal(projectBrain('proj-a'), 'refresh-consent'),
+      kind: 'conflict',
+      reason: 'The same protected conflict appeared in another live terminal.',
+    })
+
+    expect(second.id).toBe(first.id)
+    expect(reviews.listPendingFor('proj-a', 'project')).toHaveLength(1)
+  })
 })
