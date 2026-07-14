@@ -9,7 +9,6 @@ import { expect } from '@playwright/test'
  */
 export const NAV = {
   dashboard: '[data-nav="dashboard"]',
-  automations: '[data-nav="automations"]',
   terminals: '[data-nav="terminals"]',
   swarm: '[data-nav="swarm"]',
   council: '[data-nav="council"]',

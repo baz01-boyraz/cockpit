@@ -23,7 +23,6 @@ test('boots to the dashboard with rail, hero, and approval banner', async ({ pag
 
   await openView(page, 'usage')
   await expect(page.getByRole('heading', { name: 'Usage dashboard' })).toBeVisible()
-  await page.getByRole('button', { name: /Hermes engine/i }).click()
 
   for (const width of [1280, 1512, 1728, 2000]) {
     await page.setViewportSize({ width, height: 945 })
@@ -54,7 +53,7 @@ test('boots to the dashboard with rail, hero, and approval banner', async ({ pag
       }
     })
 
-    expect(layout, `Usage layout at ${width}px with Hermes docked`).toMatchObject({
+    expect(layout, `Usage layout at ${width}px with all current engines docked`).toMatchObject({
       viewportWidth: width,
       scrollFits: true,
       modulesFit: true,

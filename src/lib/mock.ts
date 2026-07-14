@@ -49,7 +49,11 @@ import { aggregateInsights, insightFromMatch } from '@shared/insight-aggregation
 import { assembleHubSnapshot, assembleNote, type MemoryDoc } from '@shared/memory-hub'
 import { assembleHealth } from '@shared/memory-health'
 import { analyzeConsolidation } from '@shared/memory-consolidate'
-import { assembleMemoryCaptureOverview, type CaptureJob } from '@shared/memory-capture'
+import {
+  assembleMemoryCaptureOverview,
+  type CaptureJob,
+  type MemoryCaptureNotice,
+} from '@shared/memory-capture'
 import type { CaptureResult } from '@shared/memory-pipeline'
 import { reviewOperation, type ReviewDecision, type ReviewItem } from '@shared/memory-review'
 import {
@@ -241,7 +245,19 @@ const approvalListeners = new Set<() => void>()
 const appUpdateListeners = new Set<(s: AppUpdateState) => void>()
 const logsListeners = new Set<() => void>()
 const councilProgressListeners = new Set<(event: CouncilProgressEvent) => void>()
+const memoryCaptureNoticeListeners = new Set<(notice: MemoryCaptureNotice) => void>()
 const notifyLogsChanged = () => logsListeners.forEach((cb) => cb())
+
+/** Browser-preview event seam used by E2E/visual review; Electron never installs it. */
+export function emitMockMemoryCaptureNotice(notice: MemoryCaptureNotice): void {
+  for (const listener of memoryCaptureNoticeListeners) {
+    try {
+      listener(notice)
+    } catch {
+      // Match the main event bus: one broken renderer observer cannot block the rest.
+    }
+  }
+}
 
 function emitCouncilProgress(
   projectId: string,
@@ -864,6 +880,15 @@ function mockAnalysisCouncil(
 }
 
 export function createMockApi(): CockpitApi {
+  const previewWindow = (globalThis as unknown as {
+    window?: {
+      cockpit?: unknown
+      __cockpitMock?: { emitMemoryCaptureNotice(notice: MemoryCaptureNotice): void }
+    }
+  }).window
+  if (previewWindow && !previewWindow.cockpit) {
+    previewWindow.__cockpitMock = { emitMemoryCaptureNotice: emitMockMemoryCaptureNotice }
+  }
   return {
     projects: {
       list: async () => projects,
@@ -1313,7 +1338,10 @@ export function createMockApi(): CockpitApi {
         mockCaptureJobs.set(projectId, jobs)
         return assembleMemoryCaptureOverview(resumableSessionsMock, jobs)
       },
-      onCaptureNotice: () => (() => {}) as Unsubscribe,
+      onCaptureNotice: (cb) => {
+        memoryCaptureNoticeListeners.add(cb)
+        return () => memoryCaptureNoticeListeners.delete(cb)
+      },
       trustState: async (projectId, scope) => {
         const brain = brainForAccess(projectId, scope)
         return {
