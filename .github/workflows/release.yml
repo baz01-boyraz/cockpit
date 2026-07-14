@@ -144,6 +144,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # electron-builder publishes the ZIP and DMG concurrently. If neither
+      # publisher can see an existing release, both may create one for the same
+      # tag and split the assets across duplicate release records.
+      - name: Create release before parallel artifact uploads
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "${GITHUB_REF_NAME#v}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build, sign, notarize, and publish
         run: |
           if [[ "${COCKPIT_HARDENED_RUNTIME:-}" == "true" ]]; then
@@ -151,5 +159,33 @@ jobs:
           else
             npm run package:publish
           fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify one complete GitHub release
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          RELEASE_IDS="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq ".[] | select(.tag_name == \"${GITHUB_REF_NAME}\") | .id")"
+          RELEASE_COUNT="$(printf '%s\n' "$RELEASE_IDS" | grep -c . || true)"
+          if [[ "$RELEASE_COUNT" -ne 1 ]]; then
+            echo "::error::Expected exactly one release for ${GITHUB_REF_NAME}; found ${RELEASE_COUNT}."
+            exit 1
+          fi
+
+          ASSETS="$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name')"
+          REQUIRED=(
+            "cockpiT-${VERSION}-arm64-mac.zip"
+            "cockpiT-${VERSION}-arm64-mac.zip.blockmap"
+            "cockpiT-${VERSION}-arm64.dmg"
+            "cockpiT-${VERSION}-arm64.dmg.blockmap"
+            "latest-mac.yml"
+          )
+          for ASSET in "${REQUIRED[@]}"; do
+            if ! grep -qxF "$ASSET" <<<"$ASSETS"; then
+              echo "::error::Release asset missing: ${ASSET}"
+              exit 1
+            fi
+          done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
