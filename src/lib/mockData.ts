@@ -302,6 +302,44 @@ export const resumableSessionsMock: ResumableSessionSummary[] = [
 
 // Seeded per-project knowledge hub — interlinked so backlinks, unresolved
 // targets, and the graph are all explorable in the browser preview.
+const scaleMemoryDoc = (
+  name: string,
+  title: string,
+  status: 'active' | 'archived',
+  minutesAgo: number,
+  body: string,
+): MemoryDoc => ({
+  name,
+  updatedAt: ago(minutesAgo),
+  content: `---\nschema: 2\nname: ${name}\ntitle: ${title}\nclass: reference\ngate: save\nupdatedAt: 2026-07-14T00:00:00.000Z\nstatus: ${status}\nauthority: observed\nscope: project\nconfidence: high\nfirstSeenAt: 2026-07-14T00:00:00.000Z\nreviewAfter: 2027-01-14T00:00:00.000Z\n---\n\n# ${title}\n\n${body}`,
+})
+
+// Keep a real-project scale fixture in the browser preview: 99 active notes
+// (the four hand-authored seeds below plus 95 generated notes) and 31 archived
+// notes. This prevents a tiny demo hub from hiding list/graph scale regressions.
+const scaleActiveMemories = Array.from({ length: 95 }, (_, index) => {
+  const number = String(index + 1).padStart(3, '0')
+  const previous = index === 0 ? 'vision-roadmap' : `scale-active-${String(index).padStart(3, '0')}`
+  return scaleMemoryDoc(
+    `scale-active-${number}`,
+    `Scale active memory ${number}`,
+    'active',
+    120 + index,
+    `Durable browser-scale fixture linked to [[${previous}]].`,
+  )
+})
+
+const scaleArchivedMemories = Array.from({ length: 31 }, (_, index) => {
+  const number = String(index + 1).padStart(3, '0')
+  return scaleMemoryDoc(
+    `scale-archive-${number}`,
+    `Scale archived memory ${number}`,
+    'archived',
+    1_000 + index,
+    'Preserved history that must stay outside the active library and graph.',
+  )
+})
+
 export const memoryHub = new Map<string, MemoryDoc[]>([
   [
     'prj_cockpit',
@@ -330,6 +368,8 @@ export const memoryHub = new Map<string, MemoryDoc[]>([
           '# Swarm Ideas\nRoles vs instances vs personas. Reviewer council reuses [[diff-review]]. Resume rides the reconciled terminal rows from [[vision-roadmap]].',
         updatedAt: ago(60 * 49),
       },
+      ...scaleActiveMemories,
+      ...scaleArchivedMemories,
     ],
   ],
   [

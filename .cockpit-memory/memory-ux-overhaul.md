@@ -5,7 +5,7 @@ title: Memory automation must reconcile the backlog, not only fresh captures
 class: gotcha
 capturedAt: 2026-07-05T04:40:55.944Z
 gate: save
-updatedAt: 2026-07-12T05:03:45.000Z
+updatedAt: 2026-07-14T05:04:16.491Z
 status: active
 authority: legacy
 scope: project
@@ -25,3 +25,4 @@ The same UX pass fixed the graph's poor resting posture with cursor-centered whe
 **Gotcha (fixed 2026-07-12):** symptom "memory graph lag yapıyor, bilgiler sürekli dönüyor" — MemoryGraph's engine effect depended on the `onOpen` prop, an inline arrow recreated on every MemoryPanel render, so any panel state change tore the whole canvas down and re-seeded/re-simulated the layout: permanent swirling + CPU burn. Fix: hold callbacks in a ref, effect deps `[data]` only. Same pass: node click opens a quick-view overlay on the graph (never yanks to list), unlit edges draw solid strokes (no per-frame gradient allocation), and labels below 0.75× zoom draw only for the focused neighbourhood.
 
 Related: [[memory-trust-modes]], [[memory-conflict-double-gate]]
+- (2026-07-14) Memory ana ekranı 24 güncel hafıza ile sınırlandı, tüm notlar 'Browse all' ve arama ile erişilebilir. Review kuyruğu varsayılan kapalı tek 'Memory Inbox' oldu, aynı anda yalnız bir karar gösteriliyor. 'Archive' gerçek arşiv yapıyor. Teknik içerik varsayılan gizli.

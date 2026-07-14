@@ -1,10 +1,12 @@
 import type { MemoryNoteSummary } from '@shared/memory-hub'
 import { relativeTime } from '@shared/time'
 import { IconChevron, IconMemory } from '../icons'
+import type { MemoryLibrary } from './memoryLibraryModel'
 
 interface MemoryOverviewProps {
   notes: MemoryNoteSummary[]
   onOpen: (name: string) => void
+  library?: MemoryLibrary
 }
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
@@ -14,7 +16,8 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000
  * memories everything else hangs off — every element opens something. No
  * marketing hero; orientation the user can act on.
  */
-export function MemoryOverview({ notes, onOpen }: MemoryOverviewProps) {
+export function MemoryOverview({ notes, onOpen, library = 'active' }: MemoryOverviewProps) {
+  const archive = library === 'archive'
   const degree = (note: MemoryNoteSummary): number => note.linksOut + note.backlinks
   const connected = notes.filter((note) => degree(note) > 0).length
   const freshCount = notes.filter(
@@ -33,16 +36,27 @@ export function MemoryOverview({ notes, onOpen }: MemoryOverviewProps) {
           <IconMemory width={20} height={20} />
         </span>
         <div className="memoverview__intro">
-          <span className="eyebrow">project brain</span>
-          <h3>Everything this project has learned, in one place.</h3>
-          <p>
-            Plain markdown saved with the repo. Open a memory below, search the library, or
-            switch to <strong>Graph</strong> to see how the ideas connect.
-          </p>
+          <span className="eyebrow">{archive ? 'history' : 'project brain'}</span>
+          <h3>
+            {archive
+              ? 'Past memories stay available without crowding today’s working set.'
+              : 'Everything this project has learned, in one place.'}
+          </h3>
+          {archive ? (
+            <p>
+              Archived and superseded notes are preserved for traceability. They are never
+              injected into active recall or the graph unless restored deliberately.
+            </p>
+          ) : (
+            <p>
+              Plain markdown saved with the repo. Open a memory below, search the library, or
+              switch to <strong>Graph</strong> to see how the ideas connect.
+            </p>
+          )}
         </div>
         <dl className="memoverview__stats" aria-label="Memory summary">
           <div>
-            <dt>memories</dt>
+            <dt>{archive ? 'archived' : 'memories'}</dt>
             <dd>{notes.length}</dd>
           </div>
           <div>
@@ -59,23 +73,27 @@ export function MemoryOverview({ notes, onOpen }: MemoryOverviewProps) {
       <div className="memoverview__grid">
         <div className="memoverview__col">
           <div className="memoverview__colHead">
-            <strong>Recently updated</strong>
-            <span>Pick up where you left off</span>
+            <strong>{archive ? 'Recently archived' : 'Recently updated'}</strong>
+            <span>{archive ? 'Open history when you need context' : 'Pick up where you left off'}</span>
           </div>
-          <ul>
-            {recent.map((note) => (
-              <li key={note.name}>
-                <button onClick={() => onOpen(note.name)}>
-                  <span className="memoverview__rowText">
-                    <strong>{note.title}</strong>
-                    <small>{note.name}.md</small>
-                  </span>
-                  <span className="memoverview__rowMeta mono">{relativeTime(note.updatedAt)}</span>
-                  <IconChevron width={13} height={13} aria-hidden />
-                </button>
-              </li>
-            ))}
-          </ul>
+          {recent.length === 0 ? (
+            <p className="memoverview__empty">Nothing has been archived.</p>
+          ) : (
+            <ul>
+              {recent.map((note) => (
+                <li key={note.name}>
+                  <button onClick={() => onOpen(note.name)}>
+                    <span className="memoverview__rowText">
+                      <strong>{note.title}</strong>
+                      <small>{note.name}.md</small>
+                    </span>
+                    <span className="memoverview__rowMeta mono">{relativeTime(note.updatedAt)}</span>
+                    <IconChevron width={13} height={13} aria-hidden />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div className="memoverview__col">

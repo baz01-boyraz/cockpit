@@ -648,7 +648,10 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
           <div className="bazbrain__head">
             <div>
               <span className="bazbrain__title">Baz brain</span>
-              <span className="brainstat"><b>{baz.notes.length}</b> facts about you</span>
+              <span className="brainstat"><b>{baz.notes.length}</b> active facts about you</span>
+              {baz.archived.length > 0 && (
+                <span className="brainstat"><b>{baz.archived.length}</b> archived</span>
+              )}
             </div>
             <div
               className="trustseg"
@@ -669,24 +672,47 @@ export function MemoryBrainBar({ projectId, onChanged }: MemoryBrainBarProps) {
             </div>
           </div>
           <p className="brainbar__mode">Global policy · {MEMORY_TRUST_META[globalMode].effect}</p>
-          {baz.notes.length === 0 ? (
+          {baz.notes.length + baz.archived.length === 0 ? (
             <p className="bazbrain__empty">
               Nothing yet — the brain files a note here when it learns something about how you work.
             </p>
           ) : (
             <div className="bazbrain__grid">
-              <ul className="bazbrain__list">
-                {baz.notes.map((n) => (
-                  <li key={n.name}>
-                    <button
-                      className={`bazbrain__item ${bazNote?.name === n.name ? 'bazbrain__item--active' : ''}`}
-                      onClick={() => void openBazNote(n.name)}
-                    >
-                      {n.title}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <div className="bazbrain__library">
+                {baz.notes.length === 0 ? (
+                  <p className="bazbrain__empty">No active global facts.</p>
+                ) : (
+                  <ul className="bazbrain__list">
+                    {baz.notes.map((n) => (
+                      <li key={n.name}>
+                        <button
+                          className={`bazbrain__item ${bazNote?.name === n.name ? 'bazbrain__item--active' : ''}`}
+                          onClick={() => void openBazNote(n.name)}
+                        >
+                          {n.title}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {baz.archived.length > 0 && (
+                  <details className="bazbrain__archive">
+                    <summary>Archive ({baz.archived.length})</summary>
+                    <ul className="bazbrain__list">
+                      {baz.archived.map((n) => (
+                        <li key={n.name}>
+                          <button
+                            className={`bazbrain__item ${bazNote?.name === n.name ? 'bazbrain__item--active' : ''}`}
+                            onClick={() => void openBazNote(n.name)}
+                          >
+                            {n.title}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
               {bazNote && (
                 <div className="bazbrain__detail">
                   <section className="bazbrain__provenance" aria-label="Baz brain memory provenance">

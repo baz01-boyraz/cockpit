@@ -1,4 +1,4 @@
-import type { MemoryHubSnapshot } from '@shared/memory-hub'
+import type { MemoryHubSnapshot, MemoryNote } from '@shared/memory-hub'
 import type { ForceEdge } from '@shared/forceGraph'
 import { cockpit } from '../../lib/cockpit'
 import type { GraphData, GraphNodeMeta, Tier, VMeta } from './memoryGraphModel'
@@ -13,6 +13,44 @@ import { hash01, makeGlowSprite, makePulseSprite, type Palette } from './memoryG
 
 export const nodeRadius = (connections: number): number => Math.min(6 + connections * 1.3, 14)
 
+/**
+ * Build the active graph from already-loaded notes. Archived targets remain
+ * valid history, but never become active nodes, edges, or fake missing ghosts.
+ */
+export function buildGraphData(
+  snapshot: MemoryHubSnapshot,
+  notes: Array<MemoryNote | null>,
+): GraphData {
+  const activeNames = new Set(snapshot.notes.map((note) => note.name))
+  const edges: ForceEdge[] = []
+  for (const note of notes) {
+    if (!note || !activeNames.has(note.name)) continue
+    for (const target of note.outgoing) {
+      if (activeNames.has(target)) edges.push({ source: note.name, target })
+    }
+  }
+  for (const unresolved of snapshot.unresolved) {
+    for (const source of unresolved.wantedBy) {
+      if (activeNames.has(source)) edges.push({ source, target: unresolved.target })
+    }
+  }
+  const metas: GraphNodeMeta[] = [
+    ...snapshot.notes.map((note) => ({
+      id: note.name,
+      label: note.title,
+      ghost: false,
+      radius: nodeRadius(note.linksOut + note.backlinks),
+    })),
+    ...snapshot.unresolved.map((unresolved) => ({
+      id: unresolved.target,
+      label: unresolved.target,
+      ghost: true,
+      radius: nodeRadius(unresolved.wantedBy.length),
+    })),
+  ]
+  return { metas, edges }
+}
+
 /** Edges from per-note outgoing links; ghosts from the unresolved aggregate. */
 export async function loadGraph(
   projectId: string,
@@ -21,29 +59,7 @@ export async function loadGraph(
   const notes = await Promise.all(
     snapshot.notes.map((n) => cockpit().memory.read(projectId, n.name)),
   )
-  const edges: ForceEdge[] = []
-  for (const note of notes) {
-    if (!note) continue
-    for (const target of note.outgoing) edges.push({ source: note.name, target })
-  }
-  for (const u of snapshot.unresolved) {
-    for (const wanter of u.wantedBy) edges.push({ source: wanter, target: u.target })
-  }
-  const metas: GraphNodeMeta[] = [
-    ...snapshot.notes.map((n) => ({
-      id: n.name,
-      label: n.title,
-      ghost: false,
-      radius: nodeRadius(n.linksOut + n.backlinks),
-    })),
-    ...snapshot.unresolved.map((u) => ({
-      id: u.target,
-      label: u.target,
-      ghost: true,
-      radius: nodeRadius(u.wantedBy.length),
-    })),
-  ]
-  return { metas, edges }
+  return buildGraphData(snapshot, notes)
 }
 
 /** Undirected adjacency index — used for hover focus + degree. */

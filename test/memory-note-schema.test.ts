@@ -53,10 +53,12 @@ describe('serializeNote / parseNote round-trip', () => {
 
   it('omits optional fields when absent and still round-trips', () => {
     const front = fm()
-    const parsed = parseNote(serializeNote(front, 'body text'))
+    const serialized = serializeNote(front, 'body text')
+    const parsed = parseNote(serialized)
     expect(parsed.frontmatter).toEqual(front)
     expect(parsed.frontmatter?.session).toBeUndefined()
     expect(parsed.frontmatter?.tags).toEqual([])
+    expect(serialized).not.toContain('\nsupersedes: ')
   })
 
   it('is deterministic — identical input yields identical output', () => {

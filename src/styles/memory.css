@@ -152,16 +152,34 @@
 }
 .memlist__intro > div { display: flex; flex-direction: column; gap: 3px; }
 .memlist__intro strong { font-size: var(--fs-body); font-weight: 620; color: var(--text); }
-.memlist__total {
-  min-width: 28px;
-  padding: 3px 7px;
-  border-radius: var(--r-pill);
-  color: var(--text-muted);
-  background: var(--surface-inset);
+.memlist__intro > .memlist__scope {
+  display: inline-flex;
+  flex-direction: row;
+  gap: 2px;
+  padding: 2px;
   border: 1px solid var(--border);
-  font-size: var(--fs-micro);
-  text-align: center;
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
 }
+.memlist__scopeBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: calc(var(--r-md) - 2px);
+  background: transparent;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  cursor: pointer;
+}
+.memlist__scopeBtn span { font-size: 9px; }
+.memlist__scopeBtn--active {
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.memlist__scopeBtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .memlist__head {
   display: flex;
   align-items: center;
@@ -1647,7 +1665,17 @@
 .bazbrain__title { font-weight: 600; font-size: var(--fs-sm); }
 .bazbrain__empty { font-size: var(--fs-xs); color: var(--text-muted); margin: 4px 0 0; }
 .bazbrain__grid { display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); gap: var(--sp-3); align-items: start; }
+.bazbrain__library {
+  min-width: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .bazbrain__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.bazbrain__archive { margin-top: var(--sp-2); border-top: 1px solid var(--border); padding-top: var(--sp-2); }
+.bazbrain__archive > summary { color: var(--text-faint); font-size: var(--fs-micro); cursor: pointer; }
+.bazbrain__archive > summary:hover { color: var(--text-muted); }
+.bazbrain__archive > .bazbrain__list { margin-top: 5px; }
 .bazbrain__item {
   width: 100%; text-align: left; padding: 6px 9px; font-size: var(--fs-xs); color: var(--text-muted);
   background: transparent; border: 1px solid transparent; border-radius: var(--r-sm); cursor: pointer;

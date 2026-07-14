@@ -85,7 +85,7 @@ export const noteFrontmatterSchema = z.object({
   firstSeenAt: isoString.optional(),
   lastVerifiedAt: isoString.optional(),
   reviewAfter: isoString.optional(),
-  supersedes: z.array(z.string().min(1)).optional(),
+  supersedes: z.array(z.string().min(1)).default([]),
 }).superRefine((value, ctx) => {
   if (value.schema < 2) return
   for (const key of [
@@ -217,7 +217,9 @@ export function serializeNote(frontmatter: NoteFrontmatter, body: string): strin
   if (frontmatter.firstSeenAt) lines.push(`firstSeenAt: ${frontmatter.firstSeenAt}`)
   if (frontmatter.lastVerifiedAt) lines.push(`lastVerifiedAt: ${frontmatter.lastVerifiedAt}`)
   if (frontmatter.reviewAfter) lines.push(`reviewAfter: ${frontmatter.reviewAfter}`)
-  if (frontmatter.supersedes) lines.push(`supersedes: ${frontmatter.supersedes.join(', ')}`)
+  if (frontmatter.supersedes.length > 0) {
+    lines.push(`supersedes: ${frontmatter.supersedes.join(', ')}`)
+  }
   if (frontmatter.tags.length > 0) lines.push(`tags: ${frontmatter.tags.join(', ')}`)
   lines.push('---', '')
   const trimmedBody = body.replace(/^\r?\n+/, '')

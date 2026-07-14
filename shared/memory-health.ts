@@ -6,6 +6,7 @@
  */
 import { buildLinkIndex, normalizeNoteName } from './wikilink'
 import type { MemoryDoc } from './memory-hub'
+import { isActiveNote } from './memory-note-schema'
 
 export interface MemoryHealth {
   noteCount: number
@@ -29,13 +30,17 @@ export function assembleHealth(
   opts: { oversizeBytes?: number } = {},
 ): MemoryHealth {
   const oversizeBytes = opts.oversizeBytes ?? OVERSIZE_BYTES
-  const idx = buildLinkIndex(docs)
+  const activeDocs = docs.filter((doc) => isActiveNote(doc.content))
+  const idx = buildLinkIndex(activeDocs)
+  const knownNames = new Set(
+    docs.map((doc) => normalizeNoteName(doc.name)).filter((name): name is string => name !== null),
+  )
 
   let orphanCount = 0
   let oversizedCount = 0
   let totalBytes = 0
 
-  for (const doc of docs) {
+  for (const doc of activeDocs) {
     const slug = normalizeNoteName(doc.name)
     if (!slug) continue
     const linksOut = idx.forward.get(slug)?.size ?? 0
@@ -47,9 +52,9 @@ export function assembleHealth(
   }
 
   return {
-    noteCount: docs.filter((d) => normalizeNoteName(d.name) !== null).length,
+    noteCount: activeDocs.filter((d) => normalizeNoteName(d.name) !== null).length,
     orphanCount,
-    unresolvedCount: idx.unresolved.size,
+    unresolvedCount: [...idx.unresolved.keys()].filter((target) => !knownNames.has(target)).length,
     oversizedCount,
     totalBytes,
   }

@@ -6,6 +6,7 @@
  * the real MemoryHubService and the browser mock — the two can never drift.
  */
 import { buildLinkIndex, normalizeNoteName, parseWikilinks } from './wikilink'
+import { isActiveNote } from './memory-note-schema'
 
 export interface MemoryDoc {
   name: string
@@ -24,7 +25,10 @@ export interface MemoryNoteSummary {
 }
 
 export interface MemoryHubSnapshot {
+  /** Active working memories. This is the default library and graph surface. */
   notes: MemoryNoteSummary[]
+  /** Recoverable history: both archived and superseded notes. */
+  archived: MemoryNoteSummary[]
   unresolved: { target: string; wantedBy: string[] }[]
 }
 
@@ -76,8 +80,19 @@ export function extractHook(content: string): string | null {
 }
 
 export function assembleHubSnapshot(docs: MemoryDoc[]): MemoryHubSnapshot {
-  const idx = buildLinkIndex(docs)
-  const notes = docs
+  const activeDocs: MemoryDoc[] = []
+  const archivedDocs: MemoryDoc[] = []
+  for (const doc of docs) {
+    if (isActiveNote(doc.content)) activeDocs.push(doc)
+    else archivedDocs.push(doc)
+  }
+  const activeIdx = buildLinkIndex(activeDocs)
+  const archivedIdx = buildLinkIndex(archivedDocs)
+  const knownNames = new Set(
+    docs.map((doc) => normalizeNoteName(doc.name)).filter((name): name is string => name !== null),
+  )
+
+  const summarize = (visibleDocs: MemoryDoc[], idx: ReturnType<typeof buildLinkIndex>) => visibleDocs
     .map((d) => {
       const slug = normalizeNoteName(d.name)
       if (!slug) return null
@@ -91,10 +106,17 @@ export function assembleHubSnapshot(docs: MemoryDoc[]): MemoryHubSnapshot {
     })
     .filter((n): n is MemoryNoteSummary => n !== null)
     .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
-  const unresolved = [...idx.unresolved.entries()]
+
+  const notes = summarize(activeDocs, activeIdx)
+  const archived = summarize(archivedDocs, archivedIdx)
+  // A link to archived history is still resolved; it simply stays off the
+  // everyday graph. Only genuinely missing targets referenced by active notes
+  // become ghosts.
+  const unresolved = [...activeIdx.unresolved.entries()]
+    .filter(([target]) => !knownNames.has(target))
     .map(([target, wantedBy]) => ({ target, wantedBy: [...wantedBy] }))
     .sort((a, b) => b.wantedBy.length - a.wantedBy.length)
-  return { notes, unresolved }
+  return { notes, archived, unresolved }
 }
 
 export function assembleNote(docs: MemoryDoc[], name: string): MemoryNote | null {

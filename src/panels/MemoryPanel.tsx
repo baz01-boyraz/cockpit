@@ -13,6 +13,10 @@ import { MemoryEmptyState } from '../components/memory/MemoryEmptyState'
 import { MemoryGraph } from '../components/memory/MemoryGraph'
 import { MemoryBrainBar } from '../components/memory/MemoryBrainBar'
 import { MemoryOverview } from '../components/memory/MemoryOverview'
+import {
+  notesForLibrary,
+  type MemoryLibrary,
+} from '../components/memory/memoryLibraryModel'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong writing to the hub.'
@@ -61,6 +65,7 @@ export function MemoryPanel() {
   const [pendingCreate, setPendingCreate] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [layout, setLayout] = useState<'list' | 'graph'>('list')
+  const [library, setLibrary] = useState<MemoryLibrary>('active')
 
   const isDirty = mode === 'edit' && note !== null && draft !== note.content
 
@@ -69,6 +74,17 @@ export function MemoryPanel() {
     if (!isDirty) return true
     return window.confirm('Discard unsaved changes to this note?')
   }, [isDirty])
+
+  const changeLibrary = useCallback((next: MemoryLibrary) => {
+    if (next === library || !confirmLeave()) return
+    setLibrary(next)
+    setLayout('list')
+    setSelected(null)
+    setNote(null)
+    setNoteActivity(null)
+    setMode('read')
+    setPendingCreate(null)
+  }, [confirmLeave, library])
 
   const refreshSnapshot = useCallback(async (): Promise<MemoryHubSnapshot | null> => {
     if (!projectId) return null
@@ -88,6 +104,7 @@ export function MemoryPanel() {
     setPendingCreate(null)
     setNotice(null)
     setLayout('list')
+    setLibrary('active')
     if (!projectId) {
       setLoading(false)
       return
@@ -123,6 +140,12 @@ export function MemoryPanel() {
           cockpit().memory.noteActivity(projectId, name).catch(() => EMPTY_NOTE_ACTIVITY),
         ])
         if (loaded) {
+          if (snapshot?.archived.some((entry) => entry.name === loaded.name)) {
+            setLibrary('archive')
+            setLayout('list')
+          } else if (snapshot?.notes.some((entry) => entry.name === loaded.name)) {
+            setLibrary('active')
+          }
           setNote(loaded)
           setNoteActivity(activity)
         } else {
@@ -137,7 +160,7 @@ export function MemoryPanel() {
         setNoteLoading(false)
       }
     },
-    [projectId, confirmLeave, refreshSnapshot],
+    [projectId, confirmLeave, refreshSnapshot, snapshot],
   )
 
   /** Create a note (seed heading), open it in the editor. */
@@ -148,6 +171,7 @@ export function MemoryPanel() {
       try {
         const written = await cockpit().memory.write(projectId, slug, `# ${titleFromSlug(slug)}\n\n`)
         await refreshSnapshot()
+        setLibrary('active')
         setPendingCreate(null)
         setSelected(written.name)
         setNote(written)
@@ -216,16 +240,18 @@ export function MemoryPanel() {
   }, [projectId, note])
 
   const known = useMemo(
-    () => new Set((snapshot?.notes ?? []).map((n) => n.name)),
+    () => new Set([...(snapshot?.notes ?? []), ...(snapshot?.archived ?? [])].map((n) => n.name)),
     [snapshot],
   )
   const titles = useMemo(
-    () => new Map((snapshot?.notes ?? []).map((n) => [n.name, n.title])),
+    () => new Map([...(snapshot?.notes ?? []), ...(snapshot?.archived ?? [])].map((n) => [n.name, n.title])),
     [snapshot],
   )
 
-  const notes = snapshot?.notes ?? []
-  const hubEmpty = !loading && snapshot !== null && notes.length === 0
+  const activeNotes = snapshot?.notes ?? []
+  const archivedNotes = snapshot?.archived ?? []
+  const notes = notesForLibrary(snapshot, library)
+  const hubEmpty = !loading && snapshot !== null && activeNotes.length + archivedNotes.length === 0
 
   return (
     <div className="panel panel--stagger">
@@ -236,7 +262,10 @@ export function MemoryPanel() {
         </div>
         {!hubEmpty && !loading && (
           <div className="panel__actions">
-            <span className="chip mono">{notes.length} notes</span>
+            <span className="chip mono">{activeNotes.length} active</span>
+            {archivedNotes.length > 0 && (
+              <span className="chip mono">{archivedNotes.length} archived</span>
+            )}
             <span className="chip" title="Plain markdown stored in .cockpit-memory/ beside this project">
               Saved with project
             </span>
@@ -250,8 +279,18 @@ export function MemoryPanel() {
               </button>
               <button
                 className={`memtoggle__btn ${layout === 'graph' ? 'memtoggle__btn--active' : ''}`}
-                onClick={() => setLayout('graph')}
+                onClick={() => {
+                  if (!confirmLeave()) return
+                  setLibrary('active')
+                  setSelected(null)
+                  setNote(null)
+                  setNoteActivity(null)
+                  setMode('read')
+                  setLayout('graph')
+                }}
                 aria-pressed={layout === 'graph'}
+                disabled={activeNotes.length === 0}
+                title={activeNotes.length === 0 ? 'No active memories to graph' : 'Graph active memories'}
               >
                 Graph
               </button>
@@ -344,10 +383,15 @@ export function MemoryPanel() {
       ) : (
         <div className={`memory__cols ${note && !noteLoading ? '' : 'memory__cols--overview'}`}>
           <MemoryNoteList
+            key={`${projectId}:${library}`}
             notes={notes}
             selected={selected}
             onSelect={(name) => void openNote(name)}
             onCreate={createNote}
+            library={library}
+            activeCount={activeNotes.length}
+            archiveCount={archivedNotes.length}
+            onLibraryChange={changeLibrary}
           />
 
           {noteLoading ? (
@@ -395,7 +439,11 @@ export function MemoryPanel() {
               />
             </>
           ) : (
-            <MemoryOverview notes={notes} onOpen={(name) => void openNote(name)} />
+            <MemoryOverview
+              notes={notes}
+              onOpen={(name) => void openNote(name)}
+              library={library}
+            />
           )}
         </div>
       )}

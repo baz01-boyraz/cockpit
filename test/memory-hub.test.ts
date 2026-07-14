@@ -41,9 +41,15 @@ describe('MemoryHubService', () => {
     service.write('prj_1', 'archived-note', note('archived-note', 'archived'))
     service.write('prj_1', 'superseded-note', note('superseded-note', 'superseded'))
 
-    expect(service.list('prj_1').notes).toHaveLength(3)
+    const snapshot = service.list('prj_1')
+    expect(snapshot.notes.map((note) => note.name)).toEqual(['active-note'])
+    expect(snapshot.archived.map((note) => note.name).sort()).toEqual([
+      'archived-note',
+      'superseded-note',
+    ])
     expect(service.read('prj_1', 'archived-note')).not.toBeNull()
     expect(service.listDocs('prj_1').map((doc) => doc.name)).toEqual(['active-note'])
+    expect(service.health('prj_1').noteCount).toBe(1)
   })
 
   it('writes, lists, and reads notes with backlinks and unresolved targets', () => {
@@ -65,7 +71,7 @@ describe('MemoryHubService', () => {
 
   it('returns an empty snapshot for a project with no hub, and null for missing notes', () => {
     const { service } = makeHubProject()
-    expect(service.list('prj_1')).toEqual({ notes: [], unresolved: [] })
+    expect(service.list('prj_1')).toEqual({ notes: [], archived: [], unresolved: [] })
     expect(service.read('prj_1', 'nope')).toBeNull()
   })
 

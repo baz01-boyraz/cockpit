@@ -5,7 +5,7 @@ title: Local app:refresh build gets reverted by GitHub auto-update
 class: gotcha
 capturedAt: 2026-07-04T20:38:28.345Z
 gate: asked
-updatedAt: 2026-07-12T05:03:45.000Z
+updatedAt: 2026-07-14T04:57:02.202Z
 status: active
 authority: legacy
 scope: project
@@ -23,3 +23,4 @@ Before debugging “my feature isn't showing up,” verify the version and commi
 Separate unresolved symptom from 2026-07-04: Baz reported that the installed app was closing itself at regular intervals. It was not investigated because the session returned to Command Blocks; `AppUpdateService` quit behavior or a crash were only hypotheses, not a diagnosis.
 
 Related: [[app-refresh-consent-rule]], [[release-tagging-gotcha]]
+- (2026-07-14) Running `app:refresh` or any local build/install command kills the currently running cockpiT application. This caused the app to close 5 times during the session, interrupting Baz's work. The AI must never run app:refresh, quit, kill, or any command that restarts the main application without explicit Baz approval. Use only read-only verification and remote release workflows.
