@@ -126,6 +126,7 @@ const api: CockpitApi = {
       invoke(IPC.memoryCaptureSession, { projectId, provider, sessionId, dryRun }),
     captureStatus: (projectId) => invoke(IPC.memoryCaptureStatus, { projectId }),
     retryCapture: (projectId, jobId) => invoke(IPC.memoryCaptureRetry, { projectId, jobId }),
+    onCaptureNotice: (cb) => subscribe(IPC.evtMemoryCaptureNotice, cb),
     trustState: (projectId, scope) => invoke(IPC.memoryTrustState, { projectId, scope }),
     setTrustMode: (projectId, scope, mode) =>
       invoke(IPC.memorySetTrustMode, { projectId, scope, mode }),

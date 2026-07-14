@@ -52,7 +52,10 @@ const session = (id: string, ageMs: number, sizeBytes = 1000, provider: Resumabl
 })
 
 const stubs = (sessions: ReturnType<typeof session>[]) => ({
-  projects: { list: () => [{ id: 'p1', path: '/proj' }] } as unknown as ProjectService,
+  projects: {
+    list: () => [{ id: 'p1', path: '/proj' }],
+    get: (id: string) => ({ id, path: '/proj' }),
+  } as unknown as ProjectService,
   sessions: {
     captureList: () => sessions,
   } as unknown as AgentSessionsService,
@@ -140,6 +143,75 @@ describe('MemoryAutoCapture.sweep', () => {
     }))
   })
 
+  it('emits one safe live notice for a saved fact and stays silent for a duplicate', async () => {
+    const q = fakeQueue()
+    const onNotice = vi.fn()
+    const pipe = {
+      capture: vi.fn(async () => ({
+        proposals: [
+          {
+            scope: 'project', class: 'decision', slug: 'router-placement', title: 'Router placement',
+            summary: 'The router lives in shared.', gate: 'commit', reconcile: 'new', similarity: 0,
+            reason: 'Clear durable decision.', proposedContent: '# Router placement',
+          },
+          {
+            scope: 'project', class: 'decision', slug: 'existing-fact', title: 'Existing fact',
+            summary: 'Already known.', gate: 'skip', reconcile: 'duplicate', similarity: 1,
+            reason: 'Equivalent content.', proposedContent: null,
+          },
+        ],
+        committed: 1,
+        queued: 0,
+        skipped: 1,
+        nextOffset: 500,
+        dryRun: false,
+      })),
+    } as unknown as MemoryPipeline
+    const { projects, sessions } = stubs([session('s1', 20 * MIN)])
+    const auto = new MemoryAutoCapture(q.svc, pipe, projects, sessions, { now: () => T, onNotice })
+
+    await auto.sweep()
+
+    expect(onNotice).toHaveBeenCalledTimes(1)
+    expect(onNotice).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'p1',
+      provider: 'claude',
+      sourceSessionId: 's1',
+      outcome: 'created',
+      scope: 'project',
+      slug: 'router-placement',
+      summary: 'The router lives in shared.',
+    }))
+  })
+
+  it('keeps a completed capture successful when the optional notice sink fails', async () => {
+    const q = fakeQueue()
+    const pipe = {
+      capture: vi.fn(async () => ({
+        proposals: [{
+          scope: 'project', class: 'decision', slug: 'router-placement', title: 'Router placement',
+          summary: 'The router lives in shared.', gate: 'commit', reconcile: 'new', similarity: 0,
+          reason: 'Clear durable decision.', proposedContent: '# Router placement',
+        }],
+        committed: 1,
+        queued: 0,
+        skipped: 0,
+        nextOffset: 500,
+        dryRun: false,
+      })),
+    } as unknown as MemoryPipeline
+    const { projects, sessions } = stubs([session('s1', 20 * MIN)])
+    const auto = new MemoryAutoCapture(q.svc, pipe, projects, sessions, {
+      now: () => T,
+      onNotice: () => { throw new Error('renderer unavailable') },
+    })
+
+    await auto.sweep()
+
+    expect(q.jobs.get('claude:s1')?.status).toBe('done')
+    expect(q.jobs.get('claude:s1')?.lastOffset).toBe(500)
+  })
+
   it('live capture enqueues every grown provider session active since the pane started', async () => {
     const q = fakeQueue()
     const pipe = okPipeline()
@@ -163,5 +235,47 @@ describe('MemoryAutoCapture.sweep', () => {
       'claude:current-claude-b',
     ])
     expect(pipe.capture).toHaveBeenCalledTimes(2)
+  })
+
+  it('drains work added by another live terminal while a capture is already running', async () => {
+    const q = fakeQueue()
+    let releaseFirst!: () => void
+    const firstCaptureCanFinish = new Promise<void>((resolve) => { releaseFirst = resolve })
+    const result = {
+      proposals: [], committed: 1, queued: 0, skipped: 0, nextOffset: 500, dryRun: false,
+    }
+    const capture = vi.fn()
+      .mockImplementationOnce(async () => {
+        await firstCaptureCanFinish
+        return result
+      })
+      .mockResolvedValue(result)
+    const pipe = { capture } as unknown as MemoryPipeline
+    let visibleSessions = [session('claude-a', 1 * MIN, 1000, 'claude')]
+    const projects = {
+      list: () => [{ id: 'p1', path: '/proj' }],
+      get: (id: string) => ({ id, path: '/proj' }),
+    } as unknown as ProjectService
+    const sessions = {
+      captureList: () => visibleSessions,
+    } as unknown as AgentSessionsService
+    const auto = new MemoryAutoCapture(q.svc, pipe, projects, sessions, {
+      now: () => T,
+      maxPerDrain: 1,
+    })
+
+    const first = auto.captureRecent('p1', 'claude', new Date(T - 5 * MIN).toISOString())
+    expect(capture).toHaveBeenCalledTimes(1)
+    visibleSessions = [
+      ...visibleSessions,
+      session('claude-b', 1 * MIN, 1000, 'claude'),
+    ]
+    await auto.captureRecent('p1', 'claude', new Date(T - 5 * MIN).toISOString())
+
+    releaseFirst()
+    await first
+
+    expect(capture).toHaveBeenCalledTimes(2)
+    expect(q.jobs.get('claude:claude-b')?.status).toBe('done')
   })
 })

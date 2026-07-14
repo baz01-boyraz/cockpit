@@ -4,7 +4,7 @@ import {
   mergeObservationIntoNote,
   type GateOutcome,
 } from '@shared/memory-commit'
-import { validateNoteContent } from '@shared/memory-note-schema'
+import { noteLifecycle, parseNote, validateNoteContent } from '@shared/memory-note-schema'
 import { BAZ_GLOBAL_BRAIN, projectBrain } from '@shared/memory-ledger'
 import { gateMemoryWrite } from '@shared/memory-gate'
 import { reconcile, type Reconciled } from '@shared/memory-reconcile'
@@ -50,13 +50,14 @@ export interface CaptureRequest {
 
 /**
  * Stage 3 orchestrator (docs/memory-imp.md): distill → reconcile → gate →
- * commit|review. Every write is validated and ledgered; a conflict or an unsure
- * model decision routes to the review queue instead of disk. A dry run returns
- * the same proposals but touches nothing.
+ * commit|review. Every write is validated and ledgered. Ordinary uncertainty
+ * fails closed; only a genuinely ambiguous replacement of protected/high-impact
+ * Memory reaches the review queue. A dry run returns the same proposals but
+ * touches nothing.
  *
- * Scope note: this operates on the PROJECT brain. `scope: 'user'` facts are
- * still saved here (tagged `baz` by the commit builder) so nothing is lost; the
- * Phase 6 global brain will relocate them. No fact is dropped for lack of a home.
+ * Scope note: project observations route to the project hub; `scope: 'user'`
+ * observations route to the configured global Baz brain. Isolated legacy tests
+ * without that hub retain the old project fallback.
  */
 export class MemoryPipeline {
   constructor(
@@ -137,27 +138,26 @@ export class MemoryPipeline {
       const initialGate = decideGate(obs, rec)
       const kind = this.reviewKind(rec)
       const mode = this.policy?.trustModeForBrain(target.brain) ?? defaultTrustModeForBrain(target.brain)
-      const gate =
+      let gate: GateOutcome =
         initialGate === 'commit' && !canAutoCommit(mode, kind)
           ? 'review'
           : initialGate
-      const proposedContent = gate === 'skip' ? null : this.buildContent(obs, rec, gate)
+      // Default automation is precision-first: uncertainty is not work for the
+      // owner. Only a genuinely ambiguous replacement of a protected/high-impact
+      // fact reaches the inbox. Manual mode remains an explicit opt-in to review
+      // every proposal.
+      if (gate === 'review' && mode !== 'manual' && !this.needsOwnerDecision(obs, rec)) {
+        gate = 'skip'
+      }
+      let proposedContent = gate === 'skip' ? null : this.buildContent(obs, rec, gate)
 
-      proposals.push({
-        scope: obs.scope,
-        class: obs.class,
-        slug: rec.targetSlug,
-        title: obs.title,
-        gate,
-        reconcile: rec.decision,
-        similarity: rec.similarity,
-        reason: obs.reason,
-        proposedContent,
-      })
+      if (req.dryRun) {
+        proposals.push(this.proposal(obs, rec, gate, proposedContent))
+        continue
+      }
 
-      if (req.dryRun) continue
-
-      if (!persistenceStarted && gate !== 'skip') {
+      const startPersistence = (): void => {
+        if (persistenceStarted) return
         persistenceStarted = true
         req.onStage?.('committing')
       }
@@ -181,18 +181,30 @@ export class MemoryPipeline {
         })
         if (decision.verdict === 'reject') {
           this.recordGate(req.projectId, rec.targetSlug, 'reject', decision.reasons)
+          gate = 'skip'
+          proposedContent = null
           skipped += 1
         } else if (decision.verdict === 'review') {
-          this.queueReview(req.projectId, target.brain, rec, obs, proposedContent, sourceId, decision.reasons.join('; '))
           this.recordGate(req.projectId, rec.targetSlug, 'review', decision.reasons)
-          queued += 1
+          if (mode === 'manual' || this.needsOwnerDecision(obs, rec)) {
+            startPersistence()
+            this.queueReview(req.projectId, target.brain, rec, obs, proposedContent, sourceId, decision.reasons.join('; '))
+            gate = 'review'
+            queued += 1
+          } else {
+            gate = 'skip'
+            proposedContent = null
+            skipped += 1
+          }
         } else {
+          startPersistence()
           this.commit(target.memory, target.hubId, target.brain, rec, proposedContent, sourceId)
           committed += 1
           // keep the right docs list fresh so later same-batch observations reconcile correctly
           target.docs.push({ name: rec.targetSlug, content: proposedContent, updatedAt: this.now() })
         }
       } else if (gate === 'review' && proposedContent) {
+        startPersistence()
         const reason =
           initialGate === 'commit'
             ? `${mode} policy requires review for a ${kind} proposal. ${obs.reason}`
@@ -200,6 +212,8 @@ export class MemoryPipeline {
         this.queueReview(req.projectId, target.brain, rec, obs, proposedContent, sourceId, reason)
         queued += 1
       }
+
+      proposals.push(this.proposal(obs, rec, gate, proposedContent))
     }
 
     return {
@@ -210,6 +224,48 @@ export class MemoryPipeline {
       nextOffset: distilled.nextOffset,
       dryRun: !!req.dryRun,
     }
+  }
+
+  private proposal(
+    obs: Observation,
+    rec: Reconciled,
+    gate: GateOutcome,
+    proposedContent: string | null,
+  ): MemoryProposal {
+    return {
+      scope: obs.scope,
+      class: obs.class,
+      slug: rec.targetSlug,
+      title: obs.title,
+      summary: obs.body,
+      gate,
+      reconcile: rec.decision,
+      similarity: rec.similarity,
+      reason: obs.reason,
+      proposedContent,
+    }
+  }
+
+  /**
+   * Human attention is reserved for the narrow intersection the owner asked
+   * for: the candidate is truly ambiguous, affects a high-impact fact, and
+   * would replace existing Memory. Low-confidence new facts and routine
+   * collisions fail closed (skip) instead of creating inbox debt.
+   */
+  private needsOwnerDecision(obs: Observation, rec: Reconciled): boolean {
+    if (!rec.existingContent) return false
+    if (obs.decision !== 'ask' && rec.decision !== 'conflict') return false
+    if (obs.class !== 'user' && obs.class !== 'decision' && obs.class !== 'architecture') {
+      return false
+    }
+    if (obs.scope === 'user') return true
+    const lifecycle = noteLifecycle(parseNote(rec.existingContent).frontmatter)
+    return (
+      lifecycle.confidence === 'high' &&
+      (lifecycle.authority === 'human-directive' ||
+        lifecycle.authority === 'code-verified' ||
+        lifecycle.authority === 'source-authority')
+    )
   }
 
   /** Enqueue a proposal for human review (shared by the model-ask and gate-review paths). */

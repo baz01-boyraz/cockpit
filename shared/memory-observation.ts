@@ -78,8 +78,10 @@ For each fact decide two things yourself:
              (a preference, a working style, a standing decision that travels
              across projects).
   decision — "save" if you are confident it matters and is unambiguous; "ask"
-             if you are unsure it is worth keeping or unsure how to classify it.
-             When in doubt, "ask". Never invent facts to fill the list.
+             ONLY for a genuinely ambiguous, high-impact conflict with an
+             existing user rule, architectural decision, or protected fact.
+             Mere low confidence is not review work: omit that candidate.
+             Never invent facts to fill the list.
 
 Prefer merging into an existing note (isNew=false, targetSlug=that note) over
 creating near-duplicates. Choose a short kebab-case targetSlug for new notes.

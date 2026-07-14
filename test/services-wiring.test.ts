@@ -136,6 +136,7 @@ const EXPECTED_SERVICE_FIELDS = [
   'memoryPipeline',
   'memoryCaptureQueue',
   'memoryAutoCapture',
+  'memoryLiveCapture',
   'memoryConsolidator',
   'memoryCuration',
   'memoryLifecycle',
@@ -327,10 +328,12 @@ describe('Services — shutdown', () => {
 
     const terminalsKill = vi.spyOn(services.terminals, 'killAll')
     const autoCaptureStop = vi.spyOn(services.memoryAutoCapture, 'stop')
+    const liveCaptureStop = vi.spyOn(services.memoryLiveCapture, 'stop')
 
     expect(() => services!.shutdown()).not.toThrow()
 
     expect(terminalsKill).toHaveBeenCalledOnce()
+    expect(liveCaptureStop).toHaveBeenCalledOnce()
     expect(autoCaptureStop).toHaveBeenCalledOnce()
     expect(close).toHaveBeenCalledOnce()
 

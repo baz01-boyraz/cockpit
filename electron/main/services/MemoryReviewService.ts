@@ -85,6 +85,18 @@ export class MemoryReviewService {
   }
 
   create(input: CreateReviewInput): ReviewItem {
+    // One unresolved topic, one owner decision. Repeated live captures of the
+    // same protected conflict reinforce provenance elsewhere; they must never
+    // create an inbox card per terminal/turn.
+    const existing = this.db
+      .prepare(
+        `SELECT * FROM memory_review
+         WHERE brain = ? AND kind = ? AND slug = ? AND status = 'pending'
+         ORDER BY created_at ASC LIMIT 1`,
+      )
+      .get(input.brain, input.kind, input.slug) as ReviewRow | undefined
+    if (existing) return toItem(existing)
+
     const id = randomUUID()
     const createdAt = new Date().toISOString()
     const payload: Payload = {

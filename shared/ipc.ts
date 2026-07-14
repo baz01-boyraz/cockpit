@@ -23,7 +23,7 @@ import type { OutcomeScorecard } from './outcomes'
 import type { MemoryHubSnapshot, MemoryNote } from './memory-hub'
 import type { MemoryHealth } from './memory-health'
 import type { CaptureResult } from './memory-pipeline'
-import type { MemoryCaptureOverview } from './memory-capture'
+import type { MemoryCaptureNotice, MemoryCaptureOverview } from './memory-capture'
 import type { ReviewDecision, ReviewItem } from './memory-review'
 import type { LedgerEntry } from './memory-ledger'
 import type { ConsolidationResult } from './memory-consolidate'
@@ -190,6 +190,7 @@ export const IPC = {
   evtSwarmCardCompleted: 'evt:swarm:cardCompleted',
   evtSentinelAlert: 'evt:sentinel:alert',
   evtCouncilProgress: 'evt:council:progress',
+  evtMemoryCaptureNotice: 'evt:memory:captureNotice',
 } as const
 
 export type Unsubscribe = () => void
@@ -445,6 +446,8 @@ export interface CockpitApi {
     captureStatus(projectId: string): Promise<MemoryCaptureOverview>
     /** Retry one blocked/exhausted capture after its dependency was fixed. */
     retryCapture(projectId: string, jobId: string): Promise<MemoryCaptureOverview>
+    /** Near-live, bounded capture results; routine duplicates stay silent. */
+    onCaptureNotice(cb: (notice: MemoryCaptureNotice) => void): Unsubscribe
     /** Brain-scoped trust lives in main/SQLite, never renderer localStorage. */
     trustState(projectId: string, scope: MemoryBrainScope): Promise<MemoryTrustState>
     setTrustMode(

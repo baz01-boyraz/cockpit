@@ -261,6 +261,18 @@ export class TerminalManager {
     this.touch(sessionId)
     if (data.includes('\r') || data.includes('\n')) {
       this.onUsage(live.session.projectId, 'command')
+      const provider = live.session.role
+      if (provider === 'claude' || provider === 'codex') {
+        // Never place prompt text on the event bus. Live Memory needs only the
+        // lifecycle marker; canonical content is read later from the provider's
+        // own redacted transcript path.
+        this.events.emitTyped('terminal:agentTurn', {
+          sessionId,
+          projectId: live.session.projectId,
+          provider,
+          at: nowIso(),
+        })
+      }
     }
   }
 

@@ -32,6 +32,7 @@ import { TranscriptReader } from './TranscriptReader'
 import { MemoryPipeline } from './MemoryPipeline'
 import { MemoryCaptureQueue } from './MemoryCaptureQueue'
 import { MemoryAutoCapture } from './MemoryAutoCapture'
+import { MemoryLiveCapture } from './MemoryLiveCapture'
 import { MemoryConsolidator } from './MemoryConsolidator'
 import { MemoryCurationService } from './MemoryCurationService'
 import { MemoryLifecycleSentinel } from './MemoryLifecycleSentinel'
@@ -114,6 +115,7 @@ export class Services {
   readonly memoryPipeline: MemoryPipeline
   readonly memoryCaptureQueue: MemoryCaptureQueue
   readonly memoryAutoCapture: MemoryAutoCapture
+  readonly memoryLiveCapture: MemoryLiveCapture
   readonly memoryConsolidator: MemoryConsolidator
   /** Faz D: the weekly curation sweep — proposes archive/merge for stale notes. */
   readonly memoryCuration: MemoryCurationService
@@ -276,6 +278,21 @@ export class Services {
       this.memoryPipeline,
       this.projects,
       this.agentSessions,
+      {
+        onNotice: (notice) => {
+          opts.events.emitTyped('memory:captureNotice', notice)
+          // Routine saves stay quiet outside the app. A protected ambiguity is
+          // deliberately rare and owner-blocking, so it also earns one native
+          // notification even when Cockpit is behind another window.
+          if (notice.outcome === 'review') {
+            const provider = notice.provider === 'claude' ? 'Claude' : 'Codex'
+            notifier({
+              title: 'Memory needs your decision',
+              body: `${provider}: ${notice.title}`,
+            })
+          }
+        },
+      },
     )
     // Rehydrate lifecycle pressure from durable state. Models are not involved;
     // only queue status/counts/ages reach Sentinel.
@@ -320,6 +337,11 @@ export class Services {
     // The standing memory-first contract rides each agent CLI's native channel
     // (Claude hook / Codex AGENTS.md) — user prompts are never modified.
     this.memoryContract = new MemoryContractService(this.projects, this.audit)
+    this.memoryLiveCapture = new MemoryLiveCapture(
+      opts.events,
+      this.terminals,
+      this.memoryAutoCapture,
+    )
     // A4: right after TerminalManager reconciled its own stale rows, audit the
     // pids those rows carried for still-alive orphans (a previous process's pty
     // children that reparented on crash) and reap only OUR recent ones. Fully
@@ -380,6 +402,10 @@ export class Services {
     // background. Conservative defaults; all state is durable
     // in the capture queue, so a crash mid-drain resumes on the next boot.
     this.memoryAutoCapture.start()
+    // Near-live capture is additive: one content-free turn marker plus output
+    // settle debounce. Provider transcripts remain canonical, while the 10m
+    // sweep and terminal-exit trigger stay as recovery fallbacks.
+    this.memoryLiveCapture.start()
     // Capture when a Claude or Codex pane closes. Other terminal roles do not
     // trigger capture; the idle poll remains the crash/sleep fallback.
     registerMemoryExitCapture(opts.events, this.memoryAutoCapture)
@@ -694,6 +720,7 @@ export class Services {
   shutdown(): void {
     if (this.closing) return
     this.closing = true
+    this.memoryLiveCapture.stop()
     this.memoryAutoCapture.stop()
     this.memoryLifecycle.dispose()
     this.operationalHealth.stop()

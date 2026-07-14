@@ -1313,6 +1313,7 @@ export function createMockApi(): CockpitApi {
         mockCaptureJobs.set(projectId, jobs)
         return assembleMemoryCaptureOverview(resumableSessionsMock, jobs)
       },
+      onCaptureNotice: () => (() => {}) as Unsubscribe,
       trustState: async (projectId, scope) => {
         const brain = brainForAccess(projectId, scope)
         return {

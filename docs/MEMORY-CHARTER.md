@@ -160,8 +160,13 @@ remain pending in plain language.
 Agent-produced candidates pass the canonical gate:
 
 - **accept:** useful, atomic, deduped, evidence-backed, and secret-free;
-- **review:** uncertain value, weak evidence, suspected overlap, or conflict;
+- **review:** Manual mode, or a genuinely ambiguous replacement of a protected,
+  high-impact owner/decision/architecture fact;
 - **reject:** secret-shaped or structurally unsafe content.
+
+Ordinary uncertainty, weak evidence, and low-impact collisions fail closed: the
+candidate is omitted instead of becoming active Memory or inbox debt. Repeated
+captures of the same unresolved protected conflict coalesce into one decision.
 
 Direct owner edits in the Memory UI remain gate-free. The gate constrains
 machines, not the owner.
@@ -170,7 +175,7 @@ Trust modes are scoped independently:
 
 - **Autopilot:** high-quality new facts, proven idempotent merges, and
   reversible evidence-clear cleanup;
-- **Assisted:** high-quality new facts only;
+- **Assisted:** high-quality new facts and proven idempotent merges;
 - **Manual:** no automatic commit.
 
 Every automatic mutation is stale-checked, ledgered, and recoverable. Conflicts
@@ -195,8 +200,15 @@ Non-terminal states:
 - `retry_wait`: transient failure with bounded exponential backoff;
 - `error`: deterministic or exhausted failure needing intervention.
 
-Terminal exit, idle capture, and manual retry all use the same durable queue and
-provider-specific cursor. Reprocessing the same range must be idempotent.
+Cockpit-owned Claude/Codex panes emit a content-free submitted-turn marker. PTY
+output only resets a short quiet timer; after 12 quiet seconds, Cockpit scans the
+matching provider transcripts active since that pane began and feeds them into
+the same durable queue. Prompt text and PTY output never travel on this event
+path. Simultaneous panes coalesce safely through provider/session queue keys.
+
+Terminal exit, the ten-minute idle sweep, and manual retry remain recovery paths
+through the same queue and provider-specific cursor. Reprocessing the same range
+must be idempotent.
 
 The analysis model is tool-less, ephemeral, bounded, and independent from the
 capture provider. It proposes observations; it never writes files directly.
@@ -245,6 +257,12 @@ The Memory UI must explain the system without pipeline jargon:
 - retry for recoverable capture jobs;
 - genuine owner decisions separated from routine cleanup.
 
+Near-live capture results appear outside the PTY so they cannot corrupt or
+self-ingest into a terminal. A bounded green toast names Claude or Codex, the
+saved/updated fact, scope, and reason. Already-known facts stay silent. The rare
+protected ambiguity remains visible with an “Open Memory” action and also emits
+one native notification.
+
 Raw transcript paths, secrets, and raw model output never appear in owner-facing
 errors.
 
@@ -258,6 +276,8 @@ A Memory change is incomplete until it proves:
 - project/global precedence and authority behavior are deterministic;
 - secret-shaped content cannot cross the write boundary;
 - capture failure states are actionable and retry-safe;
+- simultaneous Claude/Codex panes cannot strand queued live work;
+- routine duplicate captures create neither inbox cards nor terminal noise;
 - snapshots restore exactly;
 - the Memory UI works at desktop and narrow widths;
 - typecheck, lint, tests, production build, and retrieval evals pass.

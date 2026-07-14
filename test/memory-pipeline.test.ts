@@ -527,7 +527,16 @@ describe('MemoryPipeline.resolveReview', () => {
   it('accept writes the proposed note and ledgers it', async () => {
     const ledger = fakeLedger()
     const reviews = fakeReviews()
-    const pipe = new MemoryPipeline(memory, ledger.svc, reviews.svc, stubDistiller([obs({ decision: 'ask' })]))
+    const pipe = new MemoryPipeline(
+      memory,
+      ledger.svc,
+      reviews.svc,
+      stubDistiller([obs({ decision: 'ask' })]),
+      undefined,
+      undefined,
+      undefined,
+      fakePolicy({ [projectBrain('p1')]: 'manual' }) as never,
+    )
     await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
     const [item] = reviews.items.values()
 
@@ -539,7 +548,16 @@ describe('MemoryPipeline.resolveReview', () => {
 
   it('discard leaves the hub untouched', async () => {
     const reviews = fakeReviews()
-    const pipe = new MemoryPipeline(memory, fakeLedger().svc, reviews.svc, stubDistiller([obs({ decision: 'ask' })]))
+    const pipe = new MemoryPipeline(
+      memory,
+      fakeLedger().svc,
+      reviews.svc,
+      stubDistiller([obs({ decision: 'ask' })]),
+      undefined,
+      undefined,
+      undefined,
+      fakePolicy({ [projectBrain('p1')]: 'manual' }) as never,
+    )
     await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
     const [item] = reviews.items.values()
 
@@ -664,7 +682,16 @@ describe('MemoryPipeline.resolveReview', () => {
 
   it('refuses to resolve another project review through the caller project', async () => {
     const reviews = fakeReviews()
-    const pipe = new MemoryPipeline(memory, fakeLedger().svc, reviews.svc, stubDistiller([obs({ decision: 'ask' })]))
+    const pipe = new MemoryPipeline(
+      memory,
+      fakeLedger().svc,
+      reviews.svc,
+      stubDistiller([obs({ decision: 'ask' })]),
+      undefined,
+      undefined,
+      undefined,
+      fakePolicy({ [projectBrain('p1')]: 'manual' }) as never,
+    )
     await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
     const [item] = reviews.items.values()
 
@@ -686,6 +713,8 @@ describe('MemoryPipeline.resolveReview', () => {
       stubDistiller([obs({ scope: 'user', decision: 'ask', targetSlug: 'baz-prefers-calm-ui' })]),
       undefined,
       globalMemory,
+      undefined,
+      fakePolicy({ [BAZ_GLOBAL_BRAIN]: 'manual' }) as never,
     )
     await pipe.capture({ projectId: 'p1', transcriptPath: 'x' })
     const [item] = reviews.items.values()

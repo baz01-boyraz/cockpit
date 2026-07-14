@@ -5,6 +5,7 @@ import { TopBar } from './TopBar'
 import { RightPanel } from './RightPanel'
 import { UpdateToast } from './UpdateToast'
 import { SentinelToasts } from './SentinelToasts'
+import { MemoryCaptureToasts } from './MemoryCaptureToasts'
 import { IconBolt } from './icons'
 import { DashboardPanel } from '../panels/DashboardPanel'
 import { TerminalsPanel } from '../panels/TerminalsPanel'
@@ -61,6 +62,7 @@ export function AppShell() {
       </div>
       <div className="floatingCorner">
         <UpdateToast />
+        <MemoryCaptureToasts />
         <SentinelToasts />
       </div>
       {CHAT_ENABLED && <RightPanel />}

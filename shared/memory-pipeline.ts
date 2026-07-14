@@ -18,6 +18,8 @@ export interface MemoryProposal {
   reconcile: ReconcileDecision
   similarity: number
   reason: string
+  /** Redacted fact text; automatic notices bound this again before IPC. */
+  summary?: string
   /** The exact note bytes a commit/review would write; null for a skip. */
   proposedContent: string | null
 }

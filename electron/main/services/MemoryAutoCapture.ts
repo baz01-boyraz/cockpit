@@ -3,6 +3,7 @@ import type { ProjectService } from './ProjectService'
 import type { AgentSessionsService } from './AgentSessionsService'
 import type { MemoryCaptureQueue } from './MemoryCaptureQueue'
 import type { MemoryPipeline } from './MemoryPipeline'
+import type { MemoryCaptureNotice } from '@shared/memory-capture'
 
 export interface AutoCaptureOptions {
   /** A session must be quiet this long before it is captured (default 10 min). */
@@ -17,6 +18,8 @@ export interface AutoCaptureOptions {
   now?: () => number
   /** Master switch — the watcher does nothing when false. */
   enabled?: boolean
+  /** Safe renderer notice sink; no transcript paths or raw model output. */
+  onNotice?: (notice: MemoryCaptureNotice) => void
 }
 
 const MIN = 60_000
@@ -26,19 +29,24 @@ const DAY = 24 * 60 * MIN
  * Automatic capture (docs/memory-imp.md Phase 4, G1+G2). A gentle background
  * watcher: it sweeps each projects Claude and Codex sessions, enqueues the ones that have
  * gone quiet (and grown), and drains the durable queue through the pipeline —
- * confident facts save, unsure ones land in the review queue. Bounded per sweep
- * so a backlog never floods the CLI. All state lives in the queue, so a crash
- * mid-drain is recovered on the next boot, never dropped (G2).
+ * confident facts save, ordinary uncertainty is dropped, and only protected
+ * high-impact ambiguity lands in review. Bounded per sweep so a backlog never
+ * floods the CLI. All state lives in the queue, so a crash mid-drain is
+ * recovered on the next boot, never dropped (G2).
  */
 export class MemoryAutoCapture {
   private timer: ReturnType<typeof setInterval> | null = null
   private draining = false
+  /** Extra live-drain budget requested while an earlier job is awaiting its model. */
+  private pendingDrainLimit = 0
   private readonly idleMs: number
   private readonly pollMs: number
   private readonly recentMs: number
   private readonly maxPerDrain: number
   private readonly now: () => number
   private readonly enabled: boolean
+  private readonly onNotice?: (notice: MemoryCaptureNotice) => void
+  private noticeSequence = 0
 
   constructor(
     private readonly queue: MemoryCaptureQueue,
@@ -53,6 +61,7 @@ export class MemoryAutoCapture {
     this.maxPerDrain = opts.maxPerDrain ?? 2
     this.now = opts.now ?? (() => Date.now())
     this.enabled = opts.enabled ?? true
+    this.onNotice = opts.onNotice
   }
 
   /** Recover any crash-stuck jobs, then begin sweeping. Safe to call once. */
@@ -110,6 +119,35 @@ export class MemoryAutoCapture {
     await this.drain()
   }
 
+  /**
+   * Near-live trigger: capture every matching provider transcript that has
+   * been active since this Cockpit pane started. Scanning the set instead of
+   * guessing one newest transcript keeps simultaneous same-provider panes
+   * correct; the durable provider+session queue removes overlap idempotently.
+   */
+  async captureRecent(
+    projectId: string,
+    provider: ResumableSessionProvider,
+    sinceIso: string,
+  ): Promise<number> {
+    if (!this.enabled) return 0
+    let enqueued = 0
+    try {
+      const project = this.projects.get(projectId)
+      const sinceMs = Date.parse(sinceIso)
+      for (const session of this.sessions.captureList(project.path)) {
+        if (session.provider !== provider) continue
+        const activeMs = Date.parse(session.lastActiveAt)
+        if (!Number.isNaN(sinceMs) && (Number.isNaN(activeMs) || activeMs < sinceMs)) continue
+        if (this.enqueueSession(project.id, session)) enqueued += 1
+      }
+    } catch {
+      // A project removed during the debounce is an ordinary no-op.
+    }
+    if (enqueued > 0) await this.drain(Math.max(this.maxPerDrain, enqueued))
+    return enqueued
+  }
+
   /** Owner-triggered recovery after fixing a blocked/exhausted dependency. */
   async retry(projectId: string, jobId: string): Promise<void> {
     const job = this.queue.list(projectId).find((candidate) => candidate.id === jobId)
@@ -141,7 +179,7 @@ export class MemoryAutoCapture {
    * the terminal-close trigger so both use the exact same "first time, or grew
    * since the last done/errored capture" rule — never two divergent copies.
    */
-  private enqueueSession(projectId: string, s: CapturableSessionSummary): void {
+  private enqueueSession(projectId: string, s: CapturableSessionSummary): boolean {
     const job = this.queue.peek(s.provider, s.id)
     if (!job) {
       this.queue.enqueue({
@@ -150,6 +188,7 @@ export class MemoryAutoCapture {
         sessionId: s.id,
         sourcePath: s.transcriptPath,
       })
+      return true
     } else if ((job.status === 'done' || job.status === 'error') && s.sizeBytes > job.lastOffset) {
       this.queue.enqueue({
         projectId,
@@ -157,34 +196,95 @@ export class MemoryAutoCapture {
         sessionId: s.id,
         sourcePath: s.transcriptPath,
       })
+      return true
     }
+    return false
   }
 
   /** Drain up to `maxPerDrain` queued jobs through the pipeline. */
-  private async drain(): Promise<void> {
-    if (this.draining) return
+  private async drain(limit = this.maxPerDrain): Promise<void> {
+    const requested = Math.max(0, Math.floor(limit))
+    if (this.draining) {
+      // Calls from simultaneous panes may enqueue new provider sessions while
+      // the first distillation is awaiting its model. Carry that work into the
+      // active drain instead of leaving it for the 10-minute recovery sweep.
+      this.pendingDrainLimit += requested
+      return
+    }
     this.draining = true
+    let budget = requested
     try {
-      for (let i = 0; i < this.maxPerDrain; i += 1) {
-        const job = this.queue.claimNext()
-        if (!job) break
-        try {
-          const res = await this.pipeline.capture({
-            projectId: job.projectId,
-            provider: job.provider,
-            transcriptPath: job.sourcePath,
-            fromOffset: job.lastOffset,
-            sessionId: job.sessionId,
-            onStage: (stage) => this.queue.updateStage(job.id, stage),
-          })
-          if (res.error) this.queue.fail(job.id, res.error)
-          else this.queue.complete(job.id, res.nextOffset)
-        } catch (err) {
-          this.queue.fail(job.id, err instanceof Error ? err.message : String(err))
+      while (budget > 0) {
+        for (let i = 0; i < budget; i += 1) {
+          const job = this.queue.claimNext()
+          if (!job) break
+          try {
+            const res = await this.pipeline.capture({
+              projectId: job.projectId,
+              provider: job.provider,
+              transcriptPath: job.sourcePath,
+              fromOffset: job.lastOffset,
+              sessionId: job.sessionId,
+              onStage: (stage) => this.queue.updateStage(job.id, stage),
+            })
+            if (res.error) this.queue.fail(job.id, res.error)
+            else {
+              this.queue.complete(job.id, res.nextOffset)
+              this.emitNotices(job.projectId, job.provider, job.sessionId, res.proposals)
+            }
+          } catch (err) {
+            this.queue.fail(job.id, err instanceof Error ? err.message : String(err))
+          }
         }
+        budget = this.pendingDrainLimit
+        this.pendingDrainLimit = 0
       }
     } finally {
       this.draining = false
     }
   }
+
+  private emitNotices(
+    projectId: string,
+    provider: ResumableSessionProvider,
+    sourceSessionId: string,
+    proposals: Awaited<ReturnType<MemoryPipeline['capture']>>['proposals'],
+  ): void {
+    if (!this.onNotice) return
+    for (const proposal of proposals) {
+      if (proposal.gate !== 'commit' && proposal.gate !== 'review') continue
+      const outcome: MemoryCaptureNotice['outcome'] =
+        proposal.gate === 'review'
+          ? 'review'
+          : proposal.reconcile === 'merge'
+            ? 'updated'
+            : 'created'
+      const nowMs = this.now()
+      this.noticeSequence += 1
+      try {
+        this.onNotice({
+          id: `memory-${nowMs}-${this.noticeSequence}`,
+          projectId,
+          provider,
+          sourceSessionId,
+          outcome,
+          scope: proposal.scope === 'user' ? 'global' : 'project',
+          slug: proposal.slug,
+          title: bound(proposal.title, 160),
+          summary: bound(proposal.summary ?? proposal.title, 240),
+          reason: bound(proposal.reason, 220),
+          at: new Date(nowMs).toISOString(),
+        })
+      } catch {
+        // Renderer availability is not part of Memory durability. The note and
+        // cursor are already committed; a toast failure must never retry or
+        // relabel that successful capture as an error.
+      }
+    }
+  }
+}
+
+function bound(value: string, max: number): string {
+  const oneLine = value.replace(/\s+/g, ' ').trim()
+  return oneLine.length <= max ? oneLine : `${oneLine.slice(0, max - 1)}…`
 }

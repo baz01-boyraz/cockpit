@@ -174,6 +174,9 @@ interface AgentCaptureSession {
 
 ### 6.2 Capture triggers
 
+- Near-live turn: a content-free marker arms capture when a Cockpit-owned
+  Claude/Codex pane receives Enter; provider output resets a 12-second quiet
+  debounce, then all matching transcripts active since pane start are scanned.
 - Terminal exit: capture the just-finished provider session immediately.
 - Idle sweep: capture provider sessions quiet for ten minutes.
 - Manual capture: the UI shows the latest combined Claude/Codex sessions and
@@ -181,6 +184,8 @@ interface AgentCaptureSession {
 - Incremental growth: only bytes after the durable cursor are processed.
 - A provider session is never inferred from “latest overall” on exit; the
   terminal role supplies the provider explicitly.
+- Simultaneous panes share the provider/session keyed durable queue; work added
+  while another distillation is running is drained before falling back to idle.
 
 ### 6.3 Normalization and privacy
 
@@ -347,6 +352,11 @@ For each capture:
 - new, updated, already-known, needs-review counts;
 - plain-language failure and one next action;
 - never expose raw transcript paths or secrets.
+
+The live form is an out-of-band bottom-right toast, never PTY bytes. Saved and
+updated facts use a short green confirmation naming Claude/Codex and the reason;
+already-known facts are silent. A protected ambiguous conflict stays visible,
+opens Memory directly, and emits one native notification.
 
 ### 11.3 Note detail
 
@@ -518,6 +528,10 @@ All delivery phases P0–P6 are complete:
 - Memory Overview, capture status, retry guidance, inbox, note trust metadata,
   recall/evidence history, safety snapshots, and two-step restore were visually
   verified at desktop and narrow widths. The browser console is clean.
+- Near-live capture now runs after a submitted terminal turn settles, while
+  terminal-exit and idle capture remain durable fallbacks. Ordinary uncertainty
+  is dropped, safe merges commit in Autopilot/Assisted, and only protected,
+  high-impact ambiguity creates one coalesced owner decision.
 - Final gates passed: 135 test files / 1329 tests, node and web typechecks,
   zero-warning lint, production build, behavior evals, migration restore tests,
   prompt isolation scans, and whitespace validation.

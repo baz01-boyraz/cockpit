@@ -37,7 +37,7 @@ export const MEMORY_TRUST_META: Record<
   },
   assisted: {
     label: 'Assisted',
-    effect: 'Only high-confidence new facts save automatically. Merges and conflicts ask.',
+    effect: 'High-confidence facts and safe merges save automatically. Only protected, ambiguous conflicts ask.',
   },
   manual: {
     label: 'Manual',
@@ -175,7 +175,7 @@ export function autoCommitKinds(mode: MemoryTrustMode): ReadonlySet<ReviewKind> 
     case 'autopilot':
       return new Set<ReviewKind>(['new', 'merge'])
     case 'assisted':
-      return new Set<ReviewKind>(['new'])
+      return new Set<ReviewKind>(['new', 'merge'])
     case 'manual':
       return new Set<ReviewKind>()
   }

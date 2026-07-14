@@ -1,12 +1,14 @@
 import { EventEmitter } from 'node:events'
 import type {
   AppUpdateState,
+  ResumableSessionProvider,
   SwarmCardCompletedEvent,
   TerminalExitEvent,
   TerminalOutputChunk,
 } from '@shared/domain'
 import type { SentinelSignal } from '@shared/sentinel'
 import type { CouncilProgressEvent } from '@shared/council'
+import type { MemoryCaptureNotice } from '@shared/memory-capture'
 import { logFatal } from './logging'
 
 /**
@@ -17,6 +19,14 @@ import { logFatal } from './logging'
 export interface CockpitEventMap {
   'terminal:data': TerminalOutputChunk
   'terminal:exit': TerminalExitEvent
+  /** Content-free marker: an agent pane received a submitted user turn. */
+  'terminal:agentTurn': {
+    sessionId: string
+    projectId: string
+    provider: ResumableSessionProvider
+    at: string
+  }
+  'memory:captureNotice': MemoryCaptureNotice
   'approvals:changed': { projectId: string }
   'logs:changed': { projectId: string }
   'appUpdate:changed': AppUpdateState

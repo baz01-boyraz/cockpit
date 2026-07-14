@@ -92,6 +92,30 @@ export interface MemoryCaptureOverview {
   jobs: MemoryCaptureJobSummary[]
 }
 
+export const MEMORY_CAPTURE_NOTICE_OUTCOMES = ['created', 'updated', 'review'] as const
+export type MemoryCaptureNoticeOutcome = (typeof MEMORY_CAPTURE_NOTICE_OUTCOMES)[number]
+
+/**
+ * Safe, bounded result pushed to the renderer after an automatic capture.
+ * Raw transcript paths, prompts, note bytes, and model errors never cross IPC.
+ */
+export interface MemoryCaptureNotice {
+  id: string
+  projectId: string
+  provider: 'claude' | 'codex'
+  /** Provider-native transcript id — provenance, not a Cockpit project id. */
+  sourceSessionId: string
+  outcome: MemoryCaptureNoticeOutcome
+  scope: 'project' | 'global'
+  slug: string
+  title: string
+  /** One redacted, bounded fact summary suitable for a transient toast. */
+  summary: string
+  /** Why the distiller considered the fact durable, also bounded. */
+  reason: string
+  at: string
+}
+
 export function assembleMemoryCaptureOverview(
   sessions: readonly { provider: 'claude' | 'codex' }[],
   jobs: readonly CaptureJob[],

@@ -51,13 +51,25 @@ function makeReviewDb(): Db {
         },
         all: (brain: string) =>
           rows.filter((row) => row.brain === brain && row.status === 'pending'),
-        get: (id: string, brain?: string) =>
-          rows.find(
+        get: (...args: string[]) => {
+          if (sql.includes('WHERE brain = ? AND kind = ? AND slug = ?')) {
+            const [brain, kind, slug] = args
+            return rows.find(
+              (row) =>
+                row.brain === brain &&
+                row.kind === kind &&
+                row.slug === slug &&
+                row.status === 'pending',
+            )
+          }
+          const [id, brain] = args
+          return rows.find(
             (row) =>
               row.id === id &&
               (brain === undefined || row.brain === brain) &&
               (!sql.includes("status = 'pending'") || row.status === 'pending'),
-          ),
+          )
+        },
       }
     },
   } as unknown as Db

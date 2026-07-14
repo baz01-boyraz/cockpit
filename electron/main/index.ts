@@ -121,6 +121,7 @@ function forwardEvents(): void {
     terminalCoalescer?.flushSession(p.sessionId)
     send(IPC.evtTerminalExit, p)
   })
+  events.onTyped('memory:captureNotice', (p) => send(IPC.evtMemoryCaptureNotice, p))
   events.onTyped('approvals:changed', (p) => send(IPC.evtApprovalsChanged, p))
   events.onTyped('logs:changed', (p) => send(IPC.evtLogsChanged, p))
   events.onTyped('appUpdate:changed', (p) => send(IPC.evtAppUpdateChanged, p))
